@@ -1,6 +1,6 @@
 # Debug Logging System
 
-The LLxprt debug logging system provides powerful, zero-overhead debugging capabilities with flexible configuration and namespace-based filtering.
+The LLxprt debug logging system provides powerful debugging capabilities with flexible configuration and namespace-based filtering.
 
 ## Quick Start
 
@@ -167,11 +167,24 @@ Debug output can be sent to stderr (terminal) instead of or in addition to files
 
 ## Performance
 
-### Zero Overhead When Disabled
+### Near-Zero Overhead When Disabled
 
-The debug system uses lazy evaluation — when debugging is disabled, log messages
-are never evaluated, so there is zero performance impact even if the code passes
-expensive computations as arguments.
+When debugging is disabled, the logging methods return immediately without
+formatting, redacting, or writing anything. To get that benefit for a message
+that is expensive to build, pass it as a **callback** rather than a pre-built
+string:
+
+```ts
+// The string is built every call — even when logging is disabled.
+logger.debug(`result: ${expensiveComputation()}`);
+
+// The callback runs only when logging is enabled for this namespace.
+logger.debug(() => `result: ${expensiveComputation()}`);
+```
+
+A plain argument is evaluated by your code **before** the logger is entered, so
+its cost is paid regardless of whether logging is on. The callback form is what
+defers that work.
 
 ### Sensitive Data Redaction
 

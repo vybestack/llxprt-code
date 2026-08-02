@@ -661,9 +661,18 @@ the `mcp-remote` stdio bridge as shown in [Authenticate](#oauth).
 
 > **Security implication.** Because a stdio server inherits the parent
 > environment, the server process can see every variable in it — including API
-> keys, tokens, and other secrets. Only add a stdio server you trust, and prefer
-> passing only the specific variables a server needs through its `env` block
-> rather than relying on inherited values.
+> keys, tokens, and other secrets. The `env` block is **not** an allowlist: it
+> only **adds or overrides** entries on top of the inherited environment. It
+> cannot remove or hide inherited variables such as an API key that LLxprt Code
+> itself uses. To prevent a server from seeing secrets it should not, do one of
+> the following:
+>
+> - Launch LLxprt Code from a sanitized environment where the secrets are not
+>   set, then pass only what the server needs via its `env` block.
+> - Wrap the server command in a script that unsets the sensitive variables
+>   before starting the server process.
+> - Run the server (and LLxprt Code) inside a [sandbox](../sandbox.md) so the
+>   inherited environment is already bounded.
 
 ### Sandbox compatibility
 

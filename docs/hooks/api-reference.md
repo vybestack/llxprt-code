@@ -554,10 +554,22 @@ Hooks receive these environment variables:
 | -------------------- | ------------------------- |
 | `LLXPRT_PROJECT_DIR` | Current working directory |
 
-`LLXPRT_PROJECT_DIR` is the only variable LLxprt Code adds to the hook
-environment; the rest of the environment is inherited from the LLxprt Code
-process. `$LLXPRT_PROJECT_DIR` is also the only variable expanded inside a
-hook's `command` string.
+`LLXPRT_PROJECT_DIR` is the only environment variable LLxprt Code adds to the
+hook environment; the rest of the environment is inherited from the LLxprt Code
+process.
+
+Inside a hook's `command` string, two layers of expansion apply:
+
+1. **LLxprt Code expands `$LLXPRT_PROJECT_DIR` itself.** Before invoking the
+   shell, LLxprt Code replaces every `$LLXPRT_PROJECT_DIR` token with the
+   current working directory, shell-escaping the value first to prevent
+   injection. No other LLxprt-specific token is substituted by LLxprt Code.
+2. **The platform shell then performs its normal expansion.** Because the
+   resulting string is handed to a real shell, ordinary shell features such as
+   `${VAR:-default}`, `$HOME`, `~`, command substitution, and quoting all work
+   as they would in any shell script. For example,
+   `${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}` resolves correctly inside
+   a `command` because the shell evaluates it at run time.
 
 ## MessageBus Contracts
 

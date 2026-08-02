@@ -155,17 +155,31 @@ When stdout is plain text (not JSON) and the exit code is `0`, LLxprt Code
 converts it to `{ "decision": "allow", "systemMessage": ... }`. This is useful
 for returning informational messages.
 
-### The `$LLXPRT_PROJECT_DIR` variable
+### Variables in the `command` string
 
-Hook commands support `$LLXPRT_PROJECT_DIR`, which expands to the current
-working directory at runtime. This lets you reference project-relative paths
-regardless of where LLxprt Code is launched from:
+Hook `command` strings are handed to a real platform shell, so two layers of
+expansion apply:
 
-```json
-{
-  "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/my-hook.sh"
-}
-```
+1. **LLxprt Code substitutes `$LLXPRT_PROJECT_DIR`.** Before invoking the
+   shell, LLxprt Code replaces every `$LLXPRT_PROJECT_DIR` token with the
+   current working directory, shell-escaping the value first. This lets you
+   reference project-relative paths regardless of where LLxprt Code is
+   launched from:
+
+   ```json
+   {
+     "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/my-hook.sh"
+   }
+   ```
+
+2. **The shell then performs its normal expansion.** Because the string runs
+   through your platform shell, ordinary shell features also work —
+   `${VAR:-default}`, `$HOME`, `~`, command substitution, and quoting. For
+   example, `${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}` resolves
+   correctly inside a `command` because the shell evaluates it at run time.
+
+LLxprt Code only substitutes `$LLXPRT_PROJECT_DIR` itself; every other
+expansion is done by the shell, not by LLxprt Code.
 
 ### Matcher patterns
 
@@ -314,21 +328,40 @@ An `AfterTool` hook that records every tool call to a log file.
 #
 input=$(cat)
 
+# Extract the scalar fields we want to record. jq -r yields raw (unquoted)
+# strings, which we then pass back to jq as --arg values so they are encoded
+# correctly no matter what characters they contain.
 timestamp=$(echo "$input" | jq -r '.timestamp')
 session_id=$(echo "$input" | jq -r '.session_id')
 tool_name=$(echo "$input" | jq -r '.tool_name')
-tool_input=$(echo "$input" | jq -c '.tool_input')
-tool_response=$(echo "$input" | jq -c '.tool_response')
 
 # Write to LLxprt's canonical log/state directory, or choose any path your
 # policy requires.
 log_dir="${LLXPRT_LOG_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.local/state/llxprt-code}}"
 mkdir -p "$log_dir"
 log_file="$log_dir/audit.log"
-echo "{\"timestamp\": \"$timestamp\", \"session\": \"$session_id\", \"tool\": \"$tool_name\", \"input\": $tool_input, \"response\": $tool_response}" >> "$log_file"
+
+# Build the JSON record with jq -n, passing the scalar fields as --arg strings
+# and embedding tool_input / tool_response as proper JSON values (--argjson)
+# taken directly from the input. This guarantees valid JSON even when the data
+# contains quotes, newlines, or control characters.
+jq -n \
+  --arg timestamp "$timestamp" \
+  --arg session "$session_id" \
+  --arg tool "$tool_name" \
+  --argjson payload "$input" \
+  '{timestamp: $timestamp, session: $session, tool: $tool,
+    input: $payload.tool_input, response: $payload.tool_response}' >> "$log_file"
 
 exit 0
 ```
+
+> **Warning: audit logs are sensitive.** Tool inputs and responses can contain
+> file contents, environment values, API keys, or other secrets. Before
+> enabling an audit hook, set restrictive file permissions on the log file
+> (for example, `chmod 600`), and decide on a redaction and retention policy
+> that matches your organization's requirements. A shared or world-readable
+> audit log can become a concentrated store of secrets.
 
 **`.llxprt/settings.json`:**
 
@@ -376,7 +409,12 @@ command=$(echo "$input" | jq -r '.tool_input.command')
 if [[ "$command" == rm\ * ]]; then
   if [[ "$command" != *"-i"* && "$command" != *"--interactive"* ]]; then
     safe_command=$(echo "$command" | sed 's/^rm /rm -i /')
-    echo "{\"decision\": \"allow\", \"hookSpecificOutput\": {\"tool_input\": {\"command\": \"$safe_command\"}}}"
+    # Build the structured response with jq -n so $safe_command is encoded as a
+    # proper JSON string. Interpolating it into a raw echo would break on
+    # quotes, backslashes, or newlines in the command.
+    jq -n \
+      --arg command "$safe_command" \
+      '{decision: "allow", hookSpecificOutput: {tool_input: {command: $command}}}'
     exit 0
   fi
 fi
@@ -490,8 +528,12 @@ def load_state():
 
 def save_state(state):
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(STATE_FILE, 'w') as f:
+    # Write to a temporary file then atomically rename, so a crash mid-write
+    # never leaves a truncated JSON file behind.
+    tmp = STATE_FILE.with_suffix('.tmp')
+    with open(tmp, 'w') as f:
         json.dump(state, f)
+    tmp.replace(STATE_FILE)
 
 
 def main():
@@ -528,6 +570,16 @@ Make it executable:
 chmod +x .llxprt/hooks/rate-limit.py
 ```
 
+> **Note: this example is not safe for concurrent sessions.** The read-modify-
+> write cycle in `main()` has a race condition: two `BeforeModel` invocations
+> running at the same time can both read the same state, both pass the limit,
+> and then overwrite each other's updates, letting through more calls than
+> `MAX_CALLS_PER_MINUTE` allows. The atomic replace in `save_state` protects
+> against a crash truncating the JSON, but it does **not** serialize access. If
+> you need correct behavior across parallel sessions, add file locking (for
+> example, Python's `fcntl.flock`) or move the counter to a small database
+> with atomic increments.
+
 **`.llxprt/settings.json`:**
 
 ```json
@@ -562,14 +614,12 @@ the model processes the prompt.
 
 context=$(git log -5 --oneline 2>/dev/null || echo "No git history")
 
-cat <<EOF
-{
-  "hookSpecificOutput": {
-    "hookEventName": "BeforeAgent",
-    "additionalContext": "Recent commits:\\n$context"
-  }
-}
-EOF
+# Build the structured response with jq -n --arg so the commit text is encoded
+# as a proper JSON string. A heredoc would break on quotes, newlines, or
+# control characters that git commit messages can contain.
+jq -n \
+  --arg context "Recent commits:\n$context" \
+  '{hookSpecificOutput: {hookEventName: "BeforeAgent", additionalContext: $context}}'
 ```
 
 **`.llxprt/settings.json`:**
@@ -619,13 +669,22 @@ if [ ! -f "$test_file" ]; then
   exit 0
 fi
 
-if npx vitest run "$test_file" --silent 2>&1 | head -20; then
-  echo "Tests passed"
-else
-  echo "Tests failed"
-fi
+# Capture the test output and its real exit status separately. Piping
+# directly into `head` would lose the test command's exit code (the pipeline
+# would report head's status instead), so a failing test run could be
+# reported as a success.
+test_output=$(npx vitest run "$test_file" --silent 2>&1 | head -20)
+test_status=${PIPESTATUS[0]}
 
-exit 0
+if [ "$test_status" -eq 0 ]; then
+  echo "Tests passed"
+  exit 0
+else
+  # Report the failure on stderr with exit 2 so LLxprt Code surfaces it as a
+  # blocking decision rather than silently treating it as a success.
+  echo "Tests failed for $test_file" >&2
+  exit 2
+fi
 ```
 
 **`.llxprt/settings.json`:**
@@ -936,8 +995,11 @@ The default timeout is **60 seconds** (`60000` ms). You can set a shorter
 
 ### Environment variables not available
 
-Only `$LLXPRT_PROJECT_DIR` is expanded in the `command` string. If your hook
-script needs other variables, load them from a `.env` file inside the script:
+LLxprt Code only substitutes `$LLXPRT_PROJECT_DIR` itself before invoking the
+shell; every other expansion (`$HOME`, `${VAR:-default}`, and so on) is
+performed by your platform shell at run time. If your hook script needs
+additional variables that the shell does not already see, load them from a
+`.env` file inside the script:
 
 ```bash
 if [ -f "$LLXPRT_PROJECT_DIR/.env" ]; then

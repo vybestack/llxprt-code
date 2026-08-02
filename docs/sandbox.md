@@ -550,6 +550,14 @@ Pass additional flags to the container runtime:
 export SANDBOX_FLAGS="--security-opt label=disable"
 ```
 
+> **Warning — `label=disable` turns off SELinux labelling.** The flag
+> `--security-opt label=disable` removes the SELinux process label (MCS/MLS
+> category) from the container, eliminating a mandatory-access-control boundary
+> that confines what the container process can access. Treat it as a
+> **last-resort** diagnostic step for SELinux permission denials, not a
+> standing setting. After you identify and fix the underlying cause, remove
+> `SANDBOX_FLAGS` so label enforcement is restored.
+
 ### UID/GID mapping (Linux)
 
 By default on Debian and Ubuntu-based Linux, the container runs as your current
@@ -571,7 +579,10 @@ export LLXPRT_SANDBOX_IMAGE=my-registry/my-sandbox:latest
 or `podman info`.
 
 **Permission errors on mounted files** — on Linux, try `SANDBOX_SET_UID_GID=true`
-or `SANDBOX_FLAGS="--security-opt label=disable"` for SELinux systems.
+first. The flag `--security-opt label=disable` (via `SANDBOX_FLAGS`) is a
+**last resort** for SELinux systems: it turns off SELinux process labelling for
+the container, removing a mandatory-access-control boundary. Use it only to
+diagnose a SELinux denial, then remove it so label enforcement is restored.
 
 **SSH not working in Podman on macOS** — use a stable socket path. The default
 launchd socket paths are unreliable. Set up a dedicated socket:

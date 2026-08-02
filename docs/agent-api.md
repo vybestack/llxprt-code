@@ -209,13 +209,13 @@ read-only sub-surfaces for focused control.
 
 ### Sending turns
 
-| Method                                  | Description                                                             |
-| --------------------------------------- | ----------------------------------------------------------------------- |
-| `stream(input, opts?)`                  | Returns an `AsyncIterable<AgentEvent>` — the streaming turn.            |
-| `chat(input, opts?)`                    | Buffers a turn into an `AgentResult` (text + toolCalls + finishReason). |
-| `generate(input, opts?)`                | One-shot text generation returning a `string`.                          |
-| `generateJson(contents, schema, opts?)` | Schema-constrained JSON generation.                                     |
-| `generateEmbedding(texts)`              | Returns embedding vectors.                                              |
+| Method                                  | Description                                                                                              |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `stream(input, opts?)`                  | Returns an `AsyncIterable<AgentEvent>` — the streaming turn. Emits a terminal `done` event.              |
+| `chat(input, opts?)`                    | Buffers a turn and returns an `AgentResult` (text + toolCalls + finishReason). Does **not** emit events. |
+| `generate(input, opts?)`                | One-shot text generation returning a `string`.                                                           |
+| `generateJson(contents, schema, opts?)` | Schema-constrained JSON generation.                                                                      |
+| `generateEmbedding(texts)`              | Returns embedding vectors.                                                                               |
 
 `input` is an `AgentInput`: a string, an array of content blocks, an
 `{ text: string; role?: 'user' | 'system' }` object, or a message object.
@@ -256,11 +256,22 @@ agent.getApprovalMode(); // → ApprovalMode.AUTO_EDIT
 
 `ApprovalMode` is a runtime enum exported from the public root:
 
-| Member      | Meaning                                          |
-| ----------- | ------------------------------------------------ |
-| `DEFAULT`   | Confirm every tool call (interactive prompt).    |
-| `AUTO_EDIT` | Auto-approve edit-class tools; confirm the rest. |
-| `YOLO`      | Auto-approve all tools (no confirmation).        |
+| Member      | Meaning                                                                       |
+| ----------- | ----------------------------------------------------------------------------- |
+| `DEFAULT`   | Read-only tools are allowed automatically; write tools ask for confirmation.  |
+| `AUTO_EDIT` | Edit-class tools are auto-approved; shell and other tools still ask.          |
+| `YOLO`      | Auto-approve all tools (no confirmation). Dangerous command blocking applies. |
+
+These mode meanings match the built-in policy stack described in
+[Controlling Tool Execution](message-bus.md). The `ApprovalMode` enum value
+itself only selects which mode-specific policy rules are active — it does not
+inject rules of its own.
+
+> **Important — harness defaults override this in `createAgent`.** By default
+> `createAgent` applies `forceConfirmations: true`, which injects a
+> high-priority ask rule so **every** tool surfaces a confirmation request,
+> regardless of approval mode. To observe the enum's native behaviour, disable
+> that harness gate (see [Harness defaults and production gating](#harness-defaults-and-production-gating)).
 
 > **Warning — untrusted folders.** `setApprovalMode` throws
 > `"Cannot enable privileged approval modes in an untrusted folder."` for any
@@ -430,8 +441,17 @@ Every `stream()` turn yields a sequence of `AgentEvent` values discriminated by
 
 ### `DoneReason`
 
-Every `stream()` or `chat()` turn yields or returns **exactly one** terminal
-`done` event carrying one of these reasons:
+There are two ways to consume a turn's outcome, and they surface the finish
+reason differently:
+
+- **`stream()`** yields an `AgentEvent` sequence that terminates with
+  **exactly one** `done` event carrying a `reason` from the table below.
+  Errors surface as an `error` event followed by exactly one `done` with
+  `reason: 'error'`.
+- **`chat()`** returns an `AgentResult` directly. It does **not** emit events.
+  The finish reason is available on `result.finishReason`, and a failed turn
+  populates `result.error` (an `AgentError`) alongside
+  `finishReason: 'error'`.
 
 | Reason             | Meaning                                                           |
 | ------------------ | ----------------------------------------------------------------- |

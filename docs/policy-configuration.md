@@ -1,5 +1,17 @@
 # Policy Configuration Guide
 
+> **Warning — priority examples on this page are outdated.** The TOML loader
+> requires `priority` to be an **integer from 0 to 999**, not a decimal. Values
+> such as `priority = 2.6` or `priority = 2.3` are **rejected** and your policy
+> file will fail to load. The decimal numbers shown by the `/policies` command
+> are **resolved** priorities — the engine computes them as `tier + priority /
+1000` (for example, `priority = 500` in a user file resolves to `2.500`). The
+> remaining examples below still use the old decimal form and have not yet been
+> converted; treat them as illustrative of intent only and write integers in
+> your own files. For the correct, current explanation see
+> [Controlling Tool Execution](message-bus.md). This page is being rewritten
+> (issue #2941).
+
 ## Overview
 
 Policies control which tools can execute, which require user confirmation, and which are blocked. This guide covers the TOML policy file syntax, rule structure, and common use cases.
