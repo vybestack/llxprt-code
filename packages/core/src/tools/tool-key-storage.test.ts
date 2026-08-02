@@ -23,6 +23,33 @@ import {
   maskKeyForDisplay,
 } from '@vybestack/llxprt-code-tools';
 import { isValidEnvelope } from '@vybestack/llxprt-code-storage';
+import {
+  forceRuntimeReplacedForTesting,
+  isRuntimeReplacedError,
+  resetRuntimeIdentityForTesting,
+  resetRuntimeReplacedWarningForTesting,
+} from '../storage/secure-store.js';
+
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason, so
+ * callers assert on the error CODE (via isRuntimeReplacedError) rather than
+ * matching human-readable message text.
+ *
+ * @plan PLAN-20260801-ISSUE2926
+ * @requirement R3
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    expect.fail('expected the operation to reject');
+  }
+  return outcome;
+}
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -448,6 +475,71 @@ describe('ToolKeyStorage', () => {
 
       // File should be gone
       await expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
+    });
+  });
+
+  // ─── Replaced-runtime anti-divergence (issue #2926) ──────────────────────
+
+  describe('replaced-runtime anti-divergence (issue #2926)', () => {
+    beforeEach(() => {
+      resetRuntimeIdentityForTesting();
+      resetRuntimeReplacedWarningForTesting();
+    });
+    afterEach(() => {
+      resetRuntimeIdentityForTesting();
+      resetRuntimeReplacedWarningForTesting();
+    });
+
+    /**
+     * @plan PLAN-20260801-ISSUE2926
+     * @requirement R3
+     */
+    it('saveKey rethrows RUNTIME_REPLACED and does NOT create a fallback file', async () => {
+      forceRuntimeReplacedForTesting();
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+      });
+
+      const error = await captureRejection(storage.saveKey('exa', 'sk-leaked'));
+      expect(isRuntimeReplacedError(error)).toBe(true);
+
+      // The fallback .key file must NOT exist — this is the anti-divergence
+      // guarantee. Without it, the value would be silently written to the
+      // file while the keychain has a different (stale) value, causing
+      // silent data loss on the next healthy start.
+      const filePath = path.join(tempDir, 'exa.key');
+      await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
+    });
+
+    /**
+     * @plan PLAN-20260801-ISSUE2926
+     * @requirement R3
+     */
+    it('getKey rethrows RUNTIME_REPLACED instead of falling through to file', async () => {
+      forceRuntimeReplacedForTesting();
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+      });
+
+      const error = await captureRejection(storage.getKey('exa'));
+      expect(isRuntimeReplacedError(error)).toBe(true);
+    });
+
+    /**
+     * @plan PLAN-20260801-ISSUE2926
+     * @requirement R3
+     */
+    it('deleteKey rethrows RUNTIME_REPLACED instead of silently continuing', async () => {
+      forceRuntimeReplacedForTesting();
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+      });
+
+      const error = await captureRejection(storage.deleteKey('exa'));
+      expect(isRuntimeReplacedError(error)).toBe(true);
     });
   });
 

@@ -12,6 +12,9 @@
 /**
  * Error codes for secure store operations.
  * Derived from core SecureStore error handling evidence (P01 dependency-audit).
+ *
+ * `RUNTIME_REPLACED` is a terminal error identity: downstream swallow/fallback
+ * layers must rethrow it rather than absorb it (issue #2926).
  */
 export type SecureStoreErrorCode =
   | 'UNAVAILABLE'
@@ -19,7 +22,8 @@ export type SecureStoreErrorCode =
   | 'DENIED'
   | 'CORRUPT'
   | 'TIMEOUT'
-  | 'NOT_FOUND';
+  | 'NOT_FOUND'
+  | 'RUNTIME_REPLACED';
 
 /**
  * Error shape thrown/rejected by ISecureStore operations.
@@ -54,4 +58,21 @@ export interface ISecureStore {
   delete(key: string): Promise<boolean>;
   list(): Promise<string[]>;
   has(key: string): Promise<boolean>;
+}
+
+/**
+ * Type guard: narrows to an ISecureStoreError whose code is RUNTIME_REPLACED.
+ * Downstream swallow/fallback layers must rethrow this terminal error rather
+ * than absorb it (issue #2926).
+ *
+ * @plan PLAN-20260801-ISSUE2926
+ * @requirement R3
+ */
+export function isRuntimeReplacedStoreError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'RUNTIME_REPLACED'
+  );
 }

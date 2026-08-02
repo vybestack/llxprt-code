@@ -40,6 +40,12 @@ export type {
   SecureStoreErrorCode,
   SecureStoreOptions,
 } from './secure-store/secure-store.js';
+export { isSecureStoreError } from './secure-store/secure-store-errors.js';
+export { isRuntimeReplacedError } from './secure-store/secure-store-errors.js';
+export {
+  forceRuntimeReplacedForTesting,
+  resetRuntimeIdentityForTesting,
+} from './secure-store/runtime-identity.js';
 export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,
