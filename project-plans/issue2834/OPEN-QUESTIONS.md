@@ -191,7 +191,44 @@ bolted onto this one — but that is your call, not mine.
 
 ---
 
-## Question 3 (smaller) — package size
+## Question 3 — RESOLVED: do NOT deduplicate. Both copies are load-bearing.
+
+I checked before offering to "optimise" this, and it is a good thing I did —
+the change I offered to make would have broken Bun consumers.
+
+**What I found.** `packages/providers/package.json` declares 42 export subpaths
+with a `bun` condition that resolves to **TypeScript source**, not `dist`:
+
+    "./auth.js": {
+      "types": "./dist/src/auth/index.d.ts",
+      "bun":   "./src/auth/index.ts",
+      "import":"./dist/src/auth/index.js"
+    }
+
+So resolution is runtime-dependent:
+
+- **Node** consumers take `import`/`main` -> `dist/...`, and `AssetLoader`
+  resolves `dist/src/tokenizers/official/assets/`.
+- **Bun** consumers take the `bun` condition -> `src/...`, and the very same
+  `AssetLoader` resolves `src/tokenizers/official/assets/`.
+
+**Conclusion.** The ~9 MB in `src` and the ~9 MB in `dist` are not redundant.
+Each serves a different runtime. Dropping the `src` copy would break the Bun
+path; dropping the `dist` copy would break the Node path. The duplication is
+required.
+
+This also retroactively confirms the earlier packaging fix was necessary rather
+than cosmetic: before adding `.bpe` to `scripts/copy_files.ts`, the `dist` copy
+did not exist at all, so **Node consumers would have failed to load any
+tokenizer**, while the Bun path happened to work — which is exactly the kind of
+gap that would not have shown up in this repo's own Bun-based test runs.
+
+**No action, and no decision needed** unless you want the package split
+differently, which would be its own piece of work.
+
+---
+
+## Original Question 3 (kept for context) — package size
 
 The npm tarball now ships the tokenizer assets **twice**, about 9 MB each way:
 

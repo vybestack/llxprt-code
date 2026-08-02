@@ -28,10 +28,17 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Resolved relative to this module in both layouts, because the package build
-// copies .bpe assets from src into dist alongside the compiled JS:
-//   dev:  packages/providers/src/tokenizers/official/assets/
-//   dist: packages/providers/dist/src/tokenizers/official/assets/
+// Resolved relative to this module, which is correct under both published
+// layouts because the package exports resolve differently per runtime:
+//
+//   Node (import/main) -> dist/src/tokenizers/official/assets/
+//   Bun  (bun export condition, which serves TypeScript source)
+//                       -> src/tokenizers/official/assets/
+//
+// Both copies are therefore load-bearing and must ship: the dist copy is
+// produced by scripts/copy_files.ts, and the src copy is the checked-in
+// original. Removing either one breaks that runtime's consumers, so this is
+// deliberate duplication rather than redundancy.
 const ASSETS_DIR = path.join(__dirname, 'assets');
 
 /**
