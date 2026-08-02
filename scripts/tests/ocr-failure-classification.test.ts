@@ -13,23 +13,24 @@ import {
   asOptionalRecord,
   asRecord,
   asString,
+  errorField,
   parseWorkflowYaml,
 } from './typed-test-helpers.ts';
 import {
   WORKFLOW_PATH,
   commandText,
-  extractBashIfChain,
+  extractBashBlock,
   hasBash,
   readRootFile,
   stepNamed,
 } from './ocr-review-workflow-helpers.ts';
 
-// OCR >= 1.8.0 emits a structured usage record (emitFailureUsage in
-// cmd/opencodereview/output.go) to stderr when a `--format json` review
-// fails. Its token counters and session UUID embed digit runs that look like
-// HTTP status codes: 214295 contains "429", 240123 contains "401",
-// 105295 contains "529", and the session UUID contains "429b" and "403a".
-// The classifier must not read any of those as a status code.
+// OCR >= 1.8.0 writes this structured usage record (emitFailureUsage in
+// cmd/opencodereview/output.go) to stderr when a `--format json` review fails.
+// It is a pretty-printed top-level JSON object whose braces sit alone at
+// column 0. Its counters embed digit runs that look like HTTP status codes
+// (214295 contains "429", 240123 contains "401", 105295 contains "529") and
+// the session UUID contains "429b" and "403a".
 const USAGE_JSON = `{
   "status": "failed",
   "summary": {
@@ -42,8 +43,42 @@ const USAGE_JSON = `{
     "elapsed": "1m36s",
     "budget_exceeded": false
   },
+  "tool_calls": {
+    "total": 12,
+    "by_tool": {
+      "code_search": 4,
+      "file_read": 6,
+      "file_read_diff": 2
+    }
+  },
   "session_id": "7c1d429b-403a-4e51-9f52-9b0a1c2d3e4f"
 }`;
+
+// The same record with counters whose values are exactly the status codes the
+// classifier looks for. Token-boundary anchoring alone cannot reject these —
+// only dropping the record can.
+const USAGE_JSON_EXACT_CODES = `{
+  "status": "failed",
+  "summary": {
+    "files_reviewed": 429,
+    "total_tokens": 401,
+    "input_tokens": 403,
+    "output_tokens": 529,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "elapsed": "3s",
+    "budget_exceeded": false
+  },
+  "tool_calls": {
+    "total": 529,
+    "by_tool": {
+      "code_search": 429,
+      "file_read": 403
+    }
+  },
+  "session_id": "0d1f2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a5b"
+}`;
+
 const SESSION_LINE =
   '[ocr] Session: 7c1d429b-403a-4e51-9f52-9b0a1c2d3e4f ' +
   '(retry with: --resume 7c1d429b-403a-4e51-9f52-9b0a1c2d3e4f)';
@@ -66,7 +101,7 @@ const MARK_STUB =
 describe.skipIf(!hasBash())(
   '.github/workflows/ocr-review.yml — review failure classification (issue #2929)',
   () => {
-    let classifierChain: string;
+    let classifierBlock: string;
 
     beforeAll(() => {
       const workflow = parseWorkflowYaml(readRootFile(WORKFLOW_PATH));
@@ -76,11 +111,11 @@ describe.skipIf(!hasBash())(
         asRecord(jobs['code-review']),
         'Run OpenCodeReview',
       );
-      // Extract the REAL if/elif/fi chain from the workflow rather than
-      // re-implementing it here.
-      classifierChain = extractBashIfChain(
+      // Extract the REAL classification block (usage-record strip plus the
+      // if/elif/fi chain) from the workflow rather than re-implementing it.
+      classifierBlock = extractBashBlock(
         commandText(reviewStep),
-        /^\s*if grep -Eqi .*429.*ocr-stderr\.log/,
+        /^\s*ocr_diagnostics="\$\(awk /,
       );
     });
 
@@ -94,15 +129,30 @@ describe.skipIf(!hasBash())(
           stderrContent,
           'utf8',
         );
-        execFileSync(
-          'bash',
-          ['-c', ['set -euo pipefail', MARK_STUB, classifierChain].join('\n')],
-          {
-            cwd: directory,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            encoding: 'utf8',
-          },
-        );
+        try {
+          execFileSync(
+            'bash',
+            [
+              '-c',
+              ['set -euo pipefail', MARK_STUB, classifierBlock].join('\n'),
+            ],
+            {
+              cwd: directory,
+              stdio: ['ignore', 'pipe', 'pipe'],
+              encoding: 'utf8',
+            },
+          );
+        } catch (error) {
+          throw new Error(
+            [
+              'The extracted classification block failed to run.',
+              `status: ${errorField(error, 'status')}`,
+              `stderr: ${errorField(error, 'stderr')}`,
+              `input: ${JSON.stringify(stderrContent)}`,
+            ].join('\n'),
+            { cause: error },
+          );
+        }
         const content = fs
           .readFileSync(
             path.join(directory, 'ocr-infrastructure-failure.txt'),
@@ -121,9 +171,9 @@ describe.skipIf(!hasBash())(
     }
 
     // ------------------------------------------------------------------
-    // The 1.8.x structured usage record must not be read as a status code.
-    // Each case isolates a single embedded digit run so a regression in one
-    // pattern cannot be masked by another.
+    // Codes embedded inside longer numbers or hex identifiers are rejected
+    // by the token-boundary anchoring. Each case isolates one embedded run
+    // so a regression in a single pattern cannot be masked by another.
     // ------------------------------------------------------------------
     it('does not read 429 inside a token counter as a rate limit', () => {
       expect(classify('  "total_tokens": 214295,\n')).toBe(GENERIC_REASON);
@@ -145,8 +195,26 @@ describe.skipIf(!hasBash())(
       expect(classify(`${SESSION_LINE}\n`)).toBe(GENERIC_REASON);
     });
 
+    // ------------------------------------------------------------------
+    // Counters whose value is exactly a status code are only rejected
+    // because the usage record itself is dropped before classification.
+    // ------------------------------------------------------------------
     it('classifies a whole real 1.8.x failure usage record as generic', () => {
       expect(classify(`${USAGE_JSON}\n${SESSION_LINE}\n`)).toBe(GENERIC_REASON);
+    });
+
+    it('ignores usage counters whose value is exactly a status code', () => {
+      expect(classify(`${USAGE_JSON_EXACT_CODES}\n${SESSION_LINE}\n`)).toBe(
+        GENERIC_REASON,
+      );
+    });
+
+    it('does not let an exact-valued usage counter mask a later diagnostic', () => {
+      expect(
+        classify(
+          `${USAGE_JSON_EXACT_CODES}\ncontext deadline exceeded: timed out\n`,
+        ),
+      ).toBe(TIMEOUT_REASON);
     });
 
     // ------------------------------------------------------------------
@@ -156,8 +224,10 @@ describe.skipIf(!hasBash())(
       expect(classify('HTTP 429 Too Many Requests\n')).toBe(RATE_LIMIT_REASON);
     });
 
-    it('classifies a JSON status field of 429 as a rate limit', () => {
-      expect(classify('{"status":429}\n')).toBe(RATE_LIMIT_REASON);
+    it('classifies a single-line provider error payload of 429 as a rate limit', () => {
+      expect(classify('{"error":{"code":429,"message":"quota"}}\n')).toBe(
+        RATE_LIMIT_REASON,
+      );
     });
 
     it('classifies a digit-free "rate limit" message as a rate limit', () => {
@@ -201,6 +271,26 @@ describe.skipIf(!hasBash())(
           `${USAGE_JSON}\nHTTP 429 Too Many Requests\n${SESSION_LINE}\n`,
         ),
       ).toBe(RATE_LIMIT_REASON);
+    });
+
+    it('still classifies a genuine 429 emitted before the usage record', () => {
+      expect(
+        classify(
+          `HTTP 429 Too Many Requests\n${USAGE_JSON}\n${SESSION_LINE}\n`,
+        ),
+      ).toBe(RATE_LIMIT_REASON);
+    });
+
+    it('classifies the real 1.8.4 per-file read failure line as generic', () => {
+      // OCR prints tool failures as
+      // `[ocr]   ✘ file_read failed: file "path" not found: ...` — the format
+      // the coverage report's read-failure extractor consumes. It carries no
+      // provider status, so the failure cause stays generic.
+      expect(
+        classify(
+          '[ocr]   \u2718 file_read failed: file "src/missing.ts" not found: no such file\n',
+        ),
+      ).toBe(GENERIC_REASON);
     });
   },
 );

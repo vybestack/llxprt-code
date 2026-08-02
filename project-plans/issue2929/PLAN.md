@@ -54,17 +54,34 @@ mis-classify genuine failures (e.g. a config error reported as
 "HTTP 429 rate limit"), corrupting the sticky-comment reason, the
 `ocr-infrastructure-failure.txt` artifact and the telemetry failure reason.
 
-**Fix (in scope, required by acceptance criterion 3):** anchor the numeric
-alternatives at token boundaries so a status code only matches when it is not
-embedded in a larger number or hex/identifier token:
+There are two independent causes: digits *embedded* in a longer number or hex
+identifier, and a counter whose value *is* exactly a status code (for example
+`"files_reviewed": 429`), which no boundary rule can distinguish from a real
+status.
 
-    (^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)
+**Fix (in scope, required by acceptance criterion 3), one rule per cause:**
 
-Hyphen and alphanumerics are excluded on both sides so hex UUID segments
-(`-429b-`, `9f429b`) and long integers (`214295`) never match, while genuine
-diagnostics (`HTTP 429`, `status_code=429`, `{"status":429}`, `429 Too Many
-Requests`) still do. The non-numeric alternatives (`rate limit`, `overloaded`,
-`auth`, …) are untouched.
+1. Drop the usage record before classifying. Go's encoder writes it with
+   `SetIndent("", "  ")`, so it is a top-level object whose braces sit alone at
+   column 0:
+
+       ocr_diagnostics="$(awk '/^\{$/ { in_usage = 1 } in_usage != 1 { print } /^\}$/ { in_usage = 0 }' ocr-stderr.log)"
+
+   Single-line provider payloads such as `{"error":{"code":429}}` are
+   unaffected because their braces are not alone on a line.
+
+2. Anchor the numeric alternatives at token boundaries:
+
+       (^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)
+
+   Hyphen and alphanumerics are excluded on both sides so hex UUID segments
+   (`-429b-`, `9f429b`) and long integers (`214295`) never match — this is what
+   keeps the `[ocr] Session: <uuid>` line, emitted outside the JSON object,
+   from matching — while genuine diagnostics (`HTTP 429`, `status_code=429`,
+   `{"status":429}`, `429 Too Many Requests`) still do.
+
+The non-numeric alternatives (`rate limit`, `overloaded`, `auth`, …), the
+branch order and the reason strings are untouched.
 
 ### D2 — New terminal status `budget_exceeded` (verify, no change expected)
 

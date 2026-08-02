@@ -114,13 +114,16 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       stepNamed(codeReviewJob, 'Run OpenCodeReview'),
     );
     expectContainsAll(reviewRun, [
-      'grep -Eqi "(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)|rate limit" ocr-stderr.log',
+      // The structured usage record OCR >= 1.8.0 writes to stderr is dropped
+      // before classification so its counters are never read as HTTP statuses.
+      'ocr_diagnostics="$(awk \'/^\\{$/ { in_usage = 1 } in_usage != 1 { print } /^\\}$/ { in_usage = 0 }\' ocr-stderr.log)"',
+      'grep -Eqi "(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)|rate limit"',
       'OCR review failed: HTTP 429 rate limit',
-      'grep -Eqi "(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)|overloaded" ocr-stderr.log',
+      'grep -Eqi "(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)|overloaded"',
       'OCR review failed: HTTP 529 provider overloaded',
-      'grep -Eqi "(^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key" ocr-stderr.log',
+      'grep -Eqi "(^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key"',
       'OCR review failed: authentication or configuration error',
-      'grep -Eqi "timeout|timed out" ocr-stderr.log',
+      'grep -Eqi "timeout|timed out"',
       'OCR review failed: timeout',
       'all OCR per-file reviews failed; likely LLM provider/config/auth failure',
       'OCR review command failed',

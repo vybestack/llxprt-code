@@ -90,7 +90,27 @@ and exercised directly.
 | review JSON envelope (`status`, `message`, `summary`, `tool_calls`, `comments`, `warnings`, `session_id`) | ✓      | ✓                                                  | unchanged |
 | `warnings[].type === 'subtask_error'` for review failures                                                 | ✓      | ✓ (`scan_subtask_error` added for `ocr scan` only) | unchanged |
 | `all %d file review(s) failed` stderr string                                                              | ✓      | ✓                                                  | unchanged |
+| per-file read-failure stderr line                                                                         | ✓      | ✓ identical source                                 | unchanged |
+| finding object schema (`model.LlmComment`)                                                                | ✓      | ✓ identical source                                 | unchanged |
 | non-zero exit on failure                                                                                  | ✓      | ✓ (`main` → `os.Exit(1)`)                          | unchanged |
+
+Two of those rows are contracts the workflow parses but the captured sample
+runs did not happen to produce (no file was unreadable, and no run generated a
+finding), so they were verified against the tagged upstream sources instead:
+
+- **Read-failure line.** `internal/telemetry/events.go` formats every tool
+  failure as `[ocr]   ✘ %s failed: %v` and `internal/tool/file_read.go`
+  produces `file %q not found: %w`. Both files are byte-identical at `v1.7.17`
+  and `v1.8.4`, so the composed line the coverage report's read-failure
+  extractor consumes —
+  `[ocr]   ✘ file_read failed: file "<path>" not found: …` — is unchanged. The
+  classification suite pins that this line still classifies as a generic
+  failure rather than a provider status.
+- **Finding schema.** `internal/model/review.go` (which declares
+  `LlmComment` with `path`, `content`, `suggestion_code`, `existing_code`,
+  `start_line`, `end_line`, `thinking`, `category`, `severity`) is
+  byte-identical at `v1.7.17` and `v1.8.4`, so the inline-comment and routing
+  paths see the same finding fields.
 
 ## Behavioural deltas
 
@@ -112,29 +132,56 @@ grep -Eqi "529|overloaded" ocr-stderr.log
 grep -Eqi "401|403|auth|..." ocr-stderr.log
 ```
 
-A token counter such as `"total_tokens": 214295` contains `429`; a session UUID
-such as `...-429b-...` contains `429` too. After the bump these would
-mis-classify genuine failures (e.g. a config error reported as
+That is wrong against the 1.8.x stderr in two independent ways:
+
+1. **Embedded digits.** A token counter such as `"total_tokens": 214295`
+   contains `429`; a session UUID such as `...-429b-...` contains `429` too.
+2. **Exact values.** A counter whose value _is_ a status code — for example
+   `"files_reviewed": 429`, `"total_tokens": 401`, or a `tool_calls.by_tool`
+   tally of `403` — is indistinguishable from a real status by any
+   boundary rule, because it is a standalone integer.
+
+Either one mis-classifies a genuine failure (e.g. a config error reported as
 "HTTP 429 rate limit"), corrupting the sticky-comment reason, the
-`ocr-infrastructure-failure.txt` artifact and the telemetry failure reason.
+`ocr-infrastructure-failure.txt` artifact and the telemetry failure reason. The
+first-match-wins branch order also means a spurious `429` masks a real
+diagnostic of a different class that appears later in the same stderr.
 
-**Fix applied (in scope):** anchor the numeric alternatives at token
-boundaries so a status code only matches when it is not embedded in a larger
-number or hex/identifier token:
+**Fix applied (in scope), two targeted rules for the two distinct causes:**
 
-```bash
-(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)
-(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)
-(^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)
-```
+1. **Drop the usage record before classifying.** Go's encoder emits it with
+   `SetIndent("", "  ")`, so the record is a top-level object whose braces sit
+   alone at column 0 and whose members are indented. Everything from a bare
+   `{` line to the matching bare `}` line is accounting, not diagnostics:
 
-Hyphen and alphanumerics are excluded on both sides so hex UUID segments
-(`-429b-`, `9f429b`) and long integers (`214295`) never match, while genuine
-diagnostics (`HTTP 429`, `status_code=429`, `{"status":429}`,
-`429 Too Many Requests`) still do. The non-numeric alternatives
-(`rate limit`, `overloaded`, `auth`, …), the branch order, the reason strings,
-`grep -Eqi`, and the surrounding `mark_infrastructure_failure` calls are
-untouched.
+   ```bash
+   ocr_diagnostics="$(awk '/^\{$/ { in_usage = 1 } in_usage != 1 { print } /^\}$/ { in_usage = 0 }' ocr-stderr.log)"
+   ```
+
+   Single-line provider error payloads (`{"error":{"code":429,…}}`) are not
+   affected because their braces are not alone on a line.
+
+2. **Anchor the numeric alternatives at token boundaries** so a status code
+   only matches when it is not embedded in a larger number or hex identifier:
+
+   ```bash
+   (^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)
+   (^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)
+   (^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)
+   ```
+
+   Hyphen and alphanumerics are excluded on both sides so hex UUID segments
+   (`-429b-`, `9f429b`) and long integers (`214295`) never match — this is what
+   keeps the `[ocr] Session: <uuid> (retry with: --resume <uuid>)` line, which
+   is emitted _outside_ the JSON object, from matching. Genuine diagnostics
+   (`HTTP 429`, `status_code=429`, `{"status":429}`, `429 Too Many Requests`)
+   still do.
+
+The non-numeric alternatives (`rate limit`, `overloaded`, `auth`, …), the
+branch order, the reason strings, `grep -Eqi`, and the surrounding
+`mark_infrastructure_failure` calls are untouched. Both rules were exercised
+against GNU grep 3.11 and mawk on `ubuntu:24.04` (the CI runner combination)
+as well as BSD grep/awk on darwin.
 
 ### D2 — New terminal status `budget_exceeded` (verify, no change expected)
 
@@ -191,16 +238,58 @@ the exact real 1.8.4 `completed_with_errors` envelope.
 
 ## Sub-issue decisions
 
-- **#2930 (upstream 479, inline-comment batching, 1.8.0): DEFER.**
-  Composite-action only; adopting it means taking `action.yml`, losing our
-  fork-safety sequencing, checkpointing, counter/suspension and sticky-summary
-  overflow routing. Our `OCR_INLINE_COMMENT_CAP` never drops a finding.
-  Upstream's 1.8.4 422 single-review grouping is the one candidate worth a
-  separate bounded change.
-- **#2931 (upstream 478, fail-open publication controls, 1.8.1): DEFER.**
-  Composite-action only. Our severity/category routing plus
-  `OCR_ROUTING_SHADOW_MODE` and the pre-dedup `ocr-routing-decisions.json`
-  artifact are strictly more conservative and observable than a boolean input.
+Both #2930 and #2931 concern upstream code that lives **only** in the composite
+action (`action.yml` and `scripts/github-actions/post-review-comments.js`).
+Neither arrives with a version bump. The comparisons below are against
+upstream at tag `v1.8.4` and our `ocr-review.yml` at the head of this change.
+
+### #2930 — upstream bounded inline-comment batching (1.8.0) vs our inline cap
+
+| Dimension                   | Upstream (`post-review-comments.js`, `action.yml`)                                                                                                                                                                                                                                       | Ours (`ocr-review.yml`)                                                                                                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Batch sizing                | `review_comment_batch_size` input, default `50`, integer >= 1; non-numeric or < 1 falls back to 50. `chunkArray(sorted, batchSize)` over every comment.                                                                                                                                  | `OCR_INLINE_COMMENT_CAP` repository variable, default `50`, non-integer or <= 0 falls back to 50. A **cap**, not a chunker.                                                                                                 |
+| Determinism                 | `sortToSendDeterministically(toSend)` before chunking, so identical reruns produce identical batches (this is what makes per-batch reconciliation work).                                                                                                                                 | `sortInlineComments` orders by severity rank before the cap, so the highest-priority findings are the ones posted inline.                                                                                                   |
+| Comments beyond the first N | Posted, in later sequential `createReview` batches. Nothing is left unposted.                                                                                                                                                                                                            | Not posted inline. Moved to `overflowRouted` and rendered in the sticky summary with the original finding object intact.                                                                                                    |
+| Findings dropped            | None.                                                                                                                                                                                                                                                                                    | None.                                                                                                                                                                                                                       |
+| 422 handling                | Tri-state: `isLineResolutionFailure` gates a diff-hunk filter; comments outside the hunks are routed to the summary-failure list, unknown-patch comments are posted individually, and the remaining valid ones go in **one** secondary filtered `createReview` (the 1.8.4 grouping fix). | Batch failure of any kind falls back to posting each capped comment individually, with `existingInlineCommentKeys()` dedup and a reconciliation retry that clears `batchPublicationAmbiguous`. No diff-hunk classification. |
+| Idempotency / dedup         | Per-run `REVIEW_TAG` in the review body; on batch failure, re-reads to prove which comments already landed.                                                                                                                                                                              | Trusted-marker comment plus per-head exact inline key dedup (`inlineCommentKey`), and reconcile-with-retry after an ambiguous batch. Upstream has no notion of our trusted marker.                                          |
+| Observability               | `comments_total` / `comments_inline` / `comments_skipped` / `comments_routed` / `comments_failed` / `summary_comment_url` action outputs.                                                                                                                                                | Sticky-summary counters plus `ocr-routing-decisions.json`, `ocr-coverage-report.json`, `ocr-reviewed-range-manifest.json` artifacts.                                                                                        |
+| Cost of adoption            | Requires running upstream's composite action, which owns checkout, install and posting. Our fork-safety sequencing (`pull_request_target` with no PR-supplied code in scope), checkpoint read/advance, auto-review counter and suspension all live in our workflow around those steps.   | —                                                                                                                                                                                                                           |
+
+**Decision: DEFER, keep ours.** Both designs are deterministic and neither
+drops a finding; the difference is that upstream posts everything across
+batches while we cap inline volume deliberately and route the remainder to the
+sticky summary, which is the behaviour #2649/#2666 asked for. Adoption is
+all-or-nothing on the composite action and would cost the fork-safety,
+checkpointing and suspension logic that only exists in our workflow.
+
+**Partial-adoption candidate (not taken here):** upstream's 422 handling is
+genuinely better than ours — it distinguishes a line-resolution 422 from any
+other 422, filters against the PR's diff hunks, and re-groups the survivors
+into a single review instead of N individual calls. That is a bounded,
+self-contained improvement to our fallback path and is worth its own issue; it
+does not require the composite action.
+
+### #2931 — upstream fail-open publication controls (1.8.1) vs our routing
+
+| Dimension             | Upstream (`route_severity_below`, `route_categories`)                                                                                         | Ours (`routeFinding` + `OCR_ROUTING_SHADOW_MODE`)                                                                                                          |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Configuration surface | Two string inputs. `route_severity_below` is one of `critical                                                                                 | high                                                                                                                                                       | medium | low`and routes at-or-below that severity;`route_categories` is a case-insensitive comma list drawn from the eight documented categories. Either may be empty. | No routing inputs. The policy is fixed in the workflow: `bug`/`security`/`correctness` are always inline; `high`/`medium` severity is always inline; unknown category or severity is inline; only `info` severity in `maintainability`/`test`/`style`/`other` is routed to the summary. |
+| Malformed policy      | `buildPolicy` returns the `NO_ROUTING` sentinel; unknown severity or category tokens are ignored, so a bad policy routes nothing (fail-open). | Every unknown/absent category or severity takes an explicit fail-safe **inline** branch, so a malformed finding is never routed away from inline.          |
+| Non-destructive       | Routed findings are pushed to `commentsRouted` and rendered in the summary; nothing is deleted.                                               | Routed findings go to the sticky summary with the original finding object preserved; nothing is deleted.                                                   |
+| Publication errors    | Batch failure degrades to reconciliation and per-comment retry; failures are counted in `comments_failed` rather than failing the run.        | Batch failure warns, falls back to per-comment posting, and never fails the workflow; ambiguity is recorded and reconciled.                                |
+| Rollout safety        | The policy takes effect as soon as an input is set. There is no dry-run mode.                                                                 | `OCR_ROUTING_SHADOW_MODE` defaults to on: routing decisions are computed and recorded but **not** applied until the variable is explicitly set to `false`. |
+| Observability         | `comments_routed` output only.                                                                                                                | Every pre-dedup routing decision (finding, destination, reason) is persisted to `ocr-routing-decisions.json` and uploaded as an artifact.                  |
+
+**Decision: DEFER, keep ours.** Upstream's controls are a real routing policy
+rather than a boolean, and their fail-open semantics match ours, but they are
+composite-action-only and offer no shadow-mode rollout and no per-decision
+audit trail. Our fixed policy is intentionally narrower (it can only route
+`info`-severity findings in non-protected categories) and is already wired into
+the sticky summary, telemetry and the routing-decisions artifact. Making our
+policy configurable along upstream's two axes is a plausible future change, but
+it is a behaviour change to publication and is out of scope for a version bump.
+
 - **#2932 (upstream 367, run-manifest coverage contract): DEFER — blocked.**
   Commit `0ce730a` is **5 commits ahead of tag `v1.8.4`**: comparing
   `v1.8.4...0ce730a` through the GitHub compare API reports `ahead_by: 5`,
