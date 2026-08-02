@@ -52,12 +52,23 @@
 import { openSync, fstatSync, closeSync } from 'node:fs';
 
 /**
- * Function type for the injectable "is the runtime replaced?" predicate.
+ * Injectable "is the runtime replaced?" predicate.
+ *
+ * Carries an optional `close()` so a detector that holds resources (the pinned
+ * fd opened by {@link createPinnedFdDetector}) can release them deterministically
+ * when the detector is swapped out of {@link currentDetector}. `close()` must be
+ * idempotent and must never throw.
+ *
+ * Plain function detectors (e.g. the non-darwin `() => false` default and the
+ * test stubs) omit `close()` — they hold no resources.
  *
  * @plan PLAN-20260801-ISSUE2926
  * @requirement R1
  */
-export type RuntimeReplacedDetector = () => boolean;
+export interface RuntimeReplacedDetector {
+  (): boolean;
+  close?(): void;
+}
 
 // ─── Process-wide state ──────────────────────────────────────────────────────
 
@@ -113,7 +124,7 @@ export function createPinnedFdDetector(
 ): RuntimeReplacedDetector {
   let fd = openPinnedFd(execPath);
   let memoised = false;
-  return () => {
+  const detect = (): boolean => {
     if (memoised) {
       return true;
     }
@@ -130,6 +141,25 @@ export function createPinnedFdDetector(
     }
     return memoised;
   };
+  // Deterministic resource release for the swap path (issue #2926 review):
+  // when this detector is replaced via resetRuntimeIdentityForTesting() or
+  // setRuntimeReplacedDetectorForTesting(), the pinned fd must be closed so
+  // per-test detector creation cannot accumulate descriptors and hit EMFILE.
+  // Idempotent: once closed, fd is NO_PINNED_FD so subsequent calls are noops.
+  // Never throws: closeSync failures are swallowed because detection has
+  // already completed its contract by the time close() is invoked.
+  detect.close = (): void => {
+    if (fd !== NO_PINNED_FD) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Swallow: close() must never throw. The fd will be reclaimed by the
+        // OS on process exit regardless.
+      }
+      fd = NO_PINNED_FD;
+    }
+  };
+  return detect;
 }
 
 /**
@@ -153,6 +183,27 @@ function createDefaultDetector(): RuntimeReplacedDetector {
  */
 let currentDetector: RuntimeReplacedDetector = createDefaultDetector();
 
+/**
+ * Disposes a detector's resources (its pinned fd, if any) and then installs
+ * the replacement as the current detector. Centralised so every swap path —
+ * {@link resetRuntimeIdentityForTesting}, {@link setRuntimeReplacedDetectorForTesting},
+ * and {@link forceRuntimeReplacedForTesting} — closes the outgoing detector's
+ * fd before discarding it, preventing per-test fd accumulation that can hit
+ * EMFILE in a long suite.
+ *
+ * `close()` is optional and idempotent; calling it on a detector without one
+ * (e.g. the non-darwin `() => false` default) is a noop.
+ *
+ * @plan PLAN-20260801-ISSUE2926
+ */
+function replaceDetector(next: RuntimeReplacedDetector): void {
+  const outgoing = currentDetector;
+  if (typeof outgoing.close === 'function') {
+    outgoing.close();
+  }
+  currentDetector = next;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -173,7 +224,8 @@ export function isRuntimeReplaced(): boolean {
 /**
  * Sets the detector function for testing. This makes the replaced-runtime
  * behaviour testable on all CI platforms — tests inject a stub that returns
- * true/false without needing a real darwin fd.
+ * true/false without needing a real darwin fd. Disposes the outgoing
+ * detector's fd (if any) so per-test swaps cannot accumulate descriptors.
  *
  * @plan PLAN-20260801-ISSUE2926
  * @requirement R5
@@ -181,25 +233,27 @@ export function isRuntimeReplaced(): boolean {
 export function setRuntimeReplacedDetectorForTesting(
   detector: RuntimeReplacedDetector | null,
 ): void {
-  currentDetector = detector ?? createDefaultDetector();
+  replaceDetector(detector ?? createDefaultDetector());
 }
 
 /**
  * Resets the process-wide state for testing: clears memoisation and
- * re-creates the default detector (which re-opens the fd on darwin).
+ * re-creates the default detector (which re-opens the fd on darwin). Disposes
+ * the outgoing detector's fd (if any) before swapping.
  *
  * @plan PLAN-20260801-ISSUE2926
  */
 export function resetRuntimeIdentityForTesting(): void {
-  currentDetector = createDefaultDetector();
+  replaceDetector(createDefaultDetector());
 }
 
 /**
  * Test-only: forces the replaced condition so SecureStore gating can be
- * exercised without actually unlinking the real process executable.
+ * exercised without actually unlinking the real process executable. Disposes
+ * the outgoing detector's fd (if any) before swapping.
  *
  * @plan PLAN-20260801-ISSUE2926
  */
 export function forceRuntimeReplacedForTesting(): void {
-  currentDetector = () => true;
+  replaceDetector(() => true);
 }

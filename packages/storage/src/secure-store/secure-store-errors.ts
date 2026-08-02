@@ -51,11 +51,28 @@ export function isSecureStoreError(error: unknown): error is SecureStoreError {
  * Used by fallback/swallow layers that must rethrow terminal replaced-runtime
  * errors while still degrading on ordinary UNAVAILABLE.
  *
+ * Identification is **structural** (duck-typed on the `code` value), NOT based
+ * on `instanceof SecureStoreError`. Downstream consumers in other packages
+ * (core, cli, auth) rely on this guard to decide whether to rethrow instead of
+ * degrading to a fallback file. If two copies of `SecureStoreError` ever exist
+ * (bundling, duplicated dependency resolution), `instanceof` silently returns
+ * false and the layer degrades — which is precisely the silent divergence /
+ * data-loss path this PR exists to prevent. Failing open here is the worst
+ * possible failure mode.
+ *
+ * Consistent with `isRuntimeReplacedStoreError` in
+ * packages/auth/src/interfaces/secure-store.ts, which is already structural.
+ *
  * @plan PLAN-20260801-ISSUE2926
  * @requirement R3
  */
 export function isRuntimeReplacedError(error: unknown): boolean {
-  return isSecureStoreError(error) && error.code === 'RUNTIME_REPLACED';
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'RUNTIME_REPLACED'
+  );
 }
 
 /**

@@ -44,7 +44,6 @@ export {
   isSecureStoreError,
   isRuntimeReplacedError,
 } from './secure-store/secure-store-errors.js';
-export { resetRuntimeIdentityForTesting } from './secure-store/runtime-identity.js';
 export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,
