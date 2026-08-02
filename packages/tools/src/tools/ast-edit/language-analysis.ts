@@ -466,6 +466,15 @@ function stripGoLineComment(line: string): string {
 }
 
 /**
+ * Reports whether a token is a legal Go identifier. Go identifiers start with
+ * a Unicode letter or underscore and continue with Unicode letters, digits, or
+ * underscores, so ASCII-only matching would reject valid aliases.
+ */
+function isGoIdentifier(token: string): boolean {
+  return /^[\p{L}_][\p{L}\p{N}_]*$/u.test(token);
+}
+
+/**
  * Extracts the double-quoted package path from a Go import line.
  * Strips line comments and ignores any alias/dot/underscore prefix.
  * Returns null when no quoted path is present (e.g., blank lines).
@@ -479,7 +488,7 @@ function extractGoImportPath(line: string): string | null {
     return null;
   }
   const alias = body.slice(0, quoteOpen).trim();
-  if (alias !== '' && alias !== '.' && !/^\w+$/.test(alias)) {
+  if (alias !== '' && alias !== '.' && !isGoIdentifier(alias)) {
     return null;
   }
   const quoteClose = body.indexOf('"', quoteOpen + 1);

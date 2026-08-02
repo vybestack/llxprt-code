@@ -28,6 +28,14 @@ describe('language-specific import extraction follow-up', () => {
     ]);
   });
 
+  it('accepts Go aliases containing Unicode identifier characters', () => {
+    const code = 'import café "example.com/pkg"\n';
+
+    expect(extractImports(code, 'go')).toEqual([
+      { module: 'example.com/pkg', items: [], line: 1 },
+    ]);
+  });
+
   it('rejects empty Go paths and malformed aliases', () => {
     const code = [
       'import ""',
