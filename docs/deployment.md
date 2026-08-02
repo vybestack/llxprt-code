@@ -1,14 +1,11 @@
-# LLxprt Code Execution and Deployment
+# Installing and Running LLxprt Code
 
-This document describes how to run LLxprt Code and explains the deployment architecture that LLxprt Code uses.
+There are several ways to run LLxprt Code. The option you choose depends on how
+you intend to use it.
 
-## Running LLxprt Code
+## Standard installation
 
-There are several ways to run LLxprt Code. The option you choose depends on how you intend to use LLxprt Code.
-
----
-
-### 1. Standard installation (Recommended for typical users)
+Recommended for most users.
 
 - **npm (global install):**
 
@@ -37,13 +34,13 @@ There are several ways to run LLxprt Code. The option you choose depends on how 
   npm install -g @vybestack/llxprt-code@nightly
   ```
 
-  Nightly builds are published from the latest commit on main. They may contain unreleased features and breaking changes.
+  Nightly builds are published from the latest commit on main. They may contain
+  unreleased features and breaking changes.
 
----
+## Running in a sandbox
 
-### 2. Running in a sandbox (Docker or Podman)
-
-LLxprt Code can run inside a container for security isolation. Both Docker and Podman are supported.
+LLxprt Code can run inside a container for security isolation. Both Docker and
+Podman are supported.
 
 - **Using the `--sandbox` flag:**
 
@@ -68,81 +65,20 @@ LLxprt Code can run inside a container for security isolation. Both Docker and P
   podman run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:latest
   ```
 
-See [Sandboxing](./sandbox.md) for full documentation including credential proxying, SSH agent passthrough, and custom sandbox profiles.
+See [Sandboxing](./sandbox.md) for full documentation including credential
+proxying, SSH agent passthrough, and custom sandbox profiles.
 
----
+## Running the latest commit from GitHub
 
-### 3. Running from source (Recommended for LLxprt Code contributors)
-
-Contributors to the project will want to run the CLI directly from the source code.
-
-- **Development Mode:**
-  This method provides hot-reloading and is useful for active development.
-
-  ```bash
-  # From the root of the repository
-  bun run start
-  ```
-
-- **Production-like mode (Linked package):**
-  This method simulates a global installation by linking your local package. It's useful for testing a local build in a production workflow.
-
-  ```bash
-  # Link the local cli package to your global node_modules
-  npm link packages/cli
-
-  # Now you can run your local version using the `llxprt` command
-  llxprt
-  ```
-
----
-
-### 4. Running the latest LLxprt Code commit from GitHub
-
-You can run the most recently committed version of LLxprt Code directly from the GitHub repository. This is useful for testing features still in development.
+You can run the most recently committed version of LLxprt Code directly from
+the GitHub repository. This is useful for testing features still in development.
 
 ```bash
 # Execute the CLI directly from the main branch on GitHub
 npx https://github.com/vybestack/llxprt-code
 ```
 
-## Deployment architecture
+## Contributing
 
-The execution methods described above are made possible by the following architectural components and processes:
-
-**NPM packages**
-
-LLxprt Code project is a monorepo that publishes two core packages to the NPM registry:
-
-- `@vybestack/llxprt-code-core`: The backend, handling logic and tool execution.
-- `@vybestack/llxprt-code`: The user-facing frontend.
-
-These packages are used when performing the standard installation and when running LLxprt Code from the source.
-
-**Build and packaging processes**
-
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's installed command (`llxprt`) uses platform-native launchers that resolve the package-bundled Bun and execute the TypeScript (`.ts`) entry point directly, without starting Node. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run. This applies to both distribution channels:
-
-- **NPM publication:** The published NPM package exposes `packages/cli/bin/llxprt` as the `llxprt` binary. On POSIX, a valid `#!/bin/sh` shebang makes it directly execve-compatible; the launcher resolves the package-local Bun and execs the `.ts` source entrypoint. On Windows, the CLI workspace `postinstall` (`packages/cli/scripts/install-native-launchers.cjs`) replaces npm's cmd-shim with a native `.cmd` / `.ps1` launcher that invokes the same package-local Bun. `tsc --noEmit` is used for type-checking during development.
-
-The CLI's own runtime entry (`index.ts`) is never compiled to `dist/` — Bun executes the TypeScript source directly. The release pipeline still runs `npm run build:packages` to compile the internal workspace dependency packages (tools, storage, auth, etc.) whose `main`/`types` point at `dist/`, but the CLI package itself does not consume or ship a `dist/` artifact for its own runtime.
-
-- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the postinstall bootstrap ensures dependencies are available, and the native launcher executes the `.ts` source through Bun.
-
-Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
-
-**Docker sandbox image**
-
-The Docker-based execution method is supported by the `llxprt-code-sandbox` container image, published at `ghcr.io/vybestack/llxprt-code/sandbox`. This image contains a pre-installed, global version of LLxprt Code.
-
-```bash
-docker run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:0.7.0
-```
-
-## Release process
-
-The release process is automated through GitHub Actions. The release workflow performs the following actions:
-
-1.  Validate type-checking and tests (`tsc --noEmit`, vitest); no compilation to `dist/` is required — the Bun launcher runs `.ts` source directly.
-2.  Publish the NPM packages to the artifact registry.
-3.  Create GitHub releases with bundled assets.
+If you want to contribute to LLxprt Code — build from source, run tests, or
+prepare a pull request — see [CONTRIBUTING.md](../CONTRIBUTING.md).
