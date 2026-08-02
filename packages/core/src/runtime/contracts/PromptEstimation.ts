@@ -4,53 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Core-owned structural contract for provider-neutral prompt-envelope
- * estimation (issue #2817).
- *
- * The agent layer asks the provider to *prepare* the finalized prompt attempt
- * ONCE. From that single preparation it derives both the estimate (token count
- * + identity) and the opaque request token that transport reuses — so
- * estimation and transport never independently rebuild the same request body.
- *
- * Core never embeds tokenizer or provider-payload knowledge. Providers own the
- * preparation representation and count tokens against it themselves.
- */
+import type {
+  RuntimePromptEstimateMethod,
+  RuntimeTokenizerFactory,
+} from './RuntimeTokenizerFactory.js';
 
-/**
- * The wire protocol family of the finalized prompt envelope.
- */
 export type PromptEnvelopeProtocol =
   | 'anthropic-messages'
   | 'openai-chat'
   | 'openai-responses';
 
-/**
- * The concrete wire method (and its version) that will carry the finalized
- * envelope.
- */
 export type PromptEnvelopeMethod =
   | 'messages/v1'
   | 'chat/completions/v1'
   | 'responses/v1';
 
-/**
- * A single piece of media the provider cannot forward to the model.
- *
- * Surfaced explicitly so callers know the finalized envelope omits or replaces
- * that media (acceptance A9).
- */
 export interface UnsupportedMediaEntry {
   readonly kind: 'unsupported';
   readonly reason: string;
   readonly mediaType?: string;
 }
 
-/**
- * Provider-implemented projection seam: exposes the finalized prompt
- * envelope's identity and a token count computed against the provider's own
- * finalized preparation representation — WITHOUT exposing raw prompt material.
- */
 export interface PromptEnvelopeProjection {
   readonly model: string;
   readonly protocol: PromptEnvelopeProtocol;
@@ -58,31 +32,24 @@ export interface PromptEnvelopeProjection {
   readonly projectionRevision: number;
   readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
   readonly transportToken: object;
-  /**
-   * Count prompt tokens against the provider's own finalized representation.
-   */
-  readonly countProjectedTokens: () => Promise<number>;
+  readonly finalizedProjection: unknown;
+  readonly legacyEstimate: () => Promise<number>;
 }
 
-/**
- * The provider-neutral estimate result. Carries the token count and envelope
- * identity but NO raw prompt payload.
- */
 export interface PromptEnvelopeEstimate {
   readonly estimatedPromptTokens: number;
+  readonly activeProvider: string;
   readonly model: string;
   readonly protocol: PromptEnvelopeProtocol;
   readonly method: PromptEnvelopeMethod;
+  readonly estimatorMethod: RuntimePromptEstimateMethod;
+  readonly estimatorFamily: string;
+  readonly estimatorVersion: string;
+  readonly assetRevision: string;
   readonly projectionRevision: number;
   readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
 }
 
-/**
- * The closed set of wire methods each protocol can carry. The protocol and
- * method types are already closed unions, but they are independent, so a
- * projection could otherwise declare an impossible identity such as
- * `openai-chat` + `responses/v1` and still be accepted as validated.
- */
 const SUPPORTED_METHODS_BY_PROTOCOL: Readonly<
   Record<PromptEnvelopeProtocol, readonly PromptEnvelopeMethod[]>
 > = Object.freeze({
@@ -103,9 +70,6 @@ function assertSupportedProtocolMethodPair(
   protocol: PromptEnvelopeProtocol,
   method: PromptEnvelopeMethod,
 ): void {
-  // A projection crossing a package boundary can carry an unknown protocol at
-  // runtime even though the declared type is closed, so membership is checked
-  // against the contract table rather than trusted from the type alone.
   if (!Object.keys(SUPPORTED_METHODS_BY_PROTOCOL).includes(protocol)) {
     throw new Error(
       `PromptEnvelopeEstimate validation failed: protocol must be one of ${Object.keys(
@@ -173,14 +137,11 @@ function isUnsupportedMediaEntry(
   );
 }
 
-/**
- * Derive a {@link PromptEnvelopeEstimate} from a projection by asking the
- * provider to count tokens against its finalized representation. The result is
- * validated and frozen so callers receive an immutable value.
- */
-export async function estimatePromptEnvelope(
+function validateProjection(
+  activeProvider: string,
   projection: PromptEnvelopeProjection,
-): Promise<PromptEnvelopeEstimate> {
+): readonly UnsupportedMediaEntry[] {
+  assertNonEmptyString(activeProvider, 'activeProvider');
   assertNonEmptyString(projection.model, 'model');
   assertNonEmptyString(projection.protocol, 'protocol');
   assertNonEmptyString(projection.method, 'method');
@@ -189,21 +150,63 @@ export async function estimatePromptEnvelope(
     projection.projectionRevision,
     'projectionRevision',
   );
+  if (typeof projection.legacyEstimate !== 'function') {
+    throw new Error(
+      'PromptEnvelopeEstimate validation failed: legacyEstimate must be a function',
+    );
+  }
+  return validateUnsupportedMedia(projection.unsupportedMedia);
+}
 
-  const validatedUnsupportedMedia = validateUnsupportedMedia(
-    projection.unsupportedMedia,
-  );
+function validateResult(
+  projection: PromptEnvelopeProjection,
+  result: Awaited<ReturnType<RuntimeTokenizerFactory['estimatePrompt']>>,
+): void {
+  assertFiniteNonNegativeInt(result.count, 'estimatedPromptTokens');
+  const method: unknown = result.method;
+  if (method !== 'exact' && method !== 'calibrated') {
+    throw new Error(
+      'PromptEnvelopeEstimate validation failed: estimator method must be exact or calibrated',
+    );
+  }
+  assertNonEmptyString(result.family, 'estimatorFamily');
+  assertNonEmptyString(result.estimatorVersion, 'estimatorVersion');
+  assertNonEmptyString(result.assetRevision, 'assetRevision');
+  assertFiniteNonNegativeInt(result.projectionRevision, 'projectionRevision');
+  if (result.projectionRevision !== projection.projectionRevision) {
+    throw new Error(
+      'PromptEnvelopeEstimate validation failed: estimator projection revision must match provider projection revision',
+    );
+  }
+}
 
-  const estimatedPromptTokens = await projection.countProjectedTokens();
-  assertFiniteNonNegativeInt(estimatedPromptTokens, 'estimatedPromptTokens');
-
-  const estimate: PromptEnvelopeEstimate = {
-    estimatedPromptTokens,
+export async function estimatePromptEnvelope(
+  activeProvider: string,
+  projection: PromptEnvelopeProjection,
+  factory: RuntimeTokenizerFactory,
+): Promise<PromptEnvelopeEstimate> {
+  const unsupportedMedia = validateProjection(activeProvider, projection);
+  const result = await factory.estimatePrompt({
+    activeProvider,
+    canonicalModel: projection.model,
+    protocol: projection.protocol,
+    wireMethod: projection.method,
+    finalizedProjection: projection.finalizedProjection,
+    projectionRevision: projection.projectionRevision,
+    legacyEstimate: projection.legacyEstimate,
+  });
+  validateResult(projection, result);
+  return Object.freeze({
+    estimatedPromptTokens: result.count,
+    activeProvider,
     model: projection.model,
     protocol: projection.protocol,
     method: projection.method,
+    estimatorMethod: result.method,
+    estimatorFamily: result.family,
+    estimatorVersion: result.estimatorVersion,
+    assetRevision: result.assetRevision,
     projectionRevision: projection.projectionRevision,
-    unsupportedMedia: validatedUnsupportedMedia,
-  };
-  return Object.freeze(estimate);
+    unsupportedMedia,
+  });
 }

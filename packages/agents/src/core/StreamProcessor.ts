@@ -506,7 +506,6 @@ export class StreamProcessor {
         this.compressionHandler.tokenUsageLogger,
         promptId,
         prepared.estimate,
-        provider.name,
       );
 
       const streamResponse = provider.generateChatCompletion(prepared.options);

@@ -42,9 +42,14 @@ async function createLogger(): Promise<{
 
 const FINALIZED_ESTIMATE = {
   estimatedPromptTokens: 123,
+  activeProvider: 'openai',
   model: 'gpt-4o',
   protocol: 'openai-chat',
   method: 'chat/completions/v1',
+  estimatorMethod: 'calibrated',
+  estimatorFamily: 'legacy-unregistered',
+  estimatorVersion: 'core-estimate-tokens-v1',
+  assetRevision: 'none',
   projectionRevision: 2,
   unsupportedMedia: [],
 } as const;
@@ -66,7 +71,6 @@ describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
       logger,
       'prompt-1',
       FINALIZED_ESTIMATE,
-      'openai',
     );
 
     await logger.recordActual('prompt-1', {
@@ -96,7 +100,6 @@ describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
       logger,
       'prompt-2',
       FINALIZED_ESTIMATE,
-      'openai',
     );
 
     await logger.recordActual('prompt-2', {
@@ -116,7 +119,6 @@ describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
       logger,
       'prompt-3',
       FINALIZED_ESTIMATE,
-      'openai',
     );
 
     await logger.recordActual('prompt-3', {
@@ -146,7 +148,6 @@ describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
       logger,
       'prompt-4',
       FINALIZED_ESTIMATE,
-      'openai',
     );
 
     await logger.recordActual('prompt-4', {

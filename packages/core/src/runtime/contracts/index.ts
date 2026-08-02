@@ -27,7 +27,12 @@ export type {
 } from './RuntimeProviderManager.js';
 export type { RuntimeModel } from './RuntimeModel.js';
 export type { RuntimeTokenizer } from './RuntimeTokenizer.js';
-export type { RuntimeTokenizerFactory } from './RuntimeTokenizerFactory.js';
+export type {
+  RuntimePromptEstimateMethod,
+  RuntimePromptEstimateRequest,
+  RuntimePromptEstimateResult,
+  RuntimeTokenizerFactory,
+} from './RuntimeTokenizerFactory.js';
 export type { RuntimeContentGeneratorFactory } from './RuntimeContentGeneratorFactory.js';
 export type { TelemetryContext } from './TelemetryContext.js';
 export type { BucketFailureReason } from './BucketFailureReason.js';

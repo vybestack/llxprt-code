@@ -20,6 +20,12 @@ export interface PendingTokenEstimate {
   readonly model: string;
   readonly estimatedTokens: number;
   readonly estimator: TokenEstimatorType;
+  readonly estimatorMethod?: 'exact' | 'calibrated';
+  readonly estimatorFamily?: string;
+  readonly estimatorVersion?: string;
+  readonly assetRevision?: string;
+  readonly projectionRevision?: number;
+  readonly protocol?: string;
   readonly tiktokenTokens: number | null;
   readonly tiktokenEstimationFailed?: boolean;
 }
@@ -37,6 +43,12 @@ export interface SerializedTokenUsageRecord {
   readonly model: string;
   readonly estimated_tokens: number;
   readonly estimator: TokenEstimatorType;
+  readonly estimator_method?: 'exact' | 'calibrated';
+  readonly estimator_family?: string;
+  readonly estimator_version?: string;
+  readonly asset_revision?: string;
+  readonly projection_revision?: number;
+  readonly protocol?: string;
   readonly tiktoken_tokens: number | null;
   readonly tiktoken_estimation_failed: boolean;
   readonly actual_prompt_tokens: number;
@@ -168,6 +180,22 @@ export class TokenUsageLogger {
       model: record.model,
       estimated_tokens: record.estimatedTokens,
       estimator: record.estimator,
+      ...(record.estimatorMethod !== undefined && {
+        estimator_method: record.estimatorMethod,
+      }),
+      ...(record.estimatorFamily !== undefined && {
+        estimator_family: record.estimatorFamily,
+      }),
+      ...(record.estimatorVersion !== undefined && {
+        estimator_version: record.estimatorVersion,
+      }),
+      ...(record.assetRevision !== undefined && {
+        asset_revision: record.assetRevision,
+      }),
+      ...(record.projectionRevision !== undefined && {
+        projection_revision: record.projectionRevision,
+      }),
+      ...(record.protocol !== undefined && { protocol: record.protocol }),
       tiktoken_tokens: record.tiktokenTokens,
       tiktoken_estimation_failed: record.tiktokenEstimationFailed ?? false,
       actual_prompt_tokens: record.actualPromptTokens,

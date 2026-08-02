@@ -5,33 +5,46 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
-
 import {
   recordFinalizedPromptEnvelopeEstimate,
   resolveEstimatorType,
 } from './tokenUsageEstimateLogger.js';
 
-describe('recordFinalizedPromptEnvelopeEstimate', () => {
-  it('refines the existing prompt estimate with the finalized envelope count', () => {
-    const refineEstimate = vi.fn();
-    const usageLogger = {
-      isEnabled: () => true,
-      refineEstimate,
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+function estimate(
+  overrides: Partial<PromptEnvelopeEstimate> = {},
+): PromptEnvelopeEstimate {
+  return {
+    estimatedPromptTokens: 12,
+    activeProvider: 'openai',
+    model: 'gpt-4o',
+    protocol: 'openai-chat',
+    method: 'chat/completions/v1',
+    estimatorMethod: 'calibrated',
+    estimatorFamily: 'legacy-unregistered',
+    estimatorVersion: 'core-estimate-tokens-v1',
+    assetRevision: 'none',
+    projectionRevision: 2,
+    unsupportedMedia: [],
+    ...overrides,
+  };
+}
 
+function usageLogger(refineEstimate: ReturnType<typeof vi.fn>, enabled = true) {
+  return {
+    isEnabled: () => enabled,
+    refineEstimate,
+  } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+}
+
+describe('recordFinalizedPromptEnvelopeEstimate', () => {
+  it('uses provider provenance for calibrated finalized estimates', () => {
+    const refineEstimate = vi.fn();
     recordFinalizedPromptEnvelopeEstimate(
-      usageLogger,
+      usageLogger(refineEstimate),
       'prompt-finalized',
-      {
-        estimatedPromptTokens: 12,
-        model: 'gpt-4o',
-        protocol: 'openai-chat',
-        method: 'chat/completions/v1',
-        projectionRevision: 2,
-        unsupportedMedia: [],
-      },
-      'openai',
+      estimate(),
     );
 
     expect(refineEstimate).toHaveBeenCalledExactlyOnceWith('prompt-finalized', {
@@ -39,95 +52,95 @@ describe('recordFinalizedPromptEnvelopeEstimate', () => {
       model: 'gpt-4o',
       estimatedTokens: 12,
       estimator: 'openai-tiktoken',
+      estimatorMethod: 'calibrated',
+      estimatorFamily: 'legacy-unregistered',
+      estimatorVersion: 'core-estimate-tokens-v1',
+      assetRevision: 'none',
+      projectionRevision: 2,
+      protocol: 'openai-chat',
     });
   });
 
-  it('is a no-op when usageLogger is undefined', () => {
+  it('labels the registered exact family from estimator provenance', () => {
     const refineEstimate = vi.fn();
-
-    expect(() =>
-      recordFinalizedPromptEnvelopeEstimate(
-        undefined,
-        'prompt-undefined-logger',
-        {
-          estimatedPromptTokens: 12,
-          model: 'gpt-4o',
-          protocol: 'openai-chat',
-          method: 'chat/completions/v1',
-          projectionRevision: 2,
-          unsupportedMedia: [],
-        },
-        'openai',
-      ),
-    ).not.toThrow();
-    expect(refineEstimate).not.toHaveBeenCalled();
-  });
-
-  it('is a no-op when usageLogger is null', () => {
-    const refineEstimate = vi.fn();
-
-    expect(() =>
-      recordFinalizedPromptEnvelopeEstimate(
-        null,
-        'prompt-null-logger',
-        {
-          estimatedPromptTokens: 12,
-          model: 'gpt-4o',
-          protocol: 'openai-chat',
-          method: 'chat/completions/v1',
-          projectionRevision: 2,
-          unsupportedMedia: [],
-        },
-        'openai',
-      ),
-    ).not.toThrow();
-    expect(refineEstimate).not.toHaveBeenCalled();
-  });
-
-  it('is a no-op when usageLogger.isEnabled() returns false', () => {
-    const refineEstimate = vi.fn();
-    const usageLogger = {
-      isEnabled: () => false,
-      refineEstimate,
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
-
     recordFinalizedPromptEnvelopeEstimate(
-      usageLogger,
-      'prompt-disabled',
-      {
-        estimatedPromptTokens: 12,
-        model: 'gpt-4o',
-        protocol: 'openai-chat',
-        method: 'chat/completions/v1',
+      usageLogger(refineEstimate),
+      'prompt-exact',
+      estimate({
+        activeProvider: 'codex-alias',
+        model: 'gpt-5.6-sol',
+        protocol: 'openai-responses',
+        method: 'responses/v1',
+        estimatorMethod: 'exact',
+        estimatorFamily: 'openai-gpt-5.6',
+        estimatorVersion: 'gpt-5.6-o200k-v1',
+        assetRevision: 'o200k-base-revision',
+      }),
+    );
+
+    expect(refineEstimate).toHaveBeenCalledWith(
+      'prompt-exact',
+      expect.objectContaining({
+        provider: 'codex-alias',
+        estimator: 'openai-tiktoken',
+        estimatorMethod: 'exact',
+        estimatorFamily: 'openai-gpt-5.6',
+        estimatorVersion: 'gpt-5.6-o200k-v1',
+        assetRevision: 'o200k-base-revision',
         projectionRevision: 2,
-        unsupportedMedia: [],
-      },
-      'openai',
+        protocol: 'openai-responses',
+      }),
     );
-
-    expect(refineEstimate).not.toHaveBeenCalled();
   });
 
-  it('is a no-op when estimate is null', () => {
+  it('does not mislabel a non-OpenAI exact estimator', () => {
     const refineEstimate = vi.fn();
-    const usageLogger = {
-      isEnabled: () => true,
-      refineEstimate,
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
-
     recordFinalizedPromptEnvelopeEstimate(
-      usageLogger,
-      'prompt-null-estimate',
-      null,
-      'openai',
+      usageLogger(refineEstimate),
+      'prompt-other-exact',
+      estimate({
+        activeProvider: 'anthropic',
+        estimatorMethod: 'exact',
+        estimatorFamily: 'anthropic-future-exact',
+      }),
     );
+    expect(refineEstimate).toHaveBeenCalledWith(
+      'prompt-other-exact',
+      expect.objectContaining({ estimator: 'anthropic-char' }),
+    );
+  });
 
+  it.each([
+    ['undefined logger', undefined],
+    ['null logger', null],
+  ])('is a no-op for %s', (_name, logger) => {
+    expect(() =>
+      recordFinalizedPromptEnvelopeEstimate(
+        logger,
+        'prompt-no-logger',
+        estimate(),
+      ),
+    ).not.toThrow();
+  });
+
+  it('is a no-op when disabled or the estimate is null', () => {
+    const refineEstimate = vi.fn();
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger(refineEstimate, false),
+      'prompt-disabled',
+      estimate(),
+    );
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger(refineEstimate),
+      'prompt-null',
+      null,
+    );
     expect(refineEstimate).not.toHaveBeenCalled();
   });
 
   it('keeps synchronous logger failures from disrupting a valid send', () => {
     let refineCalls = 0;
-    const usageLogger = {
+    const logger = {
       isEnabled: () => true,
       refineEstimate: () => {
         refineCalls += 1;
@@ -137,17 +150,9 @@ describe('recordFinalizedPromptEnvelopeEstimate', () => {
 
     expect(() =>
       recordFinalizedPromptEnvelopeEstimate(
-        usageLogger,
+        logger,
         'prompt-finalized',
-        {
-          estimatedPromptTokens: 12,
-          model: 'gpt-4o',
-          protocol: 'openai-chat',
-          method: 'chat/completions/v1',
-          projectionRevision: 2,
-          unsupportedMedia: [],
-        },
-        'openai',
+        estimate(),
       ),
     ).not.toThrow();
     expect(refineCalls).toBe(1);

@@ -56,6 +56,7 @@ vi.mock(
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
       resetTokenAccounting: vi.fn(),
+      setActiveTokenizationTarget: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
       isEmpty: vi.fn().mockReturnValue(true),
       getAll: vi.fn().mockReturnValue([]),
@@ -533,6 +534,7 @@ describe('createChatSession', () => {
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
       resetTokenAccounting: vi.fn(),
+      setActiveTokenizationTarget: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     };
     vi.mocked(HistoryService).mockImplementationOnce(

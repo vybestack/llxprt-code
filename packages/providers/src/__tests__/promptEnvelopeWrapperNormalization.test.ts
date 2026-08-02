@@ -113,7 +113,8 @@ class RecordingProvider implements IProvider {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(tokens),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(tokens),
     };
   }
 }

@@ -1,0 +1,51 @@
+{
+  "source": {
+    "issue": 2253,
+    "commitSha": "2bec7cb6a466",
+    "projectionVersion": "responses-fields-v1",
+    "corpusVersion": "2026-07-28-v1",
+    "method": "matched within-category controls"
+  },
+  "observations": [
+    {
+      "category": "prose",
+      "controlId": 1,
+      "heldoutId": 21,
+      "controlTokens": 111,
+      "heldoutTokens": 507,
+      "providerDelta": 396
+    },
+    {
+      "category": "code",
+      "controlId": 2,
+      "heldoutId": 22,
+      "controlTokens": 150,
+      "heldoutTokens": 710,
+      "providerDelta": 560
+    },
+    {
+      "category": "json",
+      "controlId": 3,
+      "heldoutId": 23,
+      "controlTokens": 163,
+      "heldoutTokens": 763,
+      "providerDelta": 600
+    },
+    {
+      "category": "unicode",
+      "controlId": 4,
+      "heldoutId": 24,
+      "controlTokens": 66,
+      "heldoutTokens": 282,
+      "providerDelta": 216
+    },
+    {
+      "category": "mixed",
+      "controlId": 5,
+      "heldoutId": 25,
+      "controlTokens": 164,
+      "heldoutTokens": 776,
+      "providerDelta": 612
+    }
+  ]
+}
