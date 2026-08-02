@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   asOptionalRecord,
   asRecord,
@@ -119,55 +119,61 @@ describe.skipIf(!hasBash())(
       );
     });
 
-    function classify(stderrContent: string): string {
-      const directory = fs.mkdtempSync(
+    // One workspace for the whole suite: removing it in afterAll keeps a
+    // cleanup failure in its own hook instead of masking a test failure.
+    let directory: string;
+
+    beforeAll(() => {
+      directory = fs.mkdtempSync(
         path.join(os.tmpdir(), 'ocr-classification-2929-'),
       );
+    });
+
+    afterAll(() => {
+      fs.rmSync(directory, { recursive: true, force: true });
+    });
+
+    function classify(stderrContent: string): string {
+      const artifactPath = path.join(
+        directory,
+        'ocr-infrastructure-failure.txt',
+      );
+      // The workflow's mark_infrastructure_failure appends, so start each case
+      // from an empty artifact.
+      fs.rmSync(artifactPath, { force: true });
+      fs.writeFileSync(
+        path.join(directory, 'ocr-stderr.log'),
+        stderrContent,
+        'utf8',
+      );
       try {
-        fs.writeFileSync(
-          path.join(directory, 'ocr-stderr.log'),
-          stderrContent,
-          'utf8',
+        execFileSync(
+          'bash',
+          ['-c', ['set -euo pipefail', MARK_STUB, classifierBlock].join('\n')],
+          {
+            cwd: directory,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            encoding: 'utf8',
+          },
         );
-        try {
-          execFileSync(
-            'bash',
-            [
-              '-c',
-              ['set -euo pipefail', MARK_STUB, classifierBlock].join('\n'),
-            ],
-            {
-              cwd: directory,
-              stdio: ['ignore', 'pipe', 'pipe'],
-              encoding: 'utf8',
-            },
-          );
-        } catch (error) {
-          throw new Error(
-            [
-              'The extracted classification block failed to run.',
-              `status: ${errorField(error, 'status')}`,
-              `stderr: ${errorField(error, 'stderr')}`,
-              `input: ${JSON.stringify(stderrContent)}`,
-            ].join('\n'),
-            { cause: error },
-          );
-        }
-        const content = fs
-          .readFileSync(
-            path.join(directory, 'ocr-infrastructure-failure.txt'),
-            'utf8',
-          )
-          .trim();
-        const reasonMatch = /reason=(.*)$/.exec(content);
-        expect(
-          reasonMatch,
-          `unexpected artifact content: ${content}`,
-        ).not.toBeNull();
-        return asString(reasonMatch?.[1]);
-      } finally {
-        fs.rmSync(directory, { recursive: true, force: true });
+      } catch (error) {
+        throw new Error(
+          [
+            'The extracted classification block failed to run.',
+            `status: ${errorField(error, 'status')}`,
+            `stderr: ${errorField(error, 'stderr')}`,
+            `input: ${JSON.stringify(stderrContent)}`,
+          ].join('\n'),
+          { cause: error },
+        );
       }
+      const content = fs.readFileSync(artifactPath, 'utf8').trim();
+      const reasonMatch = /reason=(.*)$/.exec(content);
+      expect(
+        reasonMatch,
+        `unexpected artifact content: ${content}`,
+      ).not.toBeNull();
+      return asString(reasonMatch?.[1]);
     }
 
     // ------------------------------------------------------------------
