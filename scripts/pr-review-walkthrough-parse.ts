@@ -473,6 +473,7 @@ const BLOCK_HEADER_KEYWORDS = [
   'else',
   'critical',
   'option',
+  'break',
   'rect',
 ];
 

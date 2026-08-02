@@ -507,7 +507,7 @@ ${fence}`;
     expect(result).not.toContain('first; second');
     expect(result).not.toContain('third; fourth');
   });
-  it('escapes semicolons in loop/alt/critical block-header descriptions', () => {
+  it('escapes semicolons in loop/alt/critical/break block-header descriptions', () => {
     const input = `${fence}mermaid
 sequenceDiagram
   loop check every 30s; retry
@@ -518,14 +518,19 @@ sequenceDiagram
   CRITICAL handle; recover
     A->>B: rescue
   end
+  break on error; stop
+    A->>B: abort
+  end
 ${fence}`;
     const result = sanitizeSequenceDiagram(input);
     expect(result).toContain('loop check every 30s#59; retry');
     expect(result).toContain('alt success#59; proceed');
     expect(result).toContain('CRITICAL handle#59; recover');
+    expect(result).toContain('break on error#59; stop');
     expect(result).not.toContain('30s; retry');
     expect(result).not.toContain('success; proceed');
     expect(result).not.toContain('handle; recover');
+    expect(result).not.toContain('error; stop');
   });
   it('escapes a bare semicolon in a block-header description that also contains a colon', () => {
     // A block-header line whose free-text description includes a colon must not
