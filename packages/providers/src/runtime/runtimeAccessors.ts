@@ -45,6 +45,7 @@ import {
   resolveActiveRuntimeIdentity,
   requireRuntimeEntry,
   type RuntimeRegistryEntry,
+  type RuntimeKind,
 } from './runtimeRegistry.js';
 import { isMissingRuntimeError } from './runtimeLifecycle.js';
 import { isStatelessProviderIntegrationEnabled } from './statelessHardening.js';
@@ -365,6 +366,21 @@ export function maybeGetCliOAuthManager(): OAuthManager | null {
       return null;
     }
     throw error;
+  }
+}
+
+/**
+ * Resolve the runtime kind of the active runtime, or `undefined` when no
+ * runtime is registered or resolution fails. Used by callers that must avoid
+ * non-interactive side effects (e.g. launching a browser OAuth flow) inside
+ * agent/subagent runtimes. Never throws.
+ */
+export function getActiveRuntimeKind(): RuntimeKind | undefined {
+  try {
+    const { runtimeId } = resolveActiveRuntimeIdentity();
+    return runtimeRegistry.get(runtimeId)?.runtimeKind;
+  } catch {
+    return undefined;
   }
 }
 

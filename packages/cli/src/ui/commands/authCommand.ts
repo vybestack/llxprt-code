@@ -17,6 +17,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
@@ -544,6 +545,25 @@ export class AuthCommandExecutor {
           };
         }
       }
+
+      // Re-sync in-process auth state after a successful login. This closes a
+      // real structural gap: the NAMED-bucket branch above invalidates via
+      // `activateNamedLoginBucket`, but the DEFAULT-bucket path (no `bucket`
+      // arg) previously invalidated nothing at all. (Note that `logoutWithBucket`
+      // clears the provider cache but does NOT call
+      // `invalidateProviderRuntimeCache`, so this is not a mirror of logout.)
+      //
+      // Note (issue #2891): this is defensive hardening, NOT the mechanism
+      // behind the reported "login succeeds but the next prompt still fails".
+      // There is no negative caching to flush — a failed lookup is never cached
+      // (auth-precedence-resolver `fetchAndCacheOAuthToken` returns null without
+      // storing, and `storeRuntimeScopedToken` stores only real tokens), so on a
+      // first-ever login these calls are no-ops. They matter when a PREVIOUS
+      // real token is cached for this provider and is being replaced.
+      // `invalidateProviderRuntimeCache` is idempotent, so keeping it
+      // unconditional is safe.
+      this.clearProviderCache(provider);
+      invalidateProviderRuntimeCache(provider);
 
       const bucketInfo = bucket ? ` (bucket: ${bucket})` : '';
       return {
