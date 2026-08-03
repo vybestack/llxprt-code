@@ -258,12 +258,24 @@ async function settleReactWork(): Promise<void> {
   }
 }
 
+type TurnResult = Promise<PromiseSettledResult<void>>;
+
+function observeTurn(turn: Promise<void>): TurnResult {
+  return Promise.allSettled([turn]).then(([result]) => result);
+}
+
+async function expectTurnFulfilled(turnResult: TurnResult): Promise<void> {
+  const result = await turnResult;
+  if (result.status === 'rejected') throw result.reason;
+}
+
 async function startTurnAndWaitForTerminalEvent(
   result: { current: ReturnType<typeof useOrchestration> },
   state: OrchState,
-): Promise<AbortSignal> {
+): Promise<{ signal: AbortSignal; turnResult: TurnResult }> {
+  let turnResult!: TurnResult;
   await act(async () => {
-    void result.current.submitQuery('turn-1');
+    turnResult = observeTurn(result.current.submitQuery('turn-1'));
     await settleReactWork();
   });
 
@@ -272,23 +284,30 @@ async function startTurnAndWaitForTerminalEvent(
   );
   expect(state.setIsRespondingCalls).toContain(false);
 
-  return state.abortControllerRef.current!.signal;
+  return { signal: state.abortControllerRef.current!.signal, turnResult };
 }
 
 describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', () => {
   it.each(TERMINAL_EVENTS)(
     'accepts a slash command after $type without queuing or model streaming',
     async (event) => {
-      const { agent, streamCallCount } = createControlledAgent(() => [event]);
+      const { agent, streamCallCount, getDeferred } = createControlledAgent(
+        () => [event],
+      );
 
       const state = makeOrchState();
       const { result } = renderOrchestration(state, agent);
 
-      await startTurnAndWaitForTerminalEvent(result, state);
+      const { turnResult } = await startTurnAndWaitForTerminalEvent(
+        result,
+        state,
+      );
 
       await act(async () => {
         await result.current.submitQuery('/help');
+        getDeferred(0)?.resolve();
       });
+      await expectTurnFulfilled(turnResult);
 
       expect(result.current.commandEffect).toContain('executed:/help');
       expect(state.queuedSubmissionsRef.current).toHaveLength(0);
@@ -306,11 +325,12 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
       const state = makeOrchState();
       const { result } = renderOrchestration(state, agent);
 
-      await startTurnAndWaitForTerminalEvent(result, state);
+      const { turnResult: turn1Result } =
+        await startTurnAndWaitForTerminalEvent(result, state);
 
-      let turn2Promise!: Promise<void>;
+      let turn2Result!: TurnResult;
       await act(async () => {
-        turn2Promise = result.current.submitQuery('follow-up');
+        turn2Result = observeTurn(result.current.submitQuery('follow-up'));
         await settleReactWork();
       });
 
@@ -324,11 +344,12 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
         await settleReactWork();
       });
       await waitFor(() => expect(streamCallCount()).toBe(2));
+      await expectTurnFulfilled(turn1Result);
 
       const secondDeferred = getDeferred(1);
       await act(async () => {
         secondDeferred?.resolve();
-        await turn2Promise.catch(() => {});
+        await expectTurnFulfilled(turn2Result);
       });
     },
   );
@@ -346,9 +367,10 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
 
     const state = makeOrchState();
     const { result } = renderOrchestration(state, agent);
+    let turn1Result!: TurnResult;
 
     await act(async () => {
-      void result.current.submitQuery('turn-1');
+      turn1Result = observeTurn(result.current.submitQuery('turn-1'));
       await settleReactWork();
     });
     await waitFor(() =>
@@ -405,6 +427,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
     await waitFor(() =>
       expect(result.current.streamingState).toBe(StreamingState.Idle),
     );
+    await expectTurnFulfilled(turn1Result);
   });
 
   it('stale old-turn events and cleanup cannot mutate or release a newer active turn', async () => {
@@ -416,11 +439,12 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
     const state = makeOrchState();
     const { result } = renderOrchestration(state, agent);
 
-    const firstSignal = await startTurnAndWaitForTerminalEvent(result, state);
+    const { signal: firstSignal, turnResult: turn1Result } =
+      await startTurnAndWaitForTerminalEvent(result, state);
 
-    let turn2Promise!: Promise<void>;
+    let turn2Result!: TurnResult;
     await act(async () => {
-      turn2Promise = result.current.submitQuery('turn-2');
+      turn2Result = observeTurn(result.current.submitQuery('turn-2'));
       await settleReactWork();
     });
     await waitFor(() =>
@@ -451,6 +475,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
     await waitFor(() =>
       expect(state.abortControllerRef.current?.signal).toBe(secondSignal),
     );
+    await expectTurnFulfilled(turn1Result);
 
     await act(async () => {
       await result.current.submitQuery('turn-3-should-queue');
@@ -464,7 +489,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
     const secondDeferred = getDeferred(1);
     await act(async () => {
       secondDeferred?.resolve();
-      await turn2Promise.catch(() => {});
+      await expectTurnFulfilled(turn2Result);
     });
     await waitFor(() => expect(getDeferred(2)).toBeDefined());
     await act(async () => {
