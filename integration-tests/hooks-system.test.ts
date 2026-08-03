@@ -129,7 +129,7 @@ process.exit(2);
       // Result should mention the blocking reason from stderr
       expect(result).toContain('File writing blocked by security policy');
 
-      // Verify hook telemetry shows exit code 2 and stderr
+      // Verify hook telemetry shows exit code 2, stderr and the deny decision
       const hookLogs = rig.readHookLogs();
       const blockHook = hookLogs.find((log) => log.hookCall.exit_code === 2);
       expect(blockHook).toBeDefined();
@@ -137,6 +137,17 @@ process.exit(2);
         'File writing blocked by security policy',
       );
       expect(blockHook?.hookCall.success).toBe(false);
+      // Telemetry serializes hook_output as a JSON string.
+      const stderrHookOutput = JSON.parse(
+        String(blockHook?.hookCall.hook_output),
+      ) as {
+        decision?: string;
+        reason?: string;
+      };
+      expect(stderrHookOutput.decision).toBe('deny');
+      expect(stderrHookOutput.reason).toBe(
+        'File writing blocked by security policy',
+      );
     });
 
     it('should block tool execution with default reason when hook exits code 2 with empty stderr', async () => {
@@ -186,12 +197,20 @@ process.exit(2);
       expect(writeFileCalls).toHaveLength(0);
       expect(existsSync(join(rig.testDir!, 'test.txt'))).toBe(false);
 
-      // Verify hook telemetry shows exit code 2 and the synthesized deny reason
+      // Verify hook telemetry shows exit code 2 and the synthesized deny decision
       const hookLogs = rig.readHookLogs();
       const blockHook = hookLogs.find((log) => log.hookCall.exit_code === 2);
       expect(blockHook).toBeDefined();
       expect(blockHook?.hookCall.success).toBe(false);
-      expect(JSON.stringify(blockHook?.hookCall.hook_output)).toContain(
+      // Telemetry serializes hook_output as a JSON string.
+      const hookOutput = JSON.parse(
+        String(blockHook?.hookCall.hook_output),
+      ) as {
+        decision?: string;
+        reason?: string;
+      };
+      expect(hookOutput.decision).toBe('deny');
+      expect(hookOutput.reason).toBe(
         'Hook exited with code 2 without an error message',
       );
     });
