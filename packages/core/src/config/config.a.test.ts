@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
@@ -37,6 +38,21 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
+}));
+
+const initializeShellParser = vi.hoisted(() =>
+  vi.fn(() => Promise.resolve(true)),
+);
+
+vi.mock('../utils/shell-parser.js', () => ({
+  initializeParser: initializeShellParser,
+  isParserAvailable: () => true,
+  parseShellCommand: () => null,
+  extractCommandNames: () => [],
+  hasCommandSubstitution: () => false,
+  splitCommandsWithTree: () => [],
+  parseCommandDetails: () => null,
+  hasPromptCommandTransform: () => false,
 }));
 
 vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
@@ -79,9 +95,47 @@ describe('Server Config (config.ts)', () => {
 
   beforeEach(() => {
     resetAgentClientMock();
+    initializeShellParser.mockClear();
+    vi.mocked(ToolRegistry).mockClear();
   });
 
   describe('initialize', () => {
+    it('initializes the shell parser before creating the tool registry', async () => {
+      const parserInitialization = Promise.withResolvers<boolean>();
+      initializeShellParser.mockReturnValueOnce(parserInitialization.promise);
+      const config = new Config({
+        ...baseParams,
+        checkpointing: false,
+      });
+
+      const initialization = initializeTestConfig(config);
+      await vi.waitFor(() => {
+        expect(initializeShellParser).toHaveBeenCalledOnce();
+      });
+
+      expect(ToolRegistry).not.toHaveBeenCalled();
+
+      parserInitialization.resolve(true);
+      await initialization;
+
+      expect(ToolRegistry).toHaveBeenCalledOnce();
+      expect(initializeShellParser.mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(ToolRegistry).mock.invocationCallOrder[0],
+      );
+    });
+
+    it('continues startup when the shell parser cannot load', async () => {
+      initializeShellParser.mockResolvedValueOnce(false);
+      const config = new Config({
+        ...baseParams,
+        checkpointing: false,
+      });
+
+      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
+
+      expect(ToolRegistry).toHaveBeenCalledOnce();
+    });
+
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
       (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
