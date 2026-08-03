@@ -72,7 +72,11 @@ describe('ocr-canary-metrics.cjs — verbatim embedding in workflow (AM1 pattern
       'Build OCR canary metrics step must embed the canonical snippet ' +
         'from .github/scripts/ocr-canary-metrics.cjs verbatim. ' +
         'Re-embed: copy the text between (and including) the BEGIN/END ' +
-        'sentinels, indent by 12 spaces.',
+        'sentinels into the step script, indenting every line uniformly to ' +
+        'match the surrounding block (12 spaces at the time of writing). ' +
+        'The comparison runs against the YAML-parsed script, which strips ' +
+        'the block scalar indentation, so only inconsistent indentation ' +
+        'breaks this assertion.',
     ).toContain(canonical);
   });
 });
@@ -93,7 +97,11 @@ describe('ocr-review-context.cjs — verbatim embedding in workflow (AM1 pattern
       'Resolve effective review context step must embed the canonical ' +
         'snippet from .github/scripts/ocr-review-context.cjs verbatim. ' +
         'Re-embed: copy the text between (and including) the BEGIN/END ' +
-        'sentinels, indent by 12 spaces.',
+        'sentinels into the step script, indenting every line uniformly to ' +
+        'match the surrounding block (12 spaces at the time of writing). ' +
+        'The comparison runs against the YAML-parsed script, which strips ' +
+        'the block scalar indentation, so only inconsistent indentation ' +
+        'breaks this assertion.',
     ).toContain(canonical);
   });
 });

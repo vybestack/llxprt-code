@@ -331,9 +331,16 @@ describe('ocr-canary-metrics.cjs — buildCanaryMetrics validation rules', () =>
     );
   });
 
-  it('reports OCR exit code must be exactly zero for "0" without newline', () => {
+  it('reports OCR exit code must be exactly zero for "1" without newline', () => {
     const result = runBuild(buildInput({ exitCodeText: '1' }));
     expect(result['validation_errors']).toContain(
+      'OCR exit code must be exactly zero',
+    );
+  });
+
+  it.each(['0', '0\n'])('accepts an exact zero exit code (%j)', (exitText) => {
+    const result = runBuild(buildInput({ exitCodeText: exitText }));
+    expect(result['validation_errors']).not.toContain(
       'OCR exit code must be exactly zero',
     );
   });
