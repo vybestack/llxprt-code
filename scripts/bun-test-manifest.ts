@@ -127,6 +127,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // loads, so win32 and darwin must run in separate processes.
       'test-bun/steerKey.win32.bun.ts',
       'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
     ],
   },
   {
