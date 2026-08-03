@@ -11,7 +11,7 @@ Bun execution command (or explains why it still requires Vitest).
 | packages/a2a-server           | 15               | 15            | 0                 | 0                         |
 | packages/agents               | 348              | 0             | 0                 | 348                       |
 | packages/auth                 | 37               | 37            | 0                 | 0                         |
-| packages/cli                  | 658              | 10            | 0                 | 648                       |
+| packages/cli                  | 659              | 11            | 0                 | 648                       |
 | packages/core                 | 322              | 322           | 0                 | 0                         |
 | packages/ide-integration      | 10               | 0             | 0                 | 10                        |
 | packages/lsp                  | 0                | all           | 0                 | 0                         |
@@ -127,7 +127,7 @@ All 6 test files are Bun-native. The `research/` directory is excluded via
 These files run under Bun via `scripts/run_bun_tests.ts` but their workspace
 primary `test` script still uses Vitest for the bulk of files.
 
-### packages/cli (10 files)
+### packages/cli (11 files)
 
 - `src/__tests__/cliSessionDispatch.characterization.test.tsx`
 - `test-utils/augment-bun-vi-cleanup.bun.ts`
@@ -145,6 +145,16 @@ do not change `SELECTED_FILE_COUNT`:
 - `src/observation/jspTransport.test.ts`
 - `src/observation/jspWiring.test.ts`
 - `src/observation/observationTap.test.ts`
+
+The sandbox SSH agent preflight suite (issue #1699) follows the same pattern —
+Bun-native from the start and excluded from the Vitest selection:
+
+- `src/utils/sandbox-ssh-agent-preflight.test.ts`
+
+It partially mocks `node:child_process` through an async `importOriginal`
+factory rather than a bare `vi.mock` automock: automocking walks every export
+and throws on `ChildProcess`'s private `#stdin` getter under Bun's native
+runner.
 
 ### packages/core — fully migrated (see above)
 

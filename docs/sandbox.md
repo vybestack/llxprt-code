@@ -365,6 +365,11 @@ For Podman on macOS, an existing non-host `--network` setting stays
 authoritative. LLxprt Code warns and skips SSH agent forwarding rather than
 overriding your network policy to make forwarding work.
 
+When the host agent is reachable but has no identities loaded, LLxprt Code
+prints a warning at startup with remediation guidance. Forwarding still
+proceeds — load a key with `ssh-add` so git SSH operations succeed inside the
+container.
+
 ### Git config passthrough
 
 These files are mounted read-only into the container when they exist on the
@@ -664,6 +669,16 @@ export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
 ssh-add ~/.ssh/id_ed25519
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 ```
+
+**SSH agent forwarded but git auth still fails** — the host agent may be running
+with no identities loaded. Check with `ssh-add -l`; if it reports an empty
+agent, load a key:
+
+```bash
+ssh-add ~/.ssh/id_ed25519
+```
+
+LLxprt Code prints a startup warning when it detects this empty-agent state.
 
 **"socat not found" error** — the sandbox container image needs `socat` for SSH
 agent and credential proxy tunneling. Use the official sandbox image.
