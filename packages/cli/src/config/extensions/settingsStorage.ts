@@ -22,6 +22,7 @@ import type { ExtensionSetting } from './extensionSettings.js';
 import {
   SecureStore,
   isRuntimeReplacedError,
+  type SecureStoreOptions,
 } from '@vybestack/llxprt-code-storage';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
@@ -174,11 +175,23 @@ export class ExtensionSettingsStorage {
   private readonly extensionDir: string;
   private readonly store: SecureStore;
 
-  constructor(extensionName: string, extensionDir: string) {
+  /**
+   * @param storeOptions Optional SecureStore configuration. Production callers
+   * omit it and get the default keychain-backed store. Supplying it lets a
+   * caller point the store at an isolated fallback dir, lock dir, and keyring
+   * adapter, so the real SecureStore can be exercised without touching the
+   * user's OS keychain.
+   */
+  constructor(
+    extensionName: string,
+    extensionDir: string,
+    storeOptions?: SecureStoreOptions,
+  ) {
     this.extensionName = extensionName;
     this.extensionDir = extensionDir;
     this.store = new SecureStore(
       getKeychainServiceName(extensionName, extensionDir),
+      storeOptions,
     );
   }
 

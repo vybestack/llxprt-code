@@ -4,68 +4,109 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import type {
+  KeyringAdapter,
+  SecureStoreOptions,
+} from '@vybestack/llxprt-code-storage';
 import {
   ExtensionSettingsStorage,
   getSettingsEnvFilePath,
   getKeychainServiceName,
-} from './settingsStorage.js';
-import type { ExtensionSetting } from './extensionSettings.js';
-
-// In-memory store used by the mock SecureStore instances
-const mockStore = new Map<string, string>();
+} from '../src/config/extensions/settingsStorage.js';
+import type { ExtensionSetting } from '../src/config/extensions/extensionSettings.js';
 
 /**
- * Failure injected into the mock SecureStore's write path.
+ * An in-memory keyring adapter.
  *
- * Lets a test make `set()` / `delete()` reject with a specific
- * SecureStore-shaped error without reaching into ExtensionSettingsStorage's
- * private `store` field. Cleared in `beforeEach`.
+ * These tests drive the REAL SecureStore rather than a stand-in for it, so
+ * the behaviour under test (verified writes, CONFLICT on a foreign read-back,
+ * error classification, service-name scoping) is SecureStore's actual
+ * behaviour. Only the OS keychain itself is replaced, which is the one part
+ * that cannot be touched from a test.
  */
-let injectedWriteFailure: {
-  readonly code: string;
-  readonly message: string;
-} | null = null;
-
-function failWriteWith(code: string, message: string): void {
-  injectedWriteFailure = { code, message };
+interface Deferred {
+  readonly promise: Promise<void>;
+  resolve: () => void;
 }
 
-function throwInjectedWriteFailureIfAny(): void {
-  if (injectedWriteFailure === null) {
-    return;
+/** A promise whose resolution a test controls, used to hold a lock open. */
+function createDeferred(): Deferred {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve: () => resolve() };
+}
+
+class InMemoryKeyring implements KeyringAdapter {
+  readonly entries = new Map<string, string>();
+
+  /** When set, write operations reject with this message. */
+  writeFailureMessage: string | null = null;
+
+  /**
+   * When set, reads return this instead of the stored value, which makes
+   * SecureStore's post-write verification observe a foreign winner and raise
+   * a genuine CONFLICT.
+   */
+  foreignReadBack: string | null = null;
+
+  /**
+   * Optional hook awaited inside setPassword. Because SecureStore performs
+   * keyring writes while holding the per-item write lock, blocking here holds
+   * that lock open, which lets a test observe what a competing writer sees.
+   */
+  onSetPassword: (() => Promise<void>) | null = null;
+
+  private keyOf(service: string, account: string): string {
+    return `${service}:${account}`;
   }
-  throw {
-    name: 'SecureStoreError',
-    message: injectedWriteFailure.message,
-    code: injectedWriteFailure.code,
-    remediation: 'Retry the operation',
-  };
-}
 
-vi.mock('@vybestack/llxprt-code-storage', () => ({
-  SecureStore: vi.fn().mockImplementation(() => ({
-    get: vi.fn(async (key: string) => mockStore.get(key) ?? null),
-    set: vi.fn(async (key: string, value: string) => {
-      throwInjectedWriteFailureIfAny();
-      mockStore.set(key, value);
-    }),
-    delete: vi.fn(async (key: string) => {
-      throwInjectedWriteFailureIfAny();
-      return mockStore.delete(key);
-    }),
-    list: vi.fn(async () => Array.from(mockStore.keys())),
-    has: vi.fn(async (key: string) => mockStore.has(key)),
-  })),
-  isRuntimeReplacedError: (error: unknown): boolean =>
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'RUNTIME_REPLACED',
-}));
+  async getPassword(service: string, account: string): Promise<string | null> {
+    if (this.foreignReadBack !== null) {
+      return this.foreignReadBack;
+    }
+    return this.entries.get(this.keyOf(service, account)) ?? null;
+  }
+
+  async setPassword(
+    service: string,
+    account: string,
+    password: string,
+  ): Promise<void> {
+    if (this.onSetPassword !== null) {
+      await this.onSetPassword();
+    }
+    if (this.writeFailureMessage !== null) {
+      throw new Error(this.writeFailureMessage);
+    }
+    this.entries.set(this.keyOf(service, account), password);
+  }
+
+  async deletePassword(service: string, account: string): Promise<boolean> {
+    if (this.writeFailureMessage !== null) {
+      throw new Error(this.writeFailureMessage);
+    }
+    return this.entries.delete(this.keyOf(service, account));
+  }
+
+  async findCredentials(
+    service: string,
+  ): Promise<Array<{ account: string; password: string }>> {
+    const prefix = `${service}:`;
+    const found: Array<{ account: string; password: string }> = [];
+    for (const [key, password] of this.entries) {
+      if (key.startsWith(prefix)) {
+        found.push({ account: key.slice(prefix.length), password });
+      }
+    }
+    return found;
+  }
+}
 
 describe('getSettingsEnvFilePath', () => {
   it('should return path to .env file in extension directory', () => {
@@ -112,7 +153,7 @@ describe('getKeychainServiceName', () => {
 
     // The service name should contain a hash based on the git root (workspace identity)
     // Import getWorkspaceIdentity to get the actual workspace identity
-    const { getWorkspaceIdentity } = await import('../../utils/gitUtils.js');
+    const { getWorkspaceIdentity } = await import('../src/utils/gitUtils.js');
     const workspaceIdentity = getWorkspaceIdentity();
 
     const crypto = await import('node:crypto');
@@ -131,20 +172,60 @@ describe('getKeychainServiceName', () => {
 
 describe('ExtensionSettingsStorage', () => {
   let tmpDir: string;
+  let storeDir: string;
+  let keyring: InMemoryKeyring;
+  let holderKeyring: InMemoryKeyring;
   let storage: ExtensionSettingsStorage;
   const extensionName = 'test-extension';
 
+  /** Builds SecureStore options isolated to this test's temp directories. */
+  const storeOptionsFor = (
+    policy: 'allow' | 'deny' = 'allow',
+  ): SecureStoreOptions => ({
+    fallbackDir: path.join(storeDir, 'fallback'),
+    lockDir: path.join(storeDir, 'locks'),
+    machineSecretPath: path.join(storeDir, 'machine_secret'),
+    fallbackPolicy: policy,
+    keyringLoader: async () => keyring,
+  });
+
+  /** Reads a secret straight out of the keyring, scoped to the real service name. */
+  const storedSecret = (account: string, dir: string = tmpDir): string | null =>
+    keyring.entries.get(
+      `${getKeychainServiceName(extensionName, dir)}:${account}`,
+    ) ?? null;
+
+  /** Seeds a secret under the service name the storage instance will use. */
+  const seedSecret = (
+    account: string,
+    value: string,
+    dir: string = tmpDir,
+  ): void => {
+    keyring.entries.set(
+      `${getKeychainServiceName(extensionName, dir)}:${account}`,
+      value,
+    );
+  };
+
   beforeEach(async () => {
-    mockStore.clear();
-    injectedWriteFailure = null;
+    keyring = new InMemoryKeyring();
+    holderKeyring = new InMemoryKeyring();
     tmpDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'ext-settings-test-'),
     );
-    storage = new ExtensionSettingsStorage(extensionName, tmpDir);
+    storeDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), 'ext-settings-store-'),
+    );
+    storage = new ExtensionSettingsStorage(
+      extensionName,
+      tmpDir,
+      storeOptionsFor(),
+    );
   });
 
   afterEach(async () => {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
+    await fs.promises.rm(storeDir, { recursive: true, force: true });
   });
 
   describe('saveSettings', () => {
@@ -183,7 +264,7 @@ describe('ExtensionSettingsStorage', () => {
 
       await storage.saveSettings(settings, values);
 
-      expect(mockStore.get('API_KEY')).toBe('secret123');
+      expect(storedSecret('API_KEY')).toBe('secret123');
     });
 
     it('should NOT save sensitive settings to env file', async () => {
@@ -228,6 +309,7 @@ describe('ExtensionSettingsStorage', () => {
       const newStorage = new ExtensionSettingsStorage(
         'new-ext',
         nonExistentDir,
+        storeOptionsFor(),
       );
       const settings: ExtensionSetting[] = [
         { name: 'test', envVar: 'TEST', sensitive: false },
@@ -254,7 +336,7 @@ describe('ExtensionSettingsStorage', () => {
     });
 
     it('should load sensitive settings from SecureStore', async () => {
-      mockStore.set('API_KEY', 'secret123');
+      seedSecret('API_KEY', 'secret123');
       const settings: ExtensionSetting[] = [
         { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
       ];
@@ -310,14 +392,14 @@ describe('ExtensionSettingsStorage', () => {
     });
 
     it('should delete SecureStore entries', async () => {
-      mockStore.set('API_KEY', 'secret123');
+      seedSecret('API_KEY', 'secret123');
       await storage.deleteSettings();
-      expect(mockStore.size).toBe(0);
+      expect(storedSecret('API_KEY')).toBeNull();
     });
 
     it('should handle missing env file gracefully', async () => {
       // Don't create env file
-      await expect(storage.deleteSettings()).resolves.not.toThrow();
+      await expect(storage.deleteSettings()).resolves.toBeUndefined();
     });
   });
 
@@ -331,7 +413,7 @@ describe('ExtensionSettingsStorage', () => {
     });
 
     it('should return true if SecureStore has entries', async () => {
-      mockStore.set('API_KEY', 'secret');
+      seedSecret('API_KEY', 'secret');
       const result = await storage.hasSettings();
       expect(result).toBe(true);
     });
@@ -353,7 +435,9 @@ describe('ExtensionSettingsStorage', () => {
         : undefined;
 
     it('rethrows a CONFLICT error from SecureStore.set so saveSettings surfaces the failure', async () => {
-      failWriteWith('CONFLICT', 'conflicting value from another process');
+      // A genuine CONFLICT: the write is accepted but the verifying read-back
+      // observes a different (foreign) value, so another process won the race.
+      keyring.foreignReadBack = 'value-written-by-another-process';
 
       const error = await storage
         .saveSettings(sensitiveApiKey, { API_KEY: 'secret' })
@@ -363,9 +447,17 @@ describe('ExtensionSettingsStorage', () => {
     });
 
     it('rethrows a TIMEOUT error from SecureStore.set so saveSettings surfaces the failure', async () => {
-      failWriteWith('TIMEOUT', 'Timed out waiting for lock');
+      // A keyring that reports a timeout is classified TIMEOUT by SecureStore.
+      // fallbackPolicy 'deny' keeps the failure terminal instead of letting it
+      // be absorbed by a fallback file write.
+      keyring.writeFailureMessage = 'Timed out waiting for the keyring';
+      const denyStorage = new ExtensionSettingsStorage(
+        extensionName,
+        tmpDir,
+        storeOptionsFor('deny'),
+      );
 
-      const error = await storage
+      const error = await denyStorage
         .saveSettings(sensitiveApiKey, { API_KEY: 'secret' })
         .catch((e: unknown) => e);
 
@@ -373,52 +465,94 @@ describe('ExtensionSettingsStorage', () => {
     });
 
     it('still swallows non-terminal errors (UNAVAILABLE) for backward compatibility', async () => {
-      failWriteWith('UNAVAILABLE', 'keyring unavailable');
+      keyring.writeFailureMessage = 'keyring is unavailable';
+      const denyStorage = new ExtensionSettingsStorage(
+        extensionName,
+        tmpDir,
+        storeOptionsFor('deny'),
+      );
 
       await expect(
-        storage.saveSettings(sensitiveApiKey, { API_KEY: 'secret' }),
+        denyStorage.saveSettings(sensitiveApiKey, { API_KEY: 'secret' }),
       ).resolves.toBeUndefined();
     });
 
-    it('rethrows a CONFLICT error from SecureStore.delete when the value is undefined', async () => {
+    it('rethrows a TIMEOUT from the delete path when another writer holds the lock', async () => {
       // An undefined value routes persistSensitiveSetting to store.delete().
-      failWriteWith('CONFLICT', 'conflicting value from another process');
+      // SecureStore.deleteLocked deliberately swallows keyring delete errors,
+      // so the terminal failure the delete path can actually surface is a lock
+      // TIMEOUT. Hold the real lock with a competing writer and prove the
+      // delete reports it rather than silently doing nothing.
+      const entered = createDeferred();
+      const released = createDeferred();
+      holderKeyring.onSetPassword = async () => {
+        entered.resolve();
+        await released.promise;
+      };
+
+      const holder = new ExtensionSettingsStorage(extensionName, tmpDir, {
+        ...storeOptionsFor(),
+        keyringLoader: async () => holderKeyring,
+      });
+      const holderWrite = holder.saveSettings(sensitiveApiKey, {
+        API_KEY: 'held-by-other-writer',
+      });
+
+      // Only proceed once the holder is provably inside the critical section.
+      await entered.promise;
 
       const error = await storage
         .saveSettings(sensitiveApiKey, { API_KEY: undefined })
         .catch((e: unknown) => e);
 
-      expect(codeOf(error)).toBe('CONFLICT');
-    });
+      expect(codeOf(error)).toBe('TIMEOUT');
+
+      released.resolve();
+      await holderWrite;
+    }, 30_000);
   });
 
   describe('backward compatibility with legacy cwd-based keys', () => {
-    it('should fall back to cwd-based keychain lookup if canonical key not found', async () => {
+    // NOTE: there is deliberately no "legacy cwd-based keychain lookup" test
+    // here. The cwd fallback in this module applies to the workspace .env FILE
+    // (covered below), not to the keychain — loadSettings reads secrets only
+    // under the canonical service name. Two earlier tests appeared to cover a
+    // keychain fallback, but they exercised a stand-in store that ignored the
+    // service name entirely, so any service matched any key and the assertions
+    // could not fail. Driving the real SecureStore makes the actual contract
+    // testable, which is what the test below asserts.
+    it('keeps workspace-scoped secrets separate from user-scoped ones', async () => {
       const settings: ExtensionSetting[] = [
         { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
       ];
+      // A path containing .llxprt/extensions is workspace-scoped, so its
+      // keychain service name carries a workspace hash and differs from the
+      // user-scoped name derived from tmpDir.
+      const workspaceDir = path.join(
+        tmpDir,
+        '.llxprt',
+        'extensions',
+        extensionName,
+      );
+      const workspaceStorage = new ExtensionSettingsStorage(
+        extensionName,
+        workspaceDir,
+        storeOptionsFor(),
+      );
 
-      // Store value using legacy cwd-based key (for future migration test refinement)
-      mockStore.set('API_KEY', 'legacy-secret');
+      // A user-scoped secret must NOT leak into the workspace-scoped store.
+      seedSecret('API_KEY', 'user-scoped-secret');
+      const isolated = await workspaceStorage.loadSettings(settings);
+      expect(isolated.API_KEY).toBeUndefined();
 
-      // Current implementation only looks for canonical key with workspace hash
-      // Expected: should fall back to legacy key when canonical not found
-      const result = await storage.loadSettings(settings);
-      expect(result.API_KEY).toBe('legacy-secret');
-    });
+      // Its own workspace-scoped secret does resolve.
+      seedSecret('API_KEY', 'workspace-scoped-secret', workspaceDir);
+      const found = await workspaceStorage.loadSettings(settings);
+      expect(found.API_KEY).toBe('workspace-scoped-secret');
 
-    it('should prefer canonical key over cwd-based key when both exist', async () => {
-      const settings: ExtensionSetting[] = [
-        { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
-      ];
-
-      // Store both legacy and canonical values
-      mockStore.set('API_KEY', 'canonical-secret');
-      // In real implementation, legacy would be under different service name
-
-      const result = await storage.loadSettings(settings);
-      // Should prefer canonical (this test design needs refinement based on implementation)
-      expect(result.API_KEY).toBe('canonical-secret');
+      // And the user-scoped store still sees only its own value.
+      const userScoped = await storage.loadSettings(settings);
+      expect(userScoped.API_KEY).toBe('user-scoped-secret');
     });
 
     it('should fall back to cwd-based workspace env file if canonical not found', async () => {

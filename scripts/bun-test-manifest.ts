@@ -100,6 +100,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      // Extension settings storage drives the REAL SecureStore against an
+      // in-memory keyring, so it needs no module mocking and is Bun-native.
+      'test-bun/settingsStorage.bun.ts',
       // JSP/1 observation producer (issue #2779). Bun-native from the start:
       // these are excluded from the Vitest selection so they run only here.
       'src/observation/jspBounds.test.ts',
@@ -625,7 +628,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/machine-secret.concurrent-write.bun.ts',
       'test-bun/secure-store.bun.ts',
       'test-bun/secure-store.concurrent-write.bun.ts',
-      'test-bun/storage-credential-locks-dir.bun.ts',
+      'test-bun/storage.bun.ts',
     ],
   },
   {
