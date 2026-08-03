@@ -323,3 +323,159 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
     }
   });
 });
+
+describe('main() image mode: bypasses the conversational stdin guard (#2128)', () => {
+  const callOrder: string[] = [];
+
+  beforeEach(() => {
+    callOrder.length = 0;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    // Restore a TTY-like stdin so other suites are unaffected.
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  async function runMainImageMode(config: Config): Promise<void> {
+    vi.resetModules();
+    // Simulate non-TTY stdin (piped / /dev/null) so the stdin guard WOULD
+    // fire if not bypassed.
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    vi.doMock('@vybestack/llxprt-code-providers/auth.js', () => ({
+      createTokenStore: () => ({}),
+    }));
+    vi.doMock('./utils/sandbox-bashrc.js', () => ({
+      applySandboxBashrc: () => {},
+    }));
+    vi.doMock('./unconfiguredProviderGuard.js', () => ({
+      guardUnconfiguredProvider: async () => {},
+      UNCONFIGURED_PROVIDER_MESSAGE: '',
+    }));
+    vi.doMock('./cliProviderInit.js', () => ({
+      activateConfiguredProvider: async () => ({
+        authFailed: false,
+        token: undefined,
+        intent: undefined,
+      }),
+      configureProvidersAndServices: async () => ({}),
+      connectIdeClientIfEnabled: async () => {},
+      ensureAcpProviderActivated: () => {},
+    }));
+    vi.doMock('./cliTerminalSession.js', () => ({
+      constructAgentWithSpinner: async () => ({}),
+      prepareTerminalSession: async () => {},
+    }));
+    vi.doMock('./cliSessionBootstrap.js', () => ({
+      bootstrapRuntimeAndConfig: async () => ({
+        config,
+        runtimeSettingsService: {},
+      }),
+      setupSessionRecording: async () => undefined,
+    }));
+    vi.doMock('./session/nonInteractiveSession.js', () => ({
+      dispatchInteractiveOrNonInteractive: async () => {},
+    }));
+    vi.doMock('./cliSandbox.js', () => ({
+      maybeHopIntoSandbox: async () => {},
+    }));
+    // parseArguments returns image-mode flags with NO conversational prompt.
+    vi.doMock('./config/cliArgParser.js', () => ({
+      parseArguments: async () => ({
+        imageOutput: 'out.png',
+        imagePrompt: 'draw a cat',
+        experimentalAcp: false,
+      }),
+    }));
+    vi.doMock('./config/settings.js', () => ({
+      loadSettings: () => ({
+        merged: { ui: { unicode: 'auto' } },
+        errors: [],
+      }),
+    }));
+    vi.doMock('./cliBootstrap.js', () => ({
+      configureEarlyDebugLogging: () => {},
+      createMemoizedStdinReader: () => async () => '',
+      // Track whether the guard is invoked.
+      ensureStdinOrPromptProvided: async () => {
+        callOrder.push('stdin-guard');
+      },
+      handleVersionAndHelpFlags: async () => {},
+      maybeRelaunchForMemory: async () => {},
+      redirectConsoleForAcp: () => {},
+      rejectPromptInteractiveWithPipedStdin: async () => {},
+      throwIfSettingsErrors: () => {},
+      ParsedCliArgs: {} as never,
+    }));
+    vi.doMock('./utils/cleanup.js', () => ({
+      cleanupCheckpoints: async () => {},
+      runExitCleanup: async () => {},
+      registerSyncCleanup: () => {},
+    }));
+    vi.doMock('./utils/sessionCleanup.js', () => ({
+      cleanupExpiredSessions: async () => {},
+    }));
+    vi.doMock('./zed-integration/zedIntegration.js', () => ({
+      runZedIntegration: async () => {},
+    }));
+    vi.doMock('./config/pathMigration.js', () => ({
+      runStartupMigration: () => ({ migrated: false }),
+      reportStartupResult: () => ({
+        messages: [],
+        needsLegacyFallback: false,
+      }),
+    }));
+    vi.doMock('./session/errorReporting.js', () => ({
+      formatNonInteractiveError: () => '',
+    }));
+    vi.doMock('./session/outputListeners.js', () => ({
+      initializeOutputListenersAndFlush: () => {},
+    }));
+    vi.doMock('./session/signalHandlers.js', () => ({
+      installNonInteractiveSigintHandler: () => {},
+      setupUnhandledRejectionHandler: () => {},
+      __resetUnhandledRejectionStateForTesting: () => {},
+    }));
+    vi.doMock('./session/interactiveUI.js', () => ({
+      startInteractiveUI: async () => {},
+    }));
+    // Track whether image-mode dispatch is reached. The REAL
+    // buildImageModeFlags is preserved so the stdin-guard bypass decision is
+    // exercised against the real flag-detection logic, not a stub.
+    vi.doMock('./config/imageModeDispatch.js', async (importOriginal) => ({
+      ...(await importOriginal<
+        typeof import('./config/imageModeDispatch.js')
+      >()),
+      runDirectImageModeAndExit: async () => {
+        callOrder.push('image-dispatch');
+        return 0;
+      },
+    }));
+
+    const { main } = await import('./cli.js');
+    await main();
+  }
+
+  it('image mode dispatches when stdin is not a TTY and no conversational prompt is present', async () => {
+    // process.exit(0) is called by image mode after a successful dispatch.
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+    await expect(runMainImageMode(makeConfig(true, false))).rejects.toThrow(
+      'process.exit(0)',
+    );
+    // The stdin guard must NOT have been called (bypassed for image mode).
+    expect(callOrder).not.toContain('stdin-guard');
+    // The image dispatch MUST have been reached.
+    expect(callOrder).toContain('image-dispatch');
+  });
+});

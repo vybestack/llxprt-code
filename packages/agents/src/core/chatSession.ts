@@ -258,7 +258,6 @@ export class ChatSession {
     this.conversationManager = new ConversationManager(
       this.historyService,
       view,
-      model,
       initialBaseUrl,
     );
 

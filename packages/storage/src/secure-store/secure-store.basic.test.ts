@@ -85,6 +85,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('mykey', 'myvalue');
@@ -101,6 +102,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('retrieve-test', 'secret-123');
@@ -116,6 +118,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const available = await store.isKeychainAvailable();
@@ -131,6 +134,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('injected-key', 'injected-value');
@@ -162,6 +166,7 @@ describe('SecureStore — Availability Probe', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const available = await store.isKeychainAvailable();
@@ -176,6 +181,7 @@ describe('SecureStore — Availability Probe', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const available = await store.isKeychainAvailable();
@@ -204,6 +210,7 @@ describe('SecureStore — Availability Probe', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: countingLoader,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const first = await store.isKeychainAvailable();
@@ -240,6 +247,7 @@ describe('SecureStore — Availability Probe', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     // First probe succeeds
@@ -287,6 +295,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('mykey', 'myvalue');
@@ -302,6 +311,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -319,6 +329,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('keyring-get', 'keyring-value');
@@ -335,6 +346,7 @@ describe('SecureStore — CRUD Operations', () => {
     const fallbackStore = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     await fallbackStore.set('fallback-only', 'fb-value');
@@ -343,6 +355,7 @@ describe('SecureStore — CRUD Operations', () => {
     const readStore = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     const result = await readStore.get('fallback-only');
@@ -358,6 +371,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const result = await store.get('nonexistent');
@@ -375,6 +389,7 @@ describe('SecureStore — CRUD Operations', () => {
     const fallbackStore = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     await fallbackStore.set('both-key', 'fallback-val');
@@ -383,6 +398,7 @@ describe('SecureStore — CRUD Operations', () => {
     const keyringStore = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
     await keyringStore.set('both-key', 'keyring-val');
 
@@ -399,6 +415,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null, // force fallback
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const keyWithColon = 'service:account';
@@ -421,6 +438,7 @@ describe('SecureStore — CRUD Operations', () => {
     const fallbackStore = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     await fallbackStore.set('delete-me', 'fb-value');
@@ -429,6 +447,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
     await store.set('delete-me', 'kr-value');
 
@@ -444,6 +463,7 @@ describe('SecureStore — CRUD Operations', () => {
     const fallbackRead = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     const fromFallback = await fallbackRead.get('delete-me');
@@ -461,6 +481,7 @@ describe('SecureStore — CRUD Operations', () => {
     const keyringStore = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
     await keyringStore.set('a', 'val-a');
     await keyringStore.set('b', 'val-b');
@@ -469,6 +490,7 @@ describe('SecureStore — CRUD Operations', () => {
     const fallbackStore = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     await fallbackStore.set('b', 'val-b-fb');
@@ -488,6 +510,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('has-key', 'some-value');
@@ -504,6 +527,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const result = await store.has('nonexistent');
@@ -529,6 +553,7 @@ describe('SecureStore — CRUD Operations', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     let err: unknown;

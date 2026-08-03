@@ -68,7 +68,18 @@ export { ProviderContentGenerator } from './ProviderContentGenerator.js';
 // --- Tokenizers ---
 export { OpenAITokenizer } from './tokenizers/OpenAITokenizer.js';
 export { AnthropicTokenizer } from './tokenizers/AnthropicTokenizer.js';
-
+export {
+  KimiK3Tokenizer,
+  GlmTokenizer,
+  MinimaxTokenizer,
+  KIMI_K3_MANIFEST,
+  GLM_MANIFEST,
+  MINIMAX_MANIFEST,
+  OfficialTokenizerError,
+  type OfficialTokenizerErrorKind,
+  type AssetManifest,
+  type KimiK3Segment,
+} from './tokenizers/official/index.js';
 // --- Errors ---
 export {
   AuthenticationRequiredError,
@@ -126,6 +137,10 @@ export {
   formatCodexUsage,
 } from './openai/codexUsageInfo.js';
 export * from './openai/codexRateLimitReset.js';
+export {
+  createCodexImageBackendResolver,
+  type CodexImageBackendResolverDeps,
+} from './openai/codexImageBackendResolver.js';
 export * from './zai/usageInfo.js';
 export * from './synthetic/usageInfo.js';
 export * from './chutes/usageInfo.js';

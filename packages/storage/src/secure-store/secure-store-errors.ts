@@ -34,7 +34,8 @@ export type SecureStoreErrorCode =
   | 'CORRUPT'
   | 'TIMEOUT'
   | 'NOT_FOUND'
-  | 'RUNTIME_REPLACED';
+  | 'RUNTIME_REPLACED'
+  | 'CONFLICT';
 
 /**
  * Type guard: narrows an unknown thrown value to a SecureStoreError.

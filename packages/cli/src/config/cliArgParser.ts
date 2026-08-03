@@ -74,6 +74,9 @@ export interface CliArgs {
   listSessions: boolean | undefined;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — delete a recorded session by ref */
   deleteSession: string | undefined;
+  imageInput: string[] | undefined;
+  imageOutput: string | undefined;
+  imagePrompt: string | undefined;
 }
 
 /** Creates the base yargs instance with locale and usage. */
@@ -197,6 +200,9 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     nobrowser: result['nobrowser'] as boolean | undefined,
     listSessions: result['listSessions'] as boolean | undefined,
     deleteSession: result['deleteSession'] as string | undefined,
+    imageInput: result['imageInput'] as string[] | undefined,
+    imageOutput: result['imageOutput'] as string | undefined,
+    imagePrompt: result['imagePrompt'] as string | undefined,
   };
 }
 

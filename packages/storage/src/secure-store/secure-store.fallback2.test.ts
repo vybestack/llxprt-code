@@ -84,6 +84,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -106,6 +107,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: async () => null,
     });
@@ -135,6 +137,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -162,6 +165,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -183,6 +187,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: nestedDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -202,6 +207,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -240,6 +246,7 @@ describe('SecureStore — No Backward Compatibility', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -267,6 +274,7 @@ describe('SecureStore — No Backward Compatibility', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -309,6 +317,7 @@ describe('SecureStore — Error Taxonomy', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'deny',
     });
 
@@ -332,6 +341,7 @@ describe('SecureStore — Error Taxonomy', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -361,6 +371,7 @@ describe('SecureStore — Error Taxonomy', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     // get() on non-existent key returns null, doesn't throw NOT_FOUND
@@ -407,6 +418,7 @@ describe('SecureStore — Resilience', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -433,6 +445,7 @@ describe('SecureStore — Resilience', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: async () => null,
     });

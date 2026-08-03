@@ -33,3 +33,4 @@ package-lock.json -diff
 packages/ui/bun.lock -diff
 docs/cli/configuration.md -diff
 schemas/settings.schema.json -diff
+packages/providers/src/tokenizers/official/assets/**/*.bpe -diff

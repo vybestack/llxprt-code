@@ -108,6 +108,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('exa', 'sk-1234567890abcdef');
@@ -125,6 +126,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('exa', 'sk-to-delete');
@@ -145,6 +147,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('exa', 'sk-exists');
@@ -166,10 +169,12 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
     const toolStore = new SecureStore('llxprt-code-tool-keys', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'tools'),
+      lockDir: path.join(tempDir, 'locks'),
     });
     const otherStore = new SecureStore('other-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'other'),
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await toolStore.set('exa', 'tool-key-value');
@@ -192,6 +197,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const apiKey = 'sk-1234567890abcdef';
@@ -232,6 +238,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     const credentials = {
@@ -264,6 +271,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     // Sanitized server name with dots, dashes, underscores (no slashes)
@@ -285,6 +293,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('server-a', '{"token":"a"}');
@@ -308,6 +317,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('to-delete-server', '{"token":"deleteme"}');
@@ -346,6 +356,7 @@ describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
     const store = new SecureStore(extensionServiceName, {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store.set('API_KEY', 'ext-secret-value');
@@ -364,6 +375,7 @@ describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
     const store = new SecureStore('LLxprt Code Extension secure-ext', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'deny',
     });
 
@@ -406,14 +418,17 @@ describe('SecureStore — Cross-Wrapper Isolation', () => {
     const toolStore = new SecureStore('llxprt-code-tool-keys', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'tools'),
+      lockDir: path.join(tempDir, 'locks'),
     });
     const mcpStore = new SecureStore('llxprt-code-mcp-tokens', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'mcp'),
+      lockDir: path.join(tempDir, 'locks'),
     });
     const extStore = new SecureStore('LLxprt Code Extension my-ext', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'ext'),
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await toolStore.set('api-key', 'tool-secret');
@@ -436,10 +451,12 @@ describe('SecureStore — Cross-Wrapper Isolation', () => {
     const storeA = new SecureStore('service-a', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'a'),
+      lockDir: path.join(tempDir, 'locks'),
     });
     const storeB = new SecureStore('service-b', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'b'),
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await storeA.set('shared-name', 'value-a');
@@ -478,6 +495,7 @@ describe('SecureStore — Legacy Format Detection', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -510,6 +528,7 @@ describe('SecureStore — Legacy Format Detection', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -543,6 +562,7 @@ describe('SecureStore — Legacy Format Detection', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -577,6 +597,7 @@ describe('SecureStore — Legacy Format Detection', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -634,6 +655,7 @@ describe('SecureStore — Default machine secret integration', () => {
     const store = new SecureStore('test-service-default-secret', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretPath,
     });
