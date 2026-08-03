@@ -24,10 +24,8 @@
  * @requirement R2
  */
 
-import { existsSync } from 'node:fs';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
-import { isPlatformCredentialStoreReachable } from './platform-credential-store.js';
 import { isRuntimeReplaced } from './runtime-identity.js';
 import { assertRuntimeNotReplaced } from './runtime-replaced-errors.js';
 import type { KeyringAdapter } from './secure-store.js';
@@ -219,21 +217,6 @@ export function setKeyringLogger(logger: StorageLogger): void {
  */
 export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | null> {
   if (isRuntimeReplaced()) {
-    return null;
-  }
-  // Bail out before importing the native module when the platform has no
-  // credential store at all (a Linux box with no D-Bus session bus). Calling
-  // into libsecret there can abort the process under Bun instead of raising a
-  // catchable error, so this cannot be probed by try/catch. A null adapter is
-  // the established "keyring unavailable" signal and makes SecureStore use its
-  // encrypted-file fallback.
-  if (
-    !isPlatformCredentialStoreReachable(
-      process.platform,
-      process.env,
-      existsSync,
-    )
-  ) {
     return null;
   }
   try {
