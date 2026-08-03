@@ -98,6 +98,8 @@ export { PolicyDecision, ApprovalMode } from '@vybestack/llxprt-code-core';
 export type {
   PolicyRuleView,
   AgentTaskInfo,
+  AgentSubagentTaskInfo,
+  AgentShellJobInfo,
   HookInfo,
   AuthProviderDetail,
   AuthBucketStatus,

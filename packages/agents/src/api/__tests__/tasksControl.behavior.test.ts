@@ -54,7 +54,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
       }
       // Both tasks are 'running' before the call.
       expect(agent.tasks.listRunning()).toHaveLength(2);
-      const cancelled = agent.tasks.cancelAllRunning();
+      const cancelled = await agent.tasks.cancelAllRunning();
       expect(cancelled).toBe(2);
       // Idempotent terminal state: no running tasks remain.
       expect(agent.tasks.listRunning()).toHaveLength(0);
@@ -98,8 +98,8 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
     expect(control.list()).toStrictEqual([]);
     expect(control.listRunning()).toStrictEqual([]);
     expect(control.get('x')).toBeUndefined();
-    expect(control.cancel('x')).toBe(false);
-    expect(control.cancelAllRunning()).toBe(0);
+    expect(await control.cancel('x')).toBe(false);
+    expect(await control.cancelAllRunning()).toBe(0);
   });
 
   it('T10 list/listRunning/get/cancel fidelity over a mix of running, completed, and cancelled tasks @requirement:REQ-003 @scenario:fidelity @given:a real manager seeded with 2 running tasks where 1 is then completed @when:list/listRunning/get(knownId)/get(missing)/cancel(knownId)/cancel(missing) are called @then:list() length === 2 (both tasks remain in history); listRunning() length === 1; get(knownId) returns the projected view with matching id; get(missing) === undefined; cancel(knownId) === true; cancel(missing) === false', async () => {
@@ -138,9 +138,9 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
       // get(missing) === undefined.
       expect(agent.tasks.get('does-not-exist')).toBeUndefined();
       // cancel(knownId running) === true.
-      expect(agent.tasks.cancel('t10-run')).toBe(true);
+      expect(await agent.tasks.cancel('t10-run')).toBe(true);
       // cancel(missing) === false.
-      expect(agent.tasks.cancel('does-not-exist')).toBe(false);
+      expect(await agent.tasks.cancel('does-not-exist')).toBe(false);
     } finally {
       await cleanup();
     }
@@ -316,7 +316,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
               });
             }
             expect(agent.tasks.listRunning()).toHaveLength(n);
-            const cancelled = agent.tasks.cancelAllRunning();
+            const cancelled = await agent.tasks.cancelAllRunning();
             // MIN-2 distinct cases are exercised by the generator (0..5).
             expect(cancelled).toBe(n);
             expect(agent.tasks.listRunning()).toHaveLength(0);

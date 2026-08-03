@@ -9,63 +9,103 @@ import type {
   AsyncTaskLookupResult,
   AsyncTaskStatus as ToolsAsyncTaskStatus,
   IAsyncTaskService,
+  AsyncOutputTailOptions,
+  AsyncOutputTailResult,
+  SubagentTaskInfo,
+  ShellJobInfo,
 } from '@vybestack/llxprt-code-tools';
 import type {
-  AsyncTaskInfo as CoreAsyncTaskInfo,
-  AsyncTaskManager,
-} from '../services/asyncTaskManager.js';
+  FacadeWorkInfo,
+  FacadeLookupResult,
+  AsyncWorkFacade,
+} from '../services/asyncWorkFacade.js';
 
-function toToolsTask(task: CoreAsyncTaskInfo): ToolsAsyncTaskInfo {
+function isSubagent(info: FacadeWorkInfo): boolean {
+  return info.kind === 'subagent';
+}
+
+function toSubagentInfo(info: FacadeWorkInfo): SubagentTaskInfo {
   return {
-    id: task.id,
-    name: task.subagentName,
-    subagentName: task.subagentName,
-    goalPrompt: task.goalPrompt,
-    status: task.status,
-    launchedAt: task.launchedAt,
-    completedAt: task.completedAt,
-    output: task.output,
-    error: task.error,
+    kind: 'subagent',
+    id: info.id,
+    subagentName: info.subagentName ?? info.id,
+    goalPrompt: info.goalPrompt ?? '',
+    status: info.status,
+    ...(info.launchedAt !== undefined ? { launchedAt: info.launchedAt } : {}),
+    ...(info.completedAt !== undefined
+      ? { completedAt: info.completedAt }
+      : {}),
+    ...(info.output !== undefined ? { output: info.output } : {}),
+    ...(info.error !== undefined ? { error: info.error } : {}),
+  };
+}
+
+function toShellJobInfo(info: FacadeWorkInfo): ShellJobInfo {
+  return {
+    kind: 'shell',
+    id: info.id,
+    command: info.command ?? '',
+    cwd: info.cwd ?? '',
+    status: info.status,
+    ...(info.launchedAt !== undefined ? { launchedAt: info.launchedAt } : {}),
+    ...(info.completedAt !== undefined
+      ? { completedAt: info.completedAt }
+      : {}),
+    ...(info.exitCode !== undefined ? { exitCode: info.exitCode } : {}),
+    ...(info.signal !== undefined ? { signal: info.signal } : {}),
+    ...(info.failureReason !== undefined
+      ? { failureReason: info.failureReason }
+      : {}),
+  };
+}
+
+function toToolsInfo(info: FacadeWorkInfo): ToolsAsyncTaskInfo {
+  return isSubagent(info) ? toSubagentInfo(info) : toShellJobInfo(info);
+}
+
+function toToolsLookup(result: FacadeLookupResult): AsyncTaskLookupResult {
+  return {
+    task: result.task ? toToolsInfo(result.task) : undefined,
+    candidates: result.candidates?.map(toToolsInfo),
   };
 }
 
 export class CoreAsyncTaskServiceAdapter implements IAsyncTaskService {
-  constructor(
-    private readonly managerProvider: () => AsyncTaskManager | undefined,
-  ) {}
+  constructor(private readonly facade: AsyncWorkFacade) {}
 
   async checkAsyncTask(taskId: string): Promise<ToolsAsyncTaskStatus> {
-    const task = this.getTask(taskId) ?? this.getTaskByPrefix(taskId).task;
+    const task = this.facade.get(taskId);
     if (!task) {
-      throw new Error(`Async task not found: ${taskId}`);
+      const { task: prefixTask } = this.facade.getByPrefix(taskId);
+      if (!prefixTask) {
+        throw new Error(`Async task not found: ${taskId}`);
+      }
+      return prefixTask.status;
     }
     return task.status;
   }
 
   getTaskStatus(): ToolsAsyncTaskInfo[] {
-    return this.requireManager().getAllTasks().map(toToolsTask);
+    return this.facade.list().map(toToolsInfo);
   }
 
   getTask(taskId: string): ToolsAsyncTaskInfo | undefined {
-    const task = this.requireManager().getTask(taskId);
-    return task ? toToolsTask(task) : undefined;
+    const task = this.facade.get(taskId);
+    return task ? toToolsInfo(task) : undefined;
   }
 
   getTaskByPrefix(prefix: string): AsyncTaskLookupResult {
-    const result = this.requireManager().getTaskByPrefix(prefix);
-    return {
-      task: result.task ? toToolsTask(result.task) : undefined,
-      candidates: result.candidates?.map(toToolsTask),
-    };
+    return toToolsLookup(this.facade.getByPrefix(prefix));
   }
 
-  private requireManager(): AsyncTaskManager {
-    const manager = this.managerProvider();
-    if (!manager) {
-      throw new Error(
-        'AsyncTaskManager service is unavailable. Please configure async tasks before invoking this tool.',
-      );
-    }
-    return manager;
+  getOutputTail(
+    taskId: string,
+    options?: AsyncOutputTailOptions,
+  ): AsyncOutputTailResult {
+    return this.facade.tailOutput(taskId, options);
+  }
+
+  async cancel(taskId: string): Promise<boolean> {
+    return this.facade.cancel(taskId);
   }
 }

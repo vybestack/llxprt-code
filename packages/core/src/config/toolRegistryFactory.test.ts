@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { ShellJobManager } from '../services/shellJobManager.js';
 import {
   createToolRegistry,
   type ToolRegistryHost,
@@ -20,13 +21,14 @@ import type { SubagentManager } from './subagentManager.js';
 function createHost(
   options: {
     asyncTaskManager?: AsyncTaskManager;
+    shellJobManager?: ShellJobManager;
     subagentManager?: SubagentManager;
     profileManager?: ProfileManager;
     noCoreTools?: boolean;
     getImageBackendResolver?: () => (() => unknown) | null | undefined;
   } = {},
 ): ToolRegistryHost {
-  const { asyncTaskManager, noCoreTools } = options;
+  const { asyncTaskManager, shellJobManager, noCoreTools } = options;
   let { profileManager, subagentManager } = options;
   const getImageBackendResolver = options.getImageBackendResolver;
   return {
@@ -51,6 +53,7 @@ function createHost(
     },
     getInteractiveSubagentSchedulerFactory: () => undefined,
     getAsyncTaskManager: () => asyncTaskManager,
+    getShellJobManager: () => shellJobManager,
     getTaskToolRegistration: () => undefined,
     ...(getImageBackendResolver !== undefined
       ? { getImageBackendResolver }

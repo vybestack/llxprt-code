@@ -87,6 +87,46 @@ export interface CommandRootsResult {
   roots: string[];
 }
 
+/** State of a managed background shell job (#1995). */
+export type HostShellJobState =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/** Public info for a managed background shell job (#1995). */
+export interface HostShellJobInfo {
+  id: string;
+  command: string;
+  cwd: string;
+  state: HostShellJobState;
+  startedAt: number;
+  endedAt?: number;
+  pid: number;
+  exitCode?: number;
+  signal?: string;
+  failureReason?: string;
+}
+
+/** Bounded output tail for a job (#1995). */
+export interface HostShellJobTailResult {
+  id: string;
+  output: string;
+  truncated: boolean;
+}
+
+/**
+ * Result of recognising a trailing async `&` via the tree-sitter Bash AST
+ * (#1995 slice 6). When `promoted` is true, `command` holds the command with
+ * ONLY the trailing operator stripped, ready to be launched as a managed job.
+ * When `promoted` is false, `command` equals the original input and the
+ * caller must run the command normally.
+ */
+export interface BackgroundPromotionResult {
+  promoted: boolean;
+  command: string;
+}
+
 export interface IShellToolHost {
   /**
    * Get the target/working directory.
@@ -205,6 +245,33 @@ export interface IShellToolHost {
     content: string;
     wasTruncated: boolean;
   };
+
+  /**
+   * Launch a managed background shell job via ShellJobManager (#1995).
+   *
+   * Throws if the host has no job manager (standalone execution-service
+   * adapter) so the caller can surface a clear error rather than silently
+   * degrading to a foreground execution.
+   */
+  launchBackgroundJob(input: {
+    command: string;
+    cwd: string;
+  }): HostShellJobInfo;
+
+  /**
+   * Read a bounded output tail for a managed job (#1995).
+   * Resolves the log path by id only — never a caller-supplied path.
+   */
+  tailBackgroundJob(id: string): HostShellJobTailResult;
+
+  /**
+   * Check whether a command's final top-level construct is a trailing async
+   * `&` operator using the tree-sitter Bash AST (#1995 slice 6). When it is,
+   * returns `promoted: true` with the command stripped of only that operator.
+   * When the parser is unavailable or the parse is ambiguous/invalid, returns
+   * `promoted: false` with the original command.
+   */
+  detectTrailingBackground(command: string): BackgroundPromotionResult;
 }
 
 /**

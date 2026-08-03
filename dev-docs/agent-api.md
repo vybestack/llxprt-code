@@ -250,7 +250,13 @@ surface is JSON-safe and stable across versions. Defined in
 
 - `PolicyRuleView` — `argsPattern` is the RegExp source string (JSON-safe),
   never a live `RegExp`.
-- `AgentTaskInfo` — omits `abortController`.
+- `AgentTaskInfo` — omits `abortController`. A discriminated union since #1995:
+  `AgentSubagentTaskInfo` (`kind: 'subagent'`, with `subagentName`/`goalPrompt`)
+  or `AgentShellJobInfo` (`kind: 'shell'`, with
+  `command`/`cwd`/`exitCode`/`signal`/`failureReason`); both share `id`,
+  `status`, `launchedAt` and optional `completedAt`. `agent.tasks.cancel` and
+  `cancelAllRunning` return promises because stopping a shell job is
+  SIGTERM → bounded wait → SIGKILL.
 - `HookInfo`, `AuthProviderDetail`, `AuthBucketStatus`.
 - `McpServerAuthStatus`, `McpDetailStatus`, `McpServerDetail`,
   `McpDetailsOptions`, `McpPromptInfo`, `McpResourceInfo`, `McpBlockedServer`,

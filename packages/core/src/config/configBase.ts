@@ -7,6 +7,7 @@
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { GitService } from '../services/gitService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
 import { shutdownLsp } from './lspIntegration.js';
@@ -23,7 +24,10 @@ import {
   normalizeShellReplacement,
 } from './configTypes.js';
 import { ConfigBaseCore } from './configBaseCore.js';
-import { normalizeMaxAsyncTasks } from './asyncTaskServices.js';
+import {
+  normalizeMaxAsyncTasks,
+  normalizeShellMaxBackgroundJobs,
+} from './asyncTaskServices.js';
 
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
@@ -31,6 +35,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
   abstract getJitContextEnabled(): boolean;
   abstract getExcludeTools(): string[] | undefined;
   abstract getAsyncTaskManager(): AsyncTaskManager | undefined;
+  abstract getShellJobManager(): ShellJobManager | undefined;
 
   async refreshAuth(authMethod?: string) {
     const logger = new DebugLogger('llxprt:config:refreshAuth');
@@ -218,6 +223,15 @@ export abstract class ConfigBase extends ConfigBaseCore {
       const asyncTaskManager = this.getAsyncTaskManager();
       if (asyncTaskManager) {
         asyncTaskManager.setMaxAsyncTasks(normalizedValue);
+      }
+    }
+
+    // #1995 slice 2 — propagate shell job settings
+    if (key === 'shell-max-background-jobs') {
+      const shellJobManager = this.getShellJobManager();
+      if (shellJobManager) {
+        const normalized = normalizeShellMaxBackgroundJobs(settingValue);
+        shellJobManager.setMaxBackgroundJobs(normalized);
       }
     }
 
