@@ -95,6 +95,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'agents',
     files: [
+      'src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
       'test-bun/generatingModelStamp.issue2511.bun.ts',
       'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
     ],
@@ -116,6 +117,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspTransport.test.ts',
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
+      'src/utils/sandbox-containers.test.ts',
       // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
@@ -137,6 +139,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/__tests__/attemptLifecycle.helpers.test.ts',
       'src/__tests__/auth-migration-p16.integration.test.ts',
       'src/__tests__/BaseProvider.guard.test.ts',
+      'src/__tests__/BaseProvider.proxyKeyStorage.test.ts',
       'src/__tests__/baseProvider.stateless.test.ts',
       'src/__tests__/BaseProviderNormalization.ephemeralPropagation.test.ts',
       'src/__tests__/BaseProviderNormalization.invocation.test.ts',
