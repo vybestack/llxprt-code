@@ -78,9 +78,14 @@ describe('shell-parser', () => {
       async () => {
         resetParser();
 
+        const firstInitialization = initializeParser();
+        const secondInitialization = initializeParser();
+
+        expect(secondInitialization).toBe(firstInitialization);
+
         const results = await Promise.all([
-          initializeParser(),
-          initializeParser(),
+          firstInitialization,
+          secondInitialization,
         ]);
 
         expect(results).toStrictEqual([true, true]);

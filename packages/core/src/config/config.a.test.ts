@@ -124,6 +124,39 @@ describe('Server Config (config.ts)', () => {
       );
     });
 
+    it('waits for shared parser initialization across concurrent configs', async () => {
+      const parserInitialization = Promise.withResolvers<boolean>();
+      initializeShellParser
+        .mockReturnValueOnce(parserInitialization.promise)
+        .mockReturnValueOnce(parserInitialization.promise);
+      const firstConfig = new Config({
+        ...baseParams,
+        checkpointing: false,
+      });
+      const secondConfig = new Config({
+        ...baseParams,
+        checkpointing: false,
+      });
+
+      const initializations = [
+        initializeTestConfig(firstConfig),
+        initializeTestConfig(secondConfig),
+      ];
+      await vi.waitFor(() => {
+        expect(initializeShellParser).toHaveBeenCalledTimes(2);
+      });
+
+      expect(initializeShellParser.mock.results[0].value).toBe(
+        initializeShellParser.mock.results[1].value,
+      );
+      expect(ToolRegistry).not.toHaveBeenCalled();
+
+      parserInitialization.resolve(true);
+      await Promise.all(initializations);
+
+      expect(ToolRegistry).toHaveBeenCalledTimes(2);
+    });
+
     it('continues startup when the shell parser cannot load', async () => {
       initializeShellParser.mockResolvedValueOnce(false);
       const config = new Config({
