@@ -35,6 +35,7 @@ import type {
   IShellToolHost,
   ShellExecutionResult,
   ShellOutputEvent,
+  HostShellJobInfo,
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
@@ -44,7 +45,6 @@ import {
   getShellToolDescription,
   isShellToolHost,
   prepareShellExecution,
-  singleQuoteForShell,
   validateGrepFlags,
   validatePositiveInteger,
 } from './shell-helpers.js';
@@ -55,44 +55,6 @@ export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 /** Windows validation error for is_background. */
 const BACKGROUND_WINDOWS_ERROR =
   'is_background is not supported on Windows. Start independent background processes with Start-Process instead.';
-
-/**
- * Builds the multi-line background notice block appended to llmContent.
- *
- * The log file lives in os.tmpdir(), outside the workspace, so it cannot be
- * read with a workspace-scoped file-reading tool. The notice tells the model
- * to read it with a shell command instead. When a terminate id is available
- * it also gives a status check and a termination command.
- */
-function buildBackgroundNoticeBlock(
-  backgroundLogPath: string,
-  terminateId: number | undefined,
-): string {
-  const quoted = singleQuoteForShell(backgroundLogPath);
-  const lines: string[] = [
-    'Background: command was started in the background and was not awaited.',
-    `Output: ${backgroundLogPath} (outside the workspace - read it with a shell command such as: tail -n 50 ${quoted})`,
-  ];
-  if (terminateId !== undefined) {
-    lines.push(`Status: pgrep -g ${terminateId}`);
-    lines.push(`Terminate: kill -- -${terminateId}`);
-  }
-  return lines.join('\n');
-}
-
-/**
- * Builds the non-debug display message for a background launch. When no PGID
- * or PID is known the parenthetical is omitted entirely so the display never
- * shows a meaningless `PGID: (none)`.
- */
-function formatBackgroundStartMessage(
-  terminateId: number | undefined,
-  backgroundLogPath: string,
-): string {
-  return terminateId !== undefined
-    ? `Started in background (PGID: ${terminateId}). Output: ${backgroundLogPath}`
-    : `Started in background. Output: ${backgroundLogPath}`;
-}
 
 export interface ShellToolParams {
   /** The shell command to execute. */
@@ -113,7 +75,7 @@ export interface ShellToolParams {
   grep_flags?: string[];
   /** Optional timeout in seconds (-1 for unlimited). */
   timeout_seconds?: number;
-  /** Start the command as a background job (non-Windows only). */
+  /** Start the command as a managed background job (non-Windows only). */
   is_background?: boolean;
 }
 
@@ -244,6 +206,122 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
     const strippedCommand = this.host.stripShellWrapper(this.params.command);
 
+    if (this.shouldRunAsBackground(strippedCommand)) {
+      const backgroundCommand = this.resolveBackgroundCommand(strippedCommand);
+      return this.executeBackground(backgroundCommand);
+    }
+
+    return this.executeForeground(strippedCommand, signal, updateOutput);
+  }
+
+  /**
+   * Determines whether the command should be launched as a managed background
+   * job. This happens when `is_background` is explicitly set OR when the
+   * AST-based detector recognises a trailing `&` operator (#1995 slice 6).
+   */
+  private shouldRunAsBackground(strippedCommand: string): boolean {
+    if (this.params.is_background === true) {
+      return true;
+    }
+    if (os.platform() === 'win32') {
+      return false;
+    }
+    return this.host.detectTrailingBackground(strippedCommand).promoted;
+  }
+
+  /**
+   * Resolves the command string to launch for a background job. When
+   * `is_background` is true the original command is used. When the trailing
+   * `&` was detected via AST, the operator is stripped from the command.
+   */
+  private resolveBackgroundCommand(strippedCommand: string): string {
+    if (this.params.is_background === true) {
+      return strippedCommand;
+    }
+    return this.host.detectTrailingBackground(strippedCommand).command;
+  }
+
+  /**
+   * Launch a managed background job. The timeout/abort machinery is NOT
+   * wired in because a background job's lifetime is unbounded —
+   * `timeout_seconds` bounds launch only (#1995 slice 5).
+   */
+  private executeBackground(backgroundCommand: string): ToolResult {
+    const cwd = this.resolveCwd();
+    const job = this.host.launchBackgroundJob({
+      command: backgroundCommand,
+      cwd,
+    });
+
+    const { llmContent, returnDisplay } = this.formatBackgroundResult(job);
+    return {
+      llmContent,
+      returnDisplay,
+    };
+  }
+
+  /**
+   * Formats the deterministic job-shaped result for a background launch.
+   * Always returns the same schema regardless of whether the job has already
+   * reached a terminal state. When the job is terminal, includes the real
+   * exit code/signal and a bounded output tail.
+   */
+  private formatBackgroundResult(job: HostShellJobInfo): {
+    llmContent: string;
+    returnDisplay: string;
+  } {
+    const lines: string[] = [
+      `Background job launched.`,
+      `Job ID: ${job.id}`,
+      `Command: ${job.command}`,
+      `State: ${job.state}`,
+    ];
+
+    if (job.state === 'running') {
+      lines.push('Use check_async_tasks to inspect output or cancel this job.');
+    } else {
+      if (job.exitCode !== undefined) {
+        lines.push(`Exit Code: ${job.exitCode}`);
+      }
+      if (job.signal !== undefined) {
+        lines.push(`Signal: ${job.signal}`);
+      }
+      if (job.failureReason !== undefined) {
+        lines.push(`Failure Reason: ${job.failureReason}`);
+      }
+      const tail = this.host.tailBackgroundJob(job.id);
+      if (tail.output.trim() !== '') {
+        lines.push(`Output tail:`);
+        lines.push(tail.output);
+      }
+      lines.push('Use check_async_tasks to inspect this job.');
+    }
+
+    const llmContent = lines.join('\n');
+
+    const displayLines: string[] = [
+      `Background job **${job.id}** — ${job.state}`,
+      `Command: \`${job.command}\``,
+    ];
+    if (job.state === 'running') {
+      displayLines.push('Use `check_async_tasks` to inspect or cancel.');
+    } else {
+      if (job.exitCode !== undefined) {
+        displayLines.push(`Exit code: ${job.exitCode}`);
+      }
+      if (job.signal !== undefined) {
+        displayLines.push(`Signal: ${job.signal}`);
+      }
+    }
+
+    return { llmContent, returnDisplay: displayLines.join('\n') };
+  }
+
+  private async executeForeground(
+    strippedCommand: string,
+    signal: AbortSignal,
+    updateOutput?: (update: LiveOutputUpdate) => void,
+  ): Promise<ToolResult> {
     const timeoutConfig = this.host.getTimeoutConfig();
     const timeoutSeconds = this.resolveTimeoutSeconds(
       this.params.timeout_seconds,
@@ -301,11 +379,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
   ): Promise<ToolResult> {
     const combinedSignal = timeoutController.signal;
     const cwd = this.resolveCwd();
-    const { tempFilePath, commandToExecute, backgroundLogPath } =
-      prepareShellExecution(
-        strippedCommand,
-        this.params.is_background === true,
-      );
+    const { tempFilePath, commandToExecute } =
+      prepareShellExecution(strippedCommand);
 
     try {
       const executionResult = await this.host.executeShellCommand(
@@ -316,7 +391,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       );
 
       const result = executionResult;
-      this.reclaimBackgroundLogIfNeeded(result, backgroundLogPath);
       const { backgroundPIDs, pgid } = collectProcessInfo(
         result,
         tempFilePath,
@@ -341,7 +415,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         timeoutTriggered,
         timeoutSeconds,
         defaultTimeoutSeconds,
-        backgroundLogPath,
       );
 
       const displayWithFilter = this.applyFilterDescription(
@@ -508,6 +581,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
     return path.resolve(targetDir, dirPath);
   }
+
   private formatOutputContent(
     result: ShellExecutionResult,
     rawOutput: string,
@@ -518,7 +592,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
     timeoutTriggered: boolean,
     timeoutSeconds: number | undefined,
     defaultTimeoutSeconds: number,
-    backgroundLogPath: string | undefined,
   ): { llmContent: string; returnDisplayMessage: string } {
     let llmContent = '';
     let returnDisplayMessage = '';
@@ -557,7 +630,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         commandToExecute,
         backgroundPIDs,
         pgid,
-        backgroundLogPath,
       ));
     }
 
@@ -570,7 +642,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
     commandToExecute: string,
     backgroundPIDs: number[],
     pgid: number | null,
-    backgroundLogPath: string | undefined,
   ): { llmContent: string; returnDisplayMessage: string } {
     const finalError = result.error
       ? result.error.message.replace(commandToExecute, this.params.command)
@@ -603,71 +674,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
     }
 
-    return this.applyBackgroundNotice(
-      llmContent,
-      returnDisplayMessage,
-      result,
-      pgid,
-      backgroundLogPath,
-    );
-  }
-
-  // When the wrapper did not launch cleanly there is no surviving job, so the
-  // log file is garbage and must not be left behind. On a clean launch the
-  // detached job still owns the log and the model has been told its path, so
-  // it is retained.
-  private reclaimBackgroundLogIfNeeded(
-    result: ShellExecutionResult,
-    backgroundLogPath: string | undefined,
-  ): void {
-    if (
-      backgroundLogPath !== undefined &&
-      (result.aborted === true ||
-        !this.isCleanBackgroundLaunch(result, backgroundLogPath))
-    ) {
-      fs.rmSync(backgroundLogPath, { force: true });
-    }
-  }
-
-  // A background launch is "clean" only when the wrapper itself succeeded.
-  // The signal is intentionally NOT checked: node-pty reports signal 0 for a
-  // clean exit and CoreShellToolHostAdapter stringifies that to '0', which
-  // would make a `result.signal !== null` guard trip on every clean PTY
-  // result. A wrapper actually killed by a signal never has exitCode 0 on
-  // either backend, so gating on exitCode === 0 alone is both necessary and
-  // sufficient.
-  private isCleanBackgroundLaunch(
-    result: ShellExecutionResult,
-    backgroundLogPath: string | undefined,
-  ): boolean {
-    return (
-      this.params.is_background === true &&
-      backgroundLogPath !== undefined &&
-      result.exitCode === 0 &&
-      result.error === null
-    );
-  }
-
-  private applyBackgroundNotice(
-    llmContent: string,
-    returnDisplayMessage: string,
-    result: ShellExecutionResult,
-    pgid: number | null,
-    backgroundLogPath: string | undefined,
-  ): { llmContent: string; returnDisplayMessage: string } {
-    if (
-      backgroundLogPath === undefined ||
-      !this.isCleanBackgroundLaunch(result, backgroundLogPath)
-    ) {
-      return { llmContent, returnDisplayMessage };
-    }
-    const terminateId = pgid ?? result.pid;
-    const notice = buildBackgroundNoticeBlock(backgroundLogPath, terminateId);
-    const noticed = `${llmContent}\n${notice}`;
-    const display = this.host.getDebugMode()
-      ? noticed
-      : formatBackgroundStartMessage(terminateId, backgroundLogPath);
-    return { llmContent: noticed, returnDisplayMessage: display };
+    return { llmContent, returnDisplayMessage };
   }
 
   private applyFilterDescription(

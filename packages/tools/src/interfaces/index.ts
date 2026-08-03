@@ -99,6 +99,10 @@ export type {
   ShellExecutionConfig,
   ShellTimeoutConfig,
   CommandRootsResult,
+  HostShellJobState,
+  HostShellJobInfo,
+  HostShellJobTailResult,
+  BackgroundPromotionResult,
 } from './IShellToolHost.js';
 export type {
   IPromptRegistryService,

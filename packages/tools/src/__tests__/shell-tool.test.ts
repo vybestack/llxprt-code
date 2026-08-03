@@ -16,15 +16,10 @@
  * IShellExecutionService and IToolMessageBus. Primary assertions
  * are on ToolResult.lmContent (stdout/stderr content) and
  * ToolResult.returnDisplay — NOT on adapter method call counts.
- *
- * STATUS: RED — Tests compile but will fail at runtime until P11
- * moves real tool code and adapters are wired up.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'node:os';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
@@ -32,7 +27,9 @@ import type {
   IToolMessageBus,
   ToolConfirmationOutcome,
   IShellToolHost,
-  ShellExecutionResult as ToolsShellExecutionResult,
+  HostShellJobInfo,
+  HostShellJobTailResult,
+  BackgroundPromotionResult,
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
@@ -40,8 +37,6 @@ vi.mock('node:os');
 
 /**
  * Fake IShellExecutionService that returns controlled stdout/stderr/exitCode.
- * Infrastructure fake — not mock theater. Primary assertions verify
- * observable ToolResult content, not that execute() was called.
  */
 function createFakeShellService(
   responses: Map<string, ShellResult>,
@@ -58,14 +53,10 @@ function createFakeShellService(
       };
     },
     isCommandAllowed: (command: string) =>
-      // Allow echo commands, deny everything else
       command.trim().startsWith('echo ') || command.trim() === 'false',
   };
 }
 
-/**
- * Fake IToolMessageBus that returns controlled confirmation outcomes.
- */
 function createFakeMessageBus(
   outcome: ToolConfirmationOutcome,
 ): IToolMessageBus {
@@ -221,57 +212,25 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
   });
 });
 
-describe('is_background parameter behaviour @plan:issue1995', () => {
+describe('is_background managed job behavior @plan:issue1995', () => {
   beforeEach(() => {
     vi.mocked(os.platform).mockReturnValue('darwin');
     vi.mocked(os.tmpdir).mockReturnValue('/tmp');
   });
 
-  function createBackgroundFakeService(): IShellExecutionService {
-    return {
-      execute: async (): Promise<ShellResult> => ({
-        stdout: 'started\n',
-        stderr: '',
-        exitCode: 0,
-        aborted: false,
-      }),
-      isCommandAllowed: () => true,
-    };
-  }
-
-  function createAbortedFakeService(): IShellExecutionService {
-    return {
-      execute: async (): Promise<ShellResult> => ({
-        stdout: '',
-        stderr: '',
-        exitCode: 0,
-        aborted: true,
-      }),
-      isCommandAllowed: () => true,
-    };
-  }
-
-  function createNonZeroExitFakeService(): IShellExecutionService {
-    return {
-      execute: async (): Promise<ShellResult> => ({
-        stdout: '',
-        stderr: 'syntax error',
-        exitCode: 2,
-        aborted: false,
-      }),
-      isCommandAllowed: () => true,
-    };
-  }
-
   /**
-   * Builds a full fake IShellToolHost whose executeShellCommand resolves the
-   * given ToolsShellExecutionResult. The execution-service adapter hardcodes
-   * signal: null and pid: undefined, so it cannot express a node-pty-shaped
-   * result (signal '0', defined pid). This fake does, letting the notice
-   * guard be exercised as the real PTY backend would.
+   * Builds a fake IShellToolHost that launches managed background jobs via a
+   * fake `launchBackgroundJob` returning a controlled HostShellJobInfo. This
+   * tests the deterministic result contract: the tool must always return a
+   * job-shaped result, never foreground-shaped.
    */
-  function createFakeHostFromResult(
-    result: ToolsShellExecutionResult,
+  function createFakeHostWithBackground(
+    launchJob: (input: { command: string; cwd: string }) => HostShellJobInfo,
+    tail: (id: string) => HostShellJobTailResult = () => ({
+      id: 'fake',
+      output: '',
+      truncated: false,
+    }),
   ): IShellToolHost {
     return {
       getTargetDir: () => process.cwd(),
@@ -295,7 +254,9 @@ describe('is_background parameter behaviour @plan:issue1995', () => {
         defaultTimeoutSeconds: 60,
       }),
       getOutputLimits: () => ({}),
-      executeShellCommand: async () => result,
+      executeShellCommand: async () => {
+        throw new Error('Should not execute synchronously for background jobs');
+      },
       getCommandRoots: (command: string) => {
         const root = command.trim().split(/\s+/)[0];
         return root ? [root] : [];
@@ -311,115 +272,128 @@ describe('is_background parameter behaviour @plan:issue1995', () => {
         content,
         wasTruncated: false,
       }),
+      launchBackgroundJob: launchJob,
+      tailBackgroundJob: tail,
+      detectTrailingBackground: (
+        command: string,
+      ): BackgroundPromotionResult => ({
+        promoted: false,
+        command,
+      }),
     };
   }
 
-  it('successful background launch: llmContent ends with the notice naming the log path (T14 / AC-8)', async () => {
-    const tool = new ShellTool(
-      createBackgroundFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
-
-    const result = await executeToolForBehavioralAssertion(tool, {
+  it('is_background: true returns a deterministic job-shaped result with job id, command, and state (T14)', async () => {
+    let launched: { command: string; cwd: string } | undefined;
+    const fakeJob: HostShellJobInfo = {
+      id: 'shell_abc123',
       command: 'echo started',
-      is_background: true,
-    });
-
-    const llm = String(result.llmContent);
-    expect(llm).toContain('Background PIDs:');
-    expect(llm).toContain('Process Group PGID:');
-    // Line 1: the background notice header.
-    expect(llm).toContain(
-      'Background: command was started in the background and was not awaited.',
-    );
-    // Line 2: the Output line naming the log path, the tail hint, and the
-    // outside-the-workspace wording. The execution-service adapter path has
-    // no terminate id, so there must be no Status or Terminate line.
-    expect(llm).toMatch(/Output: .*\.log \(outside the workspace/);
-    expect(llm).toContain('tail -n 50');
-    expect(llm).not.toContain('Status:');
-    expect(llm).not.toContain('Terminate:');
-  });
-
-  it('successful background launch: non-debug returnDisplay reports the background start (T15 / AC-8)', async () => {
-    const tool = new ShellTool(
-      createBackgroundFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
-
-    const result = await executeToolForBehavioralAssertion(tool, {
-      command: 'echo started',
-      is_background: true,
-    });
-
-    expect(String(result.returnDisplay)).toContain('Started in background');
-  });
-
-  it('successful background launch with no PGID/PID: returnDisplay omits the PGID clause (T15b / AC-8)', async () => {
-    const tool = new ShellTool(
-      createBackgroundFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
-
-    const result = await executeToolForBehavioralAssertion(tool, {
-      command: 'echo started',
-      is_background: true,
-    });
-
-    const display = String(result.returnDisplay);
-    expect(display).not.toContain('PGID');
-    expect(display).toMatch(/^Started in background\. Output: .+\.log$/);
-  });
-
-  it('background launch whose wrapper exited non-zero: NO notice, normal failure formatting (T16 / AC-8)', async () => {
-    const tool = new ShellTool(
-      createNonZeroExitFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
-
-    const result = await executeToolForBehavioralAssertion(tool, {
-      command: 'echo started',
-      is_background: true,
-    });
-
-    const llm = String(result.llmContent);
-    expect(llm).not.toContain(
-      'Background: command was started in the background',
-    );
-    expect(llm).toContain('Exit Code: 2');
-  });
-
-  it('background launch whose wrapper reported an error: NO notice, normal failure formatting (T17 / AC-8)', async () => {
-    const errorService: IShellExecutionService = {
-      execute: async (): Promise<ShellResult> => ({
-        stdout: '',
-        stderr: 'command not found: echo',
-        exitCode: 127,
-        aborted: false,
-      }),
-      isCommandAllowed: () => true,
+      cwd: process.cwd(),
+      state: 'running',
+      startedAt: 1000,
+      pid: 42,
     };
-    const tool = new ShellTool(
-      errorService,
-      createFakeMessageBus('proceed_once'),
-    );
+
+    const host = createFakeHostWithBackground((input) => {
+      launched = input;
+      return fakeJob;
+    });
+
+    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'echo started',
       is_background: true,
     });
 
+    // The job was launched with the stripped command and resolved cwd.
+    expect(launched).toBeDefined();
+    expect(launched?.command).toBe('echo started');
+
     const llm = String(result.llmContent);
-    expect(llm).not.toContain(
-      'Background: command was started in the background',
-    );
-    expect(llm).toContain('Exit Code: 127');
-    expect(llm).toContain('command not found: echo');
+    expect(llm).toContain('Background job launched.');
+    expect(llm).toContain('Job ID: shell_abc123');
+    expect(llm).toContain('Command: echo started');
+    expect(llm).toContain('State: running');
+    expect(llm).toContain('check_async_tasks');
+    // Must NOT print a filesystem path, raw PGID, or pgrep/kill instructions.
+    expect(llm).not.toContain('.log');
+    expect(llm).not.toContain('pgrep');
+    expect(llm).not.toContain('kill');
+    expect(llm).not.toContain('PGID');
   });
 
-  it('is_background absent: no notice anywhere in llmContent (T18 / AC-6)', async () => {
+  it('is_background: true with a fast-completing job includes exit code and output tail (T15)', async () => {
+    const fakeJob: HostShellJobInfo = {
+      id: 'shell_def456',
+      command: 'true',
+      cwd: process.cwd(),
+      state: 'completed',
+      startedAt: 1000,
+      endedAt: 1001,
+      pid: 42,
+      exitCode: 0,
+    };
+
+    const host = createFakeHostWithBackground(
+      () => fakeJob,
+      () => ({ id: 'shell_def456', output: 'done\n', truncated: false }),
+    );
+
+    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+
+    const result = await executeToolForBehavioralAssertion(tool, {
+      command: 'true',
+      is_background: true,
+    });
+
+    const llm = String(result.llmContent);
+    expect(llm).toContain('Job ID: shell_def456');
+    expect(llm).toContain('State: completed');
+    expect(llm).toContain('Exit Code: 0');
+    expect(llm).toContain('done');
+    expect(llm).toContain('check_async_tasks');
+  });
+
+  it('is_background: true never returns foreground-shaped output (T16)', async () => {
+    const fakeJob: HostShellJobInfo = {
+      id: 'shell_fast',
+      command: 'true',
+      cwd: process.cwd(),
+      state: 'completed',
+      startedAt: 1000,
+      endedAt: 1000,
+      pid: 1,
+      exitCode: 0,
+    };
+
+    const host = createFakeHostWithBackground(() => fakeJob);
+    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+
+    const result = await executeToolForBehavioralAssertion(tool, {
+      command: 'true',
+      is_background: true,
+    });
+
+    const llm = String(result.llmContent);
+    // Must NOT contain the foreground-shaped output keys.
+    expect(llm).not.toContain('Stdout:');
+    expect(llm).not.toContain('Stderr:');
+    expect(llm).not.toContain('Process Group PGID:');
+    expect(llm).not.toContain('Background PIDs:');
+  });
+
+  it('is_background absent: no job-shaped result, normal foreground output (T18)', async () => {
+    const responses = new Map<string, ShellResult>();
+    responses.set('echo started', {
+      stdout: 'started\n',
+      stderr: '',
+      exitCode: 0,
+      aborted: false,
+    });
+
     const tool = new ShellTool(
-      createBackgroundFakeService(),
+      createFakeShellService(responses),
       createFakeMessageBus('proceed_once'),
     );
 
@@ -427,16 +401,23 @@ describe('is_background parameter behaviour @plan:issue1995', () => {
       command: 'echo started',
     });
 
-    expect(String(result.llmContent)).not.toContain(
-      'Background: command was started in the background',
-    );
+    const llm = String(result.llmContent);
+    expect(llm).not.toContain('Background job launched.');
+    expect(llm).not.toContain('Job ID:');
+    expect(llm).toContain('started');
   });
 
-  it('getDescription appends [background] when is_background is true and does not when absent (T19 / AC-9)', () => {
-    const tool = new ShellTool(
-      createBackgroundFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
+  it('getDescription appends [background] when is_background is true and does not when absent (T19)', () => {
+    const fakeJob: HostShellJobInfo = {
+      id: 'shell_x',
+      command: 'echo started',
+      cwd: process.cwd(),
+      state: 'running',
+      startedAt: 1,
+      pid: 1,
+    };
+    const host = createFakeHostWithBackground(() => fakeJob);
+    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
 
     const invocationWith = tool.build({
       command: 'echo started',
@@ -448,11 +429,17 @@ describe('is_background parameter behaviour @plan:issue1995', () => {
     expect(invocationWithout.getDescription()).not.toMatch(/ \[background\]$/);
   });
 
-  it('shouldConfirmExecute returns exec details with isBackground === true when set, and without the flag when absent (T20 / AC-9)', async () => {
-    const tool = new ShellTool(
-      createBackgroundFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
+  it('shouldConfirmExecute returns exec details with isBackground === true when set (T20)', async () => {
+    const fakeJob: HostShellJobInfo = {
+      id: 'shell_x',
+      command: 'echo started',
+      cwd: process.cwd(),
+      state: 'running',
+      startedAt: 1,
+      pid: 1,
+    };
+    const host = createFakeHostWithBackground(() => fakeJob);
+    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
 
     const invocationWith = tool.build({
       command: 'echo started',
@@ -468,24 +455,12 @@ describe('is_background parameter behaviour @plan:issue1995', () => {
         expect(confirmationWith.isBackground).toBe(true);
       }
     }
-
-    const invocationWithout = tool.build({ command: 'echo started' });
-    const confirmationWithout = await invocationWithout.shouldConfirmExecute(
-      new AbortController().signal,
-    );
-    expect(confirmationWithout).not.toBe(false);
-    if (confirmationWithout !== false) {
-      expect(confirmationWithout.type).toBe('exec');
-      if (confirmationWithout.type === 'exec') {
-        expect(confirmationWithout.isBackground).toBeUndefined();
-      }
-    }
   });
 
-  it('Windows rejects is_background: true with a message naming Start-Process (T21 / AC-7)', () => {
+  it('Windows rejects is_background: true with a message naming Start-Process (T21)', () => {
     vi.mocked(os.platform).mockReturnValue('win32');
     const tool = new ShellTool(
-      createBackgroundFakeService(),
+      createFakeShellService(new Map<string, ShellResult>()),
       createFakeMessageBus('proceed_once'),
     );
 
@@ -494,174 +469,52 @@ describe('is_background parameter behaviour @plan:issue1995', () => {
     ).toThrow(/Start-Process/);
   });
 
-  it('user-cancelled background invocation keeps the cancellation llmContent with no notice (T22 / AC-10)', async () => {
-    const tool = new ShellTool(
-      createAbortedFakeService(),
-      createFakeMessageBus('proceed_once'),
-    );
-
-    const result = await executeToolForBehavioralAssertion(tool, {
-      command: 'echo started',
-      is_background: true,
-    });
-
-    const llm = String(result.llmContent);
-    expect(llm).toContain('cancel');
-    expect(llm).not.toContain(
-      'Background: command was started in the background',
-    );
-  });
-
-  it('PTY-shaped clean result (signal "0", defined pid): background notice IS emitted and names kill -- -<PGID> (T25 / AC-8)', async () => {
-    // node-pty reports signal 0 for a clean exit; CoreShellToolHostAdapter
-    // stringifies that to '0'. The pid is defined so the terminate clause is
-    // produced from result.pid.
-    const ptyResult: ToolsShellExecutionResult = {
-      output: 'started',
-      exitCode: 0,
-      signal: '0',
-      error: null,
-      aborted: false,
-      pid: 4242,
-    };
-    const tool = new ShellTool(
-      createFakeHostFromResult(ptyResult),
-      createFakeMessageBus('proceed_once'),
-    );
-
-    const result = await executeToolForBehavioralAssertion(tool, {
-      command: 'echo started',
-      is_background: true,
-    });
-
-    const llm = String(result.llmContent);
-    expect(llm).toContain('Background: command was started in the background');
-    // With a terminate id, the Status and Terminate lines are present.
-    expect(llm).toContain('Status: pgrep -g 4242');
-    expect(llm).toContain('Terminate: kill -- -4242');
-    // The old single-line kill clause must no longer appear.
-    expect(llm).not.toContain('Its output is being written to');
-  });
-
-  it('signalled result (exitCode null, signal SIGTERM): background notice is NOT emitted (T26 / AC-8)', async () => {
-    const signalledResult: ToolsShellExecutionResult = {
-      output: '',
-      exitCode: null,
-      signal: 'SIGTERM',
-      error: null,
-      aborted: false,
+  it('background result does not reference any filesystem path (no .log, no tmpdir) (T22)', async () => {
+    const fakeJob: HostShellJobInfo = {
+      id: 'shell_nopath',
+      command: 'sleep 60',
+      cwd: '/tmp',
+      state: 'running',
+      startedAt: 1000,
       pid: 99,
     };
-    const tool = new ShellTool(
-      createFakeHostFromResult(signalledResult),
-      createFakeMessageBus('proceed_once'),
-    );
+
+    const host = createFakeHostWithBackground(() => fakeJob);
+    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+
+    const result = await executeToolForBehavioralAssertion(tool, {
+      command: 'sleep 60',
+      is_background: true,
+    });
+
+    const llm = String(result.llmContent);
+    expect(llm).not.toMatch(/\.log/);
+    expect(llm).not.toContain('/tmp/');
+    expect(llm).not.toContain('os.tmpdir');
+  });
+
+  it('standalone execution-service adapter fails fast for is_background: true (T23)', async () => {
+    // The standalone adapter (createShellToolHostFromExecutionService) has no
+    // ShellJobManager. It must throw rather than silently degrade.
+    const service: IShellExecutionService = {
+      execute: async (): Promise<ShellResult> => ({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+        aborted: false,
+      }),
+      isCommandAllowed: () => true,
+    };
+
+    const tool = new ShellTool(service, createFakeMessageBus('proceed_once'));
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'echo started',
       is_background: true,
     });
 
-    expect(String(result.llmContent)).not.toContain(
-      'Background: command was started in the background',
-    );
-  });
-
-  it('background launch whose wrapper exits non-zero leaves NO shell_bg_*.log behind (G1a)', async () => {
-    const tempDir = fs.mkdtempSync(
-      path.join(process.env.TMPDIR ?? '/tmp', 'shell-bg-g1a-'),
-    );
-    try {
-      vi.mocked(os.tmpdir).mockReturnValue(tempDir);
-      const nonZeroResult: ToolsShellExecutionResult = {
-        output: '',
-        exitCode: 2,
-        signal: null,
-        error: null,
-        aborted: false,
-        pid: undefined,
-      };
-      const host = createFakeHostFromResult(nonZeroResult);
-      const originalExecute = host.executeShellCommand;
-      host.executeShellCommand = async (command: string) => {
-        // Simulate the background redirect creating the log file on disk, as
-        // the real `>log 2>&1` wrapper would.
-        const match = command.match(/shell_bg_[a-f0-9]+\.log/);
-        if (match) {
-          const logPath = path.join(tempDir, match[0]);
-          fs.writeFileSync(logPath, '');
-        }
-        return originalExecute(command);
-      };
-
-      const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
-
-      const before = new Set(
-        fs
-          .readdirSync(tempDir)
-          .filter((name) => /^shell_bg_.*\.log$/.test(name)),
-      );
-
-      await executeToolForBehavioralAssertion(tool, {
-        command: 'echo started',
-        is_background: true,
-      });
-
-      const after = fs
-        .readdirSync(tempDir)
-        .filter((name) => /^shell_bg_.*\.log$/.test(name));
-      for (const name of after) {
-        expect(before.has(name)).toBe(true);
-      }
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it('background launch that succeeds leaves its log file behind (G1b)', async () => {
-    const tempDir = fs.mkdtempSync(
-      path.join(process.env.TMPDIR ?? '/tmp', 'shell-bg-g1b-'),
-    );
-    let createdLogPath: string | undefined;
-    try {
-      vi.mocked(os.tmpdir).mockReturnValue(tempDir);
-      const cleanResult: ToolsShellExecutionResult = {
-        output: 'started',
-        exitCode: 0,
-        signal: null,
-        error: null,
-        aborted: false,
-        pid: undefined,
-      };
-      const host = createFakeHostFromResult(cleanResult);
-      host.executeShellCommand = async (command: string) => {
-        const match = command.match(/shell_bg_[a-f0-9]+\.log/);
-        if (match) {
-          createdLogPath = path.join(tempDir, match[0]);
-          fs.writeFileSync(createdLogPath, 'started\n');
-        }
-        return cleanResult;
-      };
-
-      const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
-
-      const result = await executeToolForBehavioralAssertion(tool, {
-        command: 'echo started',
-        is_background: true,
-      });
-
-      // The path named in llmContent must still exist on disk, because the
-      // detached job owns it.
-      const llm = String(result.llmContent);
-      const logName = llm.match(/shell_bg_[a-f0-9]+\.log/);
-      expect(logName).not.toBeNull();
-      const survivingPath = path.join(tempDir, String(logName?.[0]));
-      expect(fs.existsSync(survivingPath)).toBe(true);
-    } finally {
-      if (createdLogPath !== undefined && fs.existsSync(createdLogPath)) {
-        fs.unlinkSync(createdLogPath);
-      }
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    // The error must be caught and surfaced, not silently degraded.
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('not supported');
   });
 });

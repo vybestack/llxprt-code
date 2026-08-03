@@ -81,6 +81,23 @@ function unwrapCommandForExecutionService(command: string): string {
     : innerCommand;
 }
 
+const STANDALONE_BACKGROUND_ERROR =
+  'Background jobs are not supported in the standalone execution-service adapter. ' +
+  'This capability requires a configured ShellJobManager.';
+
+function standaloneValidatePathWithinWorkspace(
+  targetDir: string,
+  dirPath: string,
+): string | null {
+  const resolvedPath = path.isAbsolute(dirPath)
+    ? dirPath
+    : path.resolve(targetDir, dirPath);
+  return resolvedPath === targetDir ||
+    resolvedPath.startsWith(`${targetDir}${path.sep}`)
+    ? null
+    : `Directory '${dirPath}' is not a registered workspace directory`;
+}
+
 export function createShellToolHostFromExecutionService(
   service: IShellExecutionService,
 ): IShellToolHost {
@@ -134,15 +151,8 @@ export function createShellToolHostFromExecutionService(
       return root ? [root] : [];
     },
     stripShellWrapper: (command: string) => command,
-    validatePathWithinWorkspace: (_workspaceContext, dirPath) => {
-      const resolvedPath = path.isAbsolute(dirPath)
-        ? dirPath
-        : path.resolve(targetDir, dirPath);
-      return resolvedPath === targetDir ||
-        resolvedPath.startsWith(`${targetDir}${path.sep}`)
-        ? null
-        : `Directory '${dirPath}' is not a registered workspace directory`;
-    },
+    validatePathWithinWorkspace: (_workspaceContext, dirPath) =>
+      standaloneValidatePathWithinWorkspace(targetDir, dirPath),
     isPtyActive: () => false,
     formatMemoryUsage: (bytes: number) => {
       if (bytes < 1024) return `${bytes} bytes`;
@@ -151,6 +161,16 @@ export function createShellToolHostFromExecutionService(
     trySummarizeOutput: async (content: string) => content,
     getSummarizeConfig: () => undefined,
     limitOutputTokens: (content: string) => ({ content, wasTruncated: false }),
+    launchBackgroundJob: () => {
+      throw new Error(STANDALONE_BACKGROUND_ERROR);
+    },
+    tailBackgroundJob: () => {
+      throw new Error(STANDALONE_BACKGROUND_ERROR);
+    },
+    detectTrailingBackground: (command: string) => ({
+      promoted: false,
+      command,
+    }),
   };
 }
 
@@ -255,45 +275,23 @@ export function buildCommandToExecute(
   strippedCommand: string,
   isWindows: boolean,
   tempFilePath: string,
-  backgroundLogPath?: string,
 ): string {
   if (isWindows) {
     return strippedCommand;
   }
-  const body = buildWrappedBody(
-    strippedCommand.trim(),
-    backgroundLogPath ?? null,
-  );
+  const body = buildWrappedBody(strippedCommand.trim());
   return `{ ${body} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
 }
 
 /**
  * Builds the body that sits between the wrapper's `{ ` prefix and its
- * ` }; __code=$?; ...` suffix.
- *
- * A defined `backgroundLogPath` selects background wrapping. The protective
- * group is essential: `trap '' HUP` makes the detached subshell (and, through
- * inherited SIG_IGN, its descendants) survive the SIGHUP delivered when the
- * PTY master closes; `>log 2>&1` releases the inherited stdout/stderr pipes
- * immediately so they are not held for the job's lifetime and gives the model
- * somewhere to read the output from; `</dev/null` stops the detached job from
- * competing for terminal input.
+ * ` }; __code=$?; ...` suffix. A trailing-`;` is normalised away so the
+ * generated `{ cmd; }` is syntactically clean.
  */
-function buildWrappedBody(
-  trimmed: string,
-  backgroundLogPath: string | null,
-): string {
-  if (trimmed.endsWith('&')) {
-    return backgroundLogPath !== null
-      ? `{ trap '' HUP; ${trimmed} } >${singleQuoteForShell(backgroundLogPath)} 2>&1 </dev/null &`
-      : trimmed;
-  }
+function buildWrappedBody(trimmed: string): string {
   const normalised = trimmed.endsWith(';')
     ? trimmed.slice(0, -1).trimEnd()
     : trimmed;
-  if (backgroundLogPath !== null) {
-    return `{ trap '' HUP; ${normalised}; } >${singleQuoteForShell(backgroundLogPath)} 2>&1 </dev/null &`;
-  }
   return `${normalised};`;
 }
 
@@ -321,33 +319,21 @@ export function parsePgrepFile(
   return pids;
 }
 
-export function prepareShellExecution(
-  strippedCommand: string,
-  isBackground = false,
-): {
+export function prepareShellExecution(strippedCommand: string): {
   tempFilePath: string;
   commandToExecute: string;
-  backgroundLogPath?: string;
 } {
   const isWindows = os.platform() === 'win32';
   const tempFileName = `shell_pgrep_${crypto
     .randomBytes(6)
     .toString('hex')}.tmp`;
   const tempFilePath = path.join(os.tmpdir(), tempFileName);
-  const backgroundLogPath =
-    isBackground && !isWindows
-      ? path.join(
-          os.tmpdir(),
-          `shell_bg_${crypto.randomBytes(6).toString('hex')}.log`,
-        )
-      : undefined;
   const commandToExecute = buildCommandToExecute(
     strippedCommand,
     isWindows,
     tempFilePath,
-    backgroundLogPath,
   );
-  return { tempFilePath, commandToExecute, backgroundLogPath };
+  return { tempFilePath, commandToExecute };
 }
 
 export function collectProcessInfo(
@@ -390,7 +376,7 @@ export function getShellToolDescription(): string {
   if (os.platform() === 'win32') {
     return `This tool executes a given shell command using PowerShell (\`powershell.exe\` or \`pwsh\`) with \`-NoProfile -Command <command>\`. Use PowerShell-compatible syntax: quote paths containing spaces with single quotes (for example, \`New-Item -ItemType Directory -Force -Path 'C:\\My Folder'\`) and represent an apostrophe inside a single-quoted path with two single quotes. Independent background processes can be started with \`Start-Process\`.${returnedInfo}`;
   }
-  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
+  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`: a trailing \`&\` is detected via AST parsing and the command is launched as a managed background job with a stable job id (use check_async_tasks to inspect or cancel it). Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`. Note: a command that daemonizes (e.g. setsid or double-fork) escapes the process group and cannot be stopped by job cancellation.${returnedInfo}`;
 }
 
 export function getCommandDescription(): string {
@@ -410,7 +396,7 @@ export function getCommandDescription(): string {
 
 /** Description for the `is_background` schema property (non-Windows only). */
 export function getBackgroundParamDescription(): string {
-  return 'When true, the command is started as a background job and the tool returns immediately without waiting for it to finish; use this for long-running processes instead of appending & to the command. The process output is written to a log file and is not returned in the tool result; the process can be stopped with kill -- -<PGID>. The log file is outside the workspace and must be read with a shell command rather than a file-reading tool.';
+  return 'When true, the command is launched as a managed background job and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. A background job runs until it exits on its own — timeout_seconds bounds only the launch, not the job lifetime.';
 }
 
 /** JSON Schema for the run_shell_command tool parameters. */
