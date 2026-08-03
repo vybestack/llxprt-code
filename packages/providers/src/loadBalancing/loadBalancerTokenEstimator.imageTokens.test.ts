@@ -67,10 +67,10 @@ describe('estimateRequestTokens image accounting', () => {
   });
 
   it('varies the image charge with the selected provider', async () => {
-    const anthropic = await estimateRequestTokens(
-      withImage(),
-      'anthropic',
-      'claude-sonnet-4-20250514',
+    const baseline = await estimateRequestTokens(
+      textOnly(),
+      'openai',
+      'gpt-4o',
       {},
     );
     const openai = await estimateRequestTokens(
@@ -86,7 +86,9 @@ describe('estimateRequestTokens image accounting', () => {
       {},
     );
 
-    expect(anthropic.tokens).not.toBe(openai.tokens);
-    expect(anthropic.tokens).not.toBe(unknown.tokens);
+    // 1092x1092 normalises to 768x768 = 4 tiles -> 170*4 + 85.
+    expect(openai.tokens - baseline.tokens).toBe(765);
+    // An unrecognised provider falls back to the flat default estimate.
+    expect(unknown.tokens - baseline.tokens).toBe(1000);
   });
 });

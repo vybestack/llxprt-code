@@ -815,6 +815,7 @@ export class HistoryService
       const tokenizerProvider: TokenizerProvider = {
         getTokenizerForModel: (targetModel) =>
           this.getTokenizerForModel(targetModel, activeProvider),
+        activeProvider,
       };
 
       for (const entry of this.history) {

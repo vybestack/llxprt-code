@@ -330,9 +330,9 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
   );
 
   it('skips an image whose estimate exceeds tool-output-max-tokens under the new estimator', async () => {
-    // A 1092x1092 PNG under the default family costs 1000 tokens — well above
-    // the old hardcoded 85. Set a token budget that the old 85 would have passed
-    // but the new 1000 does not.
+    // Any image under the default family costs DEFAULT_IMAGE_TOKEN_ESTIMATE
+    // (1000) regardless of its dimensions — well above the old hardcoded 85.
+    // Set a token budget that the old 85 would have passed but 1000 does not.
     const filePath = join(tempDir, 'big.png');
     const original = await sharp({
       create: {
@@ -384,7 +384,12 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     });
 
     expect(result.error).toBeUndefined();
-    // The default-family estimate for any image is 1000 tokens.
-    expect(result.returnDisplay).toContain('1,000 tokens');
+    // The default-family estimate for any image is 1000 tokens. The display
+    // formats totals with toLocaleString(), so tolerate any group separator.
+    const reported = /([\d\s.,\u00a0\u202f]+) tokens/.exec(
+      result.returnDisplay as string,
+    );
+    expect(reported).not.toBeNull();
+    expect(Number(reported?.[1].replace(/\D/g, ''))).toBe(1000);
   });
 });

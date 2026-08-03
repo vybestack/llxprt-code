@@ -39,11 +39,13 @@ function readUint24LE(bytes: Uint8Array, offset: number): number {
 }
 
 function readUint32BE(bytes: Uint8Array, offset: number): number {
+  // `>>> 0` keeps the result unsigned; `<< 24` alone sign-extends past 2^31.
   return (
-    (bytes[offset] << 24) |
-    (bytes[offset + 1] << 16) |
-    (bytes[offset + 2] << 8) |
-    bytes[offset + 3]
+    ((bytes[offset] << 24) |
+      (bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3]) >>>
+    0
   );
 }
 

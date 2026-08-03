@@ -22,8 +22,6 @@ import {
 import type { IContent, MediaBlock } from './IContent.js';
 import type { RuntimeTokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import type { DebugLogger } from '../../debug/index.js';
-import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
-import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 
 const noopLogger: DebugLogger = {
   debug: () => {},
@@ -119,7 +117,10 @@ describe('estimateContentTokens — image media blocks', () => {
       noopLogger,
     );
 
-    expect(openaiTotal).not.toBe(flatFamilyTotal);
+    // 1024x1024 high detail: 2x2 tiles * 170 + 85 base.
+    expect(openaiTotal).toBe(765);
+    // The flat family charges a fixed estimate regardless of dimensions.
+    expect(flatFamilyTotal).toBe(3000);
   });
 
   it('uses the unknown-dimension constant for url-encoded image media', async () => {
@@ -178,10 +179,8 @@ describe('estimateContentTokens — image media blocks', () => {
     };
     const textTokens =
       Math.ceil(text.length / 4) + Math.ceil(caption.length / 4);
-    const imageTokens = estimateImageTokens({
-      provider: 'anthropic',
-      dimensions: parseImageDimensionsFromBase64(b64),
-    });
+    // 200x200 on Anthropic: ceil(200 * 200 / 750) = 54 (published reference).
+    const imageTokens = 54;
 
     const total = await estimateContentTokens(
       content,

@@ -17,7 +17,6 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, MediaBlock } from './IContent.js';
-import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 
 function buildPngBase64(width: number, height: number): string {
@@ -36,13 +35,14 @@ function buildPngBase64(width: number, height: number): string {
   return buf.toString('base64');
 }
 
-function imageContent(): IContent {
+function imageContent(caption?: string): IContent {
   const b64 = buildPngBase64(1092, 1092);
   const block: MediaBlock = {
     type: 'media',
     mimeType: 'image/png',
     encoding: 'base64',
     data: b64,
+    caption,
   };
   return { speaker: 'human', blocks: [block] };
 }
@@ -52,13 +52,19 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
     const svc = new HistoryService();
     svc.setActiveTokenizationTarget('claude-sonnet-4-20250514', 'anthropic');
 
-    const withImage = [imageContent()];
-    const withoutImage: IContent[] = [];
+    const caption = 'a screenshot of the failing build';
+    const withImage = [imageContent(caption)];
+    const withoutImage: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: caption }] },
+    ];
 
     const tokensWith = await svc.estimateTokensForContents(withImage);
     const tokensWithout = await svc.estimateTokensForContents(withoutImage);
 
-    expect(tokensWith).toBeGreaterThan(tokensWithout);
+    // The identical caption text is present in both, so the whole difference is
+    // the 1590-token cost of the 1092x1092 image on Anthropic.
+    expect(tokensWithout).toBeGreaterThan(0);
+    expect(tokensWith - tokensWithout).toBe(1590);
   });
 
   it('the delta matches the estimator for the configured provider', async () => {
@@ -78,7 +84,12 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
   it('varies the image token delta by provider', async () => {
     const content = [imageContent()];
     const b64 = (content[0].blocks[0] as MediaBlock).data;
-    const dims = parseImageDimensionsFromBase64(b64);
+    // Guard the fixture: a dimensionless payload would silently collapse both
+    // providers onto their unknown-dimension constants.
+    expect(parseImageDimensionsFromBase64(b64)).toEqual({
+      width: 1092,
+      height: 1092,
+    });
 
     const svcAnthropic = new HistoryService();
     svcAnthropic.setActiveTokenizationTarget(
@@ -95,12 +106,9 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
       (await svcOpenai.estimateTokensForContents(content)) -
       (await svcOpenai.estimateTokensForContents([]));
 
-    expect(anthropicDelta).toBe(
-      estimateImageTokens({ provider: 'anthropic', dimensions: dims }),
-    );
-    expect(openaiDelta).toBe(
-      estimateImageTokens({ provider: 'openai', dimensions: dims }),
-    );
-    expect(anthropicDelta).not.toBe(openaiDelta);
+    // 1092x1092: Anthropic charges ceil(1092*1092/750) = 1590; OpenAI high
+    // detail normalises to 768x768 = 4 tiles -> 170*4 + 85 = 765.
+    expect(anthropicDelta).toBe(1590);
+    expect(openaiDelta).toBe(765);
   });
 });
