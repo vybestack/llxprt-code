@@ -148,6 +148,36 @@ process.exit(0);
       expect(result!.getEffectiveReason()).toContain('/etc');
     });
 
+    it('should block tool execution when hook script exits with code 2 and empty stderr', async () => {
+      const scriptContent = `import process from 'node:process';
+process.exit(2);
+`;
+
+      const scriptPath = createHookScript(
+        'block-exit-2-no-stderr.ts',
+        scriptContent,
+      );
+      const config = createRealConfig({
+        event: 'BeforeTool',
+        scriptPath,
+      });
+
+      const hookSystem = config.getHookSystem();
+      await hookSystem!.initialize();
+
+      const eventHandler = hookSystem!.getEventHandler();
+      const result = await eventHandler.fireBeforeToolEvent('write_file', {
+        path: '/home/user/file.txt',
+        content: 'some content',
+      });
+
+      expect(result).toBeDefined();
+      expect(result!.isBlockingDecision()).toBe(true);
+      expect(result!.getEffectiveReason()).toBe(
+        'Hook exited with code 2 without an error message',
+      );
+    });
+
     it('should allow tool execution when hook script exits with code 0', async () => {
       const scriptContent = `import process from 'node:process';
 import { readFileSync } from 'node:fs';
