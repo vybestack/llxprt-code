@@ -51,6 +51,16 @@
       "bun": "./src/utils/fetch.ts",
       "import": "./dist/src/utils/fetch.js"
     },
+    "./utils/imageDimensions.js": {
+      "types": "./dist/src/utils/imageDimensions.d.ts",
+      "bun": "./src/utils/imageDimensions.ts",
+      "import": "./dist/src/utils/imageDimensions.js"
+    },
+    "./utils/imageTokenEstimation.js": {
+      "types": "./dist/src/utils/imageTokenEstimation.d.ts",
+      "bun": "./src/utils/imageTokenEstimation.ts",
+      "import": "./dist/src/utils/imageTokenEstimation.js"
+    },
     "./textDelta.js": {
       "types": "./dist/src/utils/textDelta.d.ts",
       "bun": "./src/utils/textDelta.ts",

@@ -459,6 +459,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/kimi/kimiMediaProcessing.test.ts',
       'src/kimi/usageInfo.test.ts',
       'src/loadBalancing/failoverState.test.ts',
+      'src/loadBalancing/loadBalancerTokenEstimator.imageTokens.test.ts',
       'src/logging/conversationResponseLogger.test.ts',
       'src/logging/ProviderPerformanceTracker.test.ts',
       'src/logging/serverToolLogger.test.ts',

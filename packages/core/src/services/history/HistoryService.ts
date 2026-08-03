@@ -587,6 +587,7 @@ export class HistoryService
     return {
       getTokenizerForModel: (modelName: string) =>
         this.getTokenizerForModel(modelName, this.activeTokenizationProvider),
+      activeProvider: this.activeTokenizationProvider,
     };
   }
 
