@@ -3443,6 +3443,280 @@ jobs:
                   body: comment.body,
                 })));
             }
+            // Issue #2930: partial adoption of upstream OCR 1.8.0/1.8.4's
+            // HTTP 422 line-resolution fallback. We keep our inline cap and
+            // summary routing (see dev-docs/ocr-version-1.8.4-comparison.md for
+            // the full comparison and decision), but adopt the grouping: when a
+            // batch review is rejected because a line could not be resolved,
+            // drop the comments we can PROVE sit outside the PR diff and re-send
+            // the survivors as ONE review instead of N individual writes.
+            //
+            // GitHub documents 422 on the reviews endpoint as "Validation
+            // failed, OR the endpoint has been spammed", so a bare status code
+            // is not evidence of a line problem. Only a confirmed line/diff
+            // validation error may activate the grouped retry; anything else
+            // (spam/abuse throttling in particular) falls through to the
+            // pre-existing per-comment loop, because re-sending a batch into a
+            // throttled endpoint would deepen the incident.
+            const LINE_RESOLUTION_PATTERNS = [
+              /could not be resolved/i,
+              /must be part of the diff/i,
+              /not part of the diff/i,
+              /outside the diff/i,
+              /diff hunk/i,
+            ];
+            // Defensive: this endpoint returns `errors` as plain strings, but
+            // other REST endpoints return structured {resource, field, code}.
+            const LINE_RESOLUTION_FIELDS = new Set([
+              'line',
+              'start_line',
+              'position',
+              'original_line',
+              'original_start_line',
+            ]);
+
+            function errorStatus(error) {
+              if (!error || typeof error !== 'object') return undefined;
+              const raw = error.status !== undefined
+                ? error.status
+                : (error.response && error.response.status);
+              const parsed = Number(raw);
+              return Number.isInteger(parsed) ? parsed : undefined;
+            }
+
+            function isLineResolutionFailure(error) {
+              if (!error) return false;
+              const texts = [];
+              // Octokit composes `message` as "<data.message>: <errors[]>", so
+              // it carries the decisive wording on the live payload. The raw
+              // errors[] array is read too because a re-wrapped error may drop
+              // one or the other.
+              if (error.message) texts.push(String(error.message));
+              const errors = (error.response && error.response.data && error.response.data.errors)
+                || (error.data && error.data.errors)
+                || error.errors;
+              if (Array.isArray(errors)) {
+                for (const entry of errors) {
+                  if (!entry) continue;
+                  if (typeof entry === 'string') {
+                    texts.push(entry);
+                    continue;
+                  }
+                  if (entry.field && LINE_RESOLUTION_FIELDS.has(String(entry.field))) {
+                    return true;
+                  }
+                  if (entry.message) texts.push(String(entry.message));
+                }
+              }
+              const text = texts.join(' | ');
+              if (!text) return false;
+              return LINE_RESOLUTION_PATTERNS.some((pattern) => pattern.test(text));
+            }
+
+            // Parse a unified-diff patch into RIGHT-side (new file) line ranges,
+            // ONE RANGE PER HUNK. Ranges rather than a flat line set because
+            // GitHub requires a multi-line comment's start_line and line to sit
+            // inside the SAME hunk; a flat set cannot tell a legal span from one
+            // that straddles two hunks, and a straddling span 422s again.
+            //
+            // Within a hunk the new-file line numbers run contiguously from the
+            // header's start: additions and context lines advance the counter,
+            // deletions do not. `complete` is false when the observed body line
+            // count disagrees with the header's declared count, which means the
+            // patch was clipped — treating a clipped prefix as authoritative
+            // would prove later lines "outside the diff" and silently relegate
+            // postable findings to the summary.
+            function parseDiffHunkInventory(patch) {
+              if (!patch) return { ranges: [], complete: false };
+              const ranges = [];
+              const hunkHeaderRegex = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+              const lines = String(patch).split(String.fromCharCode(10));
+              let current = null;
+              let sawHunk = false;
+              let complete = true;
+              function flush() {
+                if (!current) return;
+                if (current.observed !== current.expected) complete = false;
+                // A pure-deletion hunk ("+N,0") never advanced the counter, so
+                // end < start and there is nothing to comment on.
+                if (current.end >= current.start) {
+                  ranges.push({ start: current.start, end: current.end });
+                }
+              }
+              for (const line of lines) {
+                const match = hunkHeaderRegex.exec(line);
+                if (match) {
+                  flush();
+                  const start = parseInt(match[1], 10);
+                  const expected = match[2] === undefined ? 1 : parseInt(match[2], 10);
+                  current = { start, end: start - 1, next: start, expected, observed: 0 };
+                  sawHunk = true;
+                  continue;
+                }
+                if (!current) continue;
+                if (line.startsWith('\\')) continue; // "\ No newline at end of file"
+                if (line.startsWith('-')) continue; // deletion: old file only
+                if (line.startsWith('+') || line.startsWith(' ')) {
+                  current.end = current.next;
+                  current.next += 1;
+                  current.observed += 1;
+                }
+                // Anything else (notably a bare "" from a trailing newline) is
+                // not a diff body line and must not advance the counter.
+              }
+              flush();
+              return { ranges, complete: sawHunk && complete };
+            }
+
+            // TRI-STATE: 'valid' | 'invalid' | 'unknown'.
+            //
+            // 'invalid' permanently relegates a finding to the sticky summary
+            // without ever attempting to post it, so it must be PROVABLE.
+            // Anything we cannot check is 'unknown', which keeps the
+            // pre-existing per-comment behaviour rather than silently voiding a
+            // comment that might well post.
+            function classifyCommentAgainstDiff(comment, diff) {
+              if (!diff || !diff.complete) return 'unknown';
+              const commentPath = comment.path;
+              // Not among the PR's changed files at all: provably out of diff.
+              if (!diff.known.has(commentPath)) return 'invalid';
+              // In the PR, but GitHub omitted the patch (binary, or over the
+              // diff size limit): we know nothing about its lines.
+              const ranges = diff.files.get(commentPath);
+              if (!ranges) return 'unknown';
+              // We only model RIGHT-side lines; decline to judge anything else.
+              if (comment.side && comment.side !== 'RIGHT') return 'unknown';
+              const endLine = comment.line;
+              if (endLine === undefined || endLine === null) return 'unknown';
+              const startLine = (comment.start_line === undefined || comment.start_line === null)
+                ? endLine
+                : comment.start_line;
+              // A reversed span is malformed and GitHub will reject it.
+              if (startLine > endLine) return 'invalid';
+              // Both endpoints must fall inside ONE hunk.
+              const withinOneHunk = ranges.some(
+                (range) => startLine >= range.start && endLine <= range.end,
+              );
+              return withinOneHunk ? 'valid' : 'invalid';
+            }
+
+            // Build the PR's RIGHT-side diff inventory:
+            //   files    Map<path, Array<{start,end}>> — parsed patches
+            //   known    Set<path>                     — every path in the PR
+            //   complete boolean                       — safe to prove 'invalid'
+            //
+            // Every "cannot judge" condition clears `complete` so that no
+            // comment is discarded: truncated pagination, an empty file list
+            // (impossible for a PR under review, so it means the diff has not
+            // materialised server-side), or a head SHA that moved while we
+            // walked. The head check runs AFTER pagination so a push landing
+            // mid-walk is also caught.
+            async function prDiffHunkInventory(commitSha) {
+              const files = new Map();
+              const known = new Set();
+              let complete = true;
+              const PER_PAGE = 100;
+              const MAX_PAGES = 30;
+              let page = 1;
+              let truncated = true;
+              while (page <= MAX_PAGES) {
+                const res = await github.rest.pulls.listFiles({
+                  owner, repo, pull_number: number, per_page: PER_PAGE, page,
+                });
+                const batch = (res && res.data) || [];
+                for (const file of batch) {
+                  if (!file || !file.filename) continue;
+                  known.add(file.filename);
+                  if (file.patch) {
+                    const parsed = parseDiffHunkInventory(file.patch);
+                    if (parsed.complete) files.set(file.filename, parsed.ranges);
+                  }
+                }
+                if (batch.length < PER_PAGE) {
+                  truncated = false;
+                  break;
+                }
+                page += 1;
+              }
+              if (truncated) {
+                complete = false;
+                core.warning(`OCR 422 fallback: PR changed-file list exceeded ${MAX_PAGES * PER_PAGE} files; no inline comment will be treated as out-of-diff.`);
+              }
+              if (known.size === 0) {
+                complete = false;
+                core.warning('OCR 422 fallback: PR changed-file list came back empty, which cannot be right for a PR under review; no inline comment will be treated as out-of-diff.');
+              }
+              if (complete && commitSha) {
+                const headRes = await github.rest.pulls.get({ owner, repo, pull_number: number });
+                const inventoryHead = headRes && headRes.data && headRes.data.head && headRes.data.head.sha;
+                if (!inventoryHead || inventoryHead !== commitSha) {
+                  complete = false;
+                  core.warning('OCR 422 fallback: PR head moved while resolving diff hunks; no inline comment will be treated as out-of-diff.');
+                }
+              }
+              return { files, known, complete };
+            }
+
+            // Regroup a batch that GitHub rejected with a line-resolution 422.
+            //
+            // Returns { posted, invalidPairs, remaining }:
+            //   posted       comments published by the single grouped review
+            //   invalidPairs provably out-of-diff; the CALLER counts them as
+            //                failed and routes them to the sticky summary, which
+            //                preserves the failedInline invariant that
+            //                shouldAdvanceCheckpoint depends on
+            //   remaining    pairs for the pre-existing per-comment loop
+            async function regroupLineResolutionFailure(pairs, commitSha) {
+              let diff = null;
+              try {
+                diff = await prDiffHunkInventory(commitSha);
+              } catch (hunkErr) {
+                core.warning(redactSecretDiagnostics(`OCR 422 fallback: could not resolve PR diff hunks (${hunkErr.message || hunkErr}); posting individually.`));
+                return { posted: 0, invalidPairs: [], remaining: pairs };
+              }
+              const validPairs = [];
+              const unknownPairs = [];
+              const invalidPairs = [];
+              for (const pair of pairs) {
+                const verdict = classifyCommentAgainstDiff(pair.comment, diff);
+                if (verdict === 'valid') {
+                  validPairs.push(pair);
+                } else if (verdict === 'unknown') {
+                  unknownPairs.push(pair);
+                } else {
+                  invalidPairs.push(pair);
+                }
+              }
+              // A grouped retry is only worth sending when classification
+              // actually removed something (an out-of-diff comment, or one we
+              // could not judge). If every comment survived, the payload would
+              // be byte-identical to the one GitHub just rejected, so the
+              // resend is a guaranteed second 422 against an endpoint that may
+              // already be throttling us.
+              if (validPairs.length === 0 || validPairs.length === pairs.length) {
+                return {
+                  posted: 0,
+                  invalidPairs,
+                  remaining: validPairs.concat(unknownPairs),
+                };
+              }
+              try {
+                await github.rest.pulls.createReview({
+                  owner, repo, pull_number: number,
+                  event: 'COMMENT', commit_id: commitSha, comments: validPairs.map((pair) => pair.comment),
+                });
+                core.info(`OCR 422 fallback: posted ${validPairs.length} in-diff inline comment(s) as one grouped review; ${invalidPairs.length} comment(s) were outside the diff.`);
+                return { posted: validPairs.length, invalidPairs, remaining: unknownPairs };
+              } catch (secondaryErr) {
+                core.warning(redactSecretDiagnostics(`OCR 422 fallback: grouped retry failed (${secondaryErr.message || secondaryErr}); posting individually.`));
+                return {
+                  posted: 0,
+                  invalidPairs,
+                  remaining: validPairs.concat(unknownPairs),
+                };
+              }
+            }
+
 
             // Issue #2575: reviewed-range manifest for completeness tracking.
             // A partial OCR run must never be mistaken for complete coverage.
@@ -4158,10 +4432,31 @@ jobs:
                 } catch (listErr) {
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
+                // Issue #2930: when GitHub rejected the batch specifically
+                // because a line could not be resolved, re-send the comments we
+                // can prove are in-diff as ONE grouped review instead of N
+                // individual writes. Provably out-of-diff comments are counted
+                // as failed and routed to the sticky summary here — exactly the
+                // accounting the per-comment loop below performs when an
+                // individual post fails — so the failedInline invariant that
+                // shouldAdvanceCheckpoint relies on is preserved. Every other
+                // failure shape (5xx, network, spam-throttle 422, unrecognised
+                // 422) skips this entirely and uses the loop unchanged.
+                let pairsToPostIndividually = pairsToPost;
+                if (errorStatus(batchErr) === 422 && isLineResolutionFailure(batchErr)) {
+                  const regrouped = await regroupLineResolutionFailure(pairsToPost, headSha);
+                  postedInline += regrouped.posted;
+                  for (const p of regrouped.invalidPairs) {
+                    core.warning(`Skipping OCR inline comment on ${p.comment.path}:${p.comment.line}; it is outside the PR diff hunks. Routing it to the sticky summary.`);
+                    failedInline += 1;
+                    overflowRouted.push(p.finding);
+                  }
+                  pairsToPostIndividually = regrouped.remaining;
+                }
                 // pairsToPost was already capped to effectiveCap before the
                 // batch attempt, so the fallback loop does not need a second
                 // overflow check — every remaining pair is within the cap.
-                for (const p of pairsToPost) {
+                for (const p of pairsToPostIndividually) {
                   const c = p.comment;
                   if (existingInlineKeys.has(inlineCommentKey(c))) {
                     core.warning(`Skipping duplicate OCR inline comment on ${c.path}:${c.line} after batch post uncertainty.`);
