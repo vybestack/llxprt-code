@@ -773,3 +773,71 @@ describe('.github/workflows/ocr-review.yml', () => {
     ]);
   });
 });
+
+describe('.github/workflows/ocr-review.yml — no-reviewable-files short-circuit (issue #2824)', () => {
+  let codeReviewJob: Record<string, unknown> | undefined;
+  let initializeRun: string;
+  let previewRun: string;
+  let reviewRun: string;
+  let placeholderRun: string;
+  let redactRun: string;
+
+  beforeAll(() => {
+    const workflowYml = readRootFile(WORKFLOW_PATH);
+    const workflow = parseWorkflowYaml(workflowYml);
+    const jobs = asOptionalRecord(workflow.jobs);
+    codeReviewJob = asOptionalRecord(jobs?.['code-review']);
+    initializeRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Initialize OCR artifact files'),
+    );
+    previewRun = commandText(
+      stepNamed(
+        codeReviewJob ?? {},
+        'Verify review scope includes changed tests',
+      ),
+    );
+    reviewRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Run OpenCodeReview'),
+    );
+    placeholderRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Ensure OCR artifact placeholders exist'),
+    );
+    redactRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Redact OCR diagnostic artifacts'),
+    );
+  });
+
+  it('initializes the no-reviewable-files marker alongside the other markers', () => {
+    expect(initializeRun).toContain(': > ocr-no-reviewable-files.txt');
+  });
+
+  it('records the marker in the preview step when selected files are empty', () => {
+    expect(previewRun).toContain('ocr-no-reviewable-files.txt');
+  });
+
+  it('short-circuits the review step to skipped when no files are reviewable', () => {
+    expectContainsAll(reviewRun, [
+      'ocr-no-reviewable-files.txt',
+      '"status": "skipped"',
+      'No reviewable files in range; all changed files were excluded from review.',
+      'cp ocr-result.json ocr-stdout.raw',
+      'echo "0" > ocr-exit-code.txt',
+      'echo "no-reviewable-files" > ocr-phase.txt',
+      'exit 0',
+    ]);
+  });
+
+  it('does not invoke ocr review before the no-reviewable-files short-circuit', () => {
+    const markerIndex = reviewRun.indexOf('ocr-no-reviewable-files.txt');
+    expect(markerIndex).toBeGreaterThan(-1);
+    // The ocr review invocation must come AFTER the short-circuit guard, so a
+    // docs-only PR never reaches the LLM.
+    const ocrReviewIndex = reviewRun.indexOf('ocr review');
+    expect(ocrReviewIndex).toBeGreaterThan(markerIndex);
+  });
+
+  it('includes the marker in the artifact placeholder and redaction lists', () => {
+    expect(placeholderRun).toContain('ocr-no-reviewable-files.txt');
+    expect(redactRun).toContain('ocr-no-reviewable-files.txt');
+  });
+});

@@ -1380,6 +1380,7 @@ jobs:
           : > ocr-status.txt
           : > ocr-preview-attempted.txt
           : > ocr-preview-succeeded.txt
+          : > ocr-no-reviewable-files.txt
           : > ocr-reviewed-range-manifest.json
           : > ocr-manifest-hashes.json
           : > ocr-manifest-sha256.txt
@@ -1737,8 +1738,45 @@ jobs:
                 headingIndexes.push(index);
               }
             }
-            if (headingIndexes.length !== 1) {
-              throw new Error('OCR preview must contain exactly one Will review heading');
+            if (headingIndexes.length > 1) {
+              throw new Error('OCR preview must contain at most one Will review heading');
+            }
+            if (headingIndexes.length === 0) {
+              // OCR omits the "Will review" section entirely only when every
+              // changed file is excluded from review (e.g. a docs-only PR).
+              // That is a legitimate empty selection ONLY when the excluded
+              // count provably equals the changed-file count. Enforce that
+              // cardinality invariant (N = files changed, M = excluded) so a
+              // truncated render that flushed the banner but lost the
+              // "Will review"/"Excluded" sections is classified as an
+              // infrastructure failure instead of silently shipping a PR
+              // with genuinely reviewable code UNREVIEWED. Verified against
+              // all confirmed docs-only production runs:
+              //   30725255161 -> N=26, M=26
+              //   30725089201 -> N=26, M=26
+              //   30554832360 -> N=1,  M=1
+              let changedCount = null;
+              let excludedCount = null;
+              for (const previewLine of lines) {
+                const banner = /^Preview:\s*(\d+)\s+file\(s\)\s+changed/.exec(previewLine);
+                if (banner) {
+                  changedCount = Number.parseInt(banner[1], 10);
+                }
+                const excluded = /^Excluded(?:\s+from\s+review)?\s*\((\d+)\)/.exec(previewLine);
+                if (excluded) {
+                  excludedCount = Number.parseInt(excluded[1], 10);
+                }
+              }
+              if (changedCount === null) {
+                throw new Error('OCR preview output was malformed');
+              }
+              if (changedCount === 0) {
+                return Object.freeze([]);
+              }
+              if (excludedCount === null || excludedCount !== changedCount) {
+                throw new Error('OCR preview output was malformed');
+              }
+              return Object.freeze([]);
             }
             const headingIndex = headingIndexes[0];
             const heading = /^Will review\s*\(([^)]*)\):\s*$/.exec(lines[headingIndex]);
@@ -1789,6 +1827,9 @@ jobs:
             exit 0
           fi
           echo "true" > ocr-preview-succeeded.txt
+          if [ ! -s ocr-selected-files.txt ]; then
+            echo "true" > ocr-no-reviewable-files.txt
+          fi
           reviewed="$(cat ocr-selected-files.txt)"
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
@@ -2157,6 +2198,30 @@ jobs:
             cp ocr-result.json ocr-stdout.raw
             echo "0" > ocr-exit-code.txt
             echo "noop" > ocr-phase.txt
+            exit 0
+          fi
+          if [ "$(cat ocr-no-reviewable-files.txt 2>/dev/null || true)" = "true" ]; then
+            cat > ocr-result.json <<'EOF'
+          {
+            "status": "skipped",
+            "message": "No reviewable files in range; all changed files were excluded from review.",
+            "summary": {
+              "files_reviewed": 0,
+              "comments": 0,
+              "total_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "elapsed": "0s"
+            },
+            "comments": [],
+            "warnings": []
+          }
+          EOF
+            cp ocr-result.json ocr-stdout.raw
+            echo "0" > ocr-exit-code.txt
+            echo "no-reviewable-files" > ocr-phase.txt
             exit 0
           fi
           echo "review" > ocr-phase.txt
@@ -5310,6 +5375,7 @@ jobs:
             ocr-status.txt \
             ocr-preview-attempted.txt \
             ocr-preview-succeeded.txt \
+            ocr-no-reviewable-files.txt \
             ocr-coverage-report.json \
             ocr-reviewed-range-manifest.json \
             ocr-manifest-hashes.json \
@@ -5382,6 +5448,7 @@ jobs:
             'ocr-phase.txt', 'ocr-infrastructure-failure.txt',
             'ocr-policy-failure.txt', 'ocr-selected-files.txt', 'ocr-status.txt',
             'ocr-preview-attempted.txt', 'ocr-preview-succeeded.txt',
+            'ocr-no-reviewable-files.txt',
             'ocr-reviewed-range-manifest.json', 'ocr-manifest-hashes.json',
             'ocr-manifest-sha256.txt', 'ocr-routing-decisions.json',
             'ocr-coverage-report.json',
