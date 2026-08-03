@@ -93,11 +93,7 @@ function buildConversationManager(model: string): {
     providerRuntime: { ...providerRuntime },
   });
 
-  const conversationManager = new ConversationManager(
-    historyService,
-    view,
-    model,
-  );
+  const conversationManager = new ConversationManager(historyService, view);
 
   return { conversationManager, historyService };
 }

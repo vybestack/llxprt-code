@@ -23,6 +23,7 @@ import {
   enforceAndSendWithPromptEnvelopeRetries,
   prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
+import { resolveGeneratingModel } from './generatingModelResolver.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -797,9 +798,16 @@ export class TurnProcessor {
     provider: IProvider,
   ): Promise<void> {
     try {
-      const currentModel = this.runtimeContext.state.model;
-      // Re-resolve AFTER the response so LB sub-profile selection is
-      // reflected in stamping.
+      // Resolve the generating model from the provider that actually served
+      // the request (issue #2511), not from a fresh getActiveProvider() lookup
+      // that can diverge if the active provider changes between generation and
+      // recording, and not from the immutable runtime-state snapshot that goes
+      // stale after a mid-session profile load.
+      const currentModel = resolveGeneratingModel(
+        this.runtimeContext,
+        provider,
+      );
+      // Resolve AFTER the response so LB sub-profile selection is reflected.
       this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
       const afcHistory = response.afcHistory;
 
