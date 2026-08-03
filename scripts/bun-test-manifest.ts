@@ -110,6 +110,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspTransport.test.ts',
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
+      // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
+      // and likewise excluded from the Vitest selection.
+      'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
