@@ -10,6 +10,8 @@ import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 import { ShellJobManager } from '../services/shellJobManager.js';
+import { ShellNotificationAdapter } from '../services/shellNotificationAdapter.js';
+import type { ShellNotificationSource } from '../services/shellNotificationSource.js';
 import {
   DEFAULT_LOG_MAX_BYTES,
   DEFAULT_MAX_BACKGROUND_JOBS,
@@ -161,7 +163,9 @@ export function getOrCreateAsyncTaskReminderService(
 
 /**
  * Sets up the AsyncTaskAutoTrigger with client callbacks, or refreshes
- * callbacks if already set up.
+ * callbacks if already set up. When a shell job manager provider is supplied,
+ * shell job completions are coalesced into the same notification pipeline
+ * (#1995 slice 7).
  *
  * @returns Cleanup function to unsubscribe from auto-trigger.
  */
@@ -174,6 +178,7 @@ export function setupAsyncTaskAutoTrigger(
     setReminder: (service: AsyncTaskReminderService) => void;
     getAutoTrigger: () => AsyncTaskAutoTrigger | undefined;
     setAutoTrigger: (trigger: AsyncTaskAutoTrigger) => void;
+    getShellJobManager: () => ShellJobManager | undefined;
   },
   isAgentBusy: () => boolean,
   triggerAgentTurn: (message: string) => Promise<void>,
@@ -191,6 +196,13 @@ export function setupAsyncTaskAutoTrigger(
     accessors.setReminder,
   );
 
+  const shellManager = accessors.getShellJobManager();
+  const shellSource: ShellNotificationSource | undefined =
+    shellManager !== undefined
+      ? new ShellNotificationAdapter(shellManager)
+      : undefined;
+  reminderService.setShellNotificationSource(shellSource);
+
   const existing = accessors.getAutoTrigger();
   if (!existing) {
     const trigger = new AsyncTaskAutoTrigger(
@@ -199,11 +211,13 @@ export function setupAsyncTaskAutoTrigger(
       isAgentBusy,
       triggerAgentTurn,
     );
+    trigger.setShellNotificationSource(shellSource);
     accessors.setAutoTrigger(trigger);
     return trigger.subscribe();
   }
 
   // Refresh callbacks with the latest closures from React re-renders
   existing.updateCallbacks(isAgentBusy, triggerAgentTurn);
+  existing.setShellNotificationSource(shellSource);
   return existing.subscribe();
 }

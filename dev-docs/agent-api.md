@@ -672,19 +672,17 @@ console.log(agent.policy.isNonInteractive()); // false
 
 #### `agent.tasks` — `AgentTasksControl`
 
-Undefined-safe async-task administration (added by #2143):
+Undefined-safe async-task administration (added by #2143, extended for shell jobs in #1995):
 
 ```ts
 agent.tasks.list(): readonly AgentTaskInfo[]
 agent.tasks.listRunning(): readonly AgentTaskInfo[]
 agent.tasks.get(id: string): AgentTaskInfo | undefined
-agent.tasks.cancel(id: string): boolean
-agent.tasks.cancelAllRunning(): number   // returns count cancelled
+agent.tasks.cancel(id: string): Promise<boolean>
+agent.tasks.cancelAllRunning(): Promise<number>   // returns count cancelled
 ```
 
-`AgentTaskInfo` = `{ id: string; subagentName: string; goalPrompt: string; status: 'running'|'completed'|'failed'|'cancelled'; launchedAt: number; completedAt?: number; error?: string }`.
-Note `abortController` is intentionally **NOT** exposed (projected public type
-omits non-serializable internals).
+`AgentTaskInfo` is a discriminated union: `AgentSubagentTaskInfo` (`kind: 'subagent'`, with `subagentName`/`goalPrompt`) or `AgentShellJobInfo` (`kind: 'shell'`, with `command`/`cwd`/`exitCode`/`signal`/`failureReason`). Both share `id`, `status`, `launchedAt`, and optional `completedAt`. Note `abortController` is intentionally **NOT** exposed (projected public type omits non-serializable internals). Cancellation is async because a shell job stop is TERM → wait → KILL.
 
 ```ts
 import { createAgent } from '@vybestack/llxprt-code-agents';
@@ -692,10 +690,14 @@ import { createAgent } from '@vybestack/llxprt-code-agents';
 const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
 
 for (const task of agent.tasks.listRunning()) {
-  console.log(task.id, task.subagentName, task.goalPrompt);
+  if (task.kind === 'subagent') {
+    console.log(task.id, task.subagentName, task.goalPrompt);
+  } else {
+    console.log(task.id, task.command);
+  }
 }
 
-const cancelled = agent.tasks.cancelAllRunning();
+const cancelled = await agent.tasks.cancelAllRunning();
 console.log(`Cancelled ${cancelled} running task(s).`);
 ```
 

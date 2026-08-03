@@ -781,6 +781,7 @@ export class Config extends ConfigBase {
         setReminder: (service) => (this.asyncTaskReminderService = service),
         getAutoTrigger: () => this.asyncTaskAutoTrigger,
         setAutoTrigger: (trigger) => (this.asyncTaskAutoTrigger = trigger),
+        getShellJobManager: () => this.getShellJobManager(),
       },
       isAgentBusy,
       triggerAgentTurn,
