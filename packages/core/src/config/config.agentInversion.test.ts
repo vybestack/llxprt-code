@@ -241,6 +241,7 @@ describe('P01 construction inversion contracts', () => {
       setSubagentManager: vi.fn(),
       getInteractiveSubagentSchedulerFactory: () => undefined,
       getAsyncTaskManager: () => undefined,
+      getShellJobManager: () => undefined,
       getTaskToolRegistration: () => registration,
     };
     const config = new Config(baseParams());
@@ -294,6 +295,7 @@ describe('P01 construction inversion contracts', () => {
       setSubagentManager: vi.fn(),
       getInteractiveSubagentSchedulerFactory: () => undefined,
       getAsyncTaskManager: () => undefined,
+      getShellJobManager: () => undefined,
       getTaskToolRegistration: () => undefined,
     };
     const config = new Config(baseParams());

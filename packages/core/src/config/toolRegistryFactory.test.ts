@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { ShellJobManager } from '../services/shellJobManager.js';
 import {
   createToolRegistry,
   type ToolRegistryHost,
@@ -17,12 +18,13 @@ import type { SubagentManager } from './subagentManager.js';
 function createHost(
   options: {
     asyncTaskManager?: AsyncTaskManager;
+    shellJobManager?: ShellJobManager;
     subagentManager?: SubagentManager;
     profileManager?: ProfileManager;
     noCoreTools?: boolean;
   } = {},
 ): ToolRegistryHost {
-  const { asyncTaskManager, noCoreTools } = options;
+  const { asyncTaskManager, shellJobManager, noCoreTools } = options;
   let { profileManager, subagentManager } = options;
   return {
     getCoreTools: () =>
@@ -41,6 +43,7 @@ function createHost(
     },
     getInteractiveSubagentSchedulerFactory: () => undefined,
     getAsyncTaskManager: () => asyncTaskManager,
+    getShellJobManager: () => shellJobManager,
     getTaskToolRegistration: () => undefined,
   };
 }

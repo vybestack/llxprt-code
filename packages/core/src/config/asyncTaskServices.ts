@@ -9,12 +9,21 @@
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
+import { ShellJobManager } from '../services/shellJobManager.js';
+import {
+  DEFAULT_LOG_MAX_BYTES,
+  DEFAULT_MAX_BACKGROUND_JOBS,
+} from '../services/shellJobTypes.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 /**
  * Resolves the max-async setting from the settings service, defaulting to 5.
  */
-export function normalizeMaxAsyncTasks(value: unknown, fallback = 5): number {
+function normalizeIntSetting(
+  value: unknown,
+  isValid: (n: number) => boolean,
+  fallback: number,
+): number {
   let normalized: number | undefined;
   if (typeof value === 'number' && Number.isFinite(value)) {
     normalized = value;
@@ -25,14 +34,85 @@ export function normalizeMaxAsyncTasks(value: unknown, fallback = 5): number {
     }
   }
 
-  if (normalized === -1 || (normalized !== undefined && normalized >= 1)) {
+  if (normalized !== undefined && isValid(normalized)) {
     return normalized;
   }
   return fallback;
 }
 
+const isUnlimitedOrPositive = (n: number): boolean => n === -1 || n >= 1;
+
+export function normalizeMaxAsyncTasks(value: unknown, fallback = 5): number {
+  return normalizeIntSetting(value, isUnlimitedOrPositive, fallback);
+}
+
 export function resolveMaxAsyncTasks(settingsService: SettingsService): number {
   return normalizeMaxAsyncTasks(settingsService.get('task-max-async'));
+}
+
+export function normalizeShellMaxBackgroundJobs(
+  value: unknown,
+  fallback = DEFAULT_MAX_BACKGROUND_JOBS,
+): number {
+  return normalizeIntSetting(value, isUnlimitedOrPositive, fallback);
+}
+
+export function normalizeShellLogMaxBytes(
+  value: unknown,
+  fallback = DEFAULT_LOG_MAX_BYTES,
+): number {
+  return normalizeIntSetting(value, (n) => n >= 1024, fallback);
+}
+
+export function resolveShellJobSettings(settingsService: SettingsService): {
+  maxBackgroundJobs: number;
+  logMaxBytes: number;
+} {
+  return {
+    maxBackgroundJobs: normalizeShellMaxBackgroundJobs(
+      settingsService.get('shell-max-background-jobs'),
+    ),
+    logMaxBytes: normalizeShellLogMaxBytes(
+      settingsService.get('shell-background-log-max-bytes'),
+    ),
+  };
+}
+
+export function getOrCreateShellJobManager(
+  settingsService: SettingsService,
+  getter: () => ShellJobManager | undefined,
+  setter: (manager: ShellJobManager) => void,
+): ShellJobManager {
+  const existing = getter();
+  if (existing) {
+    return existing;
+  }
+  const { maxBackgroundJobs, logMaxBytes } =
+    resolveShellJobSettings(settingsService);
+  const manager = new ShellJobManager({
+    maxBackgroundJobs,
+    logMaxBytes,
+  });
+  setter(manager);
+  return manager;
+}
+
+/**
+ * Dispose the shell job manager if it exists, terminating running jobs.
+ * Returns any error so the caller can collect it in its own failure list.
+ */
+export async function disposeShellJobManager(
+  manager: ShellJobManager | undefined,
+): Promise<unknown | undefined> {
+  if (!manager) {
+    return undefined;
+  }
+  try {
+    await manager.dispose();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
 }
 
 /**

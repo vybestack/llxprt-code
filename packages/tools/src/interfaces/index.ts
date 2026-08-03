@@ -54,7 +54,12 @@ export type {
   IAsyncTaskService,
   AsyncTaskStatus,
   AsyncTaskInfo,
+  AsyncWorkInfo,
+  SubagentTaskInfo,
+  ShellJobInfo,
   AsyncTaskLookupResult,
+  AsyncOutputTailOptions,
+  AsyncOutputTailResult,
 } from './IAsyncTaskService.js';
 export type {
   ISkillService,

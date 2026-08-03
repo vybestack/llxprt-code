@@ -55,6 +55,8 @@ import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { ShellJobManager } from '../services/shellJobManager.js';
+import { AsyncWorkFacade } from '../services/asyncWorkFacade.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from './config.js';
 import type { ConfigBaseCore } from './configBaseCore.js';
@@ -130,6 +132,7 @@ export interface ToolRegistryHost {
     | SubagentSchedulerFactory
     | undefined;
   getAsyncTaskManager(): AsyncTaskManager | undefined;
+  getShellJobManager(): ShellJobManager | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
@@ -506,9 +509,12 @@ function registerAgentTools(
   registerCoreTool(ListSubagentsTool, listSubagentsArgs);
 
   // @plan PLAN-20260130-ASYNCTASK.P14
-  const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter(() =>
-    host.getAsyncTaskManager(),
+  // #1995 slice 3 — facade aggregates both managers
+  const asyncWorkFacade = new AsyncWorkFacade(
+    () => host.getAsyncTaskManager(),
+    () => host.getShellJobManager(),
   );
+  const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter(asyncWorkFacade);
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
 }
 
