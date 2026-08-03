@@ -123,9 +123,13 @@ const COMMANDS: readonly ZedCommandDefinition[] = [
       return {
         text:
           tasks.length === 0
-            ? 'No active subagent tasks.'
-            : `Subagent tasks:\n${tasks
-                .map((task) => `  [${task.status}] ${task.goalPrompt}`)
+            ? 'No active tasks.'
+            : `Tasks:\n${tasks
+                .map((task) =>
+                  task.kind === 'subagent'
+                    ? `  [${task.status}] ${task.goalPrompt}`
+                    : `  [${task.status}] ${task.command}`,
+                )
                 .join('\n')}`,
       };
     },

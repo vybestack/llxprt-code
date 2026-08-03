@@ -881,6 +881,7 @@ export interface ToolExecuteConfirmationDetails {
   rootCommands: string[];
   commands?: string[];
   correlationId?: string;
+  isBackground?: boolean;
 }
 
 export interface ToolMcpConfirmationDetails {

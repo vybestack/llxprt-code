@@ -4,17 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as os from 'os';
 import * as path from 'node:path';
-
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    mkdirSync: vi.fn(),
-  };
-});
 
 import {
   Storage,
@@ -22,7 +14,7 @@ import {
   AGENTS_DIR,
   PROVIDER_ACCOUNTS_FILENAME,
   OAUTH_FILE,
-} from './storage.js';
+} from '../src/config/storage.js';
 
 /**
  * Returns the expected path segment for the current platform, avoiding
@@ -296,6 +288,19 @@ describe('Storage – data-category extensions + memory/locks helpers', () => {
       path.join(OVERRIDE_DIR, 'oauth', 'locks'),
     );
   });
+
+  it('getCredentialLocksDir returns <logDir>/secure-store/locks', () => {
+    expect(Storage.getCredentialLocksDir()).toBe(
+      path.join(LOG_OVERRIDE_DIR, 'secure-store', 'locks'),
+    );
+  });
+
+  it('getCredentialLocksDir falls back to LLXPRT_CONFIG_HOME for compat', () => {
+    delete process.env['LLXPRT_LOG_HOME'];
+    expect(Storage.getCredentialLocksDir()).toBe(
+      path.join(OVERRIDE_DIR, 'secure-store', 'locks'),
+    );
+  });
 });
 
 describe('Storage – getUserExtensionsDir default platform path', () => {
@@ -395,6 +400,13 @@ describe('Storage – default platform paths (no overrides)', () => {
       'llxprt-code',
     );
     expect(path.basename(result)).toBe(expectedBasename);
+  });
+
+  it('getCredentialLocksDir resolves under the platform log dir by default', () => {
+    const result = Storage.getCredentialLocksDir();
+    expect(result).toContain('secure-store');
+    expect(result).toContain('locks');
+    expect(result).toContain(platformSegment('Logs', 'Log', 'state'));
   });
 });
 

@@ -10,6 +10,15 @@
  */
 
 import type { AsyncTaskManager, AsyncTaskInfo } from './asyncTaskManager.js';
+import type { ShellNotificationSource } from './shellNotificationSource.js';
+import type { ShellJob } from './shellJobTypes.js';
+import { formatShellJobCompletionNotification } from './shellJobNotification.js';
+
+export interface ReminderResult {
+  text: string;
+  /** IDs of all terminal work items whose content was included (subagent + shell). */
+  notifiedTaskIds: string[];
+}
 
 /**
  * Generates next-turn reminders that include async task status and completion results.
@@ -18,9 +27,20 @@ import type { AsyncTaskManager, AsyncTaskInfo } from './asyncTaskManager.js';
  */
 export class AsyncTaskReminderService {
   private readonly taskManager: AsyncTaskManager;
+  private shellSource: ShellNotificationSource | undefined;
 
   constructor(taskManager: AsyncTaskManager) {
     this.taskManager = taskManager;
+  }
+
+  /**
+   * Attach (or replace) the shell job notification source. When set, shell job
+   * completions are surfaced alongside subagent completions (#1995 slice 7).
+   */
+  setShellNotificationSource(
+    source: ShellNotificationSource | undefined,
+  ): void {
+    this.shellSource = source;
   }
 
   /**
@@ -32,19 +52,33 @@ export class AsyncTaskReminderService {
    */
   generateStatusSummary(): string {
     const tasks = this.taskManager.getAllTasks();
+    const shellJobs = this.collectRunningShellJobs();
 
-    if (tasks.length === 0) {
+    if (tasks.length === 0 && shellJobs.length === 0) {
       return '';
     }
 
     const lines: string[] = [];
-    lines.push(`[ASYNC TASKS: ${tasks.length} total]`);
+    const total = tasks.length + shellJobs.length;
+    lines.push(`[ASYNC TASKS: ${total} total]`);
 
     tasks.forEach((task, i) => {
       const statusIcon = this.getStatusIcon(task.status);
       const idPrefix = task.id.substring(0, 8);
       lines.push(
         `[${i + 1}] ${task.subagentName} - ${statusIcon} (${idPrefix}...)`,
+      );
+    });
+
+    shellJobs.forEach((job, i) => {
+      const statusIcon = this.getStatusIcon(job.state);
+      const idPrefix = job.id.substring(0, 8);
+      const cmdPreview =
+        job.command.length > 30
+          ? job.command.substring(0, 30) + '...'
+          : job.command;
+      lines.push(
+        `[${tasks.length + i + 1}] shell: ${cmdPreview} - ${statusIcon} (${idPrefix}...)`,
       );
     });
 
@@ -60,35 +94,83 @@ export class AsyncTaskReminderService {
    * and marking would be silently skipped.
    * @pseudocode lines 044-071
    */
-  generateReminder(): { text: string; notifiedTaskIds: string[] } | null {
+  generateReminder(): ReminderResult | null {
     const pending = this.taskManager.getPendingNotifications();
     const running = this.taskManager.getRunningTasks();
+    const shellPending = this.collectPendingShellJobs();
+    const shellRunning = this.collectRunningShellJobs();
 
-    if (pending.length === 0 && running.length === 0) {
+    const totalPending = pending.length + shellPending.length;
+    const totalRunning = running.length + shellRunning.length;
+
+    if (totalPending === 0 && totalRunning === 0) {
       return null;
     }
 
     const parts: string[] = [];
     const notifiedTaskIds: string[] = [];
 
-    // Pending completions - include full output
-    if (pending.length > 0) {
-      parts.push(`${pending.length} async task(s) completed:`);
+    if (totalPending > 0) {
+      const labels: string[] = [];
+      if (pending.length > 0) {
+        labels.push(`${pending.length} async task(s)`);
+      }
+      if (shellPending.length > 0) {
+        labels.push(`${shellPending.length} shell job(s)`);
+      }
+      parts.push(`${labels.join(' + ')} completed:`);
+
       for (const task of pending) {
         parts.push(this.formatCompletionNotification(task));
         notifiedTaskIds.push(task.id);
       }
+      for (const job of shellPending) {
+        const tail = this.readShellTail(job.id);
+        parts.push(formatShellJobCompletionNotification(job, tail));
+        notifiedTaskIds.push(job.id);
+      }
     }
 
-    // Running tasks - just summary
-    if (running.length > 0) {
-      parts.push(`${running.length} async task(s) still running.`);
+    if (totalRunning > 0) {
+      const labels: string[] = [];
+      if (running.length > 0) {
+        labels.push(`${running.length} async task(s)`);
+      }
+      if (shellRunning.length > 0) {
+        labels.push(`${shellRunning.length} shell job(s)`);
+      }
+      parts.push(`${labels.join(' + ')} still running.`);
     }
 
     // Format MUST match the synchronous reminder service exactly
     // See the synchronous reminder service formatting.
     const text = `---\nSystem Note: Async Task Status\n\n${parts.join('\n\n')}\n---`;
     return { text, notifiedTaskIds };
+  }
+
+  private collectPendingShellJobs(): readonly ShellJob[] {
+    if (this.shellSource === undefined) {
+      return [];
+    }
+    return this.shellSource.getPendingNotifications();
+  }
+
+  private collectRunningShellJobs(): readonly ShellJob[] {
+    if (this.shellSource === undefined) {
+      return [];
+    }
+    return this.shellSource.getRunningJobs();
+  }
+
+  private readShellTail(id: string): {
+    id: string;
+    output: string;
+    truncated: boolean;
+  } {
+    if (this.shellSource === undefined) {
+      return { id, output: '', truncated: false };
+    }
+    return this.shellSource.tailOutput(id);
   }
 
   /**
@@ -140,7 +222,10 @@ export class AsyncTaskReminderService {
    * @pseudocode lines 116-118
    */
   hasPendingNotifications(): boolean {
-    return this.taskManager.getPendingNotifications().length > 0;
+    if (this.taskManager.getPendingNotifications().length > 0) {
+      return true;
+    }
+    return this.collectPendingShellJobs().length > 0;
   }
 
   /**
@@ -151,8 +236,22 @@ export class AsyncTaskReminderService {
    * @pseudocode lines 120-127
    */
   markNotified(taskIds: string[]): void {
+    const subagentIds: string[] = [];
+    const shellIds: string[] = [];
     for (const id of taskIds) {
+      if (id.startsWith('shell_')) {
+        shellIds.push(id);
+      } else {
+        subagentIds.push(id);
+      }
+    }
+
+    for (const id of subagentIds) {
       this.taskManager.markNotified(id);
+    }
+
+    if (this.shellSource !== undefined && shellIds.length > 0) {
+      this.shellSource.markNotified(shellIds);
     }
   }
 

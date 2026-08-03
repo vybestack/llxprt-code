@@ -19,12 +19,20 @@
  *   H) getToken propagates errors from Gemini normally (G4 dead-code removed)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
-import { TokenAccessCoordinator } from '../token-access-coordinator.js';
-import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
+import { TokenAccessCoordinator } from '../src/auth/token-access-coordinator.js';
+import type {
+  OAuthProvider,
+  OAuthToken,
+  TokenStore,
+} from '../src/auth/types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import {
+  SecureStoreError,
+  isRuntimeReplacedError,
+} from '@vybestack/llxprt-code-storage';
+import { oauthRuntimeBridge } from '../src/auth/runtime-accessor-bridge.js';
 
 // --------------------------------------------------------------------------
 // Minimal stub helpers
@@ -67,7 +75,7 @@ function createMockProvider(name: string): OAuthProvider {
 // Minimal ProviderRegistry-like object that TokenAccessCoordinator receives
 function createMockRegistry(provider?: OAuthProvider, oauthEnabled = true) {
   return {
-    getProvider: vi.fn((_name: string) => provider ?? undefined),
+    getProvider: vi.fn(() => provider ?? undefined),
     isOAuthEnabled: vi.fn(() => oauthEnabled),
     hasExplicitInMemoryOAuthState: vi.fn(() => false),
   };
@@ -83,10 +91,7 @@ function createMockRenewalManager() {
 // Minimal OAuthBucketManager-like stub
 function createMockBucketManager() {
   return {
-    getSessionBucket: vi.fn(
-      (_provider: string, _metadata?: OAuthTokenRequestMetadata) =>
-        undefined as string | undefined,
-    ),
+    getSessionBucket: vi.fn(() => undefined as string | undefined),
     setSessionBucket: vi.fn(),
     clearSessionBucket: vi.fn(),
     clearAllSessionBuckets: vi.fn(),
@@ -495,6 +500,121 @@ describe('TokenAccessCoordinator', () => {
       await expect(coordinator.getToken('gemini')).rejects.toThrow(
         'auth failed hard',
       );
+    });
+  });
+
+  /**
+   * Issue #2962: a credential STORE outage must never be reported as an absent
+   * credential.
+   *
+   * When the running runtime has been unlinked, macOS can no longer identify
+   * the process, so SecureStore fails every operation with a terminal
+   * RUNTIME_REPLACED error. keyring-token-store rethrows it deliberately. If
+   * this coordinator then collapses it to null, callers conclude "no token"
+   * and tell the user to re-authenticate — a login they cannot complete,
+   * because the store is broken rather than empty.
+   */
+  describe('credential-store outage is not an absent credential', () => {
+    function runtimeReplacedStore(): TokenStore {
+      const store = createMockTokenStore();
+      store.getToken = vi.fn(async () => {
+        throw new SecureStoreError(
+          "LLxprt's runtime was replaced on disk while this session was running.",
+          'RUNTIME_REPLACED',
+          'Restart LLxprt to recover.',
+        );
+      });
+      return store;
+    }
+
+    it('propagates the outage out of peekStoredToken instead of returning null', async () => {
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: runtimeReplacedStore(),
+      });
+
+      await expect(coordinator.peekStoredToken('anthropic')).rejects.toThrow(
+        /replaced on disk/i,
+      );
+    });
+
+    it('propagates the outage out of getOAuthToken instead of returning null', async () => {
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: runtimeReplacedStore(),
+      });
+
+      await expect(coordinator.getOAuthToken('anthropic')).rejects.toThrow(
+        /replaced on disk/i,
+      );
+    });
+
+    it('preserves the RUNTIME_REPLACED code so callers can distinguish it', async () => {
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: runtimeReplacedStore(),
+      });
+
+      const error = await coordinator
+        .peekStoredToken('anthropic')
+        .then(() => null)
+        .catch((caught: unknown) => caught);
+
+      expect(isRuntimeReplacedError(error)).toBe(true);
+    });
+
+    it('propagates the outage out of forceRefreshToken when the write fails', async () => {
+      // The outage surfaces on the WRITE path here, which needs the refresh to
+      // run to completion: a non-empty failedAccessToken so the baseline is
+      // taken directly, a stored token whose access_token matches it (and which
+      // carries a refresh token), and a provider that returns a refreshed
+      // token. Only then does refreshStoredToken reach tokenStore.saveToken.
+      const failedAccessToken = 'stale-access-token';
+      const store = createMockTokenStore();
+      store.getToken = vi.fn(async () => makeToken(failedAccessToken));
+      store.saveToken = vi.fn(async () => {
+        throw new SecureStoreError(
+          "LLxprt's runtime was replaced on disk while this session was running.",
+          'RUNTIME_REPLACED',
+          'Restart LLxprt to recover.',
+        );
+      });
+      const provider = createMockProvider('anthropic');
+      provider.refreshToken = vi.fn(async () =>
+        makeToken('fresh-access-token'),
+      );
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: store,
+      });
+
+      await expect(
+        coordinator.forceRefreshToken('anthropic', failedAccessToken),
+      ).rejects.toThrow(/replaced on disk/i);
+      // Guards against the setup silently regressing to a read-path failure:
+      // if saveToken was never reached, this test is not covering the write.
+      expect(store.saveToken).toHaveBeenCalled();
+    });
+
+    it('still swallows an ordinary read failure as a cache miss', async () => {
+      // Regression guard: only the terminal identity is promoted to a throw.
+      // Routine store errors must keep degrading to null as before.
+      const store = createMockTokenStore();
+      store.getToken = vi.fn(async () => {
+        throw new Error('transient keyring hiccup');
+      });
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: store,
+      });
+
+      await expect(
+        coordinator.peekStoredToken('anthropic'),
+      ).resolves.toBeNull();
     });
   });
 });

@@ -5,14 +5,12 @@
  */
 
 import vm from 'node:vm';
-import { beforeAll, expect } from 'vitest';
 import {
   asRecord,
   asStringArray,
   asVmFunction,
   parseWorkflowYaml,
 } from './typed-test-helpers.ts';
-import type { WorkflowStep } from './typed-test-helpers.ts';
 import {
   WORKFLOW_PATH,
   commandText,
@@ -79,32 +77,42 @@ export const BASE_MANIFEST_PARAMS = {
 };
 
 export function useWorkflowFixture(): WorkflowFixture {
-  const ctx: WorkflowFixture = {
-    workflow: { __placeholder: true } satisfies Record<string, unknown>,
-    codeReviewJob: { __placeholder: true } satisfies Record<string, unknown>,
-    postStep: { __placeholder: true } satisfies WorkflowStep,
-    postScript: '',
-  };
-  beforeAll(() => {
+  let cached: {
+    workflow: Record<string, unknown>;
+    codeReviewJob: Record<string, unknown>;
+    postStep: WorkflowFixture['postStep'];
+    postScript: string;
+  } | null = null;
+
+  function ensureLoaded() {
+    if (cached) return cached;
     const workflowYml = readRootFile(WORKFLOW_PATH);
     const workflow = parseWorkflowYaml(workflowYml);
     const jobs = workflow.jobs;
     if (!jobs) throw new Error(`${WORKFLOW_PATH} has no jobs`);
     const codeReviewJob = jobs['code-review'];
-    expect(
-      codeReviewJob,
-      'workflow should contain job: code-review',
-    ).toBeTruthy();
     if (!codeReviewJob)
       throw new Error('workflow should contain job: code-review');
     const postStep = stepNamed(codeReviewJob, 'Post OCR results');
     const postScript = commandText(postStep);
-    ctx.workflow = workflow;
-    ctx.codeReviewJob = codeReviewJob;
-    ctx.postStep = postStep;
-    ctx.postScript = postScript;
-  });
-  return ctx;
+    cached = { workflow, codeReviewJob, postStep, postScript };
+    return cached;
+  }
+
+  return {
+    get workflow() {
+      return ensureLoaded().workflow;
+    },
+    get codeReviewJob() {
+      return ensureLoaded().codeReviewJob;
+    },
+    get postStep() {
+      return ensureLoaded().postStep;
+    },
+    get postScript() {
+      return ensureLoaded().postScript;
+    },
+  };
 }
 
 export function makeLoadFunction(ctx: WorkflowFixture) {
@@ -126,9 +134,8 @@ export function makeLoadFunction(ctx: WorkflowFixture) {
       });
     }
     const fn = sandbox[funcName];
-    expect(typeof fn, `${funcName} should be defined after vm execution`).toBe(
-      'function',
-    );
+    if (typeof fn !== 'function')
+      throw new Error(`${funcName} should be defined after vm execution`);
     return asVmFunction(fn);
   };
 }
@@ -157,10 +164,8 @@ export function makeLoadFunctionsTogether(ctx: WorkflowFixture) {
       );
     }
     for (const name of funcNames) {
-      expect(
-        typeof sandbox[name],
-        `${name} should be defined after vm execution`,
-      ).toBe('function');
+      if (typeof sandbox[name] !== 'function')
+        throw new Error(`${name} should be defined after vm execution`);
     }
     return sandbox;
   };

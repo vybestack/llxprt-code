@@ -17,17 +17,36 @@ import {
   type ToolResult,
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import type { IAsyncTaskService, AsyncTaskInfo } from '../interfaces/index.js';
+import type {
+  IAsyncTaskService,
+  AsyncWorkInfo,
+  SubagentTaskInfo,
+  ShellJobInfo,
+} from '../interfaces/index.js';
 import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import {
+  formatDuration,
+  formatSubagentDetails,
+  formatSubagentDisplay,
+  statusIcon,
+} from './check-async-tasks-subagent-formatter.js';
+import {
+  formatShellDetails,
+  formatShellDisplay,
+} from './check-async-tasks-shell-formatter.js';
 
 export interface CheckAsyncTasksParams {
   task_id?: string;
+  action?: 'list' | 'peek' | 'cancel';
 }
 
 export interface CheckAsyncTasksToolDependencies {
   getAsyncTaskService?: () => IAsyncTaskService | undefined;
 }
+
+const SERVICE_UNAVAILABLE_MSG =
+  'Async task service is unavailable. Please configure async tasks before invoking this tool.';
 
 function resolveAsyncTaskService(
   dependenciesOrService: CheckAsyncTasksToolDependencies | IAsyncTaskService,
@@ -38,16 +57,12 @@ function resolveAsyncTaskService(
   return dependenciesOrService.getAsyncTaskService?.();
 }
 
-function getTaskStartTime(task: AsyncTaskInfo): number {
-  return task.launchedAt ?? Date.now();
+function isSubagent(task: AsyncWorkInfo): task is SubagentTaskInfo {
+  return task.kind === 'subagent';
 }
 
-function getSubagentName(task: AsyncTaskInfo): string {
-  return task.subagentName ?? task.name ?? task.id;
-}
-
-function getGoalPrompt(task: AsyncTaskInfo): string {
-  return task.goalPrompt ?? '';
+function isShell(task: AsyncWorkInfo): task is ShellJobInfo {
+  return task.kind === 'shell';
 }
 
 class CheckAsyncTasksInvocation extends BaseToolInvocation<
@@ -66,6 +81,9 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
   }
 
   override getDescription(): string {
+    if (this.params.action === 'cancel' && this.params.task_id) {
+      return `Cancel async task '${this.params.task_id}'`;
+    }
     if (this.params.task_id) {
       return `Check status of async task '${this.params.task_id}'`;
     }
@@ -73,11 +91,28 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
   }
 
   override async execute(): Promise<ToolResult> {
-    if (this.params.task_id) {
-      return this.executePeek(this.params.task_id);
-    }
+    const action = this.resolveAction();
 
+    if (action === 'cancel') {
+      return this.executeCancel(this.params.task_id ?? '');
+    }
+    if (action === 'peek') {
+      return this.executePeek(this.params.task_id ?? '');
+    }
     return this.executeList();
+  }
+
+  private resolveAction(): 'list' | 'peek' | 'cancel' {
+    if (this.params.action === 'cancel') {
+      return 'cancel';
+    }
+    if (this.params.action === 'peek') {
+      return 'peek';
+    }
+    if (this.params.action === 'list') {
+      return 'list';
+    }
+    return this.params.task_id ? 'peek' : 'list';
   }
 
   private executeList(): ToolResult {
@@ -106,19 +141,13 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     lines.push('Details:');
 
     for (const task of tasks) {
-      const statusIcon = this.statusIcon(task.status);
-      const duration = this.formatDuration(task.launchedAt, task.completedAt);
-      lines.push(`${statusIcon} [${task.id}] - ${task.status} (${duration})`);
+      lines.push(this.summaryLine(task));
     }
 
-    const llmContent = lines.join('\n');
-    const displayLines = tasks.map((t) => {
-      const icon = this.statusIcon(t.status);
-      return `${icon} **${t.id}** - ${t.status}`;
-    });
+    const displayLines = tasks.map((t) => this.displaySummaryLine(t));
 
     return {
-      llmContent,
+      llmContent: lines.join('\n'),
       returnDisplay: displayLines.join('\n'),
       metadata: {
         count: tasks.length,
@@ -130,7 +159,21 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     };
   }
 
-  private executePeek(taskId: string): ToolResult {
+  private summaryLine(task: AsyncWorkInfo): string {
+    const icon = statusIcon(task.status);
+    const duration = formatDuration(task.launchedAt, task.completedAt);
+    if (isShell(task)) {
+      return `${icon} [${task.id}] shell - ${task.status} (${duration})`;
+    }
+    return `${icon} [${task.id}] ${task.status} (${duration})`;
+  }
+
+  private displaySummaryLine(task: AsyncWorkInfo): string {
+    const icon = statusIcon(task.status);
+    return `${icon} **${task.id}** - ${task.status}`;
+  }
+
+  private async executePeek(taskId: string): Promise<ToolResult> {
     const task = this.taskService.getTask(taskId);
 
     if (task) {
@@ -167,114 +210,81 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     };
   }
 
-  private formatTaskDetails(task: AsyncTaskInfo): ToolResult {
-    const details: Record<string, unknown> = {
-      id: task.id,
-      subagentName: getSubagentName(task),
-      goalPrompt: getGoalPrompt(task),
-      status: task.status,
-      launchedAt: new Date(getTaskStartTime(task)).toISOString(),
-      duration: this.formatDuration(task.launchedAt, task.completedAt),
-    };
-
-    if (
-      task.completedAt !== undefined &&
-      task.completedAt !== 0 &&
-      !Number.isNaN(task.completedAt)
-    ) {
-      details.completedAt = new Date(task.completedAt).toISOString();
+  private async executeCancel(taskId: string): Promise<ToolResult> {
+    if (!taskId) {
+      return {
+        llmContent: 'Cannot cancel: no task_id provided.',
+        returnDisplay: 'No task_id provided for cancel action.',
+        error: {
+          message: 'task_id is required for cancel action',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+      };
     }
 
-    const output = task.output;
-    if (output !== undefined && output !== '') {
-      details.output = task.output;
+    const exists =
+      this.taskService.getTask(taskId) ??
+      this.taskService.getTaskByPrefix(taskId).task;
+
+    if (!exists) {
+      return {
+        llmContent: `No async task found with ID or prefix '${taskId}'.`,
+        returnDisplay: `Task not found: ${taskId}`,
+        error: {
+          message: 'Task not found',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+      };
     }
 
-    if (task.error !== undefined && task.error !== '') {
-      details.error = task.error;
+    const cancelled = await this.taskService.cancel(exists.id);
+
+    if (cancelled) {
+      return {
+        llmContent: `Task ${exists.id} cancelled successfully.`,
+        returnDisplay: `**${exists.id}** cancelled.`,
+      };
     }
 
     return {
-      llmContent: JSON.stringify(details, null, 2),
-      returnDisplay: this.formatTaskDisplay(task),
-      metadata: details,
+      llmContent: `Task ${exists.id} was already terminal (not running).`,
+      returnDisplay: `**${exists.id}** was not running (already terminal).`,
     };
   }
 
-  private formatDuration(
-    startTime: number | undefined,
-    endTime?: number,
-  ): string {
-    const end = endTime ?? Date.now();
-    const durationMs = end - (startTime ?? end);
-    const seconds = Math.floor(durationMs / 1000);
-
-    if (seconds < 60) {
-      return `${seconds}s`;
+  private async formatTaskDetails(task: AsyncWorkInfo): Promise<ToolResult> {
+    if (isSubagent(task)) {
+      const details = formatSubagentDetails(task);
+      return {
+        llmContent: JSON.stringify(details, null, 2),
+        returnDisplay: formatSubagentDisplay(task),
+        metadata: details,
+      };
     }
-
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    if (minutes < 60) {
-      return `${minutes}m ${remainingSeconds}s`;
+    if (isShell(task)) {
+      const tail = this.taskService.getOutputTail(task.id);
+      const details = formatShellDetails(task, tail.output, tail.truncated);
+      return {
+        llmContent: JSON.stringify(details, null, 2),
+        returnDisplay: formatShellDisplay(task, tail.output),
+        metadata: details,
+      };
     }
-
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes}m`;
-  }
-
-  private formatTaskDisplay(task: AsyncTaskInfo): string {
-    const lines: string[] = [];
-    const icon = this.statusIcon(task.status);
-    const goalPrompt = getGoalPrompt(task);
-
-    lines.push(`${icon} **${getSubagentName(task)}**`);
-    lines.push(`ID: \`${task.id}\``);
-    lines.push(`Status: ${task.status}`);
-    lines.push(
-      `Goal: ${goalPrompt.substring(0, 100)}${goalPrompt.length > 100 ? '...' : ''}`,
-    );
-    lines.push(
-      `Duration: ${this.formatDuration(task.launchedAt, task.completedAt)}`,
-    );
-
-    const output = task.output as
-      | { emitted_vars?: Record<string, unknown> }
-      | undefined;
-    if (output?.emitted_vars && Object.keys(output.emitted_vars).length > 0) {
-      lines.push('Emitted variables:');
-      for (const [key, value] of Object.entries(output.emitted_vars)) {
-        const valueStr = String(value);
-        const truncated = valueStr.substring(0, 50);
-        const suffix = valueStr.length > 50 ? '...' : '';
-        lines.push(`  - ${key}: ${truncated}${suffix}`);
-      }
-    }
-
-    if (task.error) {
-      lines.push(`Error: ${task.error}`);
-    }
-    return lines.join('\n');
-  }
-
-  private statusIcon(status: AsyncTaskInfo['status']): string {
-    if (status === 'completed') {
-      return '[OK]';
-    }
-    if (status === 'failed') {
-      return '[FAILED]';
-    }
-    return '';
+    return unreachable(task);
   }
 }
 
+function unreachable(task: never): ToolResult {
+  throw new Error(`Unhandled task kind: ${JSON.stringify(task)}`);
+}
+
 /**
- * Tool that allows querying the status of async tasks.
- * Two modes:
- * - List mode (no task_id): Shows summary of all tasks
- * - Peek mode (with task_id): Shows detailed info for specific task
+ * Tool that allows querying the status of async tasks and cancelling them.
+ * Modes:
+ * - List mode (no task_id, action omitted or 'list'): Shows summary of all tasks
+ * - Peek mode (task_id provided, action omitted or 'peek'): Shows detailed info for a specific task.
+ *   For shell jobs, includes a bounded output tail.
+ * - Cancel mode (action='cancel' + task_id): Cancels a running task.
  */
 export class CheckAsyncTasksTool extends BaseDeclarativeTool<
   CheckAsyncTasksParams,
@@ -290,8 +300,10 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
     super(
       CheckAsyncTasksTool.Name,
       'Check Async Tasks',
-      'Check the status of background async tasks. Call with no arguments to list all tasks, ' +
-        'or provide a task_id (or prefix) to get detailed info about a specific task.',
+      'Check the status of background async tasks (subagent tasks and managed shell jobs). ' +
+        'Call with no arguments to list all tasks, ' +
+        'provide a task_id (or prefix) to get detailed info about a specific task, ' +
+        'or use action "cancel" with a task_id to stop a running task.',
       Kind.Think,
       {
         type: 'object',
@@ -300,7 +312,14 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
           task_id: {
             type: 'string',
             description:
-              'Optional task ID or unique prefix to get details for a specific task.',
+              'Optional task ID or unique prefix to get details for a specific task, or to cancel.',
+          },
+          action: {
+            type: 'string',
+            enum: ['list', 'peek', 'cancel'],
+            description:
+              'Optional action: "list" (default when no task_id), "peek" (default when task_id given), ' +
+              'or "cancel" to stop a running task (requires task_id).',
           },
         },
       },
@@ -314,9 +333,7 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
     const service = resolveAsyncTaskService(this.dependencies);
 
     if (!service) {
-      throw new Error(
-        'AsyncTaskManager service is unavailable. Please configure async tasks before invoking this tool.',
-      );
+      throw new Error(SERVICE_UNAVAILABLE_MSG);
     }
 
     return new CheckAsyncTasksInvocation(params, service, messageBus);
@@ -325,9 +342,7 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
   async execute(params: CheckAsyncTasksParams): Promise<ToolResult> {
     const service = resolveAsyncTaskService(this.dependencies);
     if (!service) {
-      throw new Error(
-        'AsyncTaskManager service is unavailable. Please configure async tasks before invoking this tool.',
-      );
+      throw new Error(SERVICE_UNAVAILABLE_MSG);
     }
     return new CheckAsyncTasksInvocation(params, service, {
       requestConfirmation: async () => ToolConfirmationOutcome.ProceedOnce,

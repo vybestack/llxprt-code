@@ -6,7 +6,6 @@
 
 import { execFileSync } from 'node:child_process';
 import vm from 'node:vm';
-import { expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { asRecord } from './typed-test-helpers.ts';
@@ -54,16 +53,17 @@ export function stepNamed(
   job: WorkflowJob | undefined,
   name: string,
 ): WorkflowStep {
-  expect(job?.steps, 'job should have a steps array').toBeDefined();
+  if (job?.steps === undefined)
+    throw new Error('job should have a steps array');
   const step = job?.steps?.find((candidate) => candidate.name === name);
-  expect(step, `job should contain step: ${name}`).toBeTruthy();
   if (!step) throw new Error(`job should contain step: ${name}`);
   return step;
 }
 
 export function expectContainsAll(value: string, snippets: string[]): void {
   for (const snippet of snippets) {
-    expect(value).toContain(snippet);
+    if (!value.includes(snippet))
+      throw new Error(`value should contain snippet: "${snippet}"`);
   }
 }
 
@@ -91,28 +91,61 @@ export function commonCredentialInput(): string {
 }
 
 export function expectCommonCredentialsRedacted(sanitized: string): void {
-  expect(sanitized).toContain('Authorization: Bearer [REDACTED]');
-  expect(sanitized).toContain('Authorization: Basic [REDACTED]');
-  expect(sanitized).toContain('Authorization: token [REDACTED]');
-  expect(sanitized).toContain('Authorization: ApiKey [REDACTED]');
-  expect(sanitized).toContain('Authorization: [REDACTED]');
-  expect(sanitized).toContain('x-api-key: [REDACTED]');
-  expect(sanitized).toContain('api_key=[REDACTED]');
-  expect(sanitized).toContain('access_token=[REDACTED]');
-  expect(sanitized).toContain('refresh_token=[REDACTED]');
-  expect(sanitized).toContain('id_token=[REDACTED]');
-  expect(sanitized).toContain('?key=[REDACTED]');
-  expect(sanitized).toContain('&token=[REDACTED]');
-  expect(sanitized).toContain('token=[REDACTED]');
-  expect(sanitized).toContain('secret=[REDACTED]');
+  if (!sanitized.includes('Authorization: Bearer [REDACTED]'))
+    throw new Error(
+      'sanitized output should contain: Authorization: Bearer [REDACTED]',
+    );
+  if (!sanitized.includes('Authorization: Basic [REDACTED]'))
+    throw new Error(
+      'sanitized output should contain: Authorization: Basic [REDACTED]',
+    );
+  if (!sanitized.includes('Authorization: token [REDACTED]'))
+    throw new Error(
+      'sanitized output should contain: Authorization: token [REDACTED]',
+    );
+  if (!sanitized.includes('Authorization: ApiKey [REDACTED]'))
+    throw new Error(
+      'sanitized output should contain: Authorization: ApiKey [REDACTED]',
+    );
+  if (!sanitized.includes('Authorization: [REDACTED]'))
+    throw new Error(
+      'sanitized output should contain: Authorization: [REDACTED]',
+    );
+  if (!sanitized.includes('x-api-key: [REDACTED]'))
+    throw new Error('sanitized output should contain: x-api-key: [REDACTED]');
+  if (!sanitized.includes('api_key=[REDACTED]'))
+    throw new Error('sanitized output should contain: api_key=[REDACTED]');
+  if (!sanitized.includes('access_token=[REDACTED]'))
+    throw new Error('sanitized output should contain: access_token=[REDACTED]');
+  if (!sanitized.includes('refresh_token=[REDACTED]'))
+    throw new Error(
+      'sanitized output should contain: refresh_token=[REDACTED]',
+    );
+  if (!sanitized.includes('id_token=[REDACTED]'))
+    throw new Error('sanitized output should contain: id_token=[REDACTED]');
+  if (!sanitized.includes('?key=[REDACTED]'))
+    throw new Error('sanitized output should contain: ?key=[REDACTED]');
+  if (!sanitized.includes('&token=[REDACTED]'))
+    throw new Error('sanitized output should contain: &token=[REDACTED]');
+  if (!sanitized.includes('token=[REDACTED]'))
+    throw new Error('sanitized output should contain: token=[REDACTED]');
+  if (!sanitized.includes('secret=[REDACTED]'))
+    throw new Error('sanitized output should contain: secret=[REDACTED]');
   for (const credential of Object.values(COMMON_CREDENTIALS)) {
-    expect(sanitized).not.toContain(credential);
-    expect(sanitized).not.toContain(
-      credential.slice(0, Math.floor(credential.length / 2)),
-    );
-    expect(sanitized).not.toContain(
-      credential.slice(Math.ceil(credential.length / 2)),
-    );
+    if (sanitized.includes(credential))
+      throw new Error(
+        `sanitized output must not contain credential: "${credential}"`,
+      );
+    if (
+      sanitized.includes(credential.slice(0, Math.floor(credential.length / 2)))
+    )
+      throw new Error(
+        `sanitized output must not contain credential prefix: "${credential.slice(0, Math.floor(credential.length / 2))}"`,
+      );
+    if (sanitized.includes(credential.slice(Math.ceil(credential.length / 2))))
+      throw new Error(
+        `sanitized output must not contain credential suffix: "${credential.slice(Math.ceil(credential.length / 2))}"`,
+      );
   }
 }
 
@@ -264,13 +297,11 @@ export function extractFunctionSource(
     `(?:async\\s+)?function\\s+${escapedFunctionName}(?![A-Za-z0-9_$])`,
   );
   const match = declarationPattern.exec(source);
-  expect(match, `script should define ${functionName}`).toBeTruthy();
-  const start = match?.index ?? -1;
+  if (!match) throw new Error(`script should define ${functionName}`);
+  const start = match.index;
   const bodyStart = source.indexOf('{', start);
-  expect(
-    bodyStart,
-    `${functionName} should have a function body`,
-  ).toBeGreaterThanOrEqual(0);
+  if (bodyStart < 0)
+    throw new Error(`${functionName} should have a function body`);
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
     const char = source[index];
@@ -420,16 +451,14 @@ export function makePostSanitizer(
   const redactionMatch = postScript.match(
     /const\s+REDACTION\s*=\s*(["'])([^"'\n]*)\1/,
   );
-  expect(
-    redactionMatch,
-    'script should define REDACTION as a single- or double-quoted string constant',
-  ).toBeTruthy();
-  expect(
-    redactionMatch?.[2],
-    'REDACTION constant should be non-empty',
-  ).toBeTruthy();
+  if (!redactionMatch)
+    throw new Error(
+      'script should define REDACTION as a single- or double-quoted string constant',
+    );
+  if (!redactionMatch[2])
+    throw new Error('REDACTION constant should be non-empty');
   const source = [
-    `const REDACTION = ${JSON.stringify(redactionMatch?.[2] ?? '')};`,
+    `const REDACTION = ${JSON.stringify(redactionMatch[2] ?? '')};`,
     `const ocrTokenForRedaction = ${JSON.stringify(token)};`,
     `const ocrUrlForRedaction = ${JSON.stringify(url)};`,
     extractFunctionSource(postScript, 'escapeRegExp'),
@@ -441,18 +470,14 @@ export function makePostSanitizer(
 
 function notifySanitizerScript(notifyRun: string): string {
   const start = notifyRun.indexOf('sanitize_diagnostics() {');
-  expect(
-    start,
-    'notify script should define sanitize_diagnostics',
-  ).toBeGreaterThanOrEqual(0);
+  if (start < 0)
+    throw new Error('notify script should define sanitize_diagnostics');
   const end = notifyRun.indexOf(
     '\nnotify_ocr_infrastructure_failure() {',
     start,
   );
-  expect(
-    end,
-    'sanitize_diagnostics should precede notify function',
-  ).toBeGreaterThan(start);
+  if (end <= start)
+    throw new Error('sanitize_diagnostics should precede notify function');
   const sanitizer = notifyRun.slice(start, end);
   return [
     'set -uo pipefail',

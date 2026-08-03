@@ -13,7 +13,12 @@
 import type { SlashCommand, CommandContext } from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentTaskInfo,
+  AgentSubagentTaskInfo,
+  AgentShellJobInfo,
+} from '@vybestack/llxprt-code-agents';
 
 function formatDuration(startTime: number, endTime?: number): string {
   const end = endTime ?? Date.now();
@@ -38,22 +43,50 @@ const STATUS_ICONS: Record<string, string> = {
   failed: '[FAILED]',
 };
 
-interface TaskDisplayFields {
-  id: string;
-  status: string;
-  launchedAt: number;
-  completedAt?: number;
-  goalPrompt: string;
+function statusIcon(status: string): string {
+  return STATUS_ICONS[status] ?? '[CANCELLED]';
 }
 
-function formatTask(task: TaskDisplayFields): string {
-  const statusIcon = STATUS_ICONS[task.status] ?? '[CANCELLED]';
+function formatSubagentTask(task: AgentSubagentTaskInfo): string {
+  const icon = statusIcon(task.status);
   const duration = formatDuration(task.launchedAt, task.completedAt);
   const goalPreview =
     task.goalPrompt.length > 40
       ? task.goalPrompt.substring(0, 40) + '...'
       : task.goalPrompt;
-  return `${statusIcon} ${task.id}  ${duration}\n   Goal: ${goalPreview}`;
+  return `${icon} ${task.id}  ${duration}\n   Goal: ${goalPreview}`;
+}
+
+function formatShellJob(job: AgentShellJobInfo): string {
+  const icon = statusIcon(job.status);
+  const duration = formatDuration(job.launchedAt, job.completedAt);
+  const cmdPreview =
+    job.command.length > 60
+      ? job.command.substring(0, 60) + '...'
+      : job.command;
+  const exitInfo = formatExitInfo(job);
+  return `${icon} ${job.id}  ${duration}\n   Command: ${cmdPreview}${exitInfo}`;
+}
+
+function formatExitInfo(job: AgentShellJobInfo): string {
+  if (job.status === 'running') return '';
+  if (job.failureReason !== undefined) {
+    return `\n   Failure: ${job.failureReason}`;
+  }
+  if (job.signal !== undefined) {
+    return `\n   Signal: ${job.signal}`;
+  }
+  if (job.exitCode !== undefined) {
+    return `\n   Exit: ${job.exitCode}`;
+  }
+  return '';
+}
+
+function formatTask(task: AgentTaskInfo): string {
+  if (task.kind === 'subagent') {
+    return formatSubagentTask(task);
+  }
+  return formatShellJob(task);
 }
 
 function getRunningTaskIds(context: CommandContext): string[] {
@@ -105,11 +138,11 @@ function reportCancelResult(
   );
 }
 
-function endTaskViaAgent(
+async function endTaskViaAgent(
   context: CommandContext,
   agent: Agent,
   taskId: string,
-): void {
+): Promise<void> {
   let task = agent.tasks.get(taskId);
   if (!task) {
     const prefixMatches = agent.tasks
@@ -139,7 +172,7 @@ function endTaskViaAgent(
     );
     return;
   }
-  reportCancelResult(context, task.id, agent.tasks.cancel(task.id));
+  reportCancelResult(context, task.id, await agent.tasks.cancel(task.id));
 }
 
 function endTaskViaAsyncTaskManager(
@@ -194,16 +227,51 @@ export const taskCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       action: (context: CommandContext) => {
         const agent = context.services.agent;
-        const tasks = agent
+        const tasks: readonly AgentTaskInfo[] | undefined = agent
           ? agent.tasks.list()
-          : context.services.config?.getAsyncTaskManager()?.getAllTasks();
+          : undefined;
 
+        // When no agent, fall back to config-level AsyncTaskManager and
+        // project subagent-only tasks into the same display path.
         if (!tasks) {
+          const mgr = context.services.config?.getAsyncTaskManager();
+          if (!mgr) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: 'AsyncTaskManager not available',
+              },
+              Date.now(),
+            );
+            return;
+          }
+          const rawTasks = mgr.getAllTasks();
+          if (rawTasks.length === 0) {
+            context.ui.addItem(
+              { type: MessageType.INFO, text: 'No async tasks.' },
+              Date.now(),
+            );
+            return;
+          }
+          const lines: string[] = ['Async Tasks:', ''];
+          for (const raw of rawTasks) {
+            const projected: AgentSubagentTaskInfo = {
+              kind: 'subagent',
+              id: raw.id,
+              subagentName: raw.subagentName,
+              goalPrompt: raw.goalPrompt,
+              status: raw.status,
+              launchedAt: raw.launchedAt,
+              ...(raw.completedAt !== undefined
+                ? { completedAt: raw.completedAt }
+                : {}),
+              ...(raw.error !== undefined ? { error: raw.error } : {}),
+            };
+            lines.push(formatSubagentTask(projected));
+            lines.push('');
+          }
           context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: 'AsyncTaskManager not available',
-            },
+            { type: MessageType.INFO, text: lines.join('\n') },
             Date.now(),
           );
           return;
@@ -219,15 +287,7 @@ export const taskCommand: SlashCommand = {
 
         const lines: string[] = ['Async Tasks:', ''];
         for (const task of tasks) {
-          lines.push(
-            formatTask({
-              id: task.id,
-              status: task.status,
-              launchedAt: task.launchedAt,
-              completedAt: task.completedAt,
-              goalPrompt: task.goalPrompt,
-            }),
-          );
+          lines.push(formatTask(task));
           lines.push('');
         }
         context.ui.addItem(
@@ -252,7 +312,7 @@ export const taskCommand: SlashCommand = {
           id.toLowerCase().startsWith(partialArg.toLowerCase()),
         );
       },
-      action: (context: CommandContext, args: string) => {
+      action: async (context: CommandContext, args: string) => {
         const taskId = args.trim();
         if (!taskId) {
           context.ui.addItem(
@@ -263,7 +323,7 @@ export const taskCommand: SlashCommand = {
         }
         const agent = context.services.agent;
         if (agent) {
-          endTaskViaAgent(context, agent, taskId);
+          await endTaskViaAgent(context, agent, taskId);
           return;
         }
         endTaskViaAsyncTaskManager(context, taskId);

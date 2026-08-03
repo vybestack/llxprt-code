@@ -85,6 +85,12 @@ function createFakeAsyncTaskService(
         ? { task: candidates[0], candidates }
         : { task: undefined, candidates };
     },
+    getOutputTail: (taskId: string) => ({
+      id: taskId,
+      output: '',
+      truncated: false,
+    }),
+    cancel: async () => false,
   };
 }
 
@@ -121,8 +127,20 @@ describe('Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', ()
   describe('CheckAsyncTasksTool checks task status through IAsyncTaskService', () => {
     it('checkAsyncTask returns correct status for known task', async () => {
       const tasks: AsyncTaskInfo[] = [
-        { id: 'task-1', name: 'Build', status: 'completed' },
-        { id: 'task-2', name: 'Test', status: 'running' },
+        {
+          kind: 'subagent',
+          id: 'task-1',
+          subagentName: 'Build',
+          goalPrompt: 'build',
+          status: 'completed',
+        },
+        {
+          kind: 'subagent',
+          id: 'task-2',
+          subagentName: 'Test',
+          goalPrompt: 'test',
+          status: 'running',
+        },
       ];
       const service = createFakeAsyncTaskService(tasks);
 
@@ -137,8 +155,20 @@ describe('Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', ()
 
     it('getTaskStatus returns all task statuses in ToolResult', async () => {
       const tasks: AsyncTaskInfo[] = [
-        { id: 'task-1', name: 'Build', status: 'completed' },
-        { id: 'task-2', name: 'Test', status: 'running' },
+        {
+          kind: 'subagent',
+          id: 'task-1',
+          subagentName: 'Build',
+          goalPrompt: 'build',
+          status: 'completed',
+        },
+        {
+          kind: 'subagent',
+          id: 'task-2',
+          subagentName: 'Test',
+          goalPrompt: 'test',
+          status: 'running',
+        },
       ];
       const service = createFakeAsyncTaskService(tasks);
 

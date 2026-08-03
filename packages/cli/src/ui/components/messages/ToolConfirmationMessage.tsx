@@ -28,6 +28,8 @@ import {
   REDIRECTION_WARNING_NOTE_TEXT,
   REDIRECTION_WARNING_TIP_LABEL,
   REDIRECTION_WARNING_TIP_TEXT,
+  BACKGROUND_NOTE_LABEL,
+  BACKGROUND_NOTE_TEXT,
 } from '../../textConstants.js';
 import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
@@ -251,6 +253,78 @@ function calculateAvailableBodyContentHeight(
 }
 
 /**
+ * Builds the redirection warning block and returns it with its height cost.
+ */
+function buildRedirectionWarning(terminalWidth: number): {
+  node: React.ReactNode;
+  height: number;
+} {
+  const safeWidth = Math.max(terminalWidth, 1);
+  const noteLength =
+    REDIRECTION_WARNING_NOTE_LABEL.length +
+    REDIRECTION_WARNING_NOTE_TEXT.length;
+  const tipLength =
+    REDIRECTION_WARNING_TIP_LABEL.length + REDIRECTION_WARNING_TIP_TEXT.length;
+  const noteLines = Math.ceil(noteLength / safeWidth);
+  const tipLines = Math.ceil(tipLength / safeWidth);
+  const spacerLines = 1;
+  return {
+    node: (
+      <>
+        <Box height={1} />
+        <Text color={theme.text.primary}>
+          <Text bold color={theme.text.primary}>
+            {REDIRECTION_WARNING_NOTE_LABEL}
+          </Text>
+          {REDIRECTION_WARNING_NOTE_TEXT}
+        </Text>
+        <Text color={theme.border.default}>
+          <Text bold color={theme.border.default}>
+            {REDIRECTION_WARNING_TIP_LABEL}
+          </Text>
+          {REDIRECTION_WARNING_TIP_TEXT}
+        </Text>
+      </>
+    ),
+    height: noteLines + tipLines + spacerLines,
+  };
+}
+
+/**
+ * Builds the background note block and returns it with its height cost. When
+ * `hasPrecedingWarning` is true the leading spacer is omitted (the preceding
+ * warning already provided the visual separation) and the reported height
+ * drops by one accordingly so the available-height accounting stays in sync
+ * with what is actually rendered.
+ */
+function buildBackgroundNote(
+  terminalWidth: number,
+  hasPrecedingWarning: boolean,
+): {
+  node: React.ReactNode;
+  height: number;
+} {
+  const safeWidth = Math.max(terminalWidth, 1);
+  const noteLength = BACKGROUND_NOTE_LABEL.length + BACKGROUND_NOTE_TEXT.length;
+  const noteLines = Math.ceil(noteLength / safeWidth);
+  const spacerLines = hasPrecedingWarning ? 0 : 1;
+  return {
+    node: (
+      <>
+        {hasPrecedingWarning ? null : <Box height={1} />}
+        <Text color={theme.text.primary}>
+          <Text bold color={theme.text.primary}>
+            {BACKGROUND_NOTE_LABEL}
+          </Text>
+          {BACKGROUND_NOTE_TEXT}
+        </Text>
+      </>
+    ),
+    height: noteLines + spacerLines,
+  };
+}
+
+/**
  * Build body content for exec confirmation.
  */
 function buildExecBodyContent(
@@ -266,6 +340,7 @@ function buildExecBodyContent(
   const containsRedirection = commandsToDisplay.some((cmd) =>
     hasRedirection(cmd),
   );
+  const isBackground = executionProps.isBackground === true;
 
   let bodyContentHeight = availableBodyContentHeight;
   let warnings: React.ReactNode = null;
@@ -275,41 +350,31 @@ function buildExecBodyContent(
   }
 
   if (containsRedirection) {
-    const safeWidth = Math.max(terminalWidth, 1);
-    const noteLength =
-      REDIRECTION_WARNING_NOTE_LABEL.length +
-      REDIRECTION_WARNING_NOTE_TEXT.length;
-    const tipLength =
-      REDIRECTION_WARNING_TIP_LABEL.length +
-      REDIRECTION_WARNING_TIP_TEXT.length;
-
-    const noteLines = Math.ceil(noteLength / safeWidth);
-    const tipLines = Math.ceil(tipLength / safeWidth);
-    const spacerLines = 1;
-    const warningHeight = noteLines + tipLines + spacerLines;
-
+    const { node, height } = buildRedirectionWarning(terminalWidth);
     if (bodyContentHeight !== undefined) {
       bodyContentHeight = Math.max(
-        bodyContentHeight - warningHeight,
+        bodyContentHeight - height,
         MINIMUM_MAX_HEIGHT,
       );
     }
+    warnings = node;
+  }
 
+  if (isBackground) {
+    const { node, height } = buildBackgroundNote(
+      terminalWidth,
+      warnings !== null,
+    );
+    if (bodyContentHeight !== undefined) {
+      bodyContentHeight = Math.max(
+        bodyContentHeight - height,
+        MINIMUM_MAX_HEIGHT,
+      );
+    }
     warnings = (
       <>
-        <Box height={1} />
-        <Text color={theme.text.primary}>
-          <Text bold color={theme.text.primary}>
-            {REDIRECTION_WARNING_NOTE_LABEL}
-          </Text>
-          {REDIRECTION_WARNING_NOTE_TEXT}
-        </Text>
-        <Text color={theme.border.default}>
-          <Text bold color={theme.border.default}>
-            {REDIRECTION_WARNING_TIP_LABEL}
-          </Text>
-          {REDIRECTION_WARNING_TIP_TEXT}
-        </Text>
+        {warnings}
+        {node}
       </>
     );
   }
