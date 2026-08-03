@@ -45,11 +45,11 @@ llxprt --sandbox-engine podman "review this code"
   inside the container. `GEMINI_API_KEY` and `GOOGLE_API_KEY` are no longer
   forwarded as container environment variables, and the `~/.config/gcloud`
   directory and the `GOOGLE_APPLICATION_CREDENTIALS` file are no longer mounted
-  (and that variable is no longer set inside the container). Gemini API keys
-  saved on the host with `/key save` and referenced by `auth-key-name` are
-  resolved inside the container through the
-  [credential proxy](#credential-proxy-container-mode-only) — the supported way
-  to authenticate Gemini from a sandbox. Note that Vertex AI, application
+  (and that variable is no longer set inside the container). The Gemini provider
+  itself still works: keys saved on the host with `/key save` are resolved
+  inside the container through the
+  [credential proxy](#credential-proxy-container-mode-only), either via
+  `/key load <name>` or a profile `auth-key-name`. Note that Vertex AI, application
   default credentials (ADC), and service-account authentication do **not** work
   from inside a container sandbox (see
   [Credential handling in containers](#credential-handling-in-containers)). The
@@ -276,11 +276,38 @@ crossings have been removed:
 - **The file named by `GOOGLE_APPLICATION_CREDENTIALS`** is no longer mounted,
   and that variable is no longer set inside the container.
 
-The supported way to authenticate Gemini from inside a container sandbox is to
-save an API key on the host with `/key save <name> <key>` and reference it by
-`auth-key-name`. The key is resolved inside the container through the
-[credential proxy](#credential-proxy-container-mode-only) and authenticates
-against the Gemini Developer API.
+The Gemini provider itself still works from inside a container sandbox. Only the
+environment-variable and credential-file routes were removed; named API keys are
+unaffected. Save the key once on the host:
+
+```
+/key save gemini-personal <your-api-key>
+```
+
+Then, from inside the sandbox, either load it interactively:
+
+```
+/key load gemini-personal
+```
+
+or reference it from a profile with `auth-key-name`, which resolves it
+automatically at startup. Either way the key is fetched over the
+[credential proxy](#credential-proxy-container-mode-only) rather than read from
+the container's environment, and authenticates against the Gemini Developer API.
+
+Which `/key` subcommands work where:
+
+| Subcommand               | On the host | Inside a container           |
+| ------------------------ | ----------- | ---------------------------- |
+| `/key load`              | yes         | yes (read via the proxy)     |
+| `/key list`, `/key show` | yes         | yes (read via the proxy)     |
+| `/key save`              | yes         | no — manage keys on the host |
+| `/key delete`            | yes         | no — manage keys on the host |
+
+`/key save` and `/key delete` fail inside the container with "API key management
+is not available in sandbox mode". That is deliberate: the proxy serves key
+reads but refuses writes, so the sandbox cannot alter what is stored on your
+host.
 
 Vertex AI, application default credentials (ADC), and service-account
 authentication do **not** work from inside a container sandbox. A proxy-resolved
@@ -315,8 +342,8 @@ What the proxy provides:
 
 - **Short-lived access tokens** — the container receives short-lived tokens, not
   your stored refresh tokens. Refresh tokens stay on the host.
-- **Key reads** — `/key list`, `/key show`, and key resolution for providers
-  read host-saved keys through the proxy.
+- **Key reads** — `/key load`, `/key list`, `/key show`, and key resolution for
+  providers read host-saved keys through the proxy.
 - **OAuth flows** — OAuth login opens the browser on the host; the container
   authenticates through the proxy.
 

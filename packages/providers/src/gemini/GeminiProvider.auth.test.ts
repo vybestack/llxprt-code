@@ -365,7 +365,10 @@ describe('GeminiProvider Authentication', () => {
     expect(error).toBeInstanceOf(Error);
     const message = (error as Error).message;
     expect(message).toContain('not available inside a container sandbox');
+    // Must point at both halves of the working path: save on the host, load
+    // inside the sandbox. Naming only one leaves the user stuck.
     expect(message).toContain('/key save');
+    expect(message).toContain('/key load');
     // The sandbox message must NOT direct the user to set GEMINI_API_KEY,
     // because that variable no longer crosses into the container.
     expect(message).not.toContain('Set GEMINI_API_KEY environment variable');
