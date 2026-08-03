@@ -123,7 +123,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     return `Update todo list with ${params.todos.length} items`;
   }
 
-  // Emit an update event and track the active in-progress item.
+  // Track the active in-progress item for interactive continuation.
   private trackInteractiveUpdate(
     todos: Todo[],
     sessionId: string,
@@ -136,7 +136,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       scopedAgentId,
     );
     contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
-    this.emitTodoUpdated(todos, sessionId, scopedAgentId);
   }
 
   private emitTodoUpdated(
@@ -182,6 +181,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       agentId,
       'TodoWrite',
     );
+    // Emitted here rather than inside the interactive/non-interactive
+    // branches so the update fires exactly once on every write path.
+    this.emitTodoUpdated(todos, sessionId, agentId);
 
     const { stateChange, shouldGenerateReminder, reminder } =
       this.computeStateChange(oldTodos, todos);
@@ -282,7 +284,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         (todo) => todo.status === 'in_progress',
       );
       serviceTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
-      this.emitTodoUpdated(todos, sessionId, scopedAgentId);
     } else {
       this.trackInteractiveUpdate(todos, sessionId, scopedAgentId);
     }

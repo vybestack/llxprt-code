@@ -1,0 +1,10 @@
+{
+  "model": "minimax-m3",
+  "source": "huggingface.co/MiniMaxAI/MiniMax-M3",
+  "revision": "f0e1c1e04d40177e4673a22097036854f536e9c0",
+  "sourceFile": "tokenizer.json",
+  "assetFile": "tokenizer.bpe",
+  "sha256": "9b423908eab5445f88a72b26a283d848da80884fde9e0b8e5e7a4fe495313f1e",
+  "license": "MiniMax-Community-License",
+  "conversion": "hf-bpe-to-tiktoken"
+}

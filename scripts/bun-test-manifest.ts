@@ -93,9 +93,34 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'agents',
+    files: [
+      'test-bun/generatingModelStamp.issue2511.bun.ts',
+      'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
+    ],
+  },
+  {
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      // Extension settings storage drives the REAL SecureStore against an
+      // in-memory keyring, so it needs no module mocking and is Bun-native.
+      'test-bun/settingsStorage.bun.ts',
+      // JSP/1 observation producer (issue #2779). Bun-native from the start:
+      // these are excluded from the Vitest selection so they run only here.
+      'src/observation/jspBounds.test.ts',
+      'src/observation/jspProducer.test.ts',
+      'src/observation/jspProducerState.test.ts',
+      'src/observation/jspRedaction.test.ts',
+      'src/observation/jspSchema.test.ts',
+      'src/observation/jspTransport.test.ts',
+      'src/observation/jspWiring.test.ts',
+      'src/observation/observationTap.test.ts',
+      // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
+      // and likewise excluded from the Vitest selection.
+      'src/utils/sandbox-ssh-agent-preflight.test.ts',
+      'src/zed-integration/zed-session-lifecycle.test.ts',
+      'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
   },
@@ -189,6 +214,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.issue2411.test.ts',
       'src/anthropic/AnthropicProvider.issue276.test.ts',
       'src/anthropic/AnthropicProvider.mediaBlock.test.ts',
+      'src/anthropic/AnthropicProvider.multiBlock.test.ts',
       'src/anthropic/AnthropicProvider.messaging.test.ts',
       'src/anthropic/AnthropicProvider.modelParams.test.ts',
       'src/anthropic/AnthropicProvider.oauth.test.ts',
@@ -203,6 +229,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.toolFormatDetection.test.ts',
       'src/anthropic/AnthropicProvider.tools.test.ts',
       'src/anthropic/AnthropicRateLimitHandler.test.ts',
+      'test-bun/AnthropicRequestBuilder.issue1738.bun.ts',
       'src/anthropic/AnthropicRequestBuilder.modelParams.test.ts',
       'src/anthropic/AnthropicResponseParser.issue1844.test.ts',
       'src/anthropic/AnthropicStreamProcessor.retryOwnership.test.ts',
@@ -335,10 +362,20 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/oauth-manager.spec.ts',
       'src/auth/oauth-manager.token-reuse.spec.ts',
       'src/auth/oauth-manager.wiring.spec.ts',
+      'src/auth/proxy/__tests__/concurrent-dispatch.test.ts',
       'src/auth/proxy/__tests__/credential-proxy-server.test.ts',
+      'src/auth/proxy/__tests__/frame-and-cancel.test.ts',
       'src/auth/proxy/__tests__/deprecation-guard.test.ts',
       'src/auth/proxy/__tests__/e2e-credential-flow.test.ts',
       'src/auth/proxy/__tests__/factory-detection-wiring.test.ts',
+      'src/auth/proxy/__tests__/github-broker-envelope.test.ts',
+      'src/auth/proxy/__tests__/github-broker-multistep.test.ts',
+      'src/auth/proxy/__tests__/github-broker-p10.test.ts',
+      'src/auth/proxy/__tests__/github-broker-p10b.test.ts',
+      'src/auth/proxy/__tests__/github-broker-security.test.ts',
+      'src/auth/proxy/__tests__/github-broker-watch.test.ts',
+      'src/auth/proxy/__tests__/github-broker-write-ops.test.ts',
+      'src/auth/proxy/__tests__/github-broker.test.ts',
       'src/auth/proxy/__tests__/integration.test.ts',
       'src/auth/proxy/__tests__/migration-completeness.test.ts',
       'src/auth/proxy/__tests__/oauth-exchange.spec.ts',
@@ -570,6 +607,12 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/runtime/statelessHardening.spec.ts',
       'src/synthetic/usageInfo.test.ts',
       'src/tokenizer-behavior.test.ts',
+      'src/tokenizers/Gpt56O200kPromptEstimator.test.ts',
+      'src/tokenizers/Gpt56ProviderUsageParity.test.ts',
+      'src/tokenizers/official/assetLoader.test.ts',
+      'src/tokenizers/official/officialTokenizers.test.ts',
+      'src/tokenizers/official/offlineAssets.test.ts',
+      'src/tokenizers/official/providerFramingSeparation.test.ts',
       'src/utils/cacheMetricsExtractor.test.ts',
       'src/utils/containerSandbox.test.ts',
       'src/utils/contentPreview.test.ts',
@@ -587,6 +630,23 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/utils/toolResponsePayload.test.ts',
       'src/zai/usageInfo.test.ts',
     ],
+  },
+  {
+    workspace: 'storage',
+    preload: 'test-setup-storage-isolation.ts',
+    files: [
+      'test-bun/credential-write-lock.bun.ts',
+      'test-bun/keyring-write-verification.bun.ts',
+      'test-bun/machine-secret.bun.ts',
+      'test-bun/machine-secret.concurrent-write.bun.ts',
+      'test-bun/secure-store.bun.ts',
+      'test-bun/secure-store.concurrent-write.bun.ts',
+      'test-bun/storage.bun.ts',
+    ],
+  },
+  {
+    workspace: 'tools',
+    files: ['test-bun/language-analysis.followup.bun.ts'],
   },
   {
     workspace: 'telemetry',
@@ -610,12 +670,47 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
   },
   {
+    workspace: 'acplint',
+    cwd: '.',
+    files: [
+      'scripts/tests/ci-acplint-workflow.test.ts',
+      'scripts/tests/validate-acplint-report.test.ts',
+    ],
+  },
+  {
     workspace: 'test-setup',
     cwd: '.',
     files: [
       'test-setup/augment-bun-vi.test.ts',
       'test-setup/stub-helpers.bun.test.ts',
     ],
+  },
+  {
+    // Bun-native tests for the PR-review Mermaid sanitizer (issue #2944).
+    // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
+    workspace: 'scripts-pr-review',
+    cwd: '.',
+    files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
+  },
+  {
+    // Bun-native tests for the OCR review workflow preview parser and
+    // docs-only classification (issue #2824). Vitest skips `*.bun.test.ts`;
+    // these run under Bun's native runner only.
+    workspace: 'scripts-ocr-review',
+    cwd: '.',
+    files: [
+      'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
+      'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
+      'scripts/tests/ocr-review-workflow.bun.test.ts',
+    ],
+  },
+  {
+    // Bun-native regression test for the issue-planner filesystem-confinement
+    // step (issue #2960): vitest skips `*.bun.test.ts`; this runs under Bun's
+    // native runner only.
+    workspace: 'issue-planner-confinement',
+    cwd: '.',
+    files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
   },
 ];
 

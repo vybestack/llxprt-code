@@ -153,7 +153,7 @@ interface QueryMatch {
 
 let parser: ParserType | null = null;
 let bashLanguage: Language | null = null;
-let initializationAttempted = false;
+let initializationPromise: Promise<boolean> | null = null;
 let initializationError: Error | null = null;
 
 /**
@@ -169,17 +169,16 @@ export function getInitializationError(): Error | null {
  * Returns true if initialization succeeded, false otherwise.
  * Safe to call multiple times - will return cached result.
  */
-export async function initializeParser(): Promise<boolean> {
-  if (parser && bashLanguage) {
-    return true;
+export function initializeParser(): Promise<boolean> {
+  if (initializationPromise) {
+    return initializationPromise;
   }
 
-  if (initializationAttempted) {
-    return parser !== null;
-  }
+  initializationPromise = performParserInitialization();
+  return initializationPromise;
+}
 
-  initializationAttempted = true;
-
+async function performParserInitialization(): Promise<boolean> {
   try {
     const TreeSitter = (await import('web-tree-sitter')) as TreeSitterModule;
     const parserCandidate = TreeSitter.Parser;
@@ -817,7 +816,7 @@ function extractCommands(
 export function resetParser(): void {
   parser = null;
   bashLanguage = null;
-  initializationAttempted = false;
+  initializationPromise = null;
   initializationError = null;
 }
 

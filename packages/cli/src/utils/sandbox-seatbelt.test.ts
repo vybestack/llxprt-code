@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { buildSeatbeltArgs, runSeatbeltSandbox } from './sandbox-seatbelt.js';
+import {
+  buildSeatbeltArgs,
+  runSeatbeltSandbox,
+  wireSeatbeltProxyCloseHandler,
+} from './sandbox-seatbelt.js';
 import {
   assertSeatbeltProxyPortAvailable,
   captureSeatbeltHarnessProcessState,
@@ -847,4 +853,52 @@ describe.sequential('#1456 Seatbelt network policy', () => {
       }
     },
   );
+});
+
+describe('wireSeatbeltProxyCloseHandler', () => {
+  /**
+   * The credential proxy is a child of this process and closes as part of
+   * normal teardown once the sandbox has exited. Treating every close as fatal
+   * called process.exit(1) at the end of an otherwise successful session, which
+   * surfaced in CI as an unhandled "process.exit unexpectedly called with 1".
+   */
+  function makeEmitterPair() {
+    const proxyProcess = new EventEmitter() as unknown as ChildProcess;
+    const sandboxProcess = new EventEmitter() as unknown as ChildProcess;
+    Object.defineProperty(sandboxProcess, 'pid', { value: 0 });
+    return { proxyProcess, sandboxProcess };
+  }
+
+  it('does not terminate the CLI when the proxy closes after the sandbox exited', () => {
+    const { proxyProcess, sandboxProcess } = makeEmitterPair();
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    try {
+      wireSeatbeltProxyCloseHandler(proxyProcess, sandboxProcess, 'proxy-cmd');
+
+      (sandboxProcess as unknown as EventEmitter).emit('exit', 0, null);
+      (proxyProcess as unknown as EventEmitter).emit('close', 0, null);
+
+      expect(exitSpy).not.toHaveBeenCalled();
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('terminates the CLI when the proxy dies while the sandbox is still running', () => {
+    const { proxyProcess, sandboxProcess } = makeEmitterPair();
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    try {
+      wireSeatbeltProxyCloseHandler(proxyProcess, sandboxProcess, 'proxy-cmd');
+
+      (proxyProcess as unknown as EventEmitter).emit('close', 1, null);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
 });

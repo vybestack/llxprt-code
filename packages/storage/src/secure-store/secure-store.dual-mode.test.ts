@@ -125,6 +125,7 @@ function createStore(
 ): SecureStore {
   return new SecureStore(serviceName, {
     fallbackDir,
+    lockDir: path.join(fallbackDir, 'locks'),
     keyringLoader,
     fallbackPolicy,
     machineSecretLoader: NULL_MACHINE_SECRET_LOADER,

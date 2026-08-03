@@ -41,6 +41,12 @@ import {
 } from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import {
+  observeAgentEvent,
+  observeAssistantMessageCommitted,
+  observeTurnFailed,
+  observeTurnStarted,
+} from '../../../observation/jspWiring.js';
 
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 export type SubmissionDisposition =
@@ -267,6 +273,7 @@ function useProcessAgentEvent(
   const latestHandlers = useRef(handlers);
   latestHandlers.current = handlers;
   return useCallback<AgentEventRouter>((event, userMessageTimestamp) => {
+    observeAgentEvent(event);
     const result = dispatchAgentEvent(
       event,
       {
@@ -638,6 +645,7 @@ async function runSubmitQueryCore(
   );
   cbd.setIsResponding(true);
   cbd.setInitError(null);
+  observeTurnStarted();
 
   try {
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
@@ -646,6 +654,12 @@ async function runSubmitQueryCore(
     // errors (e.g. AbortError or auth failures from a cancelled request)
     // must not leak into the newer turn (issue #2259).
     if (isCurrentTurn(cbd, turn)) {
+      // executeStream threw before the agent emitted 'done', so the tap never
+      // saw a turn end. Close the observed turn here or the producer reports
+      // an active turn for the rest of the session. Scoped to the current
+      // turn for the same reason the error handling below is: a superseded
+      // turn must not end the turn that replaced it.
+      observeTurnFailed();
       handleSubmissionError(
         error,
         cbd.addItem,
@@ -739,7 +753,14 @@ async function executeStream(
     return;
   }
 
-  if (deps.pendingHistoryItemRef.current) {
+  const pending = deps.pendingHistoryItemRef.current;
+  if (pending) {
+    if (pending.type === 'gemini' || pending.type === 'gemini_content') {
+      const sanitized = deps.sanitizeContent(pending.text);
+      if (!sanitized.blocked) {
+        observeAssistantMessageCommitted(sanitized.text, Date.now());
+      }
+    }
     deps.flushPendingHistoryItem(turn.userMessageTimestamp);
     deps.setPendingHistoryItem(null);
   }

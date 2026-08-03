@@ -222,6 +222,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace tools",
     "test:ci": "vitest run",
     "typecheck": "tsc --noEmit"
   },

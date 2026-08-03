@@ -26,6 +26,7 @@ import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
 import { firstNonEmptyString } from '../utils/coalesce.js';
+import { createGitHubBrokerClient } from './githubBrokerClient.js';
 
 // @plan PLAN-20260610-ISSUE1592.P01
 // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
@@ -289,6 +290,9 @@ function buildFeatureArgs(
         | undefined,
     ),
     useRipgrep: useRipgrepSetting,
+    // @plan PLAN-20260731-GHBROKER.P15
+    // @requirement REQ-003
+    githubBrokerClient: createGitHubBrokerClient(),
     shouldUseNodePtyShell: profileSettingsWithTools.shouldUseNodePtyShell,
     allowPtyThemeOverride: profileSettingsWithTools.allowPtyThemeOverride,
     ptyScrollbackLimit: profileSettingsWithTools.ptyScrollbackLimit,

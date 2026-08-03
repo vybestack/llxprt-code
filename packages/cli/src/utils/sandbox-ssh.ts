@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync, type ChildProcess } from 'node:child_process';
+import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -34,6 +34,15 @@ export interface PortForwardingResult {
 const CONTAINER_SSH_AGENT_SOCK = '/ssh-agent';
 const CONTAINER_CREDENTIAL_PROXY_SOCK = '/tmp/llxprt-credential.sock';
 const SSH_TUNNEL_POLL_TIMEOUT_MS = 10000;
+const SSH_AGENT_PROBE_TIMEOUT_MS = 5000;
+const SSH_AGENT_ENV_PREFIX = 'SSH_AUTH_SOCK=';
+const SSH_AGENT_NO_IDENTITIES_PATTERN = /agent has no identities/i;
+const SSH_AGENT_EMPTY_WARNING =
+  [
+    'SSH agent socket is present, but no identities are loaded (ssh-add -l reported empty).',
+    'SSH forwarding is enabled, but git SSH auth will fail until a key is loaded.',
+    'Try: ssh-add ~/.ssh/id_ed25519',
+  ].join('\n') + '\n';
 
 export { SSH_TUNNEL_POLL_TIMEOUT_MS };
 export const createTunnelProcessCleanup = (tunnelProcess: ChildProcess) => {
@@ -69,6 +78,91 @@ export const createServerCleanup = (server: net.Server) => {
     }
   };
 };
+
+interface SshAgentProbe {
+  status: number | null;
+  output: string;
+  spawnError?: Error;
+}
+
+/**
+ * Lists the identities held by the agent behind `sshAuthSock`. Resolves for
+ * every outcome — a failed probe is a diagnostic dead end, not an error worth
+ * propagating into sandbox startup.
+ */
+function listSshAgentIdentities(sshAuthSock: string): Promise<SshAgentProbe> {
+  return new Promise((resolve) => {
+    const probe = spawn('ssh-add', ['-l'], {
+      env: { ...process.env, SSH_AUTH_SOCK: sshAuthSock },
+      timeout: SSH_AGENT_PROBE_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
+
+    let output = '';
+    const collect = (chunk: string) => {
+      output += chunk;
+    };
+    probe.stdout.setEncoding('utf8');
+    probe.stderr.setEncoding('utf8');
+    probe.stdout.on('data', collect);
+    probe.stderr.on('data', collect);
+
+    probe.on('error', (spawnError) => {
+      resolve({ status: null, output, spawnError });
+    });
+    probe.on('close', (status) => {
+      resolve({ status, output });
+    });
+  });
+}
+
+/**
+ * Warns when the agent being forwarded is reachable but holds no identities —
+ * the cause of "Permission denied (publickey)" inside a sandbox whose
+ * forwarding is otherwise wired up correctly.
+ *
+ * `ssh-add -l` exits 1 for any identity-listing failure, including a
+ * communication error with the agent, so the empty case is confirmed from the
+ * reported output rather than from the exit status alone. Every other outcome
+ * is debug-only: an inconclusive probe must not push guesswork at the user.
+ */
+async function warnIfSshAgentHasNoIdentities(
+  sshAuthSock: string,
+): Promise<void> {
+  const probe = await listSshAgentIdentities(sshAuthSock);
+
+  if (probe.spawnError) {
+    debugLogger.warn(
+      `Could not run ssh-add to check for loaded SSH agent identities: ${probe.spawnError.message}`,
+    );
+    return;
+  }
+
+  if (probe.status === 0) {
+    return;
+  }
+
+  if (
+    probe.status === 1 &&
+    SSH_AGENT_NO_IDENTITIES_PATTERN.test(probe.output)
+  ) {
+    process.stderr.write(SSH_AGENT_EMPTY_WARNING);
+    return;
+  }
+
+  debugLogger.warn(
+    `Could not determine whether the SSH agent has identities loaded; ssh-add -l exited with status ${probe.status}.`,
+  );
+}
+
+/**
+ * True once a helper has configured the container to use the forwarded agent.
+ * A helper can decline (Podman refuses to override a non-host `--network`), and
+ * the empty-agent warning must not claim forwarding is enabled in that case.
+ */
+function containerWillReceiveSshAgent(args: readonly string[]): boolean {
+  return args.some((arg) => arg.startsWith(SSH_AGENT_ENV_PREFIX));
+}
 
 /**
  * Routes SSH agent forwarding to the appropriate platform-specific helper.
@@ -114,6 +208,30 @@ export async function setupSshAgentForwarding(
     return {};
   }
 
+  const result = await dispatchSshAgentForwarding(
+    config,
+    args,
+    sshAuthSock,
+    options,
+  );
+
+  if (containerWillReceiveSshAgent(args)) {
+    await warnIfSshAgentHasNoIdentities(sshAuthSock);
+  }
+
+  return result;
+}
+
+/** Hands forwarding to the helper that matches the host platform and engine. */
+async function dispatchSshAgentForwarding(
+  config: { command: 'docker' | 'podman' | 'sandbox-exec' },
+  args: string[],
+  sshAuthSock: string,
+  options: {
+    reserveTunnelPort?: (port: number) => void;
+    excludedTunnelPorts?: ReadonlySet<number>;
+  },
+): Promise<SshAgentResult> {
   const platform = os.platform();
 
   if (platform === 'linux') {

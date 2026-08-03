@@ -40,10 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
-      # Serialize per issue so rapid edits/comments do not race on the single
-      # marker comment. In-flight runs complete rather than being cancelled.
+      # Collapse duplicate triggers for the same issue (e.g. an issue created
+      # with a label fires both `opened` and `labeled`) to a single run. The
+      # newest run wins; earlier in-flight runs are cancelled. This is safe
+      # because plan-comment reconciliation is idempotent — the surviving run
+      # converges the issue to exactly one marker comment. (#2972)
       group: 'issue-planner-${{ github.event.issue.number }}'
-      cancel-in-progress: false
+      cancel-in-progress: true
     if: |
       (github.event_name == 'issues') ||
       (github.event_name == 'issue_comment' &&
@@ -143,25 +146,47 @@ jobs:
           GH_TOKEN: '${{ github.token }}'
         run: |
           set -euo pipefail
-          issue_title="$(jq -r '.title' planner/issue.json)"
-          issue_title="${issue_title//\\/ }"
-          issue_title="${issue_title//\"/ }"
-          issue_title="${issue_title//$'\n'/ }"
-          issue_title="${issue_title//$'\r'/ }"
-          search_query="\"${issue_title}\""
-          # Use the boolean --merged search qualifier; the --state flag only
-          # accepts open|closed, so the old state value was invalid (#2747).
-          gh search prs "${search_query}" --repo "${REPO}" \
-            --merged --limit 10 --json number,title,state,url \
-            | jq -c '[.[] | { kind: "pr", number, title, state, url }]' \
-            > planner/related-prs.json
-          gh search issues "${search_query}" --repo "${REPO}" --limit 10 \
-            --json number,title,state,url \
-            | jq -c --argjson issue_number "${ISSUE_NUMBER}" \
-              '[.[] | select(.number != $issue_number) | { kind: "issue", number, title, state, url }]' \
-            > planner/related-issues.json
-          jq -s 'add' planner/related-prs.json planner/related-issues.json \
-            > planner/related-candidates.json
+          # Advisory candidate precompute — best effort, never fatal (#2972).
+          # The raw title is reduced to GitHub-search-safe keywords by the
+          # planner helper (stripping metacharacters and #NNN references) and
+          # written to planner/search-query.txt, so the title is never
+          # string-interpolated into a search query. Every failure — the
+          # helper, a gh search, or the merge — degrades to an empty candidate
+          # list rather than aborting the run (each guarded with `if !`).
+          if ! bun .github/scripts/issue-planner.ts --build-search-query planner; then
+            echo "::warning::Search-query helper failed; using empty candidates."
+            search_query=""
+          else
+            search_query="$(cat planner/search-query.txt)"
+          fi
+          printf '[]' > planner/related-prs.json
+          printf '[]' > planner/related-issues.json
+          if [[ -n "${search_query}" ]]; then
+            # Use the boolean --merged search qualifier; the --state flag only
+            # accepts open|closed, so the old state value was invalid (#2747).
+            # The query is quoted: gh search takes one positional query, so an
+            # unquoted expansion word-splits into extra args and errors (#2972).
+            if ! gh search prs "${search_query}" --repo "${REPO}" \
+                  --merged --limit 10 --json number,title,state,url \
+                  | jq -c '[.[] | { kind: "pr", number, title, state, url }]' \
+                  > planner/related-prs.json; then
+              echo "::warning::Related PR search failed; using empty candidates."
+              printf '[]' > planner/related-prs.json
+            fi
+            if ! gh search issues "${search_query}" --repo "${REPO}" --limit 10 \
+                  --json number,title,state,url \
+                  | jq -c --argjson issue_number "${ISSUE_NUMBER}" \
+                    '[.[] | select(.number != $issue_number) | { kind: "issue", number, title, state, url }]' \
+                    > planner/related-issues.json; then
+              echo "::warning::Related issue search failed; using empty candidates."
+              printf '[]' > planner/related-issues.json
+            fi
+          fi
+          if ! jq -s 'add' planner/related-prs.json planner/related-issues.json \
+                > planner/related-candidates.json; then
+            echo "::warning::Could not merge related candidates; using empty list."
+            printf '[]' > planner/related-candidates.json
+          fi
 
       - name: 'Extract /plan feedback'
         env:
@@ -193,13 +218,16 @@ jobs:
           # --allowed-tools syntax does NOT path-restrict writes (CLI
           # normalization strips parentheses), so this read-only checkout
           # except planner/ is the actual enforcement.
+          # Symlinks (workspace links, .bin shims) are lrwxrwxrwx on Linux and
+          # cannot be made read-only; prune them so the writable check does
+          # not false-positive.
           find . \
-            \( -path './.git' -o -path './planner' \) -prune -o \
+            \( -path './.git' -o -path './planner' -o -type l \) -prune -o \
             -exec chmod a-w {} +
           chmod u+w planner
           remaining_writable="$(
             find . \
-              \( -path './.git' -o -path './planner' \) -prune -o \
+              \( -path './.git' -o -path './planner' -o -type l \) -prune -o \
               \( -perm -u=w -o -perm -g=w -o -perm -o=w \) -print
           )"
           if [[ -n "${remaining_writable}" ]]; then

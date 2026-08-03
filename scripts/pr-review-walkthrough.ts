@@ -39,6 +39,7 @@ import {
   escapeMarkdownTableCell,
   computeMagnitude,
   gateSequenceDiagram,
+  sanitizeSequenceDiagram,
   type GroupTheme,
 } from './pr-review-walkthrough-parse.ts';
 
@@ -64,6 +65,7 @@ export {
   escapeMarkdownTableCell,
   computeMagnitude,
   gateSequenceDiagram,
+  sanitizeSequenceDiagram,
 };
 export type { GroupTheme };
 
@@ -658,9 +660,10 @@ async function buildSynthesisTail(
     validThemes,
     artifacts.changedFilePaths,
   );
-  const sequenceDiagram = shouldDiagram
+  const rawDiagram = shouldDiagram
     ? await runOptionalStage(reviewDir, prompts.sequenceDiagram, 'diagram')
     : '';
+  const sequenceDiagram = sanitizeSequenceDiagram(rawDiagram);
   const related = await runOptionalStage(reviewDir, prompts.related, 'related');
   return {
     walkthrough: String(walkthroughParsed.walkthrough ?? ''),

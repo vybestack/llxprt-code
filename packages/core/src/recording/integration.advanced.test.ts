@@ -21,7 +21,7 @@
  * End-to-end integration tests exercising the full recording → replay →
  * resume → continue lifecycle. Uses real filesystem, real services, no mocks.
  *
- * Property-based tests use @fast-check/vitest (≥30% of total).
+ * Property-based tests use fast-check (≥30% of total).
  */
 
 import { describe, expect, beforeEach, afterEach, it } from 'vitest';

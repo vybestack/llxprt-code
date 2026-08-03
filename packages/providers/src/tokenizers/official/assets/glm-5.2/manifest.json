@@ -1,0 +1,10 @@
+{
+  "model": "glm-5.2",
+  "source": "huggingface.co/zai-org/GLM-5.2",
+  "revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+  "sourceFile": "tokenizer.json",
+  "assetFile": "tokenizer.bpe",
+  "sha256": "d2a312b6d9fa24fc27bdea3387e65477c427214e2fb2372e5f3ae980ffaa3e1d",
+  "license": "MIT",
+  "conversion": "hf-bpe-to-tiktoken"
+}

@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import net from 'node:net';
 
 const PROCESS_LISTENER_EVENTS = ['exit', 'SIGINT', 'SIGTERM'] as const;
+const CHILD_CLOSE_DRAIN_TURNS = 5;
+const CHILD_CLOSE_DRAIN_INTERVAL_MS = 10;
 
 type FixtureSignal = '-TERM' | '-KILL';
 type ProcessListenerEvent = (typeof PROCESS_LISTENER_EVENTS)[number];
@@ -81,6 +83,22 @@ export function restoreSeatbeltHarnessFixture(
   }
 }
 
+/**
+ * `waitForFixtureProcessExit` observes the OS-level exit, but Node delivers the
+ * matching `close` event only once the child's stdio pipes reach EOF, which
+ * happens on a later loop turn. The seatbelt proxy close handler calls
+ * `process.exit(1)`, so the harness stub must stay installed until those
+ * pending events have been delivered — restoring first lets a late `close`
+ * terminate the whole test run.
+ */
+async function drainPendingChildCloseEvents(): Promise<void> {
+  for (let turn = 0; turn < CHILD_CLOSE_DRAIN_TURNS; turn++) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, CHILD_CLOSE_DRAIN_INTERVAL_MS),
+    );
+  }
+}
+
 export async function cleanupSeatbeltHarnessFixture(
   fixtureDir: string,
   restoreState: () => void,
@@ -93,6 +111,7 @@ export async function cleanupSeatbeltHarnessFixture(
     }
     await assertSeatbeltProxyPortAvailable();
   } finally {
+    await drainPendingChildCloseEvents();
     restoreSeatbeltHarnessFixture(fixtureDir, restoreState);
   }
 }

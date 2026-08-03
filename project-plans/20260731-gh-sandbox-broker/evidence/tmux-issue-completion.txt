@@ -1,0 +1,28 @@
+3. /help for more information.
+
+ℹ No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom
+  compatible endpoint, or select an existing profile.                                                        █
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ > @issue-                                                                                                  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ issue-2909  Orphaned bun test processes are never reaped, and a silent shimissue ·
+ failure allows unbounded memory growth (85.8 GB observed)                  open
+ issue-2908  Nightly workflow failed issue · open
+ issue-2905  Attribute and bound native IOSurface/IOAccelerator memory      issue ·
+ growth for image-bearing sessions (#2852 follow-up)                        open
+ issue-2904  Follow-up: pre-existing test quality findings from Bun         issue ·
+ migration OCR review (PR #2858)                                            open
+ issue-2903  Remove gh CLI from the sandbox container image (follow-up to   issue ·
+ #1663)                                                                     open
+ issue-2902  Sandbox container privilege hardening: capability token may be issue ·
+ readable from CLI process memory                                           open
+ issue-2900  Harden node24 PR-comment steps: 404 fallback + API error       issue ·
+ diagnostics (deferred from #2648)                                          open
+ issue-2896  New model config dialog emits malformed request params:         issue ·
+ string-typed top_p and triple reasoning-dialect fan-out                     open
+ ▼
+ (1/34)
+(issue1663*)                                                        Context: 0.0k/200k | TPM: 0.00 | Wait: 0ms
+~/projects/llxprt/branch-1/llxprt-code  [no sandbox (see /docs)]                           unknown | Tokens: 0

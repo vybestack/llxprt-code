@@ -13,6 +13,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { initializeParser } from '../utils/shell-parser.js';
 
 import type { AgentClientContract } from '../core/clientContract.js';
 import { HookSystem } from '../hooks/hookSystem.js';
@@ -211,6 +212,7 @@ export class Config extends ConfigBase {
     }
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
+    await initializeParser();
     this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
       await getCoreVersion(),

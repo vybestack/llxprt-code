@@ -128,6 +128,7 @@ export { ToolErrorType, isFatalToolError } from './types/tool-error.js';
 
 export {
   EXA_WEB_SEARCH_TOOL,
+  GENERATE_IMAGE_TOOL,
   EDIT_TOOL_NAME,
   GREP_TOOL_NAME,
   READ_MANY_FILES_TOOL_NAME,
@@ -298,6 +299,14 @@ export {
 } from './tools/shell.js';
 export { buildCommandToExecute } from './tools/shell-helpers.js';
 export {
+  GithubTool,
+  GithubToolInvocation,
+  MUTATING_OPS,
+  SUPPORTED_OPS,
+  type GitHubBrokerClient,
+  type GithubToolParams,
+} from './tools/github.js';
+export {
   DISCOVERED_TOOL_PREFIX,
   ToolRegistry,
   DiscoveredTool,
@@ -348,6 +357,11 @@ export {
   type ExaWebSearchToolDependencies,
   type ExaWebSearchToolParams,
 } from './tools/exa-web-search.js';
+export {
+  GenerateImageTool,
+  type GenerateImageToolParams,
+  type GenerateImageToolDependencies,
+} from './tools/generate-image/index.js';
 export {
   ApplyPatchTool,
   classifyPatchOperations,

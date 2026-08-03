@@ -1,0 +1,28 @@
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+                                                                                                             ▄
+Tips for getting started:                                                                                    █
+1. Ask questions, edit files, or run commands.                                                               █
+2. Be specific for the best results.                                                                         █
+3. /help for more information.                                                                               █
+                                                                                                             █
+ℹ No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom█
+  compatible endpoint, or select an existing profile.                                                        █
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ > @src/ind                                                                                                 │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ packages/test-utils/src/index.ts
+ packages/a2a-server/src/index.ts
+ packages/mcp/src/index.ts
+ packages/core/src/index.test.ts
+ packages/core/src/index.ts
+ packages/agents/src/index.ts
+ packages/policy/src/index.ts
+ packages/auth/src/index.ts
+ ▼
+ (1/24)
+(issue1663*)                                                        Context: 0.0k/200k | TPM: 0.00 | Wait: 0ms
+~/projects/llxprt/branch-1/llxprt-code  [no sandbox (see /docs)]                           unknown | Tokens: 0
