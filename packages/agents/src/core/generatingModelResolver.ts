@@ -4,8 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+
+const logger = new DebugLogger('llxprt:agents:generating-model');
 
 function isNonBlank(value: string | undefined): value is string {
   return typeof value === 'string' && value.trim() !== '';
@@ -20,7 +23,13 @@ function readProviderCurrentModel(
   try {
     const model = provider.getCurrentModel();
     return isNonBlank(model) ? model : undefined;
-  } catch {
+  } catch (error) {
+    // Falling back is intended, but a silent swallow would make a model
+    // misattribution regression (issue #2511) undiagnosable.
+    logger.debug(
+      () =>
+        `[resolveGeneratingModel] ${provider.name}.getCurrentModel() threw: ${error}`,
+    );
     return undefined;
   }
 }
@@ -75,8 +84,12 @@ function resolveActiveProvider(
 ): RuntimeProvider | undefined {
   try {
     return runtimeContext.provider.getActiveProvider();
-  } catch {
-    // Provider unavailable — fall through to runtime-state fallback.
+  } catch (error) {
+    // Provider unavailable — fall through to runtime-state fallback, but keep
+    // the reason observable so attribution regressions stay diagnosable.
+    logger.debug(
+      () => `[resolveGeneratingModel] getActiveProvider() threw: ${error}`,
+    );
     return undefined;
   }
 }

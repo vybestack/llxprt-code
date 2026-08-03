@@ -289,7 +289,7 @@ export class ConversationManager {
     userInput: IContent | IContent[],
     automaticFunctionCallingHistory: IContent[] | undefined,
     newHistoryEntries: IContent[],
-    generatingModel: string | undefined,
+    generatingModel: string,
     baseURL: string | undefined,
   ): void {
     if (
@@ -374,7 +374,7 @@ export class ConversationManager {
     userInputWasArray: boolean,
     userInputWasFunctionResponse: boolean,
     hasAfc: boolean,
-    generatingModel: string | undefined,
+    generatingModel: string,
     baseURL: string | undefined,
   ): void {
     // Filter out thoughts based on reasoning configuration
@@ -481,7 +481,7 @@ export class ConversationManager {
     usageMetadata: UsageStats | null | undefined,
     options: RecordHistoryOptions | undefined,
     newHistoryEntries: IContent[],
-    generatingModel: string | undefined,
+    generatingModel: string,
     baseURL: string | undefined,
   ): void {
     let didAttachThoughtBlocks = false;
