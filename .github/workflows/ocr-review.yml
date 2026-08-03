@@ -3508,6 +3508,12 @@ jobs:
                     texts.push(entry);
                     continue;
                   }
+                  // A structured validation error naming a line-position field
+                  // is conclusive on its own, whatever its message says: the
+                  // field itself identifies the problem as line resolution.
+                  // (Upstream notes this branch is unreachable for the reviews
+                  // endpoint, which returns plain strings; it is kept for
+                  // other endpoints' structured error shape.)
                   if (entry.field && LINE_RESOLUTION_FIELDS.has(String(entry.field))) {
                     return true;
                   }

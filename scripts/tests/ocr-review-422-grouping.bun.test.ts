@@ -543,9 +543,12 @@ describe('.github/workflows/ocr-review.yml — HTTP 422 line-resolution grouping
     });
 
     it('falls through untouched when the inventory cannot be trusted', async () => {
+      // A populated file list, so the inventory is untrustworthy specifically
+      // because the head moved — not because the list was empty, which would
+      // short-circuit the head check and pass for the wrong reason.
       const harness = loadHarness(fixture.postScript, {
         headSha: 'moved',
-        pages: [[]],
+        pages: [[A_TS]],
       });
       const one = pair({ path: 'a.ts', line: 3 }, 'one');
       const two = pair({ path: 'ghost.ts', line: 4 }, 'two');

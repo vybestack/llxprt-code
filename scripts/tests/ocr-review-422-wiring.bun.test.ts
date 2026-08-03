@@ -58,10 +58,13 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
       postScript,
       'regroupLineResolutionFailure',
     );
-    const helperBlock = postScript.slice(
-      helperStart,
-      postScript.indexOf(lastHelper) + lastHelper.length,
-    );
+    const helperEnd = postScript.indexOf(lastHelper) + lastHelper.length;
+    if (helperStart < 0 || helperEnd <= helperStart) {
+      throw new Error(
+        'post step should define the 422 helper block from LINE_RESOLUTION_PATTERNS through regroupLineResolutionFailure',
+      );
+    }
+    const helperBlock = postScript.slice(helperStart, helperEnd);
     const wiringStart = postScript.indexOf('const recoverablePairs = [];');
     const wiringEnd = postScript.indexOf(
       '// pairsToPost was already capped to effectiveCap',
