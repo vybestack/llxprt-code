@@ -747,7 +747,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/*/src/**/*.{test,spec}.{ts,tsx}'],
+    files: ['packages/*/src/**/*.{test,spec,bun}.{ts,tsx}'],
     plugins: {
       vitest,
     },

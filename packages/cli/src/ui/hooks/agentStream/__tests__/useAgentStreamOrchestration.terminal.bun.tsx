@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import React, { act, useState } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
@@ -29,12 +29,16 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import type { StructuredError } from '@vybestack/llxprt-code-core';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
-import { LoadedSettings } from '../../../../config/settings.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred, type Deferred } from './createDeferred.js';
 import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import { useStreamingState } from '../useAgentStreamLifecycle.js';
+import {
+  createLoadedSettings,
+  createMockOverrides,
+  createQueueOperations,
+} from './submitQueryTestFixtures.js';
 
 vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
@@ -56,50 +60,6 @@ const TERMINAL_EVENTS: readonly AgentEvent[] = [
   { type: 'error', error: SAMPLE_ERROR },
   { type: 'idle-timeout', error: SAMPLE_ERROR },
 ];
-
-function createQueueOperations(ref: { current: QueuedSubmission[] }) {
-  return {
-    enqueueSubmission: (s: QueuedSubmission) => {
-      ref.current = [...ref.current, s];
-    },
-    requeueSubmission: (s: QueuedSubmission) => {
-      ref.current = [s, ...ref.current];
-    },
-    dequeueSubmission: (): QueuedSubmission | undefined => {
-      const [first, ...rest] = ref.current;
-      ref.current = rest;
-      return first;
-    },
-    clearSubmissions: () => void (ref.current = []),
-  };
-}
-
-function createMockOverrides() {
-  return {
-    session: { getSessionId: () => 'test-session' },
-    model: {
-      getModel: () => 'test-model',
-      getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    },
-    mcp: {
-      getMcpClientManager: () => undefined,
-      getMcpServers: () => ({}),
-    },
-    asyncTasks: {
-      setupAsyncTaskAutoTrigger: () => () => {},
-    },
-  };
-}
-
-function createLoadedSettings(): LoadedSettings {
-  return new LoadedSettings(
-    { path: '/system/settings.json', settings: {} },
-    { path: '/system/defaults.json', settings: {} },
-    { path: '/user/settings.json', settings: {} },
-    { path: '/workspace/settings.json', settings: {} },
-    true,
-  );
-}
 
 function createControlledAgent(
   eventsForCall: (callIndex: number) => AgentEvent[],
@@ -232,10 +192,12 @@ function useOrchestration(
     releaseDrain,
     setPendingHistoryItem: vi.fn(),
     setIsResponding: (value: boolean | ((prev: boolean) => boolean)) => {
-      setIsRespondingState((previous) => {
-        const next = typeof value === 'function' ? value(previous) : value;
-        state.setIsRespondingCalls.push(next);
-        return next;
+      act(() => {
+        setIsRespondingState((previous) => {
+          const next = typeof value === 'function' ? value(previous) : value;
+          state.setIsRespondingCalls.push(next);
+          return next;
+        });
       });
     },
     setInitError: vi.fn(),
@@ -288,13 +250,20 @@ function renderOrchestration(state: OrchState, agent: Agent) {
   return renderHook(() => useOrchestration(state, agent));
 }
 
+async function settleReactWork(): Promise<void> {
+  for (let cycle = 0; cycle < 5; cycle++) {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 async function startTurnAndWaitForTerminalEvent(
   result: { current: ReturnType<typeof useOrchestration> },
   state: OrchState,
 ): Promise<AbortSignal> {
   await act(async () => {
     void result.current.submitQuery('turn-1');
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await settleReactWork();
   });
 
   await waitFor(() =>
@@ -341,7 +310,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
       let turn2Promise!: Promise<void>;
       await act(async () => {
         turn2Promise = result.current.submitQuery('follow-up');
-        for (let i = 0; i < 5; i++) await Promise.resolve();
+        await settleReactWork();
       });
 
       expect(state.queuedSubmissionsRef.current).toHaveLength(0);
@@ -351,7 +320,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
       expect(firstDeferred).toBeDefined();
       await act(async () => {
         firstDeferred!.resolve();
-        for (let i = 0; i < 5; i++) await Promise.resolve();
+        await settleReactWork();
       });
       await waitFor(() => expect(streamCallCount()).toBe(2));
 
@@ -379,7 +348,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
 
     await act(async () => {
       void result.current.submitQuery('turn-1');
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
     await waitFor(() =>
       expect(result.current.streamingState).toBe(StreamingState.Responding),
@@ -391,7 +360,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
 
     await act(async () => {
       eventGate.resolve();
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
     await waitFor(() =>
       expect(result.current.streamingState).toBe(StreamingState.Idle),
@@ -407,7 +376,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
 
     await act(async () => {
       getDeferred(0)?.resolve();
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
     await waitFor(() => expect(streamCallCount()).toBe(2));
     expect(streamInputs()).toStrictEqual(['turn-1', 'pre-queued-1']);
@@ -417,7 +386,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
 
     await act(async () => {
       getDeferred(1)?.resolve();
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
     await waitFor(() => expect(streamCallCount()).toBe(3));
 
@@ -430,8 +399,11 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
 
     await act(async () => {
       getDeferred(2)?.resolve();
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
+    await waitFor(() =>
+      expect(result.current.streamingState).toBe(StreamingState.Idle),
+    );
   });
 
   it('stale old-turn events and cleanup cannot mutate or release a newer active turn', async () => {
@@ -448,7 +420,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
     let turn2Promise!: Promise<void>;
     await act(async () => {
       turn2Promise = result.current.submitQuery('turn-2');
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
     await waitFor(() =>
       expect(result.current.streamingState).toBe(StreamingState.Responding),
@@ -473,7 +445,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
     const firstDeferred = getDeferred(0);
     await act(async () => {
       firstDeferred?.resolve();
-      for (let i = 0; i < 5; i++) await Promise.resolve();
+      await settleReactWork();
     });
     await waitFor(() =>
       expect(state.abortControllerRef.current?.signal).toBe(secondSignal),
@@ -493,5 +465,13 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
       secondDeferred?.resolve();
       await turn2Promise.catch(() => {});
     });
+    await waitFor(() => expect(getDeferred(2)).toBeDefined());
+    await act(async () => {
+      getDeferred(2)?.resolve();
+      await settleReactWork();
+    });
+    await waitFor(() =>
+      expect(result.current.streamingState).toBe(StreamingState.Idle),
+    );
   });
 });

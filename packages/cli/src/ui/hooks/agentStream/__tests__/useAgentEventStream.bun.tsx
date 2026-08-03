@@ -21,7 +21,7 @@ import type { IContent, ContentBlock } from '@vybestack/llxprt-code-core';
  * useAgentEventStream.loopIntegration.test.tsx.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
@@ -45,7 +45,7 @@ function setupHook(agent: Agent) {
   const onEditorOpen = vi.fn();
   const onEditorClose = vi.fn();
 
-  const { result } = renderHook(() =>
+  const { result, unmount } = renderHook(() =>
     useAgentEventStream({
       agent,
       addItem,
@@ -74,6 +74,7 @@ function setupHook(agent: Agent) {
 
   return {
     result,
+    unmount,
     routedEvents,
     routedSignals,
     addItem,
@@ -99,7 +100,7 @@ describe('useAgentEventStream', () => {
       { type: 'done', reason: 'stop' },
     ];
     const agent = createFakeAgent(events);
-    const { result, routedEvents, routedSignals } = setupHook(agent);
+    const { result, unmount, routedEvents, routedSignals } = setupHook(agent);
 
     const controller = new AbortController();
     await act(async () => {
@@ -114,25 +115,23 @@ describe('useAgentEventStream', () => {
     expect(routedEvents[0]).toStrictEqual({ type: 'text', text: 'Hello' });
     expect(routedEvents[1]).toStrictEqual({ type: 'done', reason: 'stop' });
     expect(routedSignals).toStrictEqual([controller.signal, controller.signal]);
+    unmount();
   });
 
   it('breaks iteration when the abort signal fires', async () => {
     const controller = new AbortController();
     let yieldCount = 0;
     const agent = createFakeAgent([]);
-    // Override stream to yield slowly and check abort
     (agent as unknown as { stream: unknown }).stream = async function* () {
       for (let i = 0; i < 100; i++) {
-        if (controller.signal.aborted) break;
         yieldCount++;
         yield { type: 'text', text: `chunk-${i}` } as AgentEvent;
-        // Yield to the event loop so the abort can fire
         await new Promise((r) => setTimeout(r, 0));
       }
     };
 
     const routed: AgentEvent[] = [];
-    const { result } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useAgentEventStream({
         agent,
         addItem: vi.fn(),
@@ -158,8 +157,10 @@ describe('useAgentEventStream', () => {
     });
     await promise;
 
-    // Should have stopped early (not all 100 chunks)
-    expect(yieldCount).toBeLessThan(100);
+    expect(routed.length).toBeGreaterThan(0);
+    expect(routed.length).toBeLessThan(100);
+    expect(yieldCount).toBeLessThanOrEqual(routed.length + 1);
+    unmount();
   });
 
   it('serializes overlapping runStream calls', async () => {
@@ -167,23 +168,22 @@ describe('useAgentEventStream', () => {
     const events2: AgentEvent[] = [{ type: 'text', text: 'second' }];
     let callIndex = 0;
     const allEvents = [events1, events2];
-    const startOrder: string[] = [];
-    const endOrder: string[] = [];
+    const executionOrder: string[] = [];
     const agent = createFakeAgent([]);
     (agent as unknown as { stream: unknown }).stream = async function* () {
       const myIndex = callIndex++;
-      startOrder.push(`start-${myIndex}`);
+      executionOrder.push(`start-${myIndex}`);
       const events = allEvents[myIndex] ?? [];
       for (const e of events) {
         // Yield asynchronously so both runs can be started concurrently
         await new Promise((r) => setTimeout(r, 0));
         yield e;
       }
-      endOrder.push(`end-${myIndex}`);
+      executionOrder.push(`end-${myIndex}`);
     };
 
     const routed: AgentEvent[] = [];
-    const { result } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useAgentEventStream({
         agent,
         addItem: vi.fn(),
@@ -220,13 +220,13 @@ describe('useAgentEventStream', () => {
     expect(routed[0]).toStrictEqual({ type: 'text', text: 'first' });
     expect(routed[1]).toStrictEqual({ type: 'text', text: 'second' });
 
-    // Serialization: run 1 ended BEFORE run 2 started (no overlap).
-    expect(startOrder).toStrictEqual(['start-0', 'start-1']);
-    expect(endOrder).toStrictEqual(['end-0', 'end-1']);
-    // The critical serialization assertion: end-0 precedes start-1.
-    expect(endOrder.indexOf('end-0')).toBeLessThan(
-      startOrder.indexOf('start-1'),
-    );
+    expect(executionOrder).toStrictEqual([
+      'start-0',
+      'end-0',
+      'start-1',
+      'end-1',
+    ]);
+    unmount();
   });
 
   it('registers display callbacks on the agent via setDisplayCallbacks', () => {
@@ -237,7 +237,7 @@ describe('useAgentEventStream', () => {
     agent.tools.setEditorCallbacks = setEditorCallbacksSpy;
 
     const onToolCallsUpdate = vi.fn();
-    renderHook(() =>
+    const { unmount } = renderHook(() =>
       useAgentEventStream({
         agent,
         addItem: vi.fn(),
@@ -262,5 +262,9 @@ describe('useAgentEventStream', () => {
     expect(displayCbs).toHaveProperty('onToolCallsUpdate');
     expect(displayCbs).toHaveProperty('outputUpdateHandler');
     expect(displayCbs).toHaveProperty('onAllToolCallsComplete');
+
+    unmount();
+    expect(setDisplayCallbacksSpy).toHaveBeenLastCalledWith({});
+    expect(setEditorCallbacksSpy).toHaveBeenLastCalledWith({});
   });
 });

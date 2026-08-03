@@ -105,6 +105,16 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'cli',
+    preload: 'bun-test-setup.ts',
+    files: [
+      'src/ui/hooks/agentStream/__tests__/useAgentEventStream.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useAgentStreamOrchestration.terminal.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.doublecancel.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.terminalError.bun.tsx',
+    ],
+  },
+  {
     workspace: 'core',
     files: ['src/utils/errors.test.ts'],
   },

@@ -23,7 +23,7 @@
  * leaf infrastructure (`turnPreparation`, `SessionContext`) is stubbed.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
@@ -40,11 +40,15 @@ import type { QueuedSubmission } from '../types.js';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import type { StructuredError } from '@vybestack/llxprt-code-core';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
-import { LoadedSettings } from '../../../../config/settings.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
 import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
+import {
+  createLoadedSettings,
+  createMockOverrides,
+  createQueueOperations,
+} from './submitQueryTestFixtures.js';
 
 vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
@@ -56,40 +60,6 @@ vi.mock('../../../contexts/SessionContext.js', () => ({
     getPromptCount: () => 0,
   }),
 }));
-
-function createQueueOperations(ref: { current: QueuedSubmission[] }) {
-  return {
-    enqueueSubmission: (submission: QueuedSubmission) => {
-      ref.current = [...ref.current, submission];
-    },
-    requeueSubmission: (submission: QueuedSubmission) => {
-      ref.current = [submission, ...ref.current];
-    },
-    dequeueSubmission: (): QueuedSubmission | undefined => {
-      const [first, ...rest] = ref.current;
-      ref.current = rest;
-      return first;
-    },
-    clearSubmissions: () => void (ref.current = []),
-  };
-}
-
-function createMockOverrides() {
-  return {
-    session: { getSessionId: () => 'test-session' },
-    model: {
-      getModel: () => 'test-model',
-      getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    },
-    mcp: {
-      getMcpClientManager: () => undefined,
-      getMcpServers: () => ({}),
-    },
-    asyncTasks: {
-      setupAsyncTaskAutoTrigger: () => () => {},
-    },
-  };
-}
 
 function createMockAgent() {
   return createFakeAgentFromMockClient({
@@ -103,16 +73,6 @@ function createMockSetState(
   return (value) => {
     if (typeof value === 'boolean') calls.push(value);
   };
-}
-
-function createLoadedSettings(): LoadedSettings {
-  return new LoadedSettings(
-    { path: '/system/settings.json', settings: {} },
-    { path: '/system/defaults.json', settings: {} },
-    { path: '/user/settings.json', settings: {} },
-    { path: '/workspace/settings.json', settings: {} },
-    true,
-  );
 }
 
 const SAMPLE_ERROR: StructuredError = {
@@ -509,6 +469,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
 
     const secondSignal = deps.abortControllerRef.current!.signal;
     expect(secondSignal).not.toBe(firstSignal);
+    deps.loopDetectedRef.current = true;
 
     const setIsRespondingCallsBefore = [...deps.setIsRespondingCalls];
     const addItemCallsBefore = addItem.mock.calls.length;
@@ -529,6 +490,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     });
 
     expect(deps.abortControllerRef.current?.signal).toBe(secondSignal);
+    expect(deps.loopDetectedRef.current).toBe(true);
 
     await act(async () => {
       await result.current.submitQuery('turn-3-should-queue');

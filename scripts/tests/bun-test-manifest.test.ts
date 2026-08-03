@@ -73,8 +73,16 @@ describe('Bun native test manifest', () => {
   it('contains only nonempty workspace entries and existing files', () => {
     for (const entry of BUN_NATIVE_TEST_MANIFEST) {
       expect(entry.files.length, entry.workspace).toBeGreaterThan(0);
-      expect(resolveBunNativeTestFiles(repoRoot, entry.workspace)).toHaveLength(
-        entry.files.length,
+    }
+
+    for (const workspace of new Set(
+      BUN_NATIVE_TEST_MANIFEST.map(({ workspace }) => workspace),
+    )) {
+      const expectedFileCount = BUN_NATIVE_TEST_MANIFEST.filter(
+        (entry) => entry.workspace === workspace,
+      ).reduce((total, entry) => total + entry.files.length, 0);
+      expect(resolveBunNativeTestFiles(repoRoot, workspace)).toHaveLength(
+        expectedFileCount,
       );
     }
   });
