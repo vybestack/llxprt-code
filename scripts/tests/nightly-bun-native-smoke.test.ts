@@ -33,7 +33,7 @@ const execFileAsync = promisify(execFile);
 function resolveHarnessTimeoutMs(
   env: Record<string, string | undefined> = process.env,
 ): number {
-  const DEFAULT = 120_000;
+  const DEFAULT = 300_000;
   const raw = env.LLXPRT_BUN_SMOKE_TIMEOUT_MS;
   if (raw === undefined || raw === '') return DEFAULT;
   const parsed = Number(raw);

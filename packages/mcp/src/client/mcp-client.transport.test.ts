@@ -26,8 +26,17 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js');
 vi.mock('../auth/oauth-provider.js');
 vi.mock('../auth/oauth-token-storage.js');
 vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library');
-import { GoogleAuth } from 'google-auth-library';
+
+const { MockGoogleAuth } = vi.hoisted(() => {
+  class MockGoogleAuth {
+    constructor(..._args: unknown[]) {}
+  }
+  MockGoogleAuth.prototype.getClient = vi.fn();
+  return { MockGoogleAuth };
+});
+vi.mock('google-auth-library', () => ({
+  GoogleAuth: MockGoogleAuth,
+}));
 
 vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
@@ -159,7 +168,9 @@ describe('mcp-client', () => {
           quotaProjectId: 'myproject',
         };
 
-        vi.mocked(GoogleAuth.prototype.getClient).mockResolvedValue(mockClient);
+        vi.mocked(MockGoogleAuth.prototype.getClient).mockResolvedValue(
+          mockClient,
+        );
       });
 
       it('should use GoogleCredentialProvider when specified', async () => {

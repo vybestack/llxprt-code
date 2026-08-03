@@ -10,17 +10,25 @@ import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-regis
 import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { McpClient } from './mcp-client.js';
+import type { McpClient } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';
 import {
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
 } from './mcp-status.js';
 
-vi.mock('./mcp-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./mcp-client.js')>();
-  return { ...actual, McpClient: vi.fn() };
-});
+const { mockMcpClient } = vi.hoisted(() => ({
+  mockMcpClient: vi.fn(),
+}));
+vi.mock('./mcp-client.js', () => ({
+  McpClient: mockMcpClient,
+  MCPDiscoveryState: {
+    NOT_STARTED: 'not_started',
+    IN_PROGRESS: 'in_progress',
+    COMPLETED: 'completed',
+  },
+  populateMcpServerCommand: vi.fn((servers: unknown) => servers),
+}));
 
 function createClient(): McpClient {
   return {
@@ -42,9 +50,7 @@ function createHarness(): {
 } {
   const clientA = createClient();
   const clientB = createClient();
-  vi.mocked(McpClient)
-    .mockReturnValueOnce(clientA)
-    .mockReturnValueOnce(clientB);
+  mockMcpClient.mockReturnValueOnce(clientA).mockReturnValueOnce(clientB);
   const promptRegistry = new PromptRegistry();
   const resourceRegistry = new ResourceRegistry();
   const config = {

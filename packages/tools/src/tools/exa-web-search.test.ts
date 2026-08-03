@@ -5,12 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fetch from 'node-fetch';
 
 import { ExaWebSearchTool } from './exa-web-search.js';
 
-vi.mock('node-fetch');
-const mockedFetch = fetch as unknown as ReturnType<typeof vi.fn>;
+const { mockedFetch } = vi.hoisted(() => ({ mockedFetch: vi.fn() }));
+vi.mock('node-fetch', () => ({
+  default: mockedFetch,
+}));
 
 describe('ExaWebSearchTool', () => {
   const keyStorage = { resolveKey: vi.fn() };

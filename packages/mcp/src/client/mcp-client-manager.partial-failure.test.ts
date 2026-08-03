@@ -10,13 +10,22 @@ import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-regis
 import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { McpClient, MCPDiscoveryState } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';
+import type { McpClient } from './mcp-client.js';
+import { MCPDiscoveryState } from './mcp-client.js';
 
-vi.mock('./mcp-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./mcp-client.js')>();
-  return { ...actual, McpClient: vi.fn() };
-});
+const { mockMcpClient } = vi.hoisted(() => ({
+  mockMcpClient: vi.fn(),
+}));
+vi.mock('./mcp-client.js', () => ({
+  McpClient: mockMcpClient,
+  MCPDiscoveryState: {
+    NOT_STARTED: 'not_started',
+    IN_PROGRESS: 'in_progress',
+    COMPLETED: 'completed',
+  },
+  populateMcpServerCommand: vi.fn((servers: unknown) => servers),
+}));
 
 describe('McpClientManager partial discovery failure', () => {
   beforeEach(() => {
@@ -40,7 +49,7 @@ describe('McpClientManager partial discovery failure', () => {
       getServerConfig: vi.fn().mockReturnValue({ extension: undefined }),
       getInstructions: vi.fn().mockReturnValue(''),
     };
-    vi.mocked(McpClient)
+    mockMcpClient
       .mockReturnValueOnce(goodClient as unknown as McpClient)
       .mockReturnValueOnce(badClient as unknown as McpClient);
     const promptRegistry = new PromptRegistry();

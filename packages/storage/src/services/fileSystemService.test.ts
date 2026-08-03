@@ -5,10 +5,18 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import fs from 'fs/promises';
 import { StandardFileSystemService } from './fileSystemService.js';
 
-vi.mock('fs/promises');
+const { mockReadFile, mockWriteFile } = vi.hoisted(() => ({
+  mockReadFile: vi.fn(),
+  mockWriteFile: vi.fn(),
+}));
+
+vi.mock('fs/promises', () => ({
+  default: { readFile: mockReadFile, writeFile: mockWriteFile },
+  readFile: mockReadFile,
+  writeFile: mockWriteFile,
+}));
 
 describe('StandardFileSystemService', () => {
   let fileSystem: StandardFileSystemService;
@@ -25,17 +33,17 @@ describe('StandardFileSystemService', () => {
   describe('readTextFile', () => {
     it('should read file content using fs', async () => {
       const testContent = 'Hello, World!';
-      vi.mocked(fs.readFile).mockResolvedValue(testContent);
+      mockReadFile.mockResolvedValue(testContent);
 
       const result = await fileSystem.readTextFile('/test/file.txt');
 
-      expect(fs.readFile).toHaveBeenCalledWith('/test/file.txt', 'utf-8');
+      expect(mockReadFile).toHaveBeenCalledWith('/test/file.txt', 'utf-8');
       expect(result).toBe(testContent);
     });
 
     it('should propagate fs.readFile errors', async () => {
       const error = new Error('ENOENT: File not found');
-      vi.mocked(fs.readFile).mockRejectedValue(error);
+      mockReadFile.mockRejectedValue(error);
 
       await expect(fileSystem.readTextFile('/test/file.txt')).rejects.toThrow(
         'ENOENT: File not found',
@@ -45,11 +53,11 @@ describe('StandardFileSystemService', () => {
 
   describe('writeTextFile', () => {
     it('should write file content using fs', async () => {
-      vi.mocked(fs.writeFile).mockResolvedValue();
+      mockWriteFile.mockResolvedValue();
 
       await fileSystem.writeTextFile('/test/file.txt', 'Hello, World!');
 
-      expect(fs.writeFile).toHaveBeenCalledWith(
+      expect(mockWriteFile).toHaveBeenCalledWith(
         '/test/file.txt',
         'Hello, World!',
         'utf-8',
