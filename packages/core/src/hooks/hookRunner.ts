@@ -60,6 +60,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function defaultErrorMessage(exitCode: number): string {
+  return `Hook exited with code ${exitCode} without an error message`;
+}
+
 function buildPowerShellExitCodeWrapper(encodedCommand: string): string {
   return (
     '& { ' +
@@ -586,10 +590,30 @@ export class HookRunner {
         // Not JSON, convert plain text to structured output
         return this.convertPlainTextToHookOutput(stdout.trim(), exitCode);
       }
-    } else if (exitCode !== EXIT_CODE_SUCCESS && stderr.trim()) {
-      // Convert error output to structured format
-      return this.convertPlainTextToHookOutput(
+    } else if (exitCode !== EXIT_CODE_SUCCESS) {
+      return this.convertNonZeroExitToHookOutput(
         stderr.trim(),
+        effectiveErrorExitCode,
+      );
+    }
+    return undefined;
+  }
+
+  /**
+   * A blocking exit code is authoritative on its own, so it must deny even
+   * when the hook wrote no message. Other non-zero exits stay silent unless
+   * the hook explained itself on stderr, so they cannot inject a decision.
+   */
+  private convertNonZeroExitToHookOutput(
+    stderr: string,
+    effectiveErrorExitCode: number,
+  ): HookOutput | undefined {
+    if (stderr) {
+      return this.convertPlainTextToHookOutput(stderr, effectiveErrorExitCode);
+    }
+    if (effectiveErrorExitCode === EXIT_CODE_BLOCKING_ERROR) {
+      return this.convertPlainTextToHookOutput(
+        defaultErrorMessage(effectiveErrorExitCode),
         effectiveErrorExitCode,
       );
     }
