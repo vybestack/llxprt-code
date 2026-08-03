@@ -21,29 +21,47 @@
  * Preloads (the Bun/Vitest compatibility shim and Storage-root isolation) come
  * from `bunfig.toml`, which Bun reads from the working directory of each child.
  *
- * There is deliberately no exclusion list: issue #2845 requires that every test
- * file in this workspace runs under Bun. A file that cannot pass must be fixed,
- * not skipped.
+ * There is deliberately no test-exclusion list: issue #2845 requires that every
+ * test file in this workspace runs under Bun. A file that cannot pass must be
+ * fixed, not skipped. Discovery prunes only build and dependency output — see
+ * `PRUNED_DIRECTORIES`.
  *
  * Exit code is 0 when every file passes and 1 when any file fails.
  */
 
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 
 const TEST_ROOTS = ['src'] as const;
+
+/** Upper bound on file concurrency, regardless of how many cores are present. */
+const MAX_CONCURRENCY = 4;
+
+/** Lower bound, so a single-core reporting environment still makes progress. */
+const MIN_CONCURRENCY = 2;
 
 /**
  * Number of test files executed at once.
  *
- * Capped well below the core count on purpose. Many suites under
- * `src/api/__tests__/` build a real Agent (tool registry, provider bootstrap,
- * settings) per test, so they are far heavier than a typical unit test. Running
- * too many of those concurrently pushes individual tests past the 30s budget on
- * a loaded machine, which shows up as non-deterministic failures rather than as
- * a slow run. `LLXPRT_AGENTS_TEST_CONCURRENCY` overrides the default.
+ * Deliberately half the core count, clamped to [2, 4]. Each file is a fresh
+ * `bun test` process that re-executes the whole agents module graph, and many
+ * suites under `src/api/__tests__/` additionally build a real Agent (tool
+ * registry, provider bootstrap, settings) per test. Saturating every core with
+ * that work starves individual tests past the 30s budget, which surfaces as a
+ * different file failing on each run rather than as an honestly slow run.
+ * Leaving headroom matters most on small CI runners, where the core count is
+ * roughly the concurrency an unclamped default would pick.
+ *
+ * `LLXPRT_AGENTS_TEST_CONCURRENCY` overrides this.
  */
 function resolveConcurrency(): number {
   const override = process.env.LLXPRT_AGENTS_TEST_CONCURRENCY;
@@ -55,7 +73,8 @@ function resolveConcurrency(): number {
     }
     return Number.parseInt(override.trim(), 10);
   }
-  return Math.max(1, Math.min(4, availableParallelism()));
+  const half = Math.floor(availableParallelism() / 2);
+  return Math.min(MAX_CONCURRENCY, Math.max(MIN_CONCURRENCY, half));
 }
 
 const CONCURRENCY = resolveConcurrency();
@@ -77,7 +96,25 @@ const PER_TEST_TIMEOUT_MS = 30_000;
  */
 const PER_FILE_TIMEOUT_MS = 120_000;
 
-const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set([
+/**
+ * Directories that are pruned during discovery.
+ *
+ * This is NOT a test-exclusion list — issue #2845 requires that every test file
+ * in this workspace runs, and no source test file may be filtered out. These
+ * entries are build and dependency output that must never be traversed:
+ *
+ * - `node_modules` contains third-party packages that ship their own tests.
+ * - `dist` and `coverage` contain generated copies of this workspace's sources;
+ *   traversing them would execute duplicate, stale builds of the same tests.
+ *
+ * Dot-prefixed directories are pruned for the same reason, most importantly
+ * `.stryker-tmp`: the mutation gate runs `inPlace`, leaving a pristine copy of
+ * the project under `.stryker-tmp/backup-<id>/`. Discovering that copy would
+ * double-count every test. The Vitest config this runner replaces pruned the
+ * same set (`configDefaults.exclude` plus an explicit `.stryker-tmp` exclude),
+ * so discovery is unchanged from the pre-migration behaviour.
+ */
+const PRUNED_DIRECTORIES: ReadonlySet<string> = new Set([
   'coverage',
   'dist',
   'node_modules',
@@ -97,7 +134,7 @@ function isTestFile(entry: string): boolean {
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (SKIPPED_DIRECTORIES.has(entry) || entry.startsWith('.')) {
+    if (PRUNED_DIRECTORIES.has(entry) || entry.startsWith('.')) {
       continue;
     }
     const fullPath = join(dir, entry);
@@ -117,7 +154,7 @@ interface TestResult {
   readonly timedOut: boolean;
 }
 
-function runTestFile(file: string): Promise<TestResult> {
+function runTestFile(file: string, reportPath: string): Promise<TestResult> {
   return new Promise((resolve) => {
     let settled = false;
     const settleOnce = (result: TestResult): void => {
@@ -130,7 +167,14 @@ function runTestFile(file: string): Promise<TestResult> {
     // process.execPath is the Bun binary: this script is launched with `bun`.
     const child = spawn(
       process.execPath,
-      ['test', '--timeout', String(PER_TEST_TIMEOUT_MS), file],
+      [
+        'test',
+        '--timeout',
+        String(PER_TEST_TIMEOUT_MS),
+        '--reporter=junit',
+        `--reporter-outfile=${reportPath}`,
+        file,
+      ],
       {
         cwd: process.cwd(),
         stdio: 'inherit',
@@ -138,13 +182,27 @@ function runTestFile(file: string): Promise<TestResult> {
       },
     );
 
+    // Set by the wall-clock timer so the `close` handler can report the real
+    // reason. The result is only produced once the process has actually been
+    // reaped: settling from the timer itself would free the worker slot while
+    // the killed process was still alive, letting the pool exceed its
+    // concurrency cap exactly when the machine is already struggling.
+    let killedByTimeout = false;
+
     const timer = setTimeout(() => {
+      killedByTimeout = true;
       child.kill('SIGKILL');
-      settleOnce({ file, passed: false, exitCode: null, timedOut: true });
     }, PER_FILE_TIMEOUT_MS);
 
-    child.on('exit', (code) => {
-      settleOnce({ file, passed: code === 0, exitCode: code, timedOut: false });
+    // `close` rather than `exit`: it fires once the child's stdio has been
+    // released, so a slot is not reused while the process is still tearing down.
+    child.on('close', (code) => {
+      settleOnce({
+        file,
+        passed: !killedByTimeout && code === 0,
+        exitCode: code,
+        timedOut: killedByTimeout,
+      });
     });
 
     child.on('error', (error: Error) => {
@@ -168,30 +226,106 @@ function describeFailure(result: TestResult): string {
     : `exit code ${result.exitCode ?? -1}`;
 }
 
-function generateJUnit(results: readonly TestResult[]): string {
-  const NL = '\n';
-  const failedCount = results.filter((result) => !result.passed).length;
-  const testCases = results
-    .map((result) => {
-      const className = escapeXml(
-        result.file.replace(/\.(test|spec)\.tsx?$/, ''),
-      );
-      const failureXml = result.passed
-        ? ''
-        : `<failure message="${escapeXml(describeFailure(result))}">FAILED</failure>`;
-      return `    <testcase classname="${className}" name="${className}" time="0">${failureXml}</testcase>`;
-    })
-    .join(NL);
+/** Totals scraped from the root `<testsuites>` element of a Bun JUnit report. */
+interface ReportTotals {
+  readonly tests: number;
+  readonly failures: number;
+  readonly skipped: number;
+}
+
+function readIntAttribute(element: string, name: string): number {
+  const match = new RegExp(`\\b${name}="([0-9]+)"`).exec(element);
+  return match === null ? 0 : Number.parseInt(match[1], 10);
+}
+
+/**
+ * Extracts the suite body and totals from one child's JUnit report.
+ *
+ * Bun writes a single root `<testsuites>` element wrapping nested `<testsuite>`
+ * elements that carry the real test cases, names and durations. Splicing those
+ * bodies into one root preserves every individual test record, which is what
+ * the `dorny/test-reporter` CI step consumes — a file-level summary would lose
+ * the per-test detail the Vitest reporter used to publish.
+ *
+ * Returns `undefined` when the child produced no usable report, i.e. it crashed
+ * or was killed before writing one.
+ */
+function extractReportBody(
+  xml: string,
+): { body: string; totals: ReportTotals } | undefined {
+  const openMatch = /<testsuites\b[^>]*>/.exec(xml);
+  const closeIndex = xml.lastIndexOf('</testsuites>');
+  if (openMatch === null || closeIndex < 0) {
+    return undefined;
+  }
+  const bodyStart = openMatch.index + openMatch[0].length;
+  if (closeIndex < bodyStart) {
+    return undefined;
+  }
+  return {
+    body: xml.slice(bodyStart, closeIndex).replace(/^\n+|\n+$/g, ''),
+    totals: {
+      tests: readIntAttribute(openMatch[0], 'tests'),
+      failures: readIntAttribute(openMatch[0], 'failures'),
+      skipped: readIntAttribute(openMatch[0], 'skipped'),
+    },
+  };
+}
+
+/**
+ * Synthesised suite for a file whose process died without writing a report, so
+ * that a crash or a wall-clock kill still shows up as a failure instead of
+ * silently contributing zero tests to the report.
+ */
+function unreportedSuite(result: TestResult): string {
+  const name = escapeXml(result.file);
+  const reason = escapeXml(describeFailure(result));
+  return [
+    `  <testsuite name="${name}" file="${name}" tests="1" failures="1" skipped="0" time="0">`,
+    `    <testcase name="${name} (no test report produced)" classname="${name}" time="0">`,
+    `      <failure message="${reason}">The bun test process produced no JUnit report.</failure>`,
+    '    </testcase>',
+    '  </testsuite>',
+  ].join('\n');
+}
+
+function generateJUnit(
+  results: readonly TestResult[],
+  reportPathFor: (file: string) => string,
+): string {
+  const bodies: string[] = [];
+  let tests = 0;
+  let failures = 0;
+  let skipped = 0;
+
+  for (const result of results) {
+    let report: string | undefined;
+    try {
+      report = readFileSync(reportPathFor(result.file), 'utf-8');
+    } catch {
+      report = undefined;
+    }
+    const extracted =
+      report === undefined ? undefined : extractReportBody(report);
+    if (extracted === undefined) {
+      bodies.push(unreportedSuite(result));
+      tests += 1;
+      failures += 1;
+      continue;
+    }
+    bodies.push(extracted.body);
+    tests += extracted.totals.tests;
+    failures += extracted.totals.failures;
+    skipped += extracted.totals.skipped;
+  }
 
   return (
     [
       '<?xml version="1.0" encoding="UTF-8"?>',
-      `<testsuites tests="${results.length}" failures="${failedCount}">`,
-      `  <testsuite name="agents" tests="${results.length}" failures="${failedCount}">`,
-      testCases,
-      '  </testsuite>',
+      `<testsuites name="agents" tests="${tests}" failures="${failures}" skipped="${skipped}">`,
+      ...bodies,
       '</testsuites>',
-    ].join(NL) + NL
+    ].join('\n') + '\n'
   );
 }
 
@@ -206,6 +340,12 @@ async function main(): Promise<void> {
     `Running ${testFiles.length} agents test files with concurrency ${CONCURRENCY}`,
   );
 
+  // Each child writes its own JUnit report here; they are merged into a single
+  // workspace-level junit.xml once the run finishes.
+  const reportDir = mkdtempSync(join(tmpdir(), 'agents-bun-junit-'));
+  const reportPathFor = (file: string): string =>
+    join(reportDir, `${file.replace(/[\\/]/g, '__')}.xml`);
+
   // Sliding worker pool: each worker takes the next unclaimed file as soon as
   // it is free. Fixed-size batches would hold `CONCURRENCY - 1` slots idle
   // while the slowest file in a batch finished, which both lengthens the run
@@ -215,7 +355,20 @@ async function main(): Promise<void> {
   const worker = async (): Promise<void> => {
     while (nextIndex < testFiles.length) {
       const file = testFiles[nextIndex++];
-      results.push(await runTestFile(file));
+      try {
+        results.push(await runTestFile(file, reportPathFor(file)));
+      } catch (error: unknown) {
+        // `spawn` can throw synchronously under OS-level resource exhaustion
+        // (EMFILE). Record it as a failed file so the run still produces a
+        // report and a controlled exit code rather than dying on an unhandled
+        // rejection and discarding every result collected so far.
+        console.error(
+          `Unexpected error running ${file}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        results.push({ file, passed: false, exitCode: -1, timedOut: false });
+      }
     }
   };
   await Promise.all(
@@ -233,7 +386,8 @@ async function main(): Promise<void> {
       (failed.length > 0 ? ` (${failed.length} failed)` : ''),
   );
 
-  writeFileSync('junit.xml', generateJUnit(results));
+  writeFileSync('junit.xml', generateJUnit(results, reportPathFor));
+  rmSync(reportDir, { recursive: true, force: true });
   process.exit(failed.length > 0 ? 1 : 0);
 }
 

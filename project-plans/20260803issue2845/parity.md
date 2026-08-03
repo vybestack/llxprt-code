@@ -59,10 +59,26 @@ Two findings shaped `packages/agents/run-bun-tests.ts`:
    timeout explicitly so the workspace keeps the `testTimeout: 30000` budget it
    had under Vitest.
 
-2. **Concurrency has to stay below the core count.** Suites under
-   `src/api/__tests__/` build a real Agent per test. Running eight of those at
-   once on a loaded machine pushed individual tests past 30s, producing
-   non-deterministic failures in a different file on each run. The runner uses a
-   sliding worker pool (rather than fixed batches, which idled workers behind
-   the slowest file in a batch) with a default concurrency of 4, overridable via
+2. **Concurrency has to stay below the core count.** Every file is a fresh
+   process that re-executes the whole agents module graph, and suites under
+   `src/api/__tests__/` additionally build a real Agent per test. Running eight
+   of those at once pushed individual tests past 30s, producing failures in a
+   different file on each run. The runner uses a sliding worker pool (rather
+   than fixed batches, which idled workers behind the slowest file in a batch)
+   sized at half the core count and clamped to [2, 4], overridable via
    `LLXPRT_AGENTS_TEST_CONCURRENCY`.
+
+   Measured on a 16-core machine that was concurrently hosting several
+   unrelated heavy workloads: concurrency 8 produced 1–5 failing files per run,
+   concurrency 4 produced 0–1 in ~70s, and concurrency 2 produced 0–1 in ~95s.
+   Because the residual failure rate did not track concurrency, the remaining
+   variance was external load rather than self-contention; every affected file
+   passed 5–10 consecutive times in isolation in 1–2s. For reference, the
+   Vitest agents CI shard took roughly 289s.
+
+3. **JUnit reports are merged, not summarised.** Each child writes its own Bun
+   JUnit report and the runner splices them into one `junit.xml`. A file-level
+   summary would have reported 330 pseudo test cases instead of the 3728 real
+   ones and lost every test name and duration that CI publishes. The merged
+   report independently confirms the parity figure above: its root element
+   reads `tests="3728"`.

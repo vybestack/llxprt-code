@@ -621,12 +621,18 @@ Two Bun behaviours the runner has to work around:
    the runner passes `--timeout 30000` on the command line to preserve the
    `testTimeout: 30000` the workspace ran under in Vitest. A `bunfig.toml`
    timeout would look correct and do nothing.
-2. **File concurrency must stay below the core count.** Suites under
-   `src/api/__tests__/` build a real Agent per test and are much heavier than
-   typical unit tests; oversubscribing pushes individual tests past the timeout
-   and surfaces as a different file failing on each run. The runner uses a
-   sliding worker pool with a default concurrency of 4, overridable with
+2. **File concurrency must stay below the core count.** Every file is a fresh
+   process that re-executes the whole agents module graph, and suites under
+   `src/api/__tests__/` additionally build a real Agent per test. Saturating all
+   cores starves individual tests past the timeout, which surfaces as a
+   different file failing on each run. The runner uses a sliding worker pool
+   sized at half the core count, clamped to [2, 4], overridable with
    `LLXPRT_AGENTS_TEST_CONCURRENCY`.
+
+The runner merges each child's Bun JUnit report into a single workspace
+`junit.xml`, so CI keeps per-test names and durations rather than a file-level
+summary. A file whose process dies without writing a report is still recorded
+as a failing suite.
 
 The `pretest` hook (`scripts/check-agents-api-surface.ts`) is unchanged and is
 still executed by both `npm run test` and the `bun scripts/test.ts` orchestrator.
