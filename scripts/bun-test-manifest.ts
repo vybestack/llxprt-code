@@ -694,12 +694,32 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
   },
   {
+    // Bun-native tests for the OCR review workflow preview parser and
+    // docs-only classification (issue #2824). Vitest skips `*.bun.test.ts`;
+    // these run under Bun's native runner only.
+    workspace: 'scripts-ocr-review',
+    cwd: '.',
+    files: [
+      'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
+      'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
+      'scripts/tests/ocr-review-workflow.bun.test.ts',
+    ],
+  },
+  {
     // Bun-native regression test for the issue-planner filesystem-confinement
     // step (issue #2960): vitest skips `*.bun.test.ts`; this runs under Bun's
     // native runner only.
     workspace: 'issue-planner-confinement',
     cwd: '.',
     files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
+  },
+  {
+    // Bun-native tests for the issue-planner advisory-enrichment non-fatality
+    // guards (umbrella #2984): vitest skips `*.bun.test.ts`; this runs under
+    // Bun's native runner only.
+    workspace: 'issue-planner-enrichment',
+    cwd: '.',
+    files: ['scripts/tests/issue-planner-enrichment.bun.test.ts'],
   },
   {
     // Bun-native tests for the macOS system-Bun launcher preference (#2962).

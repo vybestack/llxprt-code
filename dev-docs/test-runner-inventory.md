@@ -265,10 +265,11 @@ test suite and is retained:
    vitest's runtime semantics by spawning `vitest run` subprocesses. This is
    a meta-test of the test runner itself, not an application test.
 
-2. **Per-workspace `test:vitest` scripts** — Each migrated workspace retains a
+2. **Per-workspace `test:vitest` scripts** — Most migrated workspaces retain a
    `test:vitest` script so the Vitest path remains available as a fallback
    during the migration transition. These will be removed once the full
-   migration is complete.
+   migration is complete. `packages/core` is the exception: its script was
+   removed with the Bun exclusion list (issue #2968), so core is Bun-only.
 
 3. **`scripts/tests/vitest.config.ts`** — The scripts-tests harness (97 files)
    still runs under Vitest. Migration is deferred to Slice 13.

@@ -110,7 +110,7 @@ describe('JspProducer', () => {
     producer.observeActivityChanged('acting');
     producer.observeWaitOpened('permission');
     producer.observeWaitResolved();
-    producer.observeTodosReplaced('session', undefined, [
+    producer.observeTodosReplaced(undefined, [
       { content: 'Ship it', status: 'in_progress' },
     ]);
     producer.observeToolCreated('read_file', 'proposed');
@@ -140,17 +140,50 @@ describe('JspProducer', () => {
     producer.stop();
   });
 
-  it('filters todos and keeps the latest-created tool as the headline', async () => {
+  it('keeps publishing todos after the CLI session id is rebound', async () => {
+    // Regression for #2963. `Config.adoptSessionId` rebinds the session id at
+    // runtime (resume, session browser, /chat resume). The producer used to
+    // compare each replacement against a session id captured at startup, so
+    // every list published after such a rebind was silently dropped and Jefe
+    // rendered the pane as unknown for the rest of the session. Todos are the
+    // only field gated that way, which is why status and the last message
+    // kept working.
     const { hooks, published } = makeHarness();
     const producer = new JspProducer(bootstrap, nativeSession, hooks);
-    producer.setSession('mine', 'primary');
+    producer.setAgentScope(undefined);
     producer.start();
     await producer.flush();
     published.length = 0;
-    producer.observeTodosReplaced('other', 'agent-2', [
+
+    // The tool dispatcher always supplies a concrete agent id, and the primary
+    // agent's is the default scope; the session id is not part of the decision.
+    producer.observeTodosReplaced('primary', [
+      { content: 'after resume', status: 'in_progress' },
+    ]);
+    await producer.flush();
+
+    expect(eventTypes(published)).toStrictEqual(['todos.replaced']);
+    expect(producer.snapshot().todos).toMatchObject({
+      availability: 'known',
+      value: {
+        revision: 1,
+        items: [{ text: 'after resume', completed: false }],
+      },
+    });
+    producer.stop();
+  });
+
+  it('filters todos and keeps the latest-created tool as the headline', async () => {
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.setAgentScope('primary');
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+    producer.observeTodosReplaced('agent-2', [
       { content: 'not mine', status: 'pending' },
     ]);
-    producer.observeTodosReplaced('mine', 'primary', [
+    producer.observeTodosReplaced('primary', [
       { content: 'mine', status: 'completed' },
     ]);
     producer.observeToolCreated('read_file', 'proposed');
@@ -177,7 +210,7 @@ describe('JspProducer', () => {
     const producer = new JspProducer(bootstrap, nativeSession, hooks);
     producer.start();
     await producer.flush();
-    producer.observeTodosReplaced('session', undefined, [
+    producer.observeTodosReplaced(undefined, [
       { content: 'Completed task', status: 'completed' },
     ]);
     producer.observeAssistantMessageDisplayed('Committed reply', 4999);

@@ -62,6 +62,10 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
 
   beforeEach(() => {
     mockSpawnObj = createMockSpawn();
+    // The spawn mock is created once by the module factory, so its recorded
+    // calls survive across tests. Clear them so each test only observes the
+    // spawn invocation it triggered itself.
+    vi.mocked(spawn).mockClear();
     vi.mocked(spawn).mockReturnValue(
       mockSpawnObj as unknown as ReturnType<typeof spawn>,
     );
