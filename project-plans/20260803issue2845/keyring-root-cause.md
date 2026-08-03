@@ -70,7 +70,65 @@ accounted for), `keyring_core::set_default_store` (a plain
 `RwLock<Option<Arc<..>>>`), GC/allocation pressure, and thread-safety of
 concurrent credential reads.
 
-## Suggested fix (the basis for an upstream PR)
+## The actual defect, and a verified one-line fix
+
+The problem is not `keyring-node` and not Bun. It is `libdbus-sys`'s **vendored**
+build of libdbus.
+
+`keyring-node` enables `vendored` on `dbus-secret-service-keyring-store`, which
+chains to `dbus/vendored` and then `libdbus-sys/vendored`, so libdbus is compiled
+from source by `libdbus-sys/build_vendored.rs`.
+
+libdbus selects its polling implementation at compile time
+(`vendor/dbus/dbus/dbus-sysdeps-unix.c:3146`):
+
+```c
+_dbus_poll (DBusPollFD *fds, int n_fds, int timeout_milliseconds)
+{
+#if defined(HAVE_POLL) && !defined(BROKEN_POLL)
+  /* DBusPollFD is a struct pollfd in this code path, so we can just poll() */
+```
+
+…and otherwise falls back to a `select()` implementation that calls
+`FD_SET(fd, &read_set)`. `FD_SET` has undefined behaviour for
+`fd >= FD_SETSIZE` (1024) and writes past the end of the `fd_set`.
+
+`build_vendored.rs` enables `HAVE_EPOLL` and `DBUS_HAVE_LINUX_EPOLL` (used by
+the bus daemon's mainloop) but **never enables `HAVE_POLL`** — a grep for
+`enable("HAVE_POLL")` returns 0 matches. So every vendored build takes the
+`select()` path, and any client whose D-Bus connection lands on fd >= 1024
+corrupts memory.
+
+**The fix**, in `libdbus-sys/build_vendored.rs`, next to the existing
+`HAVE_EPOLL` line:
+
+```rust
+config.enable("HAVE_EPOLL");
+config.enable("HAVE_POLL");
+```
+
+### Verification
+
+Rebuilt keyring-node with `vendored` still enabled and libdbus-sys redirected via
+`[patch.crates-io]` to a copy carrying only that one added line:
+
+| Check | Before | After |
+| --- | --- | --- |
+| fd reproducer, 100 fds | SURVIVED | SURVIVED |
+| fd reproducer, 1200 fds | SIGSEGV | **SURVIVED** |
+| fd reproducer, 4000 fds | SIGSEGV | **SURVIVED** |
+| `capabilityGaps.integration.spec.ts` | SIGSEGV | **18 pass** |
+| `subagentOrchestrator-runtime.test.ts` | SIGSEGV | **15 pass** |
+
+Both originally-crashing agents suites pass, and the reproducer is clean at every
+descriptor count.
+
+Dropping the `vendored` feature entirely (linking the distro libdbus 1.16.2,
+which is built with poll) also fixes it — useful as confirmation, but not a fix
+upstream can ship, since `vendored` exists so the published binaries do not
+require libdbus at runtime.
+
+## Earlier suggestion, superseded by the above
 
 `keyring-node` already declares the pure-Rust alternative in `Cargo.toml`:
 
