@@ -34,6 +34,7 @@ describe('SecureStore encrypted-file fallback', () => {
     return new SecureStore(service, {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: async () => MACHINE_SECRET,
     });
@@ -116,13 +117,16 @@ describe('SecureStore encrypted-file fallback', () => {
     const store = new SecureStore('fallback-deny-test', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'deny',
     });
 
     await expect(store.set('should-fail', 'value')).rejects.toMatchObject<
       Partial<SecureStoreError>
     >({ code: 'UNAVAILABLE' });
-    expect(await fs.readdir(tempDir)).toHaveLength(0);
+    // No fallback file should be written — only the lock directory may exist.
+    const entries = await fs.readdir(tempDir);
+    expect(entries.filter((e) => e.endsWith('.enc'))).toHaveLength(0);
   });
 
   it('reports the keyring as unavailable when no adapter is loaded', async () => {

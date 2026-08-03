@@ -4,57 +4,61 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Non-destructive keyring write verification.
+ *
+ * After `setPassword`, a read-back probe classifies the result into one of
+ * three outcomes. A mismatched non-null value is a **conflict** (another
+ * process owns the item) — it is NEVER deleted. The observed foreign value is
+ * never returned or logged (no secret material may escape).
+ *
+ * @plan PLAN-20260801-ISSUE2927
+ * @requirement R1, R2
+ */
+
 import type { KeyringAdapter } from './secure-store.js';
 
-export interface KeyringWriteVerification {
-  verified: boolean;
-  hasStaleValue: boolean;
-}
+/**
+ * Discriminated outcome of a post-write read-back probe.
+ *
+ * - `verified` — read-back equals the value this process just wrote.
+ * - `conflict` — read-back is a different non-null value (another process won
+ *   the race). The winner is left untouched.
+ * - `unverified` — read-back is null or threw, so correctness cannot be
+ *   confirmed.
+ *
+ * @plan PLAN-20260801-ISSUE2927
+ * @requirement R1, R2
+ */
+export type KeyringWriteOutcome =
+  | { readonly outcome: 'verified' }
+  | { readonly outcome: 'conflict' }
+  | { readonly outcome: 'unverified' };
 
+/**
+ * Reads back the credential and classifies the result without any destructive
+ * side effect.
+ *
+ * @plan PLAN-20260801-ISSUE2927
+ * @requirement R1, R2
+ */
 export async function verifyKeyringWrite(
   adapter: KeyringAdapter,
   serviceName: string,
   key: string,
   expected: string,
-): Promise<KeyringWriteVerification> {
+): Promise<KeyringWriteOutcome> {
+  let readBack: string | null;
   try {
-    const readBack = await adapter.getPassword(serviceName, key);
-    return {
-      verified: readBack === expected,
-      hasStaleValue: readBack !== null && readBack !== expected,
-    };
+    readBack = await adapter.getPassword(serviceName, key);
   } catch {
-    return { verified: false, hasStaleValue: false };
+    return { outcome: 'unverified' };
   }
-}
-
-export async function clearMismatchedKeyringValue(
-  adapter: KeyringAdapter,
-  serviceName: string,
-  key: string,
-): Promise<boolean> {
-  try {
-    await adapter.deletePassword(serviceName, key);
-  } catch {
-    return false;
+  if (readBack === expected) {
+    return { outcome: 'verified' };
   }
-  // Some keyring backends have delayed read-after-delete visibility where a
-  // successful deletePassword is not immediately reflected by getPassword.
-  // Retry a few times with a small delay before concluding the stale value
-  // still persists, so transient inconsistency does not become durable
-  // credential loss.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const readBack = await adapter.getPassword(serviceName, key);
-      if (readBack === null) {
-        return true;
-      }
-    } catch {
-      // A throw on read-back after delete is inconclusive — the backend may
-      // not have propagated the deletion yet. Continue retrying instead of
-      // treating this as a durable failure.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+  if (readBack === null) {
+    return { outcome: 'unverified' };
   }
-  return false;
+  return { outcome: 'conflict' };
 }

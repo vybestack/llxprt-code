@@ -71,6 +71,9 @@ const baseArgv: CliArgs = {
   nobrowser: undefined,
   listSessions: undefined,
   deleteSession: undefined,
+  imageInput: undefined,
+  imageOutput: undefined,
+  imagePrompt: undefined,
   quiet: undefined,
 };
 

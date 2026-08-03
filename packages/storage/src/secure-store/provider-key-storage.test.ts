@@ -383,6 +383,7 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     const secureStore = new SecureStore('llxprt-code-provider-keys', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     const storage = new ProviderKeyStorage({ secureStore });
@@ -400,6 +401,7 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     const fallbackStore = new SecureStore('llxprt-code-provider-keys', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     await fallbackStore.set('zai', 'stale-provider-key');
@@ -447,6 +449,7 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     const secureStore = new SecureStore('llxprt-code-provider-keys', {
       keyringLoader: async () => flakyKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     const storage = new ProviderKeyStorage({ secureStore });

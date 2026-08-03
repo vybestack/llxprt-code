@@ -25,7 +25,7 @@ import {
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
 import { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
-import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import { createProviderKeyStorage } from './auth/proxy/credential-store-factory.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
 import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -69,10 +69,9 @@ export interface BaseProviderConfig {
   supportsOAuth?: boolean;
 
   // Named API key storage used to resolve `auth-key-name` references.
-  // Optional DI seam: when omitted, BaseProvider falls back to core's
-  // singleton provider key storage so resolution works in every runtime
-  // (including subagent runtimes that set `auth-key-name` without
-  // pre-resolving it to a concrete `auth-key`).
+  // Optional DI seam: when omitted, BaseProvider falls back to the sanctioned
+  // createProviderKeyStorage() factory, which routes through the credential
+  // proxy inside a sandbox and direct storage on the host.
   providerKeyStorage?: IProviderKeyStorage;
 }
 
@@ -154,15 +153,16 @@ export abstract class BaseProvider implements IProvider {
     // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor (unified with C-CB-06/C-CB-09)
     // SettingsService satisfies ISettingsService by structural typing.
     // providerKeyStorage is injected so the resolver can resolve named keys
-    // (`auth-key-name`) on its own. Pre-extraction, the core resolver reached
-    // core's getProviderKeyStorage() internally; after extraction the auth
-    // package can't, so the consumer must inject it. Falling back to core's
-    // singleton preserves behavior for runtimes (e.g. subagents) that set
-    // `auth-key-name` without pre-resolving it to a concrete `auth-key`.
+    // (`auth-key-name`) on its own. The sanctioned factory is used as the
+    // fallback so named-key resolution routes through the credential proxy
+    // inside a sandbox (when LLXPRT_CREDENTIAL_SOCKET is set) and falls back
+    // to direct storage on the host. Callers may still inject their own
+    // storage via config.providerKeyStorage.
     this.authResolver = new AuthPrecedenceResolver(precedenceConfig, {
       oauthManager: config.oauthManager,
       settingsService: fallbackSettingsService,
-      providerKeyStorage: config.providerKeyStorage ?? getProviderKeyStorage(),
+      providerKeyStorage:
+        config.providerKeyStorage ?? createProviderKeyStorage(),
     });
   }
 

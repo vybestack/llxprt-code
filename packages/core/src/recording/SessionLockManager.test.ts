@@ -22,19 +22,12 @@
  * state (lock files exist/don't exist) using real temp directories — no mock
  * theater.
  *
- * Property-based tests use @fast-check/vitest (≥30% of total tests).
+ * All tests are example-based; this file has no property-based coverage.
  * All tests expect real behavior from the lock manager. They will fail against
  * the Phase 09 stub — that is correct TDD.
  */
 
-import {
-  describe,
-  it as itProp,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-} from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'path';
 import * as os from 'os';
 import {
@@ -131,7 +124,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001
      * Test 3: getLockPath returns path + '.lock'
      */
-    itProp('getLockPath returns <chatsDir>/<sessionId>.lock', () => {
+    it('getLockPath returns <chatsDir>/<sessionId>.lock', () => {
       const result = SessionLockManager.getLockPath(
         '/tmp/chats',
         'session-abc123',
@@ -144,34 +137,28 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001
      * Test 29: getLockPathForSession uses session-ID-based path
      */
-    itProp(
-      'getLockPath uses session-ID-based path independent of JSONL',
-      () => {
-        const result = SessionLockManager.getLockPath(chatsDir, 'abc123');
-        expect(result).toBe(path.join(chatsDir, 'abc123.lock'));
-      },
-    );
+    it('getLockPath uses session-ID-based path independent of JSONL', () => {
+      const result = SessionLockManager.getLockPath(chatsDir, 'abc123');
+      expect(result).toBe(path.join(chatsDir, 'abc123.lock'));
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-001
      * getLockPathFromFilePath extracts sessionId correctly
      */
-    itProp(
-      'getLockPathFromFilePath derives lock path from JSONL file path',
-      () => {
-        const jsonlPath = path.join(chatsDir, 'session-myid.jsonl');
-        const result = SessionLockManager.getLockPathFromFilePath(jsonlPath);
-        expect(result).toBe(path.join(chatsDir, 'myid.lock'));
-      },
-    );
+    it('getLockPathFromFilePath derives lock path from JSONL file path', () => {
+      const jsonlPath = path.join(chatsDir, 'session-myid.jsonl');
+      const result = SessionLockManager.getLockPathFromFilePath(jsonlPath);
+      expect(result).toBe(path.join(chatsDir, 'myid.lock'));
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-001
      * getLockPathFromFilePath rejects invalid file names
      */
-    itProp('getLockPathFromFilePath throws for non-session file path', () => {
+    it('getLockPathFromFilePath throws for non-session file path', () => {
       expect(() =>
         SessionLockManager.getLockPathFromFilePath('/tmp/random.txt'),
       ).toThrow('Cannot extract session ID from path');
@@ -188,7 +175,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001, REQ-CON-002
      * Test 1: acquire creates .lock file
      */
-    itProp('acquire creates a .lock file on disk', async () => {
+    it('acquire creates a .lock file on disk', async () => {
       const sessionId = 'test-session-001';
       const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
@@ -204,7 +191,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001
      * Test 2: Lock file contains PID and timestamp
      */
-    itProp('lock file contains JSON with pid and timestamp', async () => {
+    it('lock file contains JSON with pid and timestamp', async () => {
       const sessionId = 'test-session-002';
       const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
@@ -223,62 +210,53 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001
      * Test 28: Lock file contains sessionId field
      */
-    itProp(
-      'lock file contains sessionId field matching the requested session',
-      async () => {
-        const sessionId = 'test-session-028';
-        const handle = await SessionLockManager.acquire(chatsDir, sessionId);
+    it('lock file contains sessionId field matching the requested session', async () => {
+      const sessionId = 'test-session-028';
+      const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        const raw = await fs.readFile(lockPath, 'utf-8');
-        const data = JSON.parse(raw);
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      const raw = await fs.readFile(lockPath, 'utf-8');
+      const data = JSON.parse(raw);
 
-        expect(data.sessionId).toBe(sessionId);
+      expect(data.sessionId).toBe(sessionId);
 
-        await handle.release();
-      },
-    );
+      await handle.release();
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-002, REQ-REC-004
      * Test 27: acquireForSession creates lock before JSONL file exists
      */
-    itProp(
-      'acquire creates lock before JSONL file exists (deferred materialization)',
-      async () => {
-        const sessionId = 'test-session-027';
-        const handle = await SessionLockManager.acquire(chatsDir, sessionId);
+    it('acquire creates lock before JSONL file exists (deferred materialization)', async () => {
+      const sessionId = 'test-session-027';
+      const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
 
-        expect(await fileExists(lockPath)).toBe(true);
-        expect(await fileExists(jsonlPath)).toBe(false);
+      expect(await fileExists(lockPath)).toBe(true);
+      expect(await fileExists(jsonlPath)).toBe(false);
 
-        await handle.release();
-      },
-    );
+      await handle.release();
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-002
      * Test 7: Lock with non-existent directory creates parent
      */
-    itProp(
-      'acquire creates parent directory if it does not exist',
-      async () => {
-        const nestedDir = path.join(tempDir, 'deep', 'nested', 'chats');
-        const sessionId = 'test-session-007';
+    it('acquire creates parent directory if it does not exist', async () => {
+      const nestedDir = path.join(tempDir, 'deep', 'nested', 'chats');
+      const sessionId = 'test-session-007';
 
-        const handle = await SessionLockManager.acquire(nestedDir, sessionId);
+      const handle = await SessionLockManager.acquire(nestedDir, sessionId);
 
-        const lockPath = SessionLockManager.getLockPath(nestedDir, sessionId);
-        expect(await fileExists(lockPath)).toBe(true);
+      const lockPath = SessionLockManager.getLockPath(nestedDir, sessionId);
+      expect(await fileExists(lockPath)).toBe(true);
 
-        await handle.release();
-      },
-    );
+      await handle.release();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -291,7 +269,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-003
      * Test 4: release deletes lock file
      */
-    itProp('release deletes the lock file from disk', async () => {
+    it('release deletes the lock file from disk', async () => {
       const sessionId = 'test-session-004';
       const handle = await SessionLockManager.acquire(chatsDir, sessionId);
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
@@ -308,7 +286,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-003
      * Test 5: Double release is safe (idempotent)
      */
-    itProp('double release is safe and idempotent', async () => {
+    it('double release is safe and idempotent', async () => {
       const sessionId = 'test-session-005';
       const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
@@ -325,7 +303,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-003
      * Test 10: LockHandle.release() followed by acquire succeeds
      */
-    itProp('release allows subsequent acquire on same session', async () => {
+    it('release allows subsequent acquire on same session', async () => {
       const sessionId = 'test-session-010';
       const handle1 = await SessionLockManager.acquire(chatsDir, sessionId);
       await handle1.release();
@@ -342,20 +320,17 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-003
      * Test 30: Lock transition: pre-materialization to released (no JSONL)
      */
-    itProp(
-      'acquire and release with no JSONL created leaves clean state',
-      async () => {
-        const sessionId = 'test-session-030';
-        const handle = await SessionLockManager.acquire(chatsDir, sessionId);
-        await handle.release();
+    it('acquire and release with no JSONL created leaves clean state', async () => {
+      const sessionId = 'test-session-030';
+      const handle = await SessionLockManager.acquire(chatsDir, sessionId);
+      await handle.release();
 
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
 
-        expect(await fileExists(lockPath)).toBe(false);
-        expect(await fileExists(jsonlPath)).toBe(false);
-      },
-    );
+      expect(await fileExists(lockPath)).toBe(false);
+      expect(await fileExists(jsonlPath)).toBe(false);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -368,7 +343,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-004
      * Test 6: Concurrent acquire fails
      */
-    itProp('second acquire on same session throws "in use" error', async () => {
+    it('second acquire on same session throws "in use" error', async () => {
       const sessionId = 'test-session-006';
       const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
@@ -384,7 +359,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-004
      * Test 11: Multiple sessions don't conflict
      */
-    itProp('different sessionIds can be locked independently', async () => {
+    it('different sessionIds can be locked independently', async () => {
       const handle1 = await SessionLockManager.acquire(chatsDir, 'session-a');
       const handle2 = await SessionLockManager.acquire(chatsDir, 'session-b');
 
@@ -409,7 +384,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-005
      * Test 8: Stale lock detection: dead PID
      */
-    itProp('checkStale returns true for a lock with dead PID', async () => {
+    it('checkStale returns true for a lock with dead PID', async () => {
       const sessionId = 'test-session-008';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       await writeFakeLock(lockPath, DEAD_PID, sessionId);
@@ -423,41 +398,35 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-005
      * Test 9: Stale lock detection: alive PID
      */
-    itProp(
-      'checkStale returns false for a lock with current process PID',
-      async () => {
-        const sessionId = 'test-session-009';
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        await writeFakeLock(lockPath, process.pid, sessionId);
+    it('checkStale returns false for a lock with current process PID', async () => {
+      const sessionId = 'test-session-009';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeFakeLock(lockPath, process.pid, sessionId);
 
-        const stale = await SessionLockManager.checkStale(lockPath);
-        expect(stale).toBe(false);
-      },
-    );
+      const stale = await SessionLockManager.checkStale(lockPath);
+      expect(stale).toBe(false);
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-005
      * Test 18: Corrupt lock file treated as stale
      */
-    itProp(
-      'checkStale returns true for corrupt (non-JSON) lock file',
-      async () => {
-        const sessionId = 'test-session-018';
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        await fs.writeFile(lockPath, 'this is not json garbage!!!', 'utf-8');
+    it('checkStale returns true for corrupt (non-JSON) lock file', async () => {
+      const sessionId = 'test-session-018';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await fs.writeFile(lockPath, 'this is not json garbage!!!', 'utf-8');
 
-        const stale = await SessionLockManager.checkStale(lockPath);
-        expect(stale).toBe(true);
-      },
-    );
+      const stale = await SessionLockManager.checkStale(lockPath);
+      expect(stale).toBe(true);
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-005
      * Test 10 (stale breaking): acquire breaks stale lock transparently
      */
-    itProp('acquire succeeds when stale lock exists (dead PID)', async () => {
+    it('acquire succeeds when stale lock exists (dead PID)', async () => {
       const sessionId = 'test-session-stale';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       await writeFakeLock(lockPath, DEAD_PID, sessionId);
@@ -477,7 +446,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-005
      * Test 14: isStale returns true for dead PID
      */
-    itProp('isStale returns true when lock file has dead PID', async () => {
+    it('isStale returns true when lock file has dead PID', async () => {
       const sessionId = 'test-session-014';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       await writeFakeLock(lockPath, DEAD_PID, sessionId);
@@ -486,40 +455,37 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       expect(stale).toBe(true);
     });
 
-    itProp(
-      'checkStale returns false when process.kill throws EPERM',
-      async () => {
-        const sessionId = 'test-session-eperm-stale';
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        await writeFakeLock(lockPath, 12345, sessionId);
+    it('checkStale returns false when process.kill throws EPERM', async () => {
+      const sessionId = 'test-session-eperm-stale';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeFakeLock(lockPath, 12345, sessionId);
 
-        const killSpy = vi
-          .spyOn(process, 'kill')
-          .mockImplementation(
-            (_pid: number, _signal?: number | NodeJS.Signals) => {
-              const error = new Error(
-                'operation not permitted',
-              ) as NodeJS.ErrnoException;
-              error.code = 'EPERM';
-              throw error;
-            },
-          );
+      const killSpy = vi
+        .spyOn(process, 'kill')
+        .mockImplementation(
+          (_pid: number, _signal?: number | NodeJS.Signals) => {
+            const error = new Error(
+              'operation not permitted',
+            ) as NodeJS.ErrnoException;
+            error.code = 'EPERM';
+            throw error;
+          },
+        );
 
-        try {
-          const stale = await SessionLockManager.checkStale(lockPath);
-          expect(stale).toBe(false);
-        } finally {
-          killSpy.mockRestore();
-        }
-      },
-    );
+      try {
+        const stale = await SessionLockManager.checkStale(lockPath);
+        expect(stale).toBe(false);
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-005
      * Test 15: isStale returns false when no lock
      */
-    itProp('isStale returns false when no lock file exists', async () => {
+    it('isStale returns false when no lock file exists', async () => {
       const stale = await SessionLockManager.isStale(chatsDir, 'nonexistent');
       expect(stale).toBe(false);
     });
@@ -535,25 +501,22 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001
      * Test 11: isLocked returns true when locked
      */
-    itProp(
-      'isLocked returns true when lock is held by live process',
-      async () => {
-        const sessionId = 'test-session-locked';
-        const handle = await SessionLockManager.acquire(chatsDir, sessionId);
+    it('isLocked returns true when lock is held by live process', async () => {
+      const sessionId = 'test-session-locked';
+      const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
-        const locked = await SessionLockManager.isLocked(chatsDir, sessionId);
-        expect(locked).toBe(true);
+      const locked = await SessionLockManager.isLocked(chatsDir, sessionId);
+      expect(locked).toBe(true);
 
-        await handle.release();
-      },
-    );
+      await handle.release();
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-001
      * Test 12: isLocked returns false when not locked
      */
-    itProp('isLocked returns false when no lock file exists', async () => {
+    it('isLocked returns false when no lock file exists', async () => {
       const locked = await SessionLockManager.isLocked(
         chatsDir,
         'no-such-session',
@@ -566,7 +529,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-001, REQ-CON-005
      * Test 13: isLocked returns false for stale lock
      */
-    itProp('isLocked returns false for stale lock (dead PID)', async () => {
+    it('isLocked returns false for stale lock (dead PID)', async () => {
       const sessionId = 'test-session-stale-locked';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       await writeFakeLock(lockPath, DEAD_PID, sessionId);
@@ -576,7 +539,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
     });
   });
 
-  itProp('acquire maps ENOENT then EEXIST race to in-use error', async () => {
+  it('acquire maps ENOENT then EEXIST race to in-use error', async () => {
     const sessionId = 'test-session-enoent-race';
     const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
     const writeFileMock = vi.mocked(fs.writeFile);
@@ -626,7 +589,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-005
      * Test 16: removeStaleLock deletes lock file
      */
-    itProp('removeStaleLock removes the lock file from disk', async () => {
+    it('removeStaleLock removes the lock file from disk', async () => {
       const sessionId = 'test-session-016';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       await writeFakeLock(lockPath, DEAD_PID, sessionId);
@@ -641,16 +604,13 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-005
      * Test 17: removeStaleLock is safe when no lock exists
      */
-    itProp(
-      'removeStaleLock does not throw when no lock file exists',
-      async () => {
-        // Verify removeStaleLock completes without throwing when the lock
-        // file does not exist (idempotent cleanup).
-        await expect(
-          SessionLockManager.removeStaleLock(chatsDir, 'nonexistent-session'),
-        ).resolves.toBeUndefined();
-      },
-    );
+    it('removeStaleLock does not throw when no lock file exists', async () => {
+      // Verify removeStaleLock completes without throwing when the lock
+      // file does not exist (idempotent cleanup).
+      await expect(
+        SessionLockManager.removeStaleLock(chatsDir, 'nonexistent-session'),
+      ).resolves.toBeUndefined();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -663,47 +623,41 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * @requirement REQ-CON-005
      * Test 31: Orphan lock cleanup: stale lock with no JSONL
      */
-    itProp(
-      'cleanupOrphanedLocks removes stale lock with no JSONL file',
-      async () => {
-        const sessionId = 'orphan-no-jsonl';
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        await writeFakeLock(lockPath, DEAD_PID, sessionId);
+    it('cleanupOrphanedLocks removes stale lock with no JSONL file', async () => {
+      const sessionId = 'orphan-no-jsonl';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeFakeLock(lockPath, DEAD_PID, sessionId);
 
-        await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
 
-        expect(await fileExists(lockPath)).toBe(false);
-      },
-    );
+      expect(await fileExists(lockPath)).toBe(false);
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-005
      * Test 32: Orphan lock cleanup: stale lock with existing JSONL
      */
-    itProp(
-      'cleanupOrphanedLocks removes stale lock but preserves JSONL file',
-      async () => {
-        const sessionId = 'orphan-with-jsonl';
-        const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-        const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+    it('cleanupOrphanedLocks removes stale lock but preserves JSONL file', async () => {
+      const sessionId = 'orphan-with-jsonl';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
 
-        await writeFakeLock(lockPath, DEAD_PID, sessionId);
-        await fs.writeFile(jsonlPath, '{"type":"session_start"}\n', 'utf-8');
+      await writeFakeLock(lockPath, DEAD_PID, sessionId);
+      await fs.writeFile(jsonlPath, '{"type":"session_start"}\n', 'utf-8');
 
-        await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
 
-        expect(await fileExists(lockPath)).toBe(false);
-        expect(await fileExists(jsonlPath)).toBe(true);
-      },
-    );
+      expect(await fileExists(lockPath)).toBe(false);
+      expect(await fileExists(jsonlPath)).toBe(true);
+    });
 
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-004
      * Test 33: Active lock is not removed by cleanup
      */
-    itProp('cleanupOrphanedLocks does not remove active locks', async () => {
+    it('cleanupOrphanedLocks does not remove active locks', async () => {
       const sessionId = 'active-lock';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       // Write lock with current PID (alive)

@@ -101,6 +101,11 @@ import {
 } from './cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
 import { formatNonInteractiveError } from './session/errorReporting.js';
+import {
+  runDirectImageModeAndExit,
+  buildImageModeFlags,
+} from './config/imageModeDispatch.js';
+import { isImageModeActive } from './config/imageMode.js';
 import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
   installNonInteractiveSigintHandler,
@@ -263,6 +268,17 @@ function prepareSandboxCredentialStartup(workspaceRoot: string): void {
   }
 }
 
+/**
+ * Detect whether direct image mode is active from parsed argv flags.
+ *
+ * Shares `buildImageModeFlags` with `resolveDirectImageMode` so the stdin-guard
+ * bypass below and the later dispatch can never disagree about whether image
+ * mode is active.
+ */
+function detectImageModeFromArgv(argv: ParsedCliArgs): boolean {
+  return isImageModeActive(buildImageModeFlags(argv));
+}
+
 export async function main() {
   configureEarlyDebugLogging();
 
@@ -285,12 +301,17 @@ export async function main() {
 
   await cleanupCheckpoints();
 
-  await ensureStdinOrPromptProvided(
-    hasPipedInput,
-    readStdinOnce,
-    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
-      (argv.promptWords ?? []).join(' '),
-  );
+  // Direct image mode bypasses the conversational stdin guard: when image
+  // flags are present, the operation does not read stdin for a conversational
+  // prompt, so a non-TTY stdin with no prompt must NOT cause an early exit.
+  if (!detectImageModeFromArgv(argv)) {
+    await ensureStdinOrPromptProvided(
+      hasPipedInput,
+      readStdinOnce,
+      firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
+        (argv.promptWords ?? []).join(' '),
+    );
+  }
   throwIfSettingsErrors(settings);
   redirectConsoleForAcp(argv);
 
@@ -362,6 +383,16 @@ export async function main() {
   if (initialAuthFailed) {
     await runExitCleanup();
     process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
+  }
+
+  // Direct image mode: detect after configuration/auth/backend setup but BEFORE
+  // interactive/non-interactive conversational dispatch. Image mode must NOT
+  // construct or invoke the conversational agent loop — it runs the common
+  // image-operation service directly and exits.
+  const imageExitCode = await runDirectImageModeAndExit(argv, config);
+  if (imageExitCode !== null) {
+    await runExitCleanup();
+    process.exit(imageExitCode);
   }
 
   // Cleanup sessions before agent construction.

@@ -537,6 +537,7 @@ export class AgentImpl implements Agent {
   private buildTasksControl(): TasksControl {
     const tasksDeps: TasksControlDeps = {
       getManager: () => this.deps.config.getAsyncTaskManager(),
+      getShellJobManager: () => this.deps.config.getShellJobManager(),
     };
     return new TasksControl(tasksDeps);
   }

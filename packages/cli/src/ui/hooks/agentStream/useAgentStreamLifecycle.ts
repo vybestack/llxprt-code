@@ -18,6 +18,7 @@ import {
   StreamingState,
   type HistoryItemWithoutId,
 } from '../../types.js';
+import { observeTurnCancelled } from '../../../observation/jspWiring.js';
 import { useShellCommandProcessor } from '../shellCommandProcessor.js';
 import {
   type TrackedCancelledToolCall,
@@ -254,6 +255,7 @@ export function useCancellation(
     addItem({ type: MessageType.INFO, text: 'Request cancelled.' }, Date.now());
     setPendingHistoryItem(null);
     onCancelSubmit();
+    observeTurnCancelled();
     setIsResponding(false);
     setShellInputFocused(false);
   }, [

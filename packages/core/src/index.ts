@@ -54,6 +54,10 @@ export * from './confirmation-bus/message-bus.js';
 // Export services
 export * from './services/git-stats-service.js';
 
+// Export the backend-neutral image-generation service so the CLI composition
+// root can wire the capability through the public package root.
+export * from './services/image/index.js';
+
 // @plan PLAN-20260130-ASYNCTASK.P09
 // Export async task management types and services
 export {
@@ -64,6 +68,15 @@ export {
 } from './services/asyncTaskManager.js';
 export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js';
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
+export {
+  ShellJobManager,
+  type ShellJob,
+  type ShellJobState,
+  type ShellJobLaunchInput,
+  type ShellJobTailOptions,
+  type ShellJobTailResult,
+  type ShellJobPrefixLookup,
+} from './services/shellJobManager.js';
 // Export SubagentTerminateMode for OutputObject types
 export { SubagentTerminateMode } from './core/subagentTypes.js';
 

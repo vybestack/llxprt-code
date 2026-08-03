@@ -13,6 +13,7 @@ import {
   MARKER,
   buildIssueContext,
   buildPlanningInstructions,
+  buildRelatedSearchQuery,
   ensureCommentBody,
   extractLinkedReferences,
   extractPlanFeedback,
@@ -86,6 +87,9 @@ function asYamlJob(value: unknown): YamlJob {
     if (typeof c['group'] === 'string') {
       job.concurrency.group = c['group'];
     }
+    if (typeof c['cancel-in-progress'] === 'boolean') {
+      job.concurrency['cancel-in-progress'] = c['cancel-in-progress'];
+    }
   }
   return job;
 }
@@ -101,7 +105,7 @@ type YamlJob = {
   steps?: YamlStep[];
   if?: string;
   env?: Record<string, string>;
-  concurrency?: { group?: string };
+  concurrency?: { group?: string; 'cancel-in-progress'?: boolean };
   [key: string]: unknown;
 };
 type YamlStep = {
@@ -354,6 +358,54 @@ describe('linked references and generated planning data', () => {
   });
 });
 
+describe('buildRelatedSearchQuery', () => {
+  it('strips metacharacters and #NNN references from a realistic title', () => {
+    const result = buildRelatedSearchQuery(
+      'Remove all Vitest escape hatches: scripts, configs, deps, lint plugin, and CI guard (#2578)',
+    );
+    expect(result).toContain('Remove');
+    expect(result).toContain('Vitest');
+    for (const forbidden of [':', ',', '(', ')', '#', '2578', '"']) {
+      expect(result).not.toContain(forbidden);
+    }
+  });
+
+  it('removes inline and trailing #NNN references', () => {
+    const result = buildRelatedSearchQuery('Fix #123 crash (#456)');
+    expect(result).not.toContain('123');
+    expect(result).not.toContain('456');
+    expect(result).not.toContain('#');
+  });
+
+  it('preserves numeric tokens and folds diacritics to ASCII', () => {
+    expect(buildRelatedSearchQuery('Fix 123 crash')).toBe('Fix 123 crash');
+    expect(buildRelatedSearchQuery('café bug')).toBe('cafe bug');
+  });
+
+  it('de-duplicates tokens case-insensitively', () => {
+    const result = buildRelatedSearchQuery('Foo foo FOO bar');
+    expect(result.split(' ')).toEqual(['Foo', 'bar']);
+  });
+
+  it('caps the keyword count at 10', () => {
+    const result = buildRelatedSearchQuery(
+      'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen',
+    );
+    expect(result.split(' ')).toHaveLength(10);
+  });
+
+  it('drops tokens shorter than two characters', () => {
+    expect(buildRelatedSearchQuery('a b cd ef')).toBe('cd ef');
+  });
+
+  it.each(['', '### (:,)'])(
+    'returns an empty string for empty or all-metacharacter input: %s',
+    (title) => {
+      expect(buildRelatedSearchQuery(title)).toBe('');
+    },
+  );
+});
+
 describe('finalizeAgentOutput', () => {
   it('normalizes a valid plan to one leading marker', () => {
     const result = finalizeAgentOutput(`${MARKER}\n# Plan\n${MARKER}\nbody`);
@@ -392,6 +444,9 @@ describe('finalizeAgentOutput', () => {
 });
 
 describe('real issue-planner CLI entrypoint', () => {
+  const readOut = (dir: string, name: string): string =>
+    fs.readFileSync(path.join(dir, name), 'utf8');
+
   it('runs linked-reference mode and excludes the current issue', () => {
     const dir = makeTempDir('planner-cli-refs-');
     try {
@@ -402,9 +457,7 @@ describe('real issue-planner CLI entrypoint', () => {
       });
       const result = runCli(['--extract-linked-references', dir, '3']);
       expect(result.status ?? -1, String(result.stderr ?? '')).toBe(0);
-      expect(
-        fs.readFileSync(path.join(dir, 'linked-references.txt'), 'utf8'),
-      ).toBe('4');
+      expect(readOut(dir, 'linked-references.txt')).toBe('4');
     } finally {
       removeTempDir(dir);
     }
@@ -438,9 +491,7 @@ describe('real issue-planner CLI entrypoint', () => {
       expect(instructions.status ?? -1, String(instructions.stderr ?? '')).toBe(
         0,
       );
-      expect(
-        fs.readFileSync(path.join(dir, 'issue-context.md'), 'utf8'),
-      ).toContain(trailing);
+      expect(readOut(dir, 'issue-context.md')).toContain(trailing);
       expect(
         fs.readFileSync(path.join(dir, 'planning-instructions.md'), 'utf8'),
       ).toContain(THRESHOLD_SENTENCE);
@@ -470,9 +521,7 @@ describe('real issue-planner CLI entrypoint', () => {
         env: { COMMENT_BODY: '/plan retain this feedback' },
       });
       expect(result.status ?? -1, String(result.stderr ?? '')).toBe(0);
-      expect(fs.readFileSync(path.join(dir, 'feedback.txt'), 'utf8')).toBe(
-        'retain this feedback',
-      );
+      expect(readOut(dir, 'feedback.txt')).toBe('retain this feedback');
     } finally {
       removeTempDir(dir);
     }
@@ -484,9 +533,39 @@ describe('real issue-planner CLI entrypoint', () => {
       fs.writeFileSync(path.join(dir, 'plan.md'), '# Concrete plan');
       const result = runCli(['--finalize', dir]);
       expect(result.status ?? -1, String(result.stderr ?? '')).toBe(0);
-      expect(fs.readFileSync(path.join(dir, 'comment.md'), 'utf8')).toBe(
-        `${MARKER}\n# Concrete plan`,
-      );
+      expect(readOut(dir, 'comment.md')).toBe(`${MARKER}\n# Concrete plan`);
+    } finally {
+      removeTempDir(dir);
+    }
+  });
+
+  it('writes a search-safe query for a metacharacter title via --build-search-query', () => {
+    const dir = makeTempDir('planner-cli-search-query-');
+    try {
+      writeJson(dir, 'issue.json', {
+        number: 11,
+        title: 'Escape hatches: configs, deps (#2578)',
+        body: '',
+      });
+      const result = runCli(['--build-search-query', dir]);
+      expect(result.status ?? -1, String(result.stderr ?? '')).toBe(0);
+      const query = readOut(dir, 'search-query.txt');
+      for (const forbidden of [':', ',', '(', ')', '#', '2578']) {
+        expect(query).not.toContain(forbidden);
+      }
+      expect(query).toContain('Escape');
+      expect(query).toContain('hatches');
+    } finally {
+      removeTempDir(dir);
+    }
+  });
+
+  it('rejects --build-search-query when issue.json is absent', () => {
+    const dir = makeTempDir('planner-cli-search-query-missing-');
+    try {
+      const result = runCli(['--build-search-query', dir]);
+      expect(result.status ?? -1).not.toBe(0);
+      expect(result.stderr).toMatch(/issue\.json/i);
     } finally {
       removeTempDir(dir);
     }
@@ -607,6 +686,11 @@ describe('.github/workflows/issue-planner.yml', () => {
     ).toContain('github.event.issue.number');
   });
 
+  it('collapses duplicate issue triggers with cancel-in-progress: true (#2972)', () => {
+    const concurrency = asRecord(planJob.concurrency);
+    expect(concurrency['cancel-in-progress']).toBe(true);
+  });
+
   it('pins only first-party actions and scopes sensitive inputs', () => {
     const uses = (planJob.steps ?? [])
       .map((step: YamlStep) => step.uses)
@@ -680,8 +764,32 @@ describe('.github/workflows/issue-planner.yml', () => {
     expect(script).toMatch(/select\(\.number != \$issue_number\)/);
     expect(script).toContain('--argjson issue_number "${ISSUE_NUMBER}"');
     expect(script).toContain('--repo "${REPO}"');
-    expect(script).toContain('search_query="\\"${issue_title}\\""');
     expect(script).not.toContain('repo:${REPO}');
+  });
+
+  it('makes related-candidate precompute best-effort and never interpolates the title (#2972)', () => {
+    const script = commandText(
+      stepNamed(planJob, 'Precompute related PRs/issues candidates'),
+    );
+    expect(script).toContain('--build-search-query');
+    expect(script).toContain('search-query.txt');
+    expect(script).toContain('::warning::');
+    expect(script).toMatch(/if ! gh search/);
+    expect(script).not.toMatch(/\$\{issue_title\}/);
+    // These exact-syntax assertions encode the #2972 defect contract, not
+    // incidental implementation detail: the quoted expansion prevents the
+    // word-split that silently zeroed the candidate list, and `if !` makes the
+    // advisory step non-fatal. They follow this file's convention for bash
+    // run-script regression guards (see the confinement `-prune`/`|| true` and
+    // `--merged` tests). There is no behavioral abstraction here: `gh` is not
+    // available in the test environment, so the run-script text IS the contract.
+    // The keyword query is passed as one quoted positional argument: gh search
+    // takes a single query, so an unquoted expansion word-splits into extra
+    // positional args and errors, silently zeroing the candidate list (#2972).
+    expect(script).toContain('gh search prs "${search_query}"');
+    expect(script).toContain('gh search issues "${search_query}"');
+    // The helper invocation is itself advisory and must not abort the run.
+    expect(script).toMatch(/if ! bun .*--build-search-query/);
   });
 
   it('uses the gh search prs --merged flag, never the invalid --state merged (#2747)', () => {

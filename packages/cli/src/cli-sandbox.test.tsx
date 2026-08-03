@@ -323,6 +323,9 @@ function buildArgv(prompt?: string) {
     nobrowser: undefined,
     listSessions: undefined,
     deleteSession: undefined,
+    imageInput: undefined,
+    imageOutput: undefined,
+    imagePrompt: undefined,
     quiet: undefined,
   };
 }

@@ -236,7 +236,13 @@ export default defineConfig({
     // normal runs (if a backup is left behind) and Stryker's own dry run would
     // pick up DUPLICATE/stale spec copies from that tree, double-counting tests
     // and corrupting coverage attribution.
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    exclude: [
+      ...configDefaults.exclude,
+      '**/.stryker-tmp/**',
+      // Bun-native and registered in scripts/bun-test-manifest.ts, so it runs
+      // under `bun test` only and must not also be discovered here (#2946).
+      '**/src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
+    ],
     reporters: ['default', 'junit'],
     testTimeout: 30000,
     teardownTimeout: 120000,

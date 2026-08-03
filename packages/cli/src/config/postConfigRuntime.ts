@@ -6,11 +6,13 @@
 
 import {
   ApprovalMode,
+  runImageOperation,
   STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
+  type ImageOperationBackend,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -24,6 +26,7 @@ import {
   applyCliSetArguments,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
 import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
@@ -297,6 +300,44 @@ async function setupRuntimeContext(
   // OAuthManager the Agent sees is the exact one assembled on the same bus — no
   // second OAuthManager is constructed or looked up.
   config.setRuntimeOAuthManager(finalRuntime.oauthManager);
+
+  // Wire the Codex image backend resolver. resolveBackend is called lazily
+  // (when the model invokes generate_image), so even though the tool registry
+  // was already created during config.initialize(), the lazy closure reads
+  // this resolver at invocation time.
+  const imageBackendResolver = createCodexImageBackendResolver({
+    oauthManager: finalRuntime.oauthManager,
+    getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
+  });
+  config.setImageBackendResolver(imageBackendResolver);
+
+  // Wire the common image-operation runner so `/image` and direct CLI image
+  // mode converge on the SAME service as the generate_image tool. The runner
+  // is bound to the workspace root and the image backend resolver; it owns
+  // request normalization, output/input path validation, provider dispatch,
+  // atomic write, and the normalized result.
+  config.setRunImageOperation((input) =>
+    runImageOperation(
+      {
+        prompt: input.prompt,
+        outputPath: input.outputPath,
+        ...(input.inputPaths !== undefined
+          ? { inputPaths: input.inputPaths }
+          : {}),
+        ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      },
+      {
+        workspaceRoot: config.getTargetDir(),
+        resolveBackend: () => {
+          const backend = imageBackendResolver();
+          if (backend === null) {
+            return null;
+          }
+          return backend as ImageOperationBackend | null;
+        },
+      },
+    ),
+  );
 
   logger.debug(
     () => `[bootstrap] Runtime context set, runtimeId=${bootstrapRuntimeId}`,

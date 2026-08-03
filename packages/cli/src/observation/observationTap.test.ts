@@ -183,6 +183,39 @@ describe('createObservationTap', () => {
     }
   });
 
+  it('ends a turn at most once no matter which exit path fires first', () => {
+    // Regression for #2964. A turn can be closed by a terminal `done` event, by
+    // the submit path's failure handler, or by the interactive cancel handler.
+    // Interactive cancel reaches none of the other two, so it must close the
+    // turn itself -- but a late `done` must then not close it a second time.
+    const cancelFirst: string[] = [];
+    const cancelTap = createObservationTap(noopTarget(cancelFirst));
+    cancelTap.onTurnStarted();
+    cancelTap.onTurnEnded('cancelled');
+    cancelTap.processEvent({ type: 'done', reason: 'aborted' } as AgentEvent);
+    expect(
+      cancelFirst.filter((call) => call.startsWith('turn.ended')),
+    ).toStrictEqual(['turn.ended:cancelled']);
+
+    // And the reverse order: a normal completion wins over a later cancel.
+    const doneFirst: string[] = [];
+    const doneTap = createObservationTap(noopTarget(doneFirst));
+    doneTap.onTurnStarted();
+    doneTap.processEvent({ type: 'done', reason: 'stop' } as AgentEvent);
+    doneTap.onTurnEnded('cancelled');
+    expect(
+      doneFirst.filter((call) => call.startsWith('turn.ended')),
+    ).toStrictEqual(['turn.ended:completed']);
+
+    // Ending a turn that was never started is a no-op, not a phantom end.
+    const neverStarted: string[] = [];
+    const idleTap = createObservationTap(noopTarget(neverStarted));
+    idleTap.onTurnEnded('cancelled');
+    expect(
+      neverStarted.filter((call) => call.startsWith('turn.ended')),
+    ).toStrictEqual([]);
+  });
+
   it('maps every ToolUpdateStatus to the correct JSP tool phase', () => {
     for (const [status, phase] of [
       ['validating', 'proposed'],

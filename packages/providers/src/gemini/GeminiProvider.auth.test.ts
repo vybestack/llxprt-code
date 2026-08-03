@@ -82,6 +82,7 @@ describe('GeminiProvider Authentication', () => {
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
     delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
   });
 
   afterEach(() => {
@@ -91,6 +92,7 @@ describe('GeminiProvider Authentication', () => {
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
     delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
   });
 
   it('should check AuthResolver before falling back to Vertex AI', async () => {
@@ -342,6 +344,65 @@ describe('GeminiProvider Authentication', () => {
       createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
     ).rejects.toThrow(
       'Vertex AI mode is active but project/location are not configured',
+    );
+  });
+
+  // #2946: inside a container sandbox, ambient Google credentials are
+  // intentionally unavailable. The auth-failure message must say so and direct
+  // the user to save a key with `/key save`, not to set GEMINI_API_KEY (which
+  // no longer crosses into the container).
+  it('gives a sandbox-aware auth message when LLXPRT_CREDENTIAL_SOCKET is set', async () => {
+    const mockAuthResolver = {
+      resolveAuthentication: vi.fn().mockResolvedValue(null),
+    };
+    process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-cred-socket.sock';
+
+    const provider = createProviderWithRuntimeSettings();
+    (provider as unknown as { authResolver: unknown }).authResolver =
+      mockAuthResolver;
+
+    const error = await provider.getAuthMode().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain('not available inside a container sandbox');
+    // Must point at both halves of the working path: save on the host, load
+    // inside the sandbox. Naming only one leaves the user stuck.
+    expect(message).toContain('/key save');
+    expect(message).toContain('/key load');
+    // The sandbox message must NOT direct the user to set GEMINI_API_KEY,
+    // because that variable no longer crosses into the container.
+    expect(message).not.toContain('Set GEMINI_API_KEY environment variable');
+  });
+
+  it('keeps the standard auth message when not in a sandbox', async () => {
+    const mockAuthResolver = {
+      resolveAuthentication: vi.fn().mockResolvedValue(null),
+    };
+
+    const provider = createProviderWithRuntimeSettings();
+    (provider as unknown as { authResolver: unknown }).authResolver =
+      mockAuthResolver;
+
+    await expect(provider.getAuthMode()).rejects.toThrow(
+      'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
+    );
+  });
+
+  // An empty LLXPRT_CREDENTIAL_SOCKET means "no socket" to the sanctioned
+  // credential factories, which fall through to direct host storage. The
+  // message must match that routing rather than claiming a sandbox.
+  it('keeps the standard auth message when LLXPRT_CREDENTIAL_SOCKET is empty', async () => {
+    const mockAuthResolver = {
+      resolveAuthentication: vi.fn().mockResolvedValue(null),
+    };
+    process.env.LLXPRT_CREDENTIAL_SOCKET = '';
+
+    const provider = createProviderWithRuntimeSettings();
+    (provider as unknown as { authResolver: unknown }).authResolver =
+      mockAuthResolver;
+
+    await expect(provider.getAuthMode()).rejects.toThrow(
+      'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
     );
   });
 });
