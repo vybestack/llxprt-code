@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import yaml from 'js-yaml';
 import {
   WORKFLOW_PATH,
@@ -49,10 +49,8 @@ describe('.github/workflows/ocr-review.yml', () => {
 
   beforeAll(() => {
     workflowYml = readRootFile(WORKFLOW_PATH);
-    expect(
-      workflowYml.trim(),
-      `${WORKFLOW_PATH} should have content`,
-    ).toBeTruthy();
+    if (!workflowYml.trim())
+      throw new Error(`${WORKFLOW_PATH} should have content`);
     notifierWorkflowYml = readRootFile(NOTIFIER_WORKFLOW_PATH);
     try {
       workflow = parseWorkflowYaml(workflowYml);
@@ -63,34 +61,31 @@ describe('.github/workflows/ocr-review.yml', () => {
         cause: error,
       });
     }
-    expect(
-      workflow && typeof workflow === 'object',
-      `${WORKFLOW_PATH} should parse to a YAML mapping`,
-    ).toBeTruthy();
-    expect(
-      notifierWorkflow && typeof notifierWorkflow === 'object',
-      `${NOTIFIER_WORKFLOW_PATH} should parse to a YAML mapping`,
-    ).toBeTruthy();
+    if (!(workflow && typeof workflow === 'object'))
+      throw new Error(`${WORKFLOW_PATH} should parse to a YAML mapping`);
+    if (!(notifierWorkflow && typeof notifierWorkflow === 'object'))
+      throw new Error(
+        `${NOTIFIER_WORKFLOW_PATH} should parse to a YAML mapping`,
+      );
     const jobs = asOptionalRecord(workflow.jobs);
     codeReviewJob = asOptionalRecord(jobs?.['code-review']);
-    expect(
-      codeReviewJob,
-      'workflow should contain job: code-review',
-    ).toBeTruthy();
+    if (!codeReviewJob)
+      throw new Error('workflow should contain job: code-review');
     mergeabilityGateJob = asOptionalRecord(jobs?.['mergeability-gate']);
-    expect(
-      mergeabilityGateJob,
-      'workflow should contain job: mergeability-gate',
-    ).toBeTruthy();
-    expect(jobs?.['notify-ocr-infrastructure-failure']).toBeUndefined();
+    if (!mergeabilityGateJob)
+      throw new Error('workflow should contain job: mergeability-gate');
+    if (jobs?.['notify-ocr-infrastructure-failure'] !== undefined)
+      throw new Error(
+        'main workflow must not contain job: notify-ocr-infrastructure-failure',
+      );
     const notifierJobs = asOptionalRecord(notifierWorkflow.jobs);
     notifyJob = asOptionalRecord(
       notifierJobs?.['notify-ocr-infrastructure-failure'],
     );
-    expect(
-      notifyJob,
-      'notifier workflow should contain job: notify-ocr-infrastructure-failure',
-    ).toBeTruthy();
+    if (!notifyJob)
+      throw new Error(
+        'notifier workflow should contain job: notify-ocr-infrastructure-failure',
+      );
     postStep = stepNamed(codeReviewJob ?? {}, 'Post OCR results');
     postScript = commandText(postStep);
     notifyStep = stepNamed(
@@ -267,7 +262,8 @@ describe('.github/workflows/ocr-review.yml', () => {
   it('uses explicit bash shells for workflow run scripts', () => {
     const runSteps = jobSteps().filter((step) => step.run);
     for (const step of runSteps) {
-      expect(step.shell, `${step.name} should use bash`).toBe('bash');
+      if (step.shell !== 'bash')
+        throw new Error(`${step.name} should use bash`);
     }
     expect(notifyStep?.shell).toBe('bash');
   });

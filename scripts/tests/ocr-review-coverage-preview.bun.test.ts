@@ -5,7 +5,7 @@
  */
 
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { useWorkflowFixture } from './ocr-manifest-test-helpers.ts';
 import {
   commandText,
@@ -175,7 +175,7 @@ describe('.github/workflows/ocr-review.yml — preview parser (real OCR 1.8.4 pr
       'scripts/tests/re-embed-trusted-marker.test.ts',
     ];
     for (const path of excluded) {
-      expect(files, `${path} must not be selected`).not.toContain(path);
+      if (files.includes(path)) throw new Error(`${path} must not be selected`);
     }
   });
 });
