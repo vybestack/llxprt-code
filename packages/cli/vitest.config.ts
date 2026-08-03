@@ -220,6 +220,14 @@ const sharedResolve = {
     'ink-testing-library': inkTestingLibraryPath,
     [inkTestingLibraryActualPath]: inkTestingLibraryPath,
     react: resolve(__dirname, '../../node_modules/react'),
+    /**
+     * Tests in this package are authored against Bun's native runner
+     * (`bun:test`) per the Bun migration. Vitest cannot resolve the `bun:`
+     * scheme, so map it onto the API-compatible Vitest surface, mirroring
+     * `packages/providers/vitest.config.ts`. This keeps a single test file
+     * runnable by both `bun test` and Vitest during the migration.
+     */
+    'bun:test': 'vitest',
   },
 };
 

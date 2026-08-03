@@ -20,7 +20,7 @@
  * already covered end-to-end by issue2891-claudecode-stale-oauth.test.ts.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 import { resolveLazyClaudeCodeOAuthDecision } from '../providerSwitch.js';
 import {

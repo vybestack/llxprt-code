@@ -24,7 +24,7 @@
  * registration is observable.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 
 import type { OAuthProvider, TokenStore } from '../../auth/index.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';

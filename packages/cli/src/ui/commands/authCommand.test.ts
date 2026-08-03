@@ -19,17 +19,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importActual) => {
   return { ...actual, discoverBrowserProfiles: vi.fn() };
 });
 
-// Issue #2891: a successful login must invalidate the provider's runtime
-// credential cache so the new token is visible without restarting. Mock only
-// that export, preserving the rest of the auth barrel.
-vi.mock('@vybestack/llxprt-code-auth', async (importActual) => {
-  const actual =
-    await importActual<typeof import('@vybestack/llxprt-code-auth')>();
-  return { ...actual, invalidateProviderRuntimeCache: vi.fn() };
-});
-
 import { discoverBrowserProfiles } from '@vybestack/llxprt-code-core';
-import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth';
 
 // Mock OAuth manager and dependencies
 const peekStoredTokenMock = vi.fn();
@@ -795,67 +785,6 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given a successful /auth claudecode login @then the claudecode runtime credential cache is invalidated (@issue:2891)', async () => {
-      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
-      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
-
-      const result = await executor.execute(mockContext, 'claudecode login');
-
-      // Before the fix this only happened on logout, so a freshly persisted
-      // token stayed invisible until the process restarted.
-      expect(vi.mocked(invalidateProviderRuntimeCache)).toHaveBeenCalledWith(
-        'claudecode',
-      );
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: 'Successfully authenticated claudecode',
-      });
-    });
-
-    it('@given a successful login @then unrelated providers are NOT invalidated (@issue:2891)', async () => {
-      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
-      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
-
-      await executor.execute(mockContext, 'claudecode login');
-
-      const invalidatedProviders = vi
-        .mocked(invalidateProviderRuntimeCache)
-        .mock.calls.map((call) => call[0]);
-      expect(invalidatedProviders).toStrictEqual(['claudecode']);
-      expect(invalidatedProviders).not.toContain('codex');
-    });
-
-    // Complements the test above: invalidation is driven by the provider named
-    // in the command, with no claudecode-specific branching.
-    it('@given a successful /auth codex login @then the codex cache is invalidated (@issue:2891)', async () => {
-      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
-      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
-
-      await executor.execute(mockContext, 'codex login');
-
-      const invalidatedProviders = vi
-        .mocked(invalidateProviderRuntimeCache)
-        .mock.calls.map((call) => call[0]);
-      expect(invalidatedProviders).toStrictEqual(['codex']);
-    });
-
-    it('@given a FAILED login @then it reports failure and does not invalidate the cache (@issue:2891)', async () => {
-      const mockAuthenticate = vi
-        .fn()
-        .mockRejectedValue(new Error('browser flow cancelled'));
-      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
-
-      const result = await executor.execute(mockContext, 'claudecode login');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Authentication failed for claudecode: browser flow cancelled',
-      });
-      expect(vi.mocked(invalidateProviderRuntimeCache)).not.toHaveBeenCalled();
-    });
-
     it('@given /auth claudecode login mybucket @when executed @then routes login to claudecode with bucket', async () => {
       const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
@@ -877,11 +806,6 @@ describe('AuthCommandExecutor OAuth Support', () => {
         messageType: 'info',
         content: 'Successfully authenticated claudecode (bucket: mybucket)',
       });
-      // The invalidation applies after the bucket-handling branch, so it must
-      // fire for NAMED buckets too, not only the default bucket.
-      expect(vi.mocked(invalidateProviderRuntimeCache)).toHaveBeenCalledWith(
-        'claudecode',
-      );
     });
 
     it('@given /auth claudecode logout @when executed @then routes logout to claudecode identity', async () => {

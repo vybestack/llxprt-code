@@ -41,12 +41,17 @@
  * production code.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
+import {
+  KeyringTokenStore,
+  ensureRuntimeState,
+  storeRuntimeScopedToken,
+  runtimeScopedStates,
+} from '@vybestack/llxprt-code-auth';
 import type {
   OAuthToken,
   ISecureStore,
@@ -197,6 +202,34 @@ function requireTempDir(dir: string | undefined): string {
   return dir;
 }
 
+/**
+ * Seed the REAL runtime-scoped auth cache with a live token entry.
+ *
+ * `ensureRuntimeState` only reads `runtimeId` and assigns `metadata`; the
+ * `settingsService` member of `IProviderRuntimeContext` is never touched on
+ * this path, so a minimal stand-in avoids constructing the settings stack.
+ */
+function seedRuntimeCacheEntry(
+  runtimeId: string,
+  providerId: string,
+  token: string,
+): void {
+  const state = ensureRuntimeState({
+    runtimeId,
+    settingsService: {} as never,
+  });
+  storeRuntimeScopedToken(state, providerId, 'default', token);
+}
+
+/** Provider ids that still hold a LIVE (non-invalidated) cache entry. */
+function cachedProviderIds(runtimeId: string): string[] {
+  const state = runtimeScopedStates.get(runtimeId);
+  if (!state) {
+    return [];
+  }
+  return [...state.entries.values()].map((entry) => entry.providerId).sort();
+}
+
 // ─── Test ───────────────────────────────────────────────────────────────────
 
 describe('Issue #2891 (b) (characterization) — /auth claudecode login makes the token visible WITHOUT restart, through the REAL command path', () => {
@@ -276,5 +309,112 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
     // ─── AFTER login, SAME live provider instance, NO restart ───────────
     const tokenAfterLogin = await anthropicProvider.testGetAuthTokenForPrompt();
     expect(tokenAfterLogin).toBe(validToken.access_token);
+  });
+});
+
+/**
+ * Issue #2891 — FIX 3 mutation guard.
+ *
+ * Unlike the characterization test above, this block FAILS when the fix is
+ * reverted. `loginWithBucket` (packages/cli/.../authCommand.ts) calls
+ * `invalidateProviderRuntimeCache(provider)` after a successful login; deleting
+ * that line leaves the pre-existing claudecode entry live and these assertions
+ * fail.
+ *
+ * The invalidation is observed through its REAL effect on the runtime-scoped
+ * auth cache (`runtimeScopedStates`) rather than by spying on the function, so
+ * the test constrains behaviour rather than call bookkeeping.
+ */
+describe('Issue #2891 FIX 3 — a successful login invalidates the runtime credential cache for THAT provider only', () => {
+  const runtimeId = 'issue2891-login-invalidation-runtime';
+  let tempDir: string | undefined;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'issue2891-invalidation-'));
+    resetRegisteredProviders();
+    runtimeScopedStates.delete(runtimeId);
+  });
+
+  afterEach(() => {
+    runtimeScopedStates.delete(runtimeId);
+    if (tempDir === undefined) {
+      return;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+    tempDir = undefined;
+  });
+
+  /**
+   * Builds the real object graph plus an executor whose browser boundary is
+   * controlled by the returned `setLoginSucceeds` switch.
+   */
+  function setUp() {
+    const graph = buildObjectGraph(requireTempDir(tempDir));
+    const executor = new AuthCommandExecutor(graph.oauthManager);
+    const oauthProvider = requireOAuthProvider(
+      graph.oauthManager,
+      'claudecode',
+    );
+
+    let loginSucceeds = true;
+    oauthProvider.initiateAuth = async (): Promise<OAuthToken> => {
+      if (!loginSucceeds) {
+        throw new Error('test: browser flow cancelled');
+      }
+      return makeValidToken();
+    };
+
+    // A previously cached token for claudecode, plus an unrelated provider that
+    // must survive untouched.
+    seedRuntimeCacheEntry(runtimeId, 'claudecode', 'stale-claudecode-token');
+    seedRuntimeCacheEntry(runtimeId, 'codex', 'unrelated-codex-token');
+    expect(cachedProviderIds(runtimeId)).toStrictEqual(['claudecode', 'codex']);
+
+    return {
+      executor,
+      setLoginSucceeds: (value: boolean) => {
+        loginSucceeds = value;
+      },
+    };
+  }
+
+  it('drops the stale claudecode entry and leaves other providers cached', async () => {
+    const { executor } = setUp();
+
+    const result = await executor.execute(
+      makeCommandContext(),
+      'claudecode login',
+    );
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'info',
+      content: 'Successfully authenticated claudecode',
+    });
+
+    // Reverting `invalidateProviderRuntimeCache(provider)` leaves 'claudecode'
+    // in this list, failing the assertion.
+    expect(cachedProviderIds(runtimeId)).toStrictEqual(['codex']);
+  });
+
+  it('leaves the cache untouched when the login FAILS', async () => {
+    const { executor, setLoginSucceeds } = setUp();
+    setLoginSucceeds(false);
+
+    const result = await executor.execute(
+      makeCommandContext(),
+      'claudecode login',
+    );
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Authentication failed for claudecode: test: browser flow cancelled',
+    });
+
+    // Invalidation lives after the success path, so a failed login must not
+    // discard credentials that are still valid.
+    expect(cachedProviderIds(runtimeId)).toStrictEqual(['claudecode', 'codex']);
   });
 });
