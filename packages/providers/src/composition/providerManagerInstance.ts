@@ -33,6 +33,10 @@ import {
 } from '../tokenizers/ModelPromptEstimatorRegistry.js';
 import { createGpt56RuntimeTokenizer } from '../tokenizers/Gpt56O200kPromptEstimator.js';
 import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
+import {
+  OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
+  createOfficialRuntimeTokenizer,
+} from '../tokenizers/official/index.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
@@ -128,9 +132,10 @@ function matchesTokenizer(
 function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
   const openaiTokenizer = new OpenAITokenizer();
   const anthropicTokenizer = new AnthropicTokenizer();
-  const estimatorRegistry = new ModelPromptEstimatorRegistry(
-    DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
-  );
+  const estimatorRegistry = new ModelPromptEstimatorRegistry([
+    ...DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
+    ...OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
+  ]);
 
   return {
     claimsModel: (canonicalModel) =>
@@ -145,6 +150,13 @@ function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
       const resolvedModel = model ?? providerName;
       if (isSanctionedGpt56Model(resolvedModel)) {
         return createGpt56RuntimeTokenizer(providerName, resolvedModel);
+      }
+      const officialTokenizer = createOfficialRuntimeTokenizer(
+        providerName,
+        resolvedModel,
+      );
+      if (officialTokenizer !== undefined) {
+        return officialTokenizer;
       }
       const providerKey = providerName.toLowerCase();
       const modelKey = resolvedModel.toLowerCase();
