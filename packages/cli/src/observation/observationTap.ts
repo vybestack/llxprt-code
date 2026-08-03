@@ -127,7 +127,7 @@ function routeEvent(
   event: AgentEvent,
   target: ObservationTapTarget,
   scope: TurnScope,
-  resetTurnScopedState: () => void,
+  endTurn: (outcome: JspTurnOutcome) => void,
 ): void {
   switch (event.type) {
     case 'text':
@@ -160,8 +160,7 @@ function routeEvent(
       target.onSourceError(event.error.message, 'AGENT_ERROR');
       break;
     case 'done':
-      resetTurnScopedState();
-      target.onTurnEnded(mapDoneReason(event.reason));
+      endTurn(mapDoneReason(event.reason));
       break;
     default:
       break;
@@ -201,17 +200,33 @@ export function createObservationTap(
     }
   };
 
+  /**
+   * A turn can now be closed from three places: a terminal `done` event, the
+   * submit path's failure handler, and the interactive cancel handler. Only the
+   * first of those may take effect, or the observer would see several ends for
+   * one turn. Ending a turn that was never started is likewise a no-op.
+   */
+  let turnOpen = false;
+  const endTurn = (outcome: JspTurnOutcome): void => {
+    if (!turnOpen) {
+      return;
+    }
+    turnOpen = false;
+    resetTurnScopedState();
+    target.onTurnEnded(outcome);
+  };
+
   return {
     onTurnStarted(): void {
       resetTurnScopedState();
+      turnOpen = true;
       target.onTurnStarted();
     },
     onTurnEnded(outcome: JspTurnOutcome): void {
-      resetTurnScopedState();
-      target.onTurnEnded(outcome);
+      endTurn(outcome);
     },
     processEvent(event: AgentEvent): void {
-      routeEvent(event, target, scope, resetTurnScopedState);
+      routeEvent(event, target, scope, endTurn);
     },
     onFlushCommitted(content: string, committedMs: number): void {
       if (content.length > 0) {
