@@ -190,10 +190,17 @@ function makeCommandContext(): CommandContext {
   } as unknown as CommandContext;
 }
 
+function requireTempDir(dir: string | undefined): string {
+  if (dir === undefined) {
+    throw new Error('Expected beforeEach to create a temp directory');
+  }
+  return dir;
+}
+
 // ─── Test ───────────────────────────────────────────────────────────────────
 
 describe('Issue #2891 (b) (characterization) — /auth claudecode login makes the token visible WITHOUT restart, through the REAL command path', () => {
-  let tempDir: string;
+  let tempDir: string | undefined;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'issue2891-loginpath-'));
@@ -201,11 +208,17 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
   });
 
   afterEach(() => {
+    // Guard against `beforeEach` having thrown before `tempDir` was assigned;
+    // an unguarded rmSync would raise a TypeError that masks the real failure.
+    if (tempDir === undefined) {
+      return;
+    }
     rmSync(tempDir, { recursive: true, force: true });
+    tempDir = undefined;
   });
 
   it('the SAME live AnthropicProvider yields no token before login and the persisted token after login (driven via AuthCommandExecutor.execute)', async () => {
-    const graph = buildObjectGraph(tempDir);
+    const graph = buildObjectGraph(requireTempDir(tempDir));
     const { oauthManager, anthropicProvider, tokenStore } = graph;
 
     // The real executor that owns the `/auth claudecode login` command.
