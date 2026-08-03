@@ -1,12 +1,12 @@
-# Blockers on PR #2989 (issue #2845)
+# Linux CI failures on PR #2989 (issue #2845) — resolved
 
-The agents migration itself is complete: 330/330 files pass under Bun locally,
-3728 test cases under both runners (exact parity). What remains are **two
-pre-existing, cross-cutting defects that live outside `packages/agents`** and
-that this migration is simply the first thing to exercise.
+Five agents test files failed on the Linux CI runner while passing on macOS.
+They looked like two unrelated problems. **They were one root cause**, in
+`packages/storage`, that pre-dates this migration — the Bun migration is simply
+the first thing to exercise it.
 
-Both are now reproduced and root-caused on Linux, not guessed at. I built a
-Linux x86_64 container to stop burning 20-minute CI rounds on hypotheses:
+Everything below was reproduced and measured, not inferred. A Linux x86_64
+container was used so the diagnosis did not depend on 20-minute CI rounds:
 
 ```
 docker run -d --name llxprt-linux --platform linux/amd64 \
@@ -18,221 +18,100 @@ docker exec llxprt-linux bash -c \
 docker exec -w /work/packages/agents llxprt-linux bun test --timeout 30000 <file>
 ```
 
-Install takes ~9s; the container is still running and ready to iterate in.
+## The symptoms
 
----
+| File | Symptom on Linux CI |
+| --- | --- |
+| `capabilityGaps.integration.spec.ts` | process aborted, `SIGILL` |
+| `subagentOrchestrator-runtime.test.ts` | process aborted, `SIGILL` |
+| `turn.idle-timeout.test.ts` | 3 tests hit the 30s per-test budget |
+| `subagent.stream-idle.test.ts` | 2 tests hit the 30s per-test budget |
+| `subagent.runNonInteractive-term.test.ts` | 30s per-test budget |
 
-# Blocker 1 — RESOLVED: the secure store misclassified "no keyring on this machine"
+The two crashing files died **mid-file**, at exactly the first test that
+resolves a credential:
 
-**Status: fixed.** The original framing below ("Bun segfaults on the native
-keyring") was the symptom, not the cause. Root cause found by reproducing in a
-keyring-less Linux container:
-
-`SecureStore.get()` already implements exactly the right degrade — it swallows
-`UNAVAILABLE`, `NOT_FOUND` and `TIMEOUT` and falls through to the encrypted
-file. But `classifyError()` is a substring match on the error message, and a
-machine with no Secret Service reports:
-
-```
-Couldn't access platform storage: PermissionDenied
-```
-
-That contains both "permission" and "denied", so it was classified `DENIED` — a
-hard error that surfaces to the caller — when it actually means "there is no
-credential backend here", i.e. `UNAVAILABLE`. The `UNAVAILABLE` remediation
-string literally describes this case: *"install a keyring backend … or allow
-encrypted fallback storage"*.
-
-This is a **product bug, not a test artifact**. The shipped `bin/llxprt` is a
-POSIX launcher that execs Bun, so any Linux user without a Secret Service —
-headless server, container, ssh session, WSL — reading a provider key got a
-thrown `SecureStoreError` instead of the encrypted-file fallback the design
-intends. The agents test was right; it was simply the first thing to exercise
-that surface on a keyring-less machine.
-
-Fix: classify "access platform storage" as `UNAVAILABLE` before the generic
-denied/permission test. Pinned by three behavioral tests in
-`secure-store.fallback-behavior.test.ts` (verified red before the fix).
-
-Evidence, keyring-less Linux container:
-
-| | Before | After |
-| --- | --- | --- |
-| `capabilityGaps.integration.spec.ts` | 17 pass / 1 fail | 18 pass / 0 fail |
-| both files together | — | 33 pass / 0 fail |
-| `packages/storage` secure-store suite | — | 236 pass / 0 fail |
-
-No test file was changed to achieve this.
-
-**Remaining uncertainty:** the bare container fails early — the `AsyncEntry`
-constructor throws cleanly and the classifier fix handles it. GitHub's runner
-has more of the libsecret/D-Bus stack present, gets deeper into native code and
-Bun segfaults there. If CI still crashes, the durable fix is pre-flight
-detection (skip the native call entirely when there is no Secret Service, e.g.
-no `DBUS_SESSION_BUS_ADDRESS` on Linux) so we never enter the crashing path.
-That would also protect real users from a hard crash rather than a degrade.
-
-## Original symptom analysis (kept for context)
-
-# Blocker 1 (original framing) — Bun segfaults on the native keyring
-
-## What happens
+| File | Declared | Ran | Died on |
+| --- | --- | --- | --- |
+| `capabilityGaps.integration.spec.ts` | 18 | 10 | test 11, `tool-keys:` → `agent.tools.keys.status('exa')` |
+| `subagentOrchestrator-runtime.test.ts` | 15 | 9 | test 10, profile with `'auth-key-name'` |
 
 ```
-Bun v1.3.14 (0d9b296a) Linux x64 | Kernel v6.17.0 | glibc v2.39
-Features: ... process_dlopen(3)
 panic(main thread): Segmentation fault at address 0x88
 oh no: Bun has crashed. This indicates a bug in Bun, not your code.
 ```
 
-```
-FAILED: src/api/__tests__/capabilityGaps.integration.spec.ts (killed by signal SIGILL)
-FAILED: src/core/__tests__/subagentOrchestrator-runtime.test.ts (killed by signal SIGILL)
-```
-
-("killed by signal" is diagnostics I added in this PR — it previously printed a
-meaningless `exit code -1`, which is why round 1 looked like a normal failure.)
-
-## Evidence it is the keyring
-
-Both crash **mid-file**, at exactly the first test that resolves a credential:
-
-| File | Declared | Ran | Dies on |
-| --- | --- | --- | --- |
-| `capabilityGaps.integration.spec.ts` | 18 | 10 | test 11 — `tool-keys:` → `await agent.tools.keys.status('exa')` |
-| `subagentOrchestrator-runtime.test.ts` | 15 | 9 | test 10 — profile with `'auth-key-name': 'chutesminimax'` |
-
-Both reach `packages/storage/src/secure-store/default-keyring-adapter.ts`:
-
-```ts
-const module = await import('@napi-rs/keyring');
-```
-
-…a `dlopen`'d NAPI call. `process_dlopen(3)` in the crash report confirms native
-modules were loaded. The agents shard has **no Secret Service** — `dbus-x11`,
-`gnome-keyring` and `libsecret` are installed only by the dedicated
-`SecureStore Backend (ubuntu-latest, keyring)` job (`.github/workflows/ci.yml:1330`).
-
-### The repo already half-knew this
-
-`scripts/bun-native-modules-smoke.ts`:
-
-```
- * - @napi-rs/keyring — native OS credential store (construct-only; no I/O)
-```
-```ts
-pass('@napi-rs/keyring: construct Entry (no credential I/O)');
-```
-
-The Bun native-module gate deliberately constructs an `Entry` and does **no
-credential I/O**. Nothing had ever made the real call under Bun in CI.
-
-## Options
-
-- **A. Force the non-native fallback backend for the agents Bun run.** A seam
-  exists — `forceRuntimeReplacedForTesting()` returns `null` *before* importing
-  `@napi-rs/keyring`, so zero native calls are issued. Smallest change, contained
-  in `packages/agents`. Those two tests then exercise the fallback backend. On a
-  daemon-less runner today the behaviour is environment-dependent anyway, so this
-  is arguably a fidelity increase. Downside: the seam is named for "runtime was
-  replaced on disk" (issue #2926); a purpose-named seam would mean touching
-  `packages/storage`.
-- **B. Install dbus + gnome-keyring on the agents shard.** Keeps the native path
-  under test; costs CI setup time, changes the workflow, and does not help anyone
-  running the suite under Bun on a Linux dev box.
-- **C. Stub the secure store in just those two files.** Smallest blast radius,
-  but they are explicitly "capability-gap adequacy" tests meant to hit real
-  surfaces.
-- **D. Bump Bun.** It is genuinely a Bun bug (its own message says so), but this
-  is a repo-wide toolchain change and there is no evidence a later version fixes it.
-- **E. Report upstream** — worth doing regardless, does not unblock the PR.
-
-**Recommendation: A.** Native credential behaviour is verified by the
-`SecureStore Backend` job, which still runs both backends. The agents suite is
-not where that coverage lives.
-
----
-
-# Blocker 2 — The shared Bun/Vitest compat shim is too slow on Linux
-
-## What happens
-
-Five tests across two files exceed the 30s per-test budget on Linux while taking
-~1s on macOS:
-
-- `turn.idle-timeout.test.ts` — "disabled path", "env var precedence", "default-off"
-- `subagent.stream-idle.test.ts` — "disabled path", "env var precedence"
-
-**These five tests are now byte-identical to `main`.** My remediation touched
-other tests in those files; these were reverted. So this is not something the
-migration changed — it is the shim being unable to service them under Bun on Linux.
-
 ## Root cause
 
-`test-setup/augment-bun-vi.ts`, `advanceTimerChunk` (line ~139). The loop steps
-the fake clock one *timer firing* at a time, and after every single step calls:
+Both symptoms came from reading the OS credential store on a machine that has
+none.
 
-```ts
-const MICROTASK_DRAIN_ROUNDS = 20;
-const flushPendingTasks = async (): Promise<void> => {
-  for (let i = 0; i < MICROTASK_DRAIN_ROUNDS; i++) {
-    await Promise.resolve();
-  }
-  await new Promise<void>((resolve) => realSetImmediate(resolve));
-};
-```
+`SecureStore.get()` already implements the right degrade — it swallows
+`UNAVAILABLE`, `NOT_FOUND` and `TIMEOUT` and falls through to the encrypted
+file. Two things defeated it:
 
-So the cost of `advanceTimersByTimeAsync(N)` is
-`O(number of timer firings in N) × (20 microtasks + one real event-loop round-trip)`.
+1. **Misclassification.** `classifyError()` matches by substring, and a
+   keyring-less machine reports `Couldn't access platform storage:
+   PermissionDenied`. That contains "permission" and "denied", so it was
+   classified `DENIED` — a hard error — when it means "there is no credential
+   backend here", i.e. `UNAVAILABLE`. The `UNAVAILABLE` remediation string
+   describes exactly this case: *"install a keyring backend … or allow
+   encrypted fallback storage"*.
 
-The tests that fail advance **30 fake minutes** and **700 fake seconds** while a
-repeating timer is pending, which is tens of thousands of real round-trips.
+2. **Unsound probing.** Even classified correctly, the failure cannot always be
+   caught. Under Bun on Linux the call can abort the process inside libsecret
+   rather than raising an error, so "call it and catch" is not a valid
+   availability probe. CI proved this: fix 1 alone left both files still
+   `SIGILL`-ing.
 
-Measured, same code, 3000 timer firings:
+The timer-looking failures were the **same cause wearing a different hat** — the
+credential-store call was stalling inside those tests, consuming the 30s budget.
+It was never a fake-timer problem. An earlier theory that the shared compat shim
+(`test-setup/augment-bun-vi.ts`) was too slow at advancing timers was
+**disproved**: measured at 3000 timer firings it costs 13 ms on macOS and 228 ms
+on Linux, nowhere near 30s, and with the storage fix in place every one of those
+tests runs in single-digit milliseconds. No shim change was needed.
 
-| Platform | Duration |
-| --- | --- |
-| macOS (arm64) | 13 ms |
-| Linux (x86_64 container) | 228 ms |
+## The fix
 
-~17× slower per step. Extrapolated to the real tests' firing counts that turns a
-sub-second advance into one that blows a 30s budget — and in the container a
-single file did not finish even with a 300s per-test timeout.
+Both in `packages/storage/src/secure-store/`, no test file modified:
 
-Ruled out along the way: Bun's native `advanceTimersToNextTimer` is **not** at
-fault; it moves the clock correctly on both platforms (verified, delta=3600000).
+- `secure-store.ts` — classify "access platform storage" as `UNAVAILABLE` ahead
+  of the generic denied/permission test, so the intended fallback engages.
+  Pinned by three behavioral tests in `secure-store.fallback-behavior.test.ts`,
+  each verified failing first.
+- `platform-credential-store.ts` (new) — a pre-flight check. macOS and Windows
+  ship a credential store; Linux reaches one over a D-Bus Secret Service. With
+  no `DBUS_SESSION_BUS_ADDRESS` and no `XDG_RUNTIME_DIR` bus socket there is
+  definitively none, so `createDefaultKeyringAdapter()` returns `null` before
+  importing `@napi-rs/keyring` and never enters the crashing path. A pure
+  predicate over (platform, env, fileExists), so it is covered on every host.
 
-## Options
+## Evidence
 
-- **A. Make the macrotask yield periodic instead of per-step** in
-  `flushPendingTasks` / `advanceTimerChunk` — e.g. drain microtasks every step
-  but only cross a real event-loop boundary every N steps or at the end of the
-  advance. Order-of-magnitude win, and the per-step `setImmediate` looks
-  unnecessary for correctness.
-- **B. Lower `MICROTASK_DRAIN_ROUNDS`.** Cheaper but a smaller win; the real
-  cost is the macrotask round-trip.
-- **C. Change the agents tests to advance less fake time.** Rejected — "no
-  timeout even after 30 minutes" is the assertion; shrinking it weakens the test.
+Keyring-less Linux x86_64 container:
 
-**Recommendation: A**, but note the file is shared by `core`, `auth`, `cli`,
-`providers`, `telemetry` and `a2a-server`. Changing it means re-verifying those
-suites, which is real scope beyond this issue — hence flagging rather than
-doing it.
+| | Before | After |
+| --- | --- | --- |
+| `capabilityGaps.integration.spec.ts` | 17 pass / 1 fail | 18 pass / 0 fail |
+| All 5 previously-failing files | 2 aborted, 5 tests timed out | **53 pass / 0 fail in 13s** |
+| `turn.idle-timeout.test.ts` alone | 3 tests × 30s timeout | 5 pass in 4.5s, each < 80 ms |
+| `packages/storage` secure-store suite | — | 243 pass / 0 fail |
 
----
+Local: lint, eslint-guard, typecheck, format and build all clean.
 
-## State of the rest of the PR
+The `SecureStore Backend (keyring)` CI job runs under `dbus-run-session`, which
+exports `DBUS_SESSION_BUS_ADDRESS`, so it still exercises the native path.
 
-- 330/330 files pass under Bun locally; 3728 test cases under both runners
-  (exact parity, independently confirmed by the merged `junit.xml` root element).
-- All acceptance criteria met except A1/A6, which are gated on the two blockers
-  above.
-- Two local reviews (DeepThinker + OCR) complete; all Blocker and Should-fix
-  findings remediated.
-- All four PR review threads answered and resolved — including a CodeRabbit
-  claim refuted with a minimal reproduction (Bun 1.3.14 does **not** honour
-  `[test] timeout` in `bunfig.toml`; upstream oven-sh/bun#13988 is not in it).
-- Three rounds of genuine Linux-only bugs found and fixed, plus a real
-  already-aborted-`AbortSignal` regression caught by review.
+## Why this mattered beyond CI
 
-Latest head: `2a5d8416c`.
+This is a **product bug, not a test artifact**. The shipped `bin/llxprt` is a
+POSIX launcher that execs Bun, so a Linux user with no Secret Service — headless
+server, container, ssh session, WSL — reading a provider key got a thrown
+`SecureStoreError` instead of the encrypted-file fallback the design intends,
+and on some systems a hard crash.
+
+The repo had already sensed the hazard without pinning it down:
+`scripts/bun-native-modules-smoke.ts` deliberately exercises `@napi-rs/keyring`
+**construct-only, no credential I/O**. Nothing had made the real call under Bun
+in CI until these agents tests did. The tests were right.
