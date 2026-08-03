@@ -40,6 +40,26 @@ const KEYRING_MODULE_ERROR_CODES = new Set([
   'ERR_DLOPEN_FAILED',
 ]);
 
+/**
+ * Environment marker that suppresses use of the real OS credential store.
+ *
+ * Test suites must not read or write the developer's actual keyring. Storage
+ * roots are already redirected for tests (see `isolateStorageRoots`), but the
+ * OS credential store sits outside those roots and was never covered, so any
+ * suite that touched a SecureStore reached the real keychain. Setting this
+ * marker makes the factory return null, and SecureStore then uses its
+ * encrypted-file fallback inside the isolated storage root.
+ *
+ * Deliberately distinct from `LLXPRT_TEST_STORAGE_ISOLATED`: the storage
+ * workspace's own suites isolate their roots while still needing the genuine
+ * keyring, so the two concerns cannot share one flag.
+ */
+const DISABLE_OS_KEYRING_ENV = 'LLXPRT_TEST_DISABLE_OS_KEYRING';
+
+function isOsKeyringDisabledForTests(): boolean {
+  return process.env[DISABLE_OS_KEYRING_ENV] === '1';
+}
+
 function isErrorWithCode(value: unknown): value is { code: string } {
   return (
     typeof value === 'object' &&
@@ -217,6 +237,9 @@ export function setKeyringLogger(logger: StorageLogger): void {
  */
 export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | null> {
   if (isRuntimeReplaced()) {
+    return null;
+  }
+  if (isOsKeyringDisabledForTests()) {
     return null;
   }
   try {
