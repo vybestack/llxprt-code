@@ -132,6 +132,11 @@ function assertRuntimeReplacedError(error: unknown): void {
     expect(error.code).toBe('RUNTIME_REPLACED');
     expect(error.remediation).toContain('Restart');
     expect(error.remediation).toContain('Always Allow');
+    // Issue #2962: this error is now rethrown out of the OAuth token layer and
+    // surfaced to the user, and every consumer renders `message` only — none
+    // read `.remediation`. The message must therefore carry the fix, not just
+    // the diagnosis.
+    expect(error.message).toContain(error.remediation);
   }
 }
 

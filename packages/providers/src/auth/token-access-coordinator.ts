@@ -44,6 +44,7 @@ import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import type { OAuthBucketManager } from './OAuthBucketManager.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import { rethrowIfStoreOutage } from './token-store-outage.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
@@ -204,6 +205,7 @@ export class TokenAccessCoordinator {
     try {
       return await this.tokenStore.getToken(providerName, bucket);
     } catch (error) {
+      rethrowIfStoreOutage(error);
       logger.debug(`Failed to load stored token for ${providerName}:`, error);
       return null;
     }
@@ -452,6 +454,7 @@ export class TokenAccessCoordinator {
       ) {
         throw error;
       }
+      rethrowIfStoreOutage(error);
       return null;
     }
   }
@@ -704,6 +707,9 @@ export class TokenAccessCoordinator {
           return peekToken.access_token;
         }
       } catch (peekError) {
+        // Unusable for every bucket, not just this one: continuing the loop
+        // would swallow it once per bucket and end in a false "no token".
+        rethrowIfStoreOutage(peekError);
         logger.debug(
           `[issue1616] Token peek failed for ${providerName}/${peekBucket}:`,
           peekError,
@@ -751,6 +757,7 @@ export class TokenAccessCoordinator {
     try {
       diskToken = await this.tokenStore.getToken(providerName, bucketToCheck);
     } catch (error) {
+      rethrowIfStoreOutage(error);
       logger.debug(
         `[issue1262/1195] Disk fallback read failed for ${providerName}:`,
         error,

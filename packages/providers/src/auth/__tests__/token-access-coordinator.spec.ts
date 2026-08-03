@@ -24,6 +24,10 @@ import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
+import {
+  SecureStoreError,
+  isRuntimeReplacedError,
+} from '@vybestack/llxprt-code-storage';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 
 // --------------------------------------------------------------------------
@@ -495,6 +499,88 @@ describe('TokenAccessCoordinator', () => {
       await expect(coordinator.getToken('gemini')).rejects.toThrow(
         'auth failed hard',
       );
+    });
+  });
+
+  /**
+   * Issue #2962: a credential STORE outage must never be reported as an absent
+   * credential.
+   *
+   * When the running runtime has been unlinked, macOS can no longer identify
+   * the process, so SecureStore fails every operation with a terminal
+   * RUNTIME_REPLACED error. keyring-token-store rethrows it deliberately. If
+   * this coordinator then collapses it to null, callers conclude "no token"
+   * and tell the user to re-authenticate — a login they cannot complete,
+   * because the store is broken rather than empty.
+   */
+  describe('credential-store outage is not an absent credential', () => {
+    function runtimeReplacedStore(): TokenStore {
+      const store = createMockTokenStore();
+      store.getToken = vi.fn(async () => {
+        throw new SecureStoreError(
+          "LLxprt's runtime was replaced on disk while this session was running.",
+          'RUNTIME_REPLACED',
+          'Restart LLxprt to recover.',
+        );
+      });
+      return store;
+    }
+
+    it('propagates the outage out of peekStoredToken instead of returning null', async () => {
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: runtimeReplacedStore(),
+      });
+
+      await expect(coordinator.peekStoredToken('anthropic')).rejects.toThrow(
+        /replaced on disk/i,
+      );
+    });
+
+    it('propagates the outage out of getOAuthToken instead of returning null', async () => {
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: runtimeReplacedStore(),
+      });
+
+      await expect(coordinator.getOAuthToken('anthropic')).rejects.toThrow(
+        /replaced on disk/i,
+      );
+    });
+
+    it('preserves the RUNTIME_REPLACED code so callers can distinguish it', async () => {
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: runtimeReplacedStore(),
+      });
+
+      const error = await coordinator
+        .peekStoredToken('anthropic')
+        .then(() => null)
+        .catch((caught: unknown) => caught);
+
+      expect(isRuntimeReplacedError(error)).toBe(true);
+    });
+
+    it('still swallows an ordinary read failure as a cache miss', async () => {
+      // Regression guard: only the terminal identity is promoted to a throw.
+      // Routine store errors must keep degrading to null as before.
+      const store = createMockTokenStore();
+      store.getToken = vi.fn(async () => {
+        throw new Error('transient keyring hiccup');
+      });
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: store,
+      });
+
+      await expect(
+        coordinator.peekStoredToken('anthropic'),
+      ).resolves.toBeNull();
     });
   });
 });
