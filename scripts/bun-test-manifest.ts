@@ -712,6 +712,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     cwd: '.',
     files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
   },
+  {
+    // Bun-native tests for the issue-planner advisory-enrichment non-fatality
+    // guards (umbrella #2984): vitest skips `*.bun.test.ts`; this runs under
+    // Bun's native runner only.
+    workspace: 'issue-planner-enrichment',
+    cwd: '.',
+    files: ['scripts/tests/issue-planner-enrichment.bun.test.ts'],
+  },
 ];
 
 /**

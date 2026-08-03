@@ -125,11 +125,14 @@ jobs:
           GH_TOKEN: '${{ github.token }}'
         run: |
           set -euo pipefail
-          # Use the production extractLinkedReferences() helper (handles
-          # fenced-code exclusion and de-dup) so the workflow and tests share
-          # one implementation. Excludes the current issue number.
-          bun .github/scripts/issue-planner.ts \
-            --extract-linked-references planner "${ISSUE_NUMBER}"
+          # Advisory enrichment — best effort, never fatal (#2984). The helper
+          # reads issue.json (already gathered); if it fails, degrade to an
+          # empty reference list rather than aborting the run.
+          if ! bun .github/scripts/issue-planner.ts \
+              --extract-linked-references planner "${ISSUE_NUMBER}"; then
+            echo "::warning::Linked-references extraction failed; using empty list."
+            printf '' > planner/linked-references.txt
+          fi
 
           mapfile -t linked_numbers < planner/linked-references.txt
           for num in "${linked_numbers[@]}"; do
@@ -193,7 +196,13 @@ jobs:
           COMMENT_BODY: '${{ github.event.comment.body }}'
         run: |
           set -euo pipefail
-          bun .github/scripts/issue-planner.ts --extract-feedback planner
+          # Advisory enrichment — best effort, never fatal (#2984). Feedback
+          # only applies to /plan comment re-runs; if extraction fails,
+          # degrade to empty feedback.
+          if ! bun .github/scripts/issue-planner.ts --extract-feedback planner; then
+            echo "::warning::Plan-feedback extraction failed; using empty feedback."
+            printf '' > planner/feedback.txt
+          fi
 
       - name: 'Render planner context and instructions'
         run: |
