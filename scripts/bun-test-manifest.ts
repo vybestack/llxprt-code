@@ -659,6 +659,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     cwd: '.',
     files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
   },
+  {
+    // Bun-native regression test for the issue-planner filesystem-confinement
+    // step (issue #2960): vitest skips `*.bun.test.ts`; this runs under Bun's
+    // native runner only.
+    workspace: 'issue-planner-confinement',
+    cwd: '.',
+    files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
+  },
 ];
 
 /**
