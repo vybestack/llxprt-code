@@ -35,7 +35,6 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { flushEventLoop } from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -366,13 +365,17 @@ describe('subagent.ts', () => {
         SubagentTerminateMode.TIMEOUT,
       );
 
-      // Resolve the iterator so the run can finish. `runAllTimersAsync` must
-      // NOT be used here: it would also fire the 60-minute max_time_minutes
-      // watchdog and report a TIMEOUT this test exists to rule out. Yielding
-      // to the real event loop lets the generator resume without moving the
-      // fake clock at all.
+      // Resolve the iterator so the run can finish.
+      //
+      // `runAllTimersAsync` must NOT be used here: it would also fire the
+      // 60-minute max_time_minutes watchdog and report the very TIMEOUT this
+      // test exists to rule out. A real event-loop yield does not work either —
+      // after the clock has been advanced, a real `setImmediate` does not
+      // reliably run under Bun on Linux. Nudging the fake clock by a second
+      // pumps the pending promise chain through the fake-timer API itself and
+      // stays nowhere near the 60-minute limit.
       resolveIterator!();
-      await flushEventLoop();
+      await vi.advanceTimersByTimeAsync(1_000);
 
       await runPromise;
       // Should complete normally (not timeout)
