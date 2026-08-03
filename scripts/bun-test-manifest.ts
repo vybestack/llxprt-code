@@ -704,6 +704,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     cwd: '.',
     files: [
       'scripts/tests/ocr-review-422-grouping.bun.test.ts',
+      'scripts/tests/ocr-review-422-wiring.bun.test.ts',
       'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
       'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
       'scripts/tests/ocr-review-workflow.bun.test.ts',

@@ -312,50 +312,55 @@ unreachable for us.
 
 This is the one dimension where upstream is materially better than ours.
 
-| Step                      | Upstream (`publishBatch`)                                                                                                                                                                                                                         | Ours                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Gate                      | Status must be 422 **and** `isLineResolutionFailure(e)` must hold. It scans `error.message` plus `errors[]` (string entries and `{field}` entries) against five patterns, the load-bearing one being `/could not be resolved/i`                   | None. **Any** batch error takes the same fallback                        |
-| Why the gate              | GitHub documents 422 on this endpoint as "Validation failed, **or** the endpoint has been spammed". Re-sending into a spam-throttled endpoint deepens the incident                                                                                | n/a                                                                      |
-| Diff knowledge            | `getPrDiffHunks` walks `pulls.listFiles` (100/page, 30 pages) and parses each `patch` into per-hunk RIGHT-side `{start, end}` ranges                                                                                                              | None                                                                     |
-| Provability guards        | The inventory is marked incomplete — so nothing is discarded — when pagination is truncated, when `listFiles` returns empty, when a `patch` is clipped (observed line count != hunk header count), or when the PR head SHA moved during the walk  | n/a                                                                      |
-| Classification            | Tri-state `classifyCommentAgainstDiff`: `invalid` only when provable (path not in the PR, reversed span, or span not contained in a **single** hunk); `unknown` for missing patch, LEFT side, no line, or an incomplete inventory                 | n/a                                                                      |
-| Recovery shape            | `invalid` → summary; `valid` → **one** secondary `createReview`, but only when filtering actually removed something (otherwise the payload would be byte-identical to the one just rejected); `unknown` and secondary failures → per-comment loop | Every capped comment is re-posted individually via `createReviewComment` |
-| Worst-case write volume   | 1 secondary review                                                                                                                                                                                                                                | Up to `cap` (50) individual writes, paced 1 s apart                      |
-| Worst-case timeline noise | 1 entry                                                                                                                                                                                                                                           | Up to 50 entries                                                         |
+| Step                           | Upstream (`publishBatch`)                                                                                                                                                                                                                         | Ours                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Gate                           | Status must be 422 **and** `isLineResolutionFailure(e)` must hold. It scans `error.message` plus `errors[]` (string entries and `{field}` entries) against five patterns, the load-bearing one being `/could not be resolved/i`                   | None. **Any** batch error takes the same fallback                        |
+| Why the gate                   | GitHub documents 422 on this endpoint as "Validation failed, **or** the endpoint has been spammed". Re-sending into a spam-throttled endpoint deepens the incident                                                                                | n/a                                                                      |
+| Diff knowledge                 | `getPrDiffHunks` walks `pulls.listFiles` (100/page, 30 pages) and parses each `patch` into per-hunk RIGHT-side `{start, end}` ranges                                                                                                              | None                                                                     |
+| Provability guards             | The inventory is marked incomplete — so nothing is discarded — when pagination is truncated, when `listFiles` returns empty, when a `patch` is clipped (observed line count != hunk header count), or when the PR head SHA moved during the walk  | n/a                                                                      |
+| Classification                 | Tri-state `classifyCommentAgainstDiff`: `invalid` only when provable (path not in the PR, reversed span, or span not contained in a **single** hunk); `unknown` for missing patch, LEFT side, no line, or an incomplete inventory                 | n/a                                                                      |
+| Recovery shape                 | `invalid` → summary; `valid` → **one** secondary `createReview`, but only when filtering actually removed something (otherwise the payload would be byte-identical to the one just rejected); `unknown` and secondary failures → per-comment loop | Every capped comment is re-posted individually via `createReviewComment` |
+| Best case for the grouped path | 1 secondary review covering every provably in-diff comment                                                                                                                                                                                        | n/a before this change                                                   |
+| Worst case                     | Still degrades to the per-comment loop: comments it cannot judge, and survivors of a failed secondary write, are posted individually                                                                                                              | Up to `cap` (50) individual writes, paced 1 s apart                      |
 
 Our _outcome_ is already correct — an out-of-diff comment 422s individually,
 increments `failedInline`, and its finding is pushed to `overflowRouted`, so it
 still reaches the reader through the sticky summary. What we lack is the
 _efficiency and quietness_ of the recovery: on a line-resolution 422 with a full
-cap we make up to 50 API writes and produce up to 50 separate timeline entries
-where upstream makes one.
+cap we make up to 50 API writes and produce up to 50 separate timeline entries,
+where upstream collapses the provably in-diff ones into a single review.
 
 #### Interaction with our markers, dedup and trust model
 
-Upstream has no notion of any of this.
+| Concern          | Upstream                                                                                                                                                                                                                                                                              | Ours                                                                                                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sticky summary   | `SUMMARY_TAG` in an issue comment                                                                                                                                                                                                                                                     | `MARKER` = `<!-- llxprt-code-ocr-review -->`                                                                                                                                                                                                                      |
+| Inline identity  | A per-run `REVIEW_TAG` in the **review body**, plus a **random per-comment id** embedded in each comment body as an HTML comment (`newCommentId(RUN_TAG)` / `formatComment(comment, id)`). Random rather than content-derived, so two findings sharing path/line/content still differ | Every inline body is prefixed with `INLINE_MARKER` = `<!-- llxprt-code-ocr-inline -->` plus a per-finding `<!-- ocr-fp:… -->` fingerprint                                                                                                                         |
+| Dedup key        | Reconciliation re-reads the review carrying `REVIEW_TAG` and matches those per-comment ids                                                                                                                                                                                            | `inlineCommentKey` = path ∥ line ∥ start_line ∥ un-rendered body, over every trusted-marker review comment on the PR (`existingInlineCommentKeys()` does not filter by SHA; it takes `line`/`start_line` and falls back to `original_line`/`original_start_line`) |
+| Author trust     | **None.** Any comment carrying the tag is treated as the action's own                                                                                                                                                                                                                 | `OCR_DEFAULT_TRUSTED_MARKER_LOGINS` gates marker recognition, so a forged marker from an untrusted author cannot spoof dedup, the sticky summary, or embedded checkpoint state                                                                                    |
+| Ambiguity signal | `reconciled` flag per batch, surfaced as `batches_reconciled`                                                                                                                                                                                                                         | `batchPublicationAmbiguous`, cleared only by `reconcileWithRetry()` (two attempts, 3 s apart, tolerating GitHub's eventual consistency)                                                                                                                           |
 
-| Concern          | Upstream                                                                                 | Ours                                                                                                                                                                           |
-| ---------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Sticky summary   | `SUMMARY_TAG` in an issue comment                                                        | `MARKER` = `<!-- llxprt-code-ocr-review -->`                                                                                                                                   |
-| Inline identity  | Per-run `REVIEW_TAG` in the **review body**; individual comments carry no marker         | Every inline body is prefixed with `INLINE_MARKER` = `<!-- llxprt-code-ocr-inline -->` plus a per-finding `<!-- ocr-fp:… -->` fingerprint                                      |
-| Dedup key        | Reconciliation re-reads the review carrying `REVIEW_TAG` and compares posted comment ids | `inlineCommentKey` = path ∥ line ∥ start_line ∥ un-rendered body, computed per head SHA by `existingInlineCommentKeys()`                                                       |
-| Author trust     | **None.** Any comment carrying the tag is treated as the action's own                    | `OCR_DEFAULT_TRUSTED_MARKER_LOGINS` gates marker recognition, so a forged marker from an untrusted author cannot spoof dedup, the sticky summary, or embedded checkpoint state |
-| Ambiguity signal | `reconciled` flag per batch, surfaced as `batches_reconciled`                            | `batchPublicationAmbiguous`, cleared only by `reconcileWithRetry()` (two attempts, 3 s apart, tolerating GitHub's eventual consistency)                                        |
-
-Upstream's per-run `REVIEW_TAG` is strictly weaker than our scheme for our
-threat model: it identifies a _review_, not a _finding_, and it trusts any
-author. Adopting the composite action would mean giving up the trusted-marker
-filter, which is load-bearing for a `pull_request_target` workflow.
+So upstream does have a per-comment identity, and its reconciliation is
+comparable to ours in mechanism. The material difference is **author trust**:
+upstream treats any comment bearing its tag as its own, whereas we only trust
+markers from an allow-listed login. That filter is load-bearing for a
+`pull_request_target` workflow and has no upstream equivalent.
 
 #### What adopting upstream would actually cost
 
 Upstream ships a _composite action_: it owns checkout, install, review
 invocation and posting as one unit. Our workflow deliberately calls the `ocr`
-CLI directly so the surrounding logic stays ours. That logic has no upstream
+CLI directly so the surrounding logic stays ours.
+
+To be accurate about one point: upstream's action is **not** fork-unsafe. Its
+`Checkout base` step checks out the trusted base rather than the PR head and
+fetches the head commit's objects separately (`action.yml`), which is the same
+principle our workflow follows. Adopting it would not introduce a fork-safety
+hole; it would replace our sequencing with theirs.
+
+What it would displace is the surrounding logic, which has no upstream
 equivalent and would have to be rebuilt around the action:
 
-- fork-safety sequencing on `pull_request_target` (no PR-supplied code enters
-  scope),
 - checkpoint read/advance (`shouldAdvanceCheckpoint`, `buildCheckpoint`, and the
   checkpoint embedded in the sticky comment body),
 - the auto-review counter and suspension logic,
@@ -379,10 +384,17 @@ here.
 **Batching: DEFER, keep ours.** Both designs are deterministic and neither drops
 a finding. The batching difference is a deliberate product choice — upstream
 bounds request size, we bound reader burden — and ours is the behaviour
-#2649/#2666 specified. Adoption is all-or-nothing on the composite action and
-would cost the fork-safety sequencing, checkpointing, suspension, manifest,
-coverage and routing logic listed above, plus the trusted-marker author filter
-that upstream does not have.
+#2649/#2666 specified.
+
+Two distinct adoption routes exist, and neither is attractive for batching.
+Consuming upstream's action _as a maintained dependency_ is all-or-nothing,
+because the chunking is not separable from the action that owns checkout,
+install and posting; that would displace the checkpointing, suspension,
+manifest, coverage and routing logic listed above, plus the trusted-marker
+author filter. _Vendoring_ the chunking logic into our workflow is possible —
+that is exactly what we do below for the 422 grouping — but it buys nothing
+today, since at a cap of 50 a single `createReview` is always within GitHub's
+practical limit, so a chunker would never split anything.
 
 **422 line-resolution grouping: ADOPT**, implemented under #2930. It is
 self-contained,
@@ -402,8 +414,19 @@ The port is deliberately conservative:
   pagination, an empty file list, a missing or clipped `patch`, a LEFT-side
   comment, a missing line, or a head SHA that moved during the walk all degrade
   to `unknown`, which means today's behaviour.
+- **Patch completeness is proved on both axes.** Each hunk's observed body lines
+  must match the header's declared old _and_ new counts — checking only the new
+  side would miss a patch truncated inside a run of deletions — and the parsed
+  totals must equal the file entry's own `additions`/`deletions`, which is what
+  catches a patch truncated exactly on a hunk boundary. A file that fails either
+  check is not indexed, so its comments classify `unknown`.
 - **No secondary batch unless filtering removed something**, since an unfiltered
   resend would be byte-identical to the payload GitHub just rejected.
+- **Dedup runs before either recovery path.** The refreshed key set is applied
+  to the candidate pairs before the grouped retry, so the grouped review cannot
+  repost a comment the per-comment loop would have skipped. If the grouped write
+  itself throws, it may still have been committed, so the key set is re-read
+  before the per-comment loop is allowed to repost the survivors.
 - **Counters preserved.** A provably-out-of-diff comment still increments
   `failedInline` and still pushes its finding onto `overflowRouted`, exactly as
   the per-comment failure path does today. Working the cases through,

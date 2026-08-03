@@ -3477,11 +3477,17 @@ jobs:
 
             function errorStatus(error) {
               if (!error || typeof error !== 'object') return undefined;
-              const raw = error.status !== undefined
-                ? error.status
-                : (error.response && error.response.status);
-              const parsed = Number(raw);
-              return Number.isInteger(parsed) ? parsed : undefined;
+              // Octokit puts the status on the error; a re-wrapped error may
+              // only carry it on `response`. Take the first candidate that is
+              // actually a number so a junk top-level `status` cannot mask a
+              // valid `response.status`.
+              const candidates = [error.status, error.response && error.response.status];
+              for (const candidate of candidates) {
+                if (candidate === undefined || candidate === null) continue;
+                const parsed = Number(candidate);
+                if (Number.isInteger(parsed)) return parsed;
+              }
+              return undefined;
             }
 
             function isLineResolutionFailure(error) {
@@ -3520,25 +3526,38 @@ jobs:
             // that straddles two hunks, and a straddling span 422s again.
             //
             // Within a hunk the new-file line numbers run contiguously from the
-            // header's start: additions and context lines advance the counter,
-            // deletions do not. `complete` is false when the observed body line
-            // count disagrees with the header's declared count, which means the
-            // patch was clipped — treating a clipped prefix as authoritative
-            // would prove later lines "outside the diff" and silently relegate
-            // postable findings to the summary.
+            // header's start: additions and context lines advance the new-side
+            // counter, deletions do not. `complete` is false when the observed
+            // body line counts disagree with the header's declared counts,
+            // which means the patch was clipped — treating a clipped prefix as
+            // authoritative would prove later lines "outside the diff" and
+            // silently relegate postable findings to the summary.
+            //
+            // BOTH sides are validated. Checking only the new side misses a
+            // patch truncated inside a run of deletions (the new-side count is
+            // already satisfied by then), which would leave `complete` true for
+            // a hunk whose tail — and possibly whole later hunks — is missing.
+            // The caller additionally cross-checks the totals against the file
+            // entry's own additions/deletions, which is what catches a patch
+            // truncated exactly on a hunk boundary.
             function parseDiffHunkInventory(patch) {
-              if (!patch) return { ranges: [], complete: false };
+              if (!patch) return { ranges: [], complete: false, additions: 0, deletions: 0 };
               const ranges = [];
-              const hunkHeaderRegex = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+              const hunkHeaderRegex = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
               const lines = String(patch).split(String.fromCharCode(10));
               let current = null;
               let sawHunk = false;
               let complete = true;
+              let additions = 0;
+              let deletions = 0;
               function flush() {
                 if (!current) return;
-                if (current.observed !== current.expected) complete = false;
-                // A pure-deletion hunk ("+N,0") never advanced the counter, so
-                // end < start and there is nothing to comment on.
+                if (current.observedNew !== current.expectedNew
+                  || current.observedOld !== current.expectedOld) {
+                  complete = false;
+                }
+                // A pure-deletion hunk ("+N,0") never advanced the new-side
+                // counter, so end < start and there is nothing to comment on.
                 if (current.end >= current.start) {
                   ranges.push({ start: current.start, end: current.end });
                 }
@@ -3547,25 +3566,43 @@ jobs:
                 const match = hunkHeaderRegex.exec(line);
                 if (match) {
                   flush();
-                  const start = parseInt(match[1], 10);
-                  const expected = match[2] === undefined ? 1 : parseInt(match[2], 10);
-                  current = { start, end: start - 1, next: start, expected, observed: 0 };
+                  const start = parseInt(match[3], 10);
+                  const expectedNew = match[4] === undefined ? 1 : parseInt(match[4], 10);
+                  const expectedOld = match[2] === undefined ? 1 : parseInt(match[2], 10);
+                  current = {
+                    start,
+                    end: start - 1,
+                    next: start,
+                    expectedNew,
+                    observedNew: 0,
+                    expectedOld,
+                    observedOld: 0,
+                  };
                   sawHunk = true;
                   continue;
                 }
                 if (!current) continue;
                 if (line.startsWith('\\')) continue; // "\ No newline at end of file"
-                if (line.startsWith('-')) continue; // deletion: old file only
+                if (line.startsWith('-')) { // deletion: old file only
+                  current.observedOld += 1;
+                  deletions += 1;
+                  continue;
+                }
                 if (line.startsWith('+') || line.startsWith(' ')) {
                   current.end = current.next;
                   current.next += 1;
-                  current.observed += 1;
+                  current.observedNew += 1;
+                  if (line.startsWith('+')) {
+                    additions += 1;
+                  } else {
+                    current.observedOld += 1; // context advances both sides
+                  }
                 }
                 // Anything else (notably a bare "" from a trailing newline) is
-                // not a diff body line and must not advance the counter.
+                // not a diff body line and must not advance the counters.
               }
               flush();
-              return { ranges, complete: sawHunk && complete };
+              return { ranges, complete: sawHunk && complete, additions, deletions };
             }
 
             // TRI-STATE: 'valid' | 'invalid' | 'unknown'.
@@ -3600,6 +3637,18 @@ jobs:
               return withinOneHunk ? 'valid' : 'invalid';
             }
 
+            // Does the parsed patch account for every line the file entry says
+            // changed? A truncated patch reports fewer. Missing or non-numeric
+            // totals mean we cannot cross-check, and an unverifiable file is
+            // simply not indexed, so its comments classify "unknown".
+            function patchTotalsAgree(file, parsed) {
+              if (!Number.isInteger(file.additions) || !Number.isInteger(file.deletions)) {
+                return false;
+              }
+              return file.additions === parsed.additions
+                && file.deletions === parsed.deletions;
+            }
+
             // Build the PR's RIGHT-side diff inventory:
             //   files    Map<path, Array<{start,end}>> — parsed patches
             //   known    Set<path>                     — every path in the PR
@@ -3629,7 +3678,15 @@ jobs:
                   known.add(file.filename);
                   if (file.patch) {
                     const parsed = parseDiffHunkInventory(file.patch);
-                    if (parsed.complete) files.set(file.filename, parsed.ranges);
+                    // Per-hunk counts cannot detect a patch truncated exactly
+                    // on a hunk boundary — every hunk we did see is internally
+                    // consistent while whole later hunks are missing. The file
+                    // entry's own additions/deletions totals are the
+                    // independent signal that catches it, so a file is only
+                    // indexed when the parsed patch accounts for all of them.
+                    if (parsed.complete && patchTotalsAgree(file, parsed)) {
+                      files.set(file.filename, parsed.ranges);
+                    }
                   }
                 }
                 if (batch.length < PER_PAGE) {
@@ -3666,13 +3723,16 @@ jobs:
             //                preserves the failedInline invariant that
             //                shouldAdvanceCheckpoint depends on
             //   remaining    pairs for the pre-existing per-comment loop
+            //   secondaryFailed  a grouped write was sent and threw, so it may
+            //                    have landed anyway; the caller must re-read
+            //                    before the per-comment loop reposts anything
             async function regroupLineResolutionFailure(pairs, commitSha) {
               let diff = null;
               try {
                 diff = await prDiffHunkInventory(commitSha);
               } catch (hunkErr) {
                 core.warning(redactSecretDiagnostics(`OCR 422 fallback: could not resolve PR diff hunks (${hunkErr.message || hunkErr}); posting individually.`));
-                return { posted: 0, invalidPairs: [], remaining: pairs };
+                return { posted: 0, invalidPairs: [], remaining: pairs, secondaryFailed: false };
               }
               const validPairs = [];
               const unknownPairs = [];
@@ -3698,6 +3758,7 @@ jobs:
                   posted: 0,
                   invalidPairs,
                   remaining: validPairs.concat(unknownPairs),
+                  secondaryFailed: false,
                 };
               }
               try {
@@ -3706,13 +3767,23 @@ jobs:
                   event: 'COMMENT', commit_id: commitSha, comments: validPairs.map((pair) => pair.comment),
                 });
                 core.info(`OCR 422 fallback: posted ${validPairs.length} in-diff inline comment(s) as one grouped review; ${invalidPairs.length} comment(s) were outside the diff.`);
-                return { posted: validPairs.length, invalidPairs, remaining: unknownPairs };
+                return {
+                  posted: validPairs.length,
+                  invalidPairs,
+                  remaining: unknownPairs,
+                  secondaryFailed: false,
+                };
               } catch (secondaryErr) {
                 core.warning(redactSecretDiagnostics(`OCR 422 fallback: grouped retry failed (${secondaryErr.message || secondaryErr}); posting individually.`));
+                // The grouped write may have been committed before the error
+                // reached us (a 5xx or a dropped connection), so the survivors
+                // are returned for individual posting only after the caller
+                // re-reads what actually landed.
                 return {
                   posted: 0,
                   invalidPairs,
                   remaining: validPairs.concat(unknownPairs),
+                  secondaryFailed: true,
                 };
               }
             }
@@ -4442,9 +4513,23 @@ jobs:
                 // shouldAdvanceCheckpoint relies on is preserved. Every other
                 // failure shape (5xx, network, spam-throttle 422, unrecognised
                 // 422) skips this entirely and uses the loop unchanged.
-                let pairsToPostIndividually = pairsToPost;
+                // The refreshed key set above can reveal comments that landed
+                // after the pre-batch read, or that the pre-batch read missed
+                // entirely because the list call failed. Drop them here, before
+                // EITHER recovery path runs, so the grouped review cannot
+                // repost something the per-comment loop would have skipped.
+                const recoverablePairs = [];
+                for (const p of pairsToPost) {
+                  if (existingInlineKeys.has(inlineCommentKey(p.comment))) {
+                    core.warning(`Skipping duplicate OCR inline comment on ${p.comment.path}:${p.comment.line} after batch post uncertainty.`);
+                    skippedExactHistoryCount += 1;
+                  } else {
+                    recoverablePairs.push(p);
+                  }
+                }
+                let pairsToPostIndividually = recoverablePairs;
                 if (errorStatus(batchErr) === 422 && isLineResolutionFailure(batchErr)) {
-                  const regrouped = await regroupLineResolutionFailure(pairsToPost, headSha);
+                  const regrouped = await regroupLineResolutionFailure(recoverablePairs, headSha);
                   postedInline += regrouped.posted;
                   for (const p of regrouped.invalidPairs) {
                     core.warning(`Skipping OCR inline comment on ${p.comment.path}:${p.comment.line}; it is outside the PR diff hunks. Routing it to the sticky summary.`);
@@ -4452,10 +4537,23 @@ jobs:
                     overflowRouted.push(p.finding);
                   }
                   pairsToPostIndividually = regrouped.remaining;
+                  // A grouped write that threw may still have been committed,
+                  // so re-read before the per-comment loop can repost it.
+                  if (regrouped.secondaryFailed) {
+                    try {
+                      existingInlineKeys = await existingInlineCommentKeys();
+                    } catch (listErr) {
+                      core.warning(redactSecretDiagnostics(`Could not re-list OCR inline comments after the grouped 422 retry: ${listErr.message || listErr}`));
+                    }
+                  }
                 }
                 // pairsToPost was already capped to effectiveCap before the
                 // batch attempt, so the fallback loop does not need a second
                 // overflow check — every remaining pair is within the cap.
+                // The per-comment dedup check below is still load-bearing even
+                // though recoverablePairs was already filtered: the grouped 422
+                // retry can refresh existingInlineKeys after a write that may
+                // have landed, and this loop must honour that newer view.
                 for (const p of pairsToPostIndividually) {
                   const c = p.comment;
                   if (existingInlineKeys.has(inlineCommentKey(c))) {
