@@ -94,12 +94,18 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   },
   {
     workspace: 'agents',
-    files: ['test-bun/subagentAnthropicTextSettings.issue1738.bun.ts'],
+    files: [
+      'test-bun/generatingModelStamp.issue2511.bun.ts',
+      'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
+    ],
   },
   {
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      // Extension settings storage drives the REAL SecureStore against an
+      // in-memory keyring, so it needs no module mocking and is Bun-native.
+      'test-bun/settingsStorage.bun.ts',
       // JSP/1 observation producer (issue #2779). Bun-native from the start:
       // these are excluded from the Vitest selection so they run only here.
       'src/observation/jspBounds.test.ts',
@@ -110,7 +116,11 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspTransport.test.ts',
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
+      // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
+      // and likewise excluded from the Vitest selection.
+      'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
+      'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
   },
@@ -597,6 +607,12 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/runtime/statelessHardening.spec.ts',
       'src/synthetic/usageInfo.test.ts',
       'src/tokenizer-behavior.test.ts',
+      'src/tokenizers/Gpt56O200kPromptEstimator.test.ts',
+      'src/tokenizers/Gpt56ProviderUsageParity.test.ts',
+      'src/tokenizers/official/assetLoader.test.ts',
+      'src/tokenizers/official/officialTokenizers.test.ts',
+      'src/tokenizers/official/offlineAssets.test.ts',
+      'src/tokenizers/official/providerFramingSeparation.test.ts',
       'src/utils/cacheMetricsExtractor.test.ts',
       'src/utils/containerSandbox.test.ts',
       'src/utils/contentPreview.test.ts',
@@ -613,6 +629,19 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/utils/toolNameNormalization.test.ts',
       'src/utils/toolResponsePayload.test.ts',
       'src/zai/usageInfo.test.ts',
+    ],
+  },
+  {
+    workspace: 'storage',
+    preload: 'test-setup-storage-isolation.ts',
+    files: [
+      'test-bun/credential-write-lock.bun.ts',
+      'test-bun/keyring-write-verification.bun.ts',
+      'test-bun/machine-secret.bun.ts',
+      'test-bun/machine-secret.concurrent-write.bun.ts',
+      'test-bun/secure-store.bun.ts',
+      'test-bun/secure-store.concurrent-write.bun.ts',
+      'test-bun/storage.bun.ts',
     ],
   },
   {
@@ -662,6 +691,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'scripts-pr-review',
     cwd: '.',
     files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
+  },
+  {
+    // Bun-native regression test for the issue-planner filesystem-confinement
+    // step (issue #2960): vitest skips `*.bun.test.ts`; this runs under Bun's
+    // native runner only.
+    workspace: 'issue-planner-confinement',
+    cwd: '.',
+    files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
   },
   {
     // Bun-native tests for the macOS system-Bun launcher preference (#2962).

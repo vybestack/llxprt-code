@@ -32,6 +32,7 @@ describe('ProviderKeyStorage encrypted fallback', () => {
     const secureStore = new SecureStore(SERVICE_NAME, {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: async () => MACHINE_SECRET,
     });

@@ -65,6 +65,7 @@ import type { SkillManager } from '../skills/skillManager.js';
 import type { ToolRecord } from './toolRegistryFactory.js';
 import type { LspState } from './lspIntegration.js';
 import type { ApprovalMode, MCPServerConfig } from './configTypes.js';
+import type { ImageOperationRunner } from '../services/image/imageCapability.js';
 import {
   type AccessibilitySettings,
   type BugCommandSettings,
@@ -292,6 +293,22 @@ export abstract class ConfigBaseCore {
     this.taskToolRegistration = registration;
   }
   /**
+   * Public typed setter so the CLI composition root can inject the
+   * image-backend resolver (constructed from the providers package) without
+   * mutating a protected field via a cast. Core keeps the type loose to
+   * avoid importing providers.
+   */
+  setImageBackendResolver(resolver: (() => unknown) | null | undefined): void {
+    this.imageBackendResolver = resolver;
+  }
+  /**
+   * Inject the common image-operation runner so `/image`, direct CLI image
+   * mode, and the generate_image tool converge on one service.
+   */
+  setRunImageOperation(runner: ImageOperationRunner | undefined): void {
+    this.runImageOperationCapability = runner;
+  }
+  /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    */
@@ -306,6 +323,13 @@ export abstract class ConfigBaseCore {
    * @requirement REQ-INV-003
    */
   protected taskToolRegistration: TaskToolRegistration | undefined;
+  /**
+   * Injected image-backend resolver closure (used by the common image-operation
+   * runner, NOT by GenerateImageTool directly). Typed loosely (`unknown`) so
+   * core does not import the providers package.
+   */
+  protected imageBackendResolver: (() => unknown) | null | undefined;
+  protected runImageOperationCapability: ImageOperationRunner | undefined;
   protected postSkillDiscoveryToolRegistrar:
     | PostSkillDiscoveryToolRegistrar
     | undefined;
@@ -866,6 +890,12 @@ export abstract class ConfigBaseCore {
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined {
     return this.taskToolRegistration;
+  }
+  getImageBackendResolver(): (() => unknown) | null | undefined {
+    return this.imageBackendResolver;
+  }
+  getRunImageOperation(): ImageOperationRunner | undefined {
+    return this.runImageOperationCapability;
   }
   getPostSkillDiscoveryToolRegistrar():
     | PostSkillDiscoveryToolRegistrar

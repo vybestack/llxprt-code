@@ -23,7 +23,8 @@ export type SecureStoreErrorCode =
   | 'CORRUPT'
   | 'TIMEOUT'
   | 'NOT_FOUND'
-  | 'RUNTIME_REPLACED';
+  | 'RUNTIME_REPLACED'
+  | 'CONFLICT';
 
 /**
  * Error shape thrown/rejected by ISecureStore operations.

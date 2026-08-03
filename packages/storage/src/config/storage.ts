@@ -257,6 +257,32 @@ export class Storage {
     return path.join(Storage.getGlobalLogDir(), 'oauth', 'locks');
   }
 
+  /**
+   * Credential write advisory lock directory.
+   *
+   * Per-item credential write locks are non-secret ephemeral runtime state
+   * and therefore belong to the log/state category, alongside
+   * {@link getOAuthLocksDir}. They contain no credentials — only owner
+   * identity metadata (pid, hostname, start time) used to detect dead owners.
+   *
+   * The lock root is derived from stable, version-independent path authority
+   * so mixed-version fleets serialize against the same files (R4).
+   *
+   * SERIALIZATION ASSUMPTION: serialization only holds between processes
+   * that resolve the SAME lock root. Processes run with different
+   * `LLXPRT_LOG_HOME`/`LLXPRT_CONFIG_HOME` values address the same OS
+   * keychain item through disjoint lock roots and will NOT serialize —
+   * their writes may interleave.
+   *
+   * Override precedence (inherited from {@link getGlobalLogDir}):
+   * 1. `LLXPRT_LOG_HOME`
+   * 2. `LLXPRT_CONFIG_HOME` (backward-compat fallback)
+   * 3. platform log/state dir
+   */
+  static getCredentialLocksDir(): string {
+    return path.join(Storage.getGlobalLogDir(), 'secure-store', 'locks');
+  }
+
   // ── System settings (system-wide, not user-specific) ────
 
   /**
