@@ -126,10 +126,7 @@ function estimateMediaBlockImageTokens(
   block: MediaBlock,
   provider: string | undefined,
 ): number {
-  // Media blocks can be rehydrated from persisted sessions, where the MIME
-  // type may be absent despite the declared type.
-  const isImage = block.mimeType?.toLowerCase().startsWith('image/') ?? false;
-  if (!isImage) return 0;
+  if (!block.mimeType.toLowerCase().startsWith('image/')) return 0;
   const dimensions =
     block.encoding === 'base64'
       ? parseImageDimensionsFromBase64(block.data)

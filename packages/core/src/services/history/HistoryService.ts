@@ -583,11 +583,13 @@ export class HistoryService
   }
 
   /** Provide the TokenizerProvider interface for the token estimation helpers. */
-  private tokenizerProvider(): TokenizerProvider {
+  private tokenizerProvider(
+    activeProvider = this.activeTokenizationProvider,
+  ): TokenizerProvider {
     return {
       getTokenizerForModel: (modelName: string) =>
-        this.getTokenizerForModel(modelName, this.activeTokenizationProvider),
-      activeProvider: this.activeTokenizationProvider,
+        this.getTokenizerForModel(modelName, activeProvider),
+      activeProvider,
     };
   }
 
@@ -812,11 +814,7 @@ export class HistoryService
   ): Promise<void> {
     return this.runSerializedTokenOperation(async () => {
       let newTotal = 0;
-      const tokenizerProvider: TokenizerProvider = {
-        getTokenizerForModel: (targetModel) =>
-          this.getTokenizerForModel(targetModel, activeProvider),
-        activeProvider,
-      };
+      const tokenizerProvider = this.tokenizerProvider(activeProvider);
 
       for (const entry of this.history) {
         const entryTokens = await estimateContentTokensImpl(

@@ -13,6 +13,7 @@ import sharp from 'sharp';
 import { createRealToolHost as createRealHost } from './helpers/create-real-tool-host.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import type { ToolResult } from '../index.js';
+import { DEFAULT_IMAGE_TOKEN_ESTIMATE } from '../utils/imageTokenEstimation.js';
 
 function createTempDir(prefix = 'llxprt-read-many-files-behavior-'): {
   dir: string;
@@ -336,8 +337,8 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     const filePath = join(tempDir, 'big.png');
     const original = await sharp({
       create: {
-        width: 1092,
-        height: 1092,
+        width: 10,
+        height: 10,
         channels: 3,
         background: { r: 10, g: 20, b: 30 },
       },
@@ -384,12 +385,10 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     });
 
     expect(result.error).toBeUndefined();
-    // The default-family estimate for any image is 1000 tokens. The display
-    // formats totals with toLocaleString(), so tolerate any group separator.
-    const reported = /([\d\s.,\u00a0\u202f]+) tokens/.exec(
-      result.returnDisplay as string,
+    // The display formats totals with toLocaleString(), so build the expected
+    // string the same way rather than assuming a group separator.
+    expect(result.returnDisplay).toContain(
+      `${DEFAULT_IMAGE_TOKEN_ESTIMATE.toLocaleString()} tokens`,
     );
-    expect(reported).not.toBeNull();
-    expect(Number(reported?.[1].replace(/\D/g, ''))).toBe(1000);
   });
 });

@@ -260,9 +260,14 @@ export function parseImageDimensionsFromBase64(
 ): ImageDimensions | undefined {
   if (base64.length === 0) return undefined;
   try {
-    // Read a bounded window first so a multi-megabyte payload is never scanned
-    // or copied in full; the window is doubled to absorb interleaved newlines.
-    const window = stripDataUriPrefix(base64).slice(
+    // Bound the input before stripping so a multi-megabyte payload is never
+    // scanned or copied in full. The window is doubled to absorb interleaved
+    // newlines, and widened again to cover a leading data: URI prefix.
+    const bounded = base64.slice(
+      0,
+      MAX_DATA_URI_PREFIX_CHARS + MAX_BASE64_HEADER_CHARS * 2,
+    );
+    const window = stripDataUriPrefix(bounded).slice(
       0,
       MAX_BASE64_HEADER_CHARS * 2,
     );
