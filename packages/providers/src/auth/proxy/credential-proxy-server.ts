@@ -28,7 +28,7 @@ import {
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
 // ProviderKeyStorage now lives in the storage package
-import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {
   CredentialProxyOAuthHandler,
   type OAuthFlowInterface,
@@ -69,7 +69,7 @@ const isWindows = process.platform === 'win32';
 
 export interface CredentialProxyServerOptions {
   tokenStore: TokenStore;
-  providerKeyStorage: ProviderKeyStorage;
+  providerKeyStorage: ProviderKeyStorageLike;
   socketDir?: string;
   /** Flow factories for OAuth initiation - maps provider name to factory function */
   flowFactories?: Map<string, () => OAuthFlowInterface>;

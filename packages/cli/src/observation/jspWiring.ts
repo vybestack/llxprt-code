@@ -36,14 +36,10 @@ let tap: ObservationTap = createObservationTap(null);
 let unsubscribeTodos: (() => void) | null = null;
 
 export function createTodoObservationSubscription(
-  observer: (
-    sessionId: string,
-    agentId: string | undefined,
-    todos: readonly Todo[],
-  ) => void,
+  observer: (agentId: string | undefined, todos: readonly Todo[]) => void,
 ): () => void {
   const listener = (event: TodoUpdateEvent) => {
-    observer(event.sessionId, event.agentId, event.todos);
+    observer(event.agentId, event.todos);
   };
   todoEvents.onTodoUpdated(listener);
   return () => todoEvents.offTodoUpdated(listener);
@@ -132,7 +128,6 @@ export function createObservationProducer(
 
 export function initializeObservationProducer(
   context: ObservationSessionContext,
-  sessionId: string,
 ): void {
   unsubscribeTodos?.();
   unsubscribeTodos = null;
@@ -147,7 +142,7 @@ export function initializeObservationProducer(
   if (producer === null) {
     return;
   }
-  producer.setSession(sessionId, undefined);
+  producer.setAgentScope(undefined);
   unsubscribeTodos = createTodoObservationSubscription(observeTodosReplaced);
   tap = createObservationTap({
     onTurnStarted: () => producer?.observeTurnStarted(),
@@ -197,6 +192,16 @@ export function observeTurnFailed(): void {
   isolate(() => tap.onTurnEnded('failed'));
 }
 
+/**
+ * Close the observed turn when the user cancels interactively. The abort does
+ * not surface as a terminal `done` event and does not reach the submit path's
+ * failure handler, so without this the producer would keep reporting an active
+ * turn with a growing elapsed time for the rest of the session.
+ */
+export function observeTurnCancelled(): void {
+  isolate(() => tap.onTurnEnded('cancelled'));
+}
+
 export function observeAgentEvent(event: AgentEvent): void {
   isolate(() => tap.processEvent(event));
 }
@@ -209,9 +214,8 @@ export function observeAssistantMessageCommitted(
 }
 
 export function observeTodosReplaced(
-  sessionId: string,
   agentId: string | undefined,
   todos: readonly Todo[],
 ): void {
-  isolate(() => producer?.observeTodosReplaced(sessionId, agentId, todos));
+  isolate(() => producer?.observeTodosReplaced(agentId, todos));
 }

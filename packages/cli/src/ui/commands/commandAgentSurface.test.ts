@@ -120,6 +120,7 @@ describe('tasksCommand — agent surface', () => {
   it('lists tasks from agent.tasks when agent is available', async () => {
     const listMock = vi.fn().mockReturnValue([
       {
+        kind: 'subagent',
         id: 'coder-abc123',
         status: 'running',
         launchedAt: Date.now() - 5000,
@@ -145,6 +146,7 @@ describe('tasksCommand — agent surface', () => {
 
   it('cancels a task via agent.tasks.cancel when agent is available', async () => {
     const getMock = vi.fn().mockReturnValue({
+      kind: 'subagent',
       id: 'coder-abc123',
       status: 'running',
     });

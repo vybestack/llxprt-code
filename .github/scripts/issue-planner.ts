@@ -83,6 +83,39 @@ export function extractPlanFeedback(body: string | null): string | null {
   return remainder.replace(/^\s+/, '');
 }
 
+const RELATED_SEARCH_KEYWORD_LIMIT = 10;
+
+/**
+ * Reduce an issue title to a GitHub-search-safe keyword query. Folds
+ * combining diacritics to their ASCII base, strips all #NNN issue
+ * references, and drops every non-alphanumeric metacharacter so the result
+ * can never produce invalid search syntax. Returns a space-joined,
+ * de-duplicated keyword string (empty when the title yields no usable
+ * keywords).
+ */
+export function buildRelatedSearchQuery(title: string): string {
+  if (typeof title !== 'string') {
+    return '';
+  }
+  // Fold diacritics to ASCII (cafe) so i18n titles keep usable keywords.
+  const folded = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const withoutRefs = folded.replace(/#[0-9]+/g, ' ');
+  const tokens = withoutRefs
+    .split(/[^A-Za-z0-9_]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const token of tokens) {
+    const key = token.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(token);
+    }
+  }
+  return unique.slice(0, RELATED_SEARCH_KEYWORD_LIMIT).join(' ');
+}
+
 function truncate(text: string, limit?: number): string {
   const value = typeof text === 'string' ? text.trim() : '';
   return value.length <= (limit ?? value.length)
@@ -594,7 +627,7 @@ export async function runCli(argv: string[]): Promise<void> {
   const [mode, dir, currentIssue] = argv;
   if (!mode || !dir) {
     throw new Error(
-      'Usage: issue-planner.ts --render-context|--render-instructions|--extract-feedback|--finalize|--extract-linked-references <dir> [currentIssue]',
+      'Usage: issue-planner.ts --render-context|--render-instructions|--extract-feedback|--finalize|--extract-linked-references|--build-search-query <dir> [currentIssue]',
     );
   }
 
@@ -674,6 +707,17 @@ export async function runCli(argv: string[]): Promise<void> {
       nodePath.join(dir, 'linked-references.txt'),
       filtered.map((n) => String(n)).join('\n'),
     );
+    return;
+  }
+
+  if (mode === '--build-search-query') {
+    const issueRaw = await readOptionalJson(dir, 'issue.json');
+    if (issueRaw === null) {
+      throw new Error(`issue.json not found in ${dir}`);
+    }
+    const issue = plannerIssueSchema.parse(issueRaw);
+    const query = buildRelatedSearchQuery(issue.title ?? '');
+    await fs.writeFile(nodePath.join(dir, 'search-query.txt'), query);
     return;
   }
 

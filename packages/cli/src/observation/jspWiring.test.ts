@@ -138,7 +138,7 @@ describe('createTodoObservationSubscription', () => {
     });
     unsubscribe();
 
-    expect(observer).toHaveBeenCalledWith('session-1', 'default', todos);
+    expect(observer).toHaveBeenCalledWith('default', todos);
 
     // A stale listener on the global emitter would keep publishing after the
     // session is gone, so prove the unsubscribe actually detaches it.

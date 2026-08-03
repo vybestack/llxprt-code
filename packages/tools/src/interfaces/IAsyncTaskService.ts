@@ -9,34 +9,62 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** Status of an async task. */
+/** Status shared by all async work (subagent tasks and shell jobs). */
 export type AsyncTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
-/** Information about an async task. */
-export interface AsyncTaskInfo {
-  /** Task identifier. */
+/** Discriminated union member: subagent-driven async work. */
+export interface SubagentTaskInfo {
+  kind: 'subagent';
   id: string;
-  /** Task name or description. */
-  name?: string;
-  /** Subagent name for task-driven async work. */
-  subagentName?: string;
-  /** Goal prompt used to launch the task. */
-  goalPrompt?: string;
-  /** Current task status. */
+  subagentName: string;
+  goalPrompt: string;
   status: AsyncTaskStatus;
-  /** Unix timestamp in milliseconds when the task was launched. */
   launchedAt?: number;
-  /** Unix timestamp in milliseconds when the task completed. */
   completedAt?: number;
-  /** Task output payload. */
   output?: unknown;
-  /** Error message for failed tasks. */
   error?: string;
 }
 
+/** Discriminated union member: managed background shell job. */
+export interface ShellJobInfo {
+  kind: 'shell';
+  id: string;
+  command: string;
+  cwd: string;
+  status: AsyncTaskStatus;
+  launchedAt?: number;
+  completedAt?: number;
+  exitCode?: number;
+  signal?: string;
+  failureReason?: string;
+}
+
+/**
+ * Discriminated union of all async work the model can observe.
+ * The `kind` field is required so consumers can narrow without guesswork.
+ */
+export type AsyncWorkInfo = SubagentTaskInfo | ShellJobInfo;
+
+/**
+ * Legacy alias kept for gradual migration of consumers that still reference
+ * the pre-discriminated name. New code MUST use {@link AsyncWorkInfo}.
+ */
+export type AsyncTaskInfo = AsyncWorkInfo;
+
 export interface AsyncTaskLookupResult {
-  task?: AsyncTaskInfo;
-  candidates?: AsyncTaskInfo[];
+  task?: AsyncWorkInfo;
+  candidates?: AsyncWorkInfo[];
+}
+
+export interface AsyncOutputTailOptions {
+  lines?: number;
+  maxBytes?: number;
+}
+
+export interface AsyncOutputTailResult {
+  id: string;
+  output: string;
+  truncated: boolean;
 }
 
 export interface IAsyncTaskService {
@@ -51,15 +79,30 @@ export interface IAsyncTaskService {
    * Get information for all tracked tasks.
    * @returns Array of task information objects.
    */
-  getTaskStatus(): AsyncTaskInfo[];
+  getTaskStatus(): AsyncWorkInfo[];
 
   /**
    * Get a task by exact ID.
    */
-  getTask(taskId: string): AsyncTaskInfo | undefined;
+  getTask(taskId: string): AsyncWorkInfo | undefined;
 
   /**
    * Get a task by unique prefix or return ambiguous candidates.
    */
   getTaskByPrefix(prefix: string): AsyncTaskLookupResult;
+
+  /**
+   * Read a bounded output tail for a task by id (#1995).
+   * Only meaningful for shell jobs; subagent tasks return empty output.
+   */
+  getOutputTail(
+    taskId: string,
+    options?: AsyncOutputTailOptions,
+  ): AsyncOutputTailResult;
+
+  /**
+   * Cancel a running task by id (#1995). Returns true if the cancel won
+   * the terminal transition, false if the task was already terminal.
+   */
+  cancel(taskId: string): Promise<boolean>;
 }

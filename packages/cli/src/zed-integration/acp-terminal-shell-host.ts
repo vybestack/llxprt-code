@@ -8,6 +8,9 @@ import type {
   IShellToolHost,
   ShellExecutionResult,
   ShellOutputEvent,
+  HostShellJobInfo,
+  HostShellJobTailResult,
+  BackgroundPromotionResult,
 } from '@vybestack/llxprt-code-tools';
 import type { TerminalManager } from './zed-terminal-manager.js';
 
@@ -108,5 +111,20 @@ export class AcpTerminalShellHost implements IShellToolHost {
 
   limitOutputTokens(content: string) {
     return this.delegate.limitOutputTokens(content);
+  }
+
+  launchBackgroundJob(input: {
+    command: string;
+    cwd: string;
+  }): HostShellJobInfo {
+    return this.delegate.launchBackgroundJob(input);
+  }
+
+  tailBackgroundJob(id: string): HostShellJobTailResult {
+    return this.delegate.tailBackgroundJob(id);
+  }
+
+  detectTrailingBackground(command: string): BackgroundPromotionResult {
+    return this.delegate.detectTrailingBackground(command);
   }
 }
