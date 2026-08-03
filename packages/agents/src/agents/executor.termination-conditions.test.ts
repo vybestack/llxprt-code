@@ -9,10 +9,9 @@ import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
 import {
-  ChatSession,
   StreamEventType,
   type StreamEvent,
-} from '../core/chatSession.js';
+} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
@@ -27,21 +26,24 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockExecuteToolCall: vi.fn(),
-}));
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
+  vi.hoisted(() => ({
+    MockedChatSession: vi.fn(),
+    mockSendMessageStream: vi.fn(),
+    mockExecuteToolCall: vi.fn(),
+  }));
 
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
-  return {
-    ...actual,
-    ChatSession: vi.fn().mockImplementation(() => ({
-      sendMessageStream: mockSendMessageStream,
-    })),
-  };
-});
+vi.mock('../core/chatSession.js', () => ({
+  // Re-export StreamEventType string-enum values for production code
+  // (executor-stream-processor.ts) that imports them from this module.
+  StreamEventType: {
+    CHUNK: 'chunk',
+    RETRY: 'retry',
+    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
+    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
+  },
+  ChatSession: MockedChatSession,
+}));
 
 vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
@@ -49,7 +51,6 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
-const MockedChatSession = vi.mocked(ChatSession);
 const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 describe('AgentExecutor run (Termination Conditions)', () => {
@@ -151,23 +152,15 @@ describe('AgentExecutor run (Termination Conditions)', () => {
             value: createMockResponseChunk([{ text: 'partial output' }]),
           } as StreamEvent;
 
-          await new Promise<void>((_resolve, reject) => {
-            if (!capturedSignal) {
-              reject(new Error('Abort signal was not provided'));
-              return;
-            }
-            if (capturedSignal.aborted) {
-              reject(createAbortError());
-              return;
-            }
-            capturedSignal.addEventListener(
-              'abort',
-              () => {
-                queueMicrotask(() => reject(createAbortError()));
-              },
-              { once: true },
-            );
+          if (!capturedSignal) {
+            throw new Error('Abort signal was not provided');
+          }
+          await new Promise<void>((resolve) => {
+            capturedSignal!.addEventListener('abort', () => resolve(), {
+              once: true,
+            });
           });
+          throw createAbortError();
         })();
       },
     );
@@ -184,9 +177,16 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       },
     );
 
+    // Flush microtasks so the executor's async setup chain registers the
+    // stream-idle-timeout timer before we advance fake time.
+    for (let i = 0; i < 200; i++) {
+      await Promise.resolve();
+    }
     await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
     await runRejection;
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     expect(capturedSignal?.aborted).toBe(true);
     expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
   });

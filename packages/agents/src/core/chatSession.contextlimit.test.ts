@@ -156,9 +156,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     // Total: 40000 (history) + 50000 (pending) + 65536 (budget) = 155536
     // Limit: 190000 - 256 (safety margin) = 189744
     // 155536 < 189744, so should not throw
-    await expect(
-      chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
-    ).resolves.not.toThrow();
+    await chat['enforceContextWindow'](pendingTokens, 'test-prompt-id');
 
     // Verify tokenLimit was called with the user context limit
     expect(tokenLimitsModule.tokenLimit).toHaveBeenCalledWith(
@@ -206,9 +204,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     const pendingTokens = 5000; // This should be within the limit
 
     // Act: Should not trigger compression
-    await expect(
-      chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
-    ).resolves.not.toThrow();
+    await chat['enforceContextWindow'](pendingTokens, 'test-prompt-id');
 
     // Verify tokenLimit was called with the user context limit
     expect(tokenLimitsModule.tokenLimit).toHaveBeenCalledWith(
@@ -278,9 +274,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     const pendingTokens = 5000;
 
     // Act
-    await expect(
-      chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
-    ).resolves.not.toThrow();
+    await chat['enforceContextWindow'](pendingTokens, 'test-prompt-id');
 
     // resolveEffectiveContextLimit handles the model lookup internally
     // (same-module call, not visible to the export spy). The spy only sees

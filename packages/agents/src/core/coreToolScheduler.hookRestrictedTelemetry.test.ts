@@ -6,16 +6,30 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('../index.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../index.js')>();
-  return {
-    ...actual,
-    logToolCall: vi.fn(),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-core/telemetry/loggers.js',
+  (importOriginal) => {
+    const result = importOriginal() as
+      | typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
+      | Promise<
+          typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
+        >;
+    if (result instanceof Promise) {
+      return result.then((actual) => ({
+        ...actual,
+        logToolCall: vi.fn(),
+      }));
+    }
+    return {
+      ...result,
+      logToolCall: vi.fn(),
+    };
+  },
+);
 
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { ApprovalMode, logToolCall } from '../index.js';
+import { ApprovalMode } from '../index.js';
+import { logToolCall } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import type { Config, ToolRegistry } from '../index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 

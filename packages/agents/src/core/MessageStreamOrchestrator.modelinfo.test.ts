@@ -145,6 +145,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
   const config = {
     getMaxSessionTurns: vi.fn(() => 0),
     getIdeMode: vi.fn(() => false),
+    getContinueOnFailedApiCall: vi.fn(() => false),
     getEphemeralSetting: vi.fn((key: string) =>
       key === 'context-limit' ? state.contextLimit : undefined,
     ),

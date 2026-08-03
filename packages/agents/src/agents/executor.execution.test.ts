@@ -10,7 +10,6 @@ import type { AgentInputs } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
-import { ChatSession } from '../core/chatSession.js';
 import type { FunctionCall } from './types.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
@@ -26,21 +25,24 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockExecuteToolCall: vi.fn(),
-}));
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
+  vi.hoisted(() => ({
+    MockedChatSession: vi.fn(),
+    mockSendMessageStream: vi.fn(),
+    mockExecuteToolCall: vi.fn(),
+  }));
 
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
-  return {
-    ...actual,
-    ChatSession: vi.fn().mockImplementation(() => ({
-      sendMessageStream: mockSendMessageStream,
-    })),
-  };
-});
+vi.mock('../core/chatSession.js', () => ({
+  // Re-export StreamEventType string-enum values for production code
+  // (executor-stream-processor.ts) that imports them from this module.
+  StreamEventType: {
+    CHUNK: 'chunk',
+    RETRY: 'retry',
+    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
+    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
+  },
+  ChatSession: MockedChatSession,
+}));
 
 vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
@@ -48,7 +50,6 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
-const MockedChatSession = vi.mocked(ChatSession);
 const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 describe('AgentExecutor run (Execution Loop and Logic)', () => {

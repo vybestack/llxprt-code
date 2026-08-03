@@ -105,7 +105,9 @@ describe('Turn - stream idle timeout behavioral tests', () => {
         value: mockChunk({ text: 'First chunk' }),
       };
       // Inter-chunk gap that exceeds the 30s inter-chunk idle timeout.
-      await vi.advanceTimersByTimeAsync(45_000);
+      // Use a never-resolving promise instead of advanceTimersByTimeAsync
+      // so the generator doesn't eagerly advance timers under Bun.
+      await new Promise<void>(() => undefined);
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'Late response' }),
@@ -124,7 +126,15 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(29_999);
+    // Let the consumer process the first chunk. Under Bun, the async generator
+    // consumer needs enough microtask rounds to pull the first chunk through
+    // Turn.run's internal pipeline. We drain incrementally and check whether
+    // the first Content event has arrived.
+    for (let i = 0; i < 100; i++) {
+      await Promise.resolve();
+      if (events.length >= 1) break;
+    }
+    vi.advanceTimersByTime(29_999);
     await Promise.resolve();
     // First chunk arrived immediately (Content), but the inter-chunk idle
     // timeout (30s gap before the second chunk) has not yet elapsed.

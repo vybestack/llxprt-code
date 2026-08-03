@@ -256,6 +256,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
       await Promise.resolve();
       await Promise.resolve();
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
@@ -355,6 +358,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
       await Promise.resolve();
       await Promise.resolve();
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;

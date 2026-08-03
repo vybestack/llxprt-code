@@ -182,6 +182,9 @@ describe('Turn run - abort and idle timeout', () => {
         }
       })();
 
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(100);
       await runPromise;
 
@@ -348,6 +351,9 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
       const events = await eventsPromise;
 

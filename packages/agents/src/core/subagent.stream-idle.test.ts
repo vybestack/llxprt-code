@@ -52,7 +52,15 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', () => ({
+  ChatSession: vi.fn(),
+  StreamEventType: {
+    CHUNK: 'chunk',
+    RETRY: 'retry',
+    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
+    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
+  },
+}));
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -358,7 +366,9 @@ describe('subagent.ts', () => {
 
       // Resolve the iterator to let the test complete
       resolveIterator!();
-      await vi.runAllTimersAsync();
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
 
       await runPromise;
       // Should complete normally (not timeout)

@@ -606,6 +606,31 @@ The CLI workspace has additional complexities:
    (`__setWriteToStderrForTesting`, `__setRenderForTesting`) instead of
    module-level mocking.
 
+### Agents workspace specifics (issue #2845)
+
+All 330 `packages/agents` test files run under Bun. The workspace `test` and
+`test:ci` scripts invoke `bun run-bun-tests.ts`, a workspace-local runner that
+discovers every `src/**/*.{test,spec}.{ts,tsx}` file and executes each in its
+own `bun test <file>` process. `test:vitest` is retained as the Vitest fallback.
+There is no exclusion list: every discovered file must pass.
+
+Two Bun behaviours the runner has to work around:
+
+1. **`[test] timeout` in `bunfig.toml` is ignored.** Bun 1.3.14 silently falls
+   back to its 5s default even when `bunfig.toml` declares a longer timeout, so
+   the runner passes `--timeout 30000` on the command line to preserve the
+   `testTimeout: 30000` the workspace ran under in Vitest. A `bunfig.toml`
+   timeout would look correct and do nothing.
+2. **File concurrency must stay below the core count.** Suites under
+   `src/api/__tests__/` build a real Agent per test and are much heavier than
+   typical unit tests; oversubscribing pushes individual tests past the timeout
+   and surfaces as a different file failing on each run. The runner uses a
+   sliding worker pool with a default concurrency of 4, overridable with
+   `LLXPRT_AGENTS_TEST_CONCURRENCY`.
+
+The `pretest` hook (`scripts/check-agents-api-surface.ts`) is unchanged and is
+still executed by both `npm run test` and the `bun scripts/test.ts` orchestrator.
+
 ### Running native Bun tests
 
 ```bash

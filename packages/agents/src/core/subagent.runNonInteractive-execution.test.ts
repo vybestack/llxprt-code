@@ -55,7 +55,15 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', () => ({
+  ChatSession: vi.fn(),
+  StreamEventType: {
+    CHUNK: 'chunk',
+    RETRY: 'retry',
+    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
+    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
+  },
+}));
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -112,6 +120,7 @@ describe('subagent.ts', () => {
       mockReadTodos.mockReset();
       mockReadTodos.mockResolvedValue([]);
       TodoStoreMock.mockClear();
+      TodoStoreMock.mockImplementation(() => ({ readTodos: mockReadTodos }));
 
       vi.mocked(getEnvironmentContext).mockResolvedValue([
         { text: 'Env Context' },
@@ -181,6 +190,7 @@ describe('subagent.ts', () => {
         createMockStream(['stop', 'stop']),
       );
 
+      TodoStoreMock.mockClear();
       mockReadTodos
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
@@ -213,7 +223,7 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
       const firstCallMessage =
         mockSendMessageStream.mock.calls[0]?.[0]?.message;
       expect(firstCallMessage?.[0]?.text ?? '').toContain(

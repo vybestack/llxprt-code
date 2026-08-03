@@ -42,7 +42,15 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', () => ({
+  ChatSession: vi.fn(),
+  StreamEventType: {
+    CHUNK: 'chunk',
+    RETRY: 'retry',
+    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
+    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
+  },
+}));
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -222,7 +230,15 @@ describe('subagent.ts', () => {
       const runPromise = scope.runNonInteractive(new ContextState());
 
       // Advance time beyond the limit (6 minutes) while the agent is awaiting the LLM response.
-      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+      // Flush microtasks first to let the executor's async setup complete,
+      // then advance time and flush again to let the termination recheck run.
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
+      vi.advanceTimersByTime(6 * 60 * 1000);
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
 
       // Now resolve the stream. The model returns 'stop'.
 
@@ -255,23 +271,22 @@ describe('subagent.ts', () => {
               value: mockChunk({ text: 'partial output' }),
             };
 
-            await new Promise<void>((_resolve, reject) => {
+            await new Promise<void>((resolve) => {
               if (!capturedSignal) {
-                reject(new Error('Abort signal was not provided'));
-                return;
+                throw new Error('Abort signal was not provided');
               }
               if (capturedSignal.aborted) {
-                reject(createAbortError());
-                return;
+                throw createAbortError();
               }
               capturedSignal.addEventListener(
                 'abort',
                 () => {
-                  queueMicrotask(() => reject(createAbortError()));
+                  resolve();
                 },
                 { once: true },
               );
             });
+            throw createAbortError();
           })();
         },
       );
@@ -300,6 +315,11 @@ describe('subagent.ts', () => {
         },
       );
 
+      // Flush microtasks so the executor's async setup chain registers the
+      // stream-idle-timeout timer before we advance fake time.
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
       await runRejection;
@@ -346,26 +366,26 @@ describe('subagent.ts', () => {
       mockSendMessageStream.mockImplementation(
         async ({ config: messageConfig }) => {
           capturedSignal = messageConfig.abortSignal;
-          return (async function* () {
-            await new Promise<void>((resolve, reject) => {
+          const stall = async function* () {
+            await new Promise<void>((resolve) => {
               if (!capturedSignal) {
-                reject(new Error('Abort signal was not provided'));
-                return;
+                throw new Error('Abort signal was not provided');
               }
               if (capturedSignal.aborted) {
-                reject(createAbortError());
-                return;
+                throw createAbortError();
               }
               capturedSignal.addEventListener(
                 'abort',
                 () => {
-                  queueMicrotask(() => reject(createAbortError()));
+                  resolve();
                 },
                 { once: true },
               );
             });
-            yield* [];
-          })();
+            throw createAbortError();
+            yield; // unreachable — satisfies require-yield
+          };
+          return stall();
         },
       );
 
@@ -393,6 +413,9 @@ describe('subagent.ts', () => {
         },
       );
 
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(100);
 
       await runRejection;
@@ -466,6 +489,9 @@ describe('subagent.ts', () => {
         },
       );
 
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(100);
 
       await runRejection;
@@ -675,6 +701,9 @@ describe('subagent.ts', () => {
         },
       );
 
+      for (let i = 0; i < 200; i++) {
+        await Promise.resolve();
+      }
       await vi.advanceTimersByTimeAsync(100);
 
       await runRejection;

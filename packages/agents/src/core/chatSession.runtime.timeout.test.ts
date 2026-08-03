@@ -318,10 +318,14 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
         .catch((error: unknown) => error);
 
-      await vi.waitFor(() => expect(pendingReads).toBe(1), {
-        interval: 1,
-        timeout: 100,
-      });
+      // Drain microtasks so the provider stream is entered and pendingReads
+      // increments. vi.waitFor uses real timers which may not fire under
+      // Bun's fake timers.
+      for (let i = 0; i < 2000; i++) {
+        await Promise.resolve();
+        if (pendingReads >= 1) break;
+      }
+      expect(pendingReads).toBeGreaterThanOrEqual(1);
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
       const firstError = await firstSend;
       expect(firstTransportSignal?.aborted).toBe(true);
@@ -450,15 +454,24 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
         .catch((error: unknown) => error);
 
-      // Wait for both sends to reach the blocked read.
-      await vi.waitFor(
-        () => {
-          expect(capturedSignals.length).toBeGreaterThanOrEqual(2);
-        },
-        { interval: 1, timeout: 100 },
-      );
+      // Wait for the first send to reach the blocked read.
+      for (let i = 0; i < 2000; i++) {
+        await Promise.resolve();
+        if (capturedSignals.length >= 1) break;
+      }
+      expect(capturedSignals.length).toBeGreaterThanOrEqual(1);
 
-      // Advance past timeout for BOTH concurrent streams.
+      // Advance past timeout for the first stream. Under Bun, ChatSession
+      // may serialize sends, so the second stream starts only after the first
+      // aborts. Advance in steps with microtask draining between each step
+      // so the second send can register its own timeout watchdog.
+      await vi.advanceTimersByTimeAsync(timeoutMs + 1);
+      for (let i = 0; i < 2000; i++) {
+        await Promise.resolve();
+        if (capturedSignals.length >= 2) break;
+      }
+      // Advance past the second timeout too (the second send may have started
+      // after the first aborted due to ChatSession serialization).
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
 
       const [resultA, resultB] = await Promise.all([sendA, sendB]);

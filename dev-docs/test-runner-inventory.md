@@ -9,7 +9,7 @@ Bun execution command (or explains why it still requires Vitest).
 | Area                          | Total test files | Bun-native    | Vitest (retained) | Deferred to future slices |
 | ----------------------------- | ---------------- | ------------- | ----------------- | ------------------------- |
 | packages/a2a-server           | 15               | 15            | 0                 | 0                         |
-| packages/agents               | 348              | 0             | 0                 | 348                       |
+| packages/agents               | 330              | 330           | 0                 | 0                         |
 | packages/auth                 | 37               | 37            | 0                 | 0                         |
 | packages/cli                  | 659              | 11            | 0                 | 648                       |
 | packages/core                 | 322              | 322           | 0                 | 0                         |
@@ -250,11 +250,10 @@ will be migrated in a bounded vertical slice:
 6. **packages/mcp** (46 files) — Slice 7
 7. **packages/tools** (62 files) — Slice 8
 8. **packages/providers** (477 files) — Slice 10
-9. **packages/agents** (348 files) — Slice 11
-10. **packages/cli** (648 files) — Slice 12
-11. **scripts/tests** (97 files) — Slice 13
-12. **evals** (2 files) — Slice 14
-13. **integration-tests** (26 files) — Slice 15
+9. **packages/cli** (648 files) — Slice 12
+10. **scripts/tests** (97 files) — Slice 13
+11. **evals** (2 files) — Slice 14
+12. **integration-tests** (26 files) — Slice 15
 
 ## Enumerated Vitest retention (acceptance criterion #8)
 

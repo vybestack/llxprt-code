@@ -37,10 +37,13 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 
 const mockTurnRun = vi.fn();
 
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', (importOriginal) => {
+  const result = importOriginal() as
+    | typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')
+    | Promise<typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')>;
+  const buildExports = (
+    actual: typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js'),
+  ) => {
     const tokenLimit = vi.fn(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
@@ -58,18 +61,30 @@ vi.mock(
         },
       ),
     };
-  },
-);
+  };
+  if (result instanceof Promise) {
+    return result.then(buildExports);
+  }
+  return buildExports(result);
+});
 
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+vi.mock('./turn.js', (importOriginal) => {
+  const result = importOriginal() as
+    | typeof import('./turn.js')
+    | Promise<typeof import('./turn.js')>;
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;
   }
+  if (result instanceof Promise) {
+    return result.then((actual) => ({
+      ...actual,
+      Turn: MockTurn as unknown as typeof actual.Turn,
+    }));
+  }
   return {
-    ...actual,
-    Turn: MockTurn as unknown as typeof actual.Turn,
+    ...result,
+    Turn: MockTurn as unknown as typeof result.Turn,
   };
 });
 
@@ -128,6 +143,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     })),
     getMaxSessionTurns: vi.fn(() => 0),
     getIdeMode: vi.fn(() => false),
+    getContinueOnFailedApiCall: vi.fn(() => false),
     getModel: vi.fn(() => 'gpt-4'),
     getEphemeralSetting: vi.fn(() => undefined),
     getSettingsService: vi.fn(() => ({

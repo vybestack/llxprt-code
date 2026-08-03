@@ -544,6 +544,9 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
 
     // Advance past the default 5s retry backoff delay so no real wall-clock
     // time is consumed by the test.
+    for (let i = 0; i < 200; i++) {
+      await Promise.resolve();
+    }
     await vi.advanceTimersByTimeAsync(10_000);
     await sendPromise;
 

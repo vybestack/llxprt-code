@@ -43,7 +43,15 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', () => ({
+  ChatSession: vi.fn(),
+  StreamEventType: {
+    CHUNK: 'chunk',
+    RETRY: 'retry',
+    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
+    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
+  },
+}));
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {

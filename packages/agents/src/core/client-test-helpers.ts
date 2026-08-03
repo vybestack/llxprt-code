@@ -218,6 +218,7 @@ async function createAndInitClient(
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
     getContextLimit: vi.fn().mockReturnValue(0),
+    getConfig: vi.fn().mockReturnValue(undefined),
     getTokenUsageLogger: vi.fn().mockReturnValue({
       isEnabled: () => false,
     }),
