@@ -72,13 +72,9 @@ function loadPreviewParser(
     'Verify review scope includes changed tests',
   );
   const stepSource = commandText(previewStep);
-  // `previewSelectionFromOutput` delegates the provably-empty cardinality
-  // invariant to `assertProvablyEmptySelection`, so both must be evaluated
-  // into the sandbox for the parser to resolve its dependency.
-  const guardSource = extractFunctionSource(
-    stepSource,
-    'assertProvablyEmptySelection',
-  );
+  // `previewSelectionFromOutput` must stay self-contained: several suites
+  // extract it by name and evaluate it in an isolated sandbox, so any helper
+  // it depends on has to be nested inside it rather than hoisted alongside.
   const functionSource = extractFunctionSource(
     stepSource,
     'previewSelectionFromOutput',
@@ -90,7 +86,6 @@ function loadPreviewParser(
     Set,
     String,
   };
-  vm.runInNewContext(guardSource, sandbox);
   vm.runInNewContext(functionSource, sandbox);
   const fn = asVmFunction(sandbox.previewSelectionFromOutput);
   return (output: string): string[] => asStringArray(fn(output));

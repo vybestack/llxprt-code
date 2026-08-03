@@ -5,7 +5,7 @@
  */
 import { Buffer } from 'node:buffer';
 import vm from 'node:vm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import {
   asRecord,
   asRecordArray,
@@ -803,8 +803,11 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
     it('does not advance zero eligible files', () => {
       const fixture = runCheckpointFixture({
         broadFiles: ['project-plans/excluded.md'],
+        // Real OCR always emits the "Preview: N file(s) changed" banner, and
+        // an empty selection is only accepted when it proves every changed
+        // file was excluded (N === M). See issue #2824.
         previewOutput:
-          'Will review (0):\nExcluded (1):\nproject-plans/excluded.md',
+          'Preview: 1 file(s) changed  |  +1  -0\nWill review (0):\nExcluded (1):\nproject-plans/excluded.md',
         filesReviewed: 0,
       });
 
@@ -823,7 +826,12 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       expect(() => runCheckpointFixture({ previewOutput })).toThrow();
     });
 
-    it.each(['3', true, [3], 3.5, -1, Number.POSITIVE_INFINITY, null])(
+    // Each row is wrapped in its own tuple so the runner spreads exactly one
+    // argument. Without this, an array row like [3] is spread into the bare
+    // number 3 -- valid evidence -- and the case silently stops testing
+    // malformed input.
+    const badEvidence = ['3', true, [3], 3.5, -1, Infinity, null];
+    it.each(badEvidence.map((v) => [v] as const))(
       'does not advance coercible or malformed completion evidence %j',
       (filesReviewed) => {
         expect(runCheckpointFixture({ filesReviewed }).advances).toBe(false);
