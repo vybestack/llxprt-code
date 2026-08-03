@@ -10,7 +10,7 @@ import {
   asRecord,
   parseWorkflowYaml,
 } from './typed-test-helpers.ts';
-import type { WorkflowJob } from './typed-test-helpers.ts';
+import type { WorkflowJob, WorkflowStep } from './typed-test-helpers.ts';
 import {
   WORKFLOW_PATH,
   commandText,
@@ -161,7 +161,7 @@ describe('fork-safety — canary and review-context steps never require PR-head 
           /^(?:<<|-e\b|ocr-[\w-]+\.c?js|scripts\/\S+\.ts|["'].*["']|'$)/.test(
             args,
           ),
-          `code-review job step "${step.name}" invokes node/bun with an ` +
+          `code-review job step "${stepLabel(step)}" invokes node/bun with an ` +
             `unrecognized argument pattern: "${invocation[0].trim()}". ` +
             'If this is a trusted script, add it to the safe-pattern list.',
         ).toBe(true);
@@ -181,7 +181,7 @@ describe('fork-safety — canary and review-context steps never require PR-head 
       const run = commandText(step);
       expect(
         run,
-        `code-review job step "${step.name}" must not dynamically require/import ` +
+        `code-review job step "${stepLabel(step)}" must not dynamically require/import ` +
           'a module constructed from path.join/process.cwd()/__dirname.',
       ).not.toMatch(dynamicLoadPattern);
     }
@@ -261,13 +261,17 @@ function collectEnvKeys(source: string): Set<string> {
   return keys;
 }
 
-function availableEnvKeys(step: {
-  env?: Record<string, unknown>;
-}): Set<string> {
+function stepLabel(step: WorkflowStep): string {
+  return step.name ?? step.id ?? '<unnamed step>';
+}
+
+function availableEnvKeys(job: WorkflowJob, step: WorkflowStep): Set<string> {
   const workflowEnv = asOptionalRecord(workflowEnvBlock());
+  const jobEnv = asOptionalRecord(job.env);
   const stepEnv = asOptionalRecord(step.env);
   return new Set([
     ...(workflowEnv ? Object.keys(workflowEnv) : []),
+    ...(jobEnv ? Object.keys(jobEnv) : []),
     ...(stepEnv ? Object.keys(stepEnv) : []),
   ]);
 }
@@ -282,7 +286,7 @@ function assertEnvWiring(stepName: string): void {
   const step = stepNamed(job, stepName);
   const script = commandText(step);
   const required = collectEnvKeys(script);
-  const available = availableEnvKeys(step);
+  const available = availableEnvKeys(job, step);
   const missing = [...required].filter(
     (key) => !available.has(key) && !RUNNER_PROVIDED_ENV.has(key),
   );

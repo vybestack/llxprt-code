@@ -149,23 +149,20 @@ describe('ocr-canary-metrics.cjs — buildCanaryMetrics validation rules', () =>
     );
   });
 
-  it('reports each required-string field individually', () => {
-    const fields = [
-      'runId',
-      'prNumber',
-      'normalizedModel',
-      'language',
-      'audience',
-      'format',
-    ];
-    for (const field of fields) {
-      const result = runBuild(
-        buildInput({ metadata: completeMetadata({ [field]: '' }) }),
-      );
-      expect(result['validation_errors']).toContain(
-        `metadata ${field} is required`,
-      );
-    }
+  it.each([
+    'runId',
+    'prNumber',
+    'normalizedModel',
+    'language',
+    'audience',
+    'format',
+  ])('reports metadata %s is required', (field) => {
+    const result = runBuild(
+      buildInput({ metadata: completeMetadata({ [field]: '' }) }),
+    );
+    expect(result['validation_errors']).toContain(
+      `metadata ${field} is required`,
+    );
   });
 
   it('reports SHA must be 40-char for trustedBaseSha', () => {

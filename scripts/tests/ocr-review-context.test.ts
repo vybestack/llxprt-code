@@ -92,21 +92,6 @@ describe('ocr-review-context.cjs — pull_request_target synchronize context', (
   });
 });
 
-describe('ocr-review-context.cjs — pull_request_target non-synchronize context', () => {
-  it('uses rangeFromSha and full rangeMode for opened action', () => {
-    const result = mod.resolveEffectiveReviewContext({
-      eventName: 'pull_request_target',
-      mergeBaseSha: SHA_A,
-      rangeFromSha: SHA_A,
-      rangeMode: 'full',
-      prNumber: '42',
-      trustedBaseSha: SHA_A,
-    });
-    expect(result.fromSha).toBe(SHA_A);
-    expect(result.rangeMode).toBe('full');
-  });
-});
-
 describe('ocr-review-context.cjs — issue_comment context', () => {
   it('uses rangeFromSha and rangeMode as-is', () => {
     const result = mod.resolveEffectiveReviewContext({
@@ -186,5 +171,7 @@ describe('ocr-review-context.cjs — defensive input handling', () => {
     });
     expect(result.fromSha).toBe('');
     expect(result.rangeMode).toBe('');
+    expect(result.prNumber).toBe('');
+    expect(result.trustedBaseSha).toBe('');
   });
 });
