@@ -71,8 +71,16 @@ function loadPreviewParser(
     codeReviewJob,
     'Verify review scope includes changed tests',
   );
+  const stepSource = commandText(previewStep);
+  // `previewSelectionFromOutput` delegates the provably-empty cardinality
+  // invariant to `assertProvablyEmptySelection`, so both must be evaluated
+  // into the sandbox for the parser to resolve its dependency.
+  const guardSource = extractFunctionSource(
+    stepSource,
+    'assertProvablyEmptySelection',
+  );
   const functionSource = extractFunctionSource(
-    commandText(previewStep),
+    stepSource,
     'previewSelectionFromOutput',
   );
   const sandbox: Record<string, unknown> = {
@@ -82,6 +90,7 @@ function loadPreviewParser(
     Set,
     String,
   };
+  vm.runInNewContext(guardSource, sandbox);
   vm.runInNewContext(functionSource, sandbox);
   const fn = asVmFunction(sandbox.previewSelectionFromOutput);
   return (output: string): string[] => asStringArray(fn(output));
@@ -322,5 +331,88 @@ describe('.github/workflows/ocr-review.yml — preview parser (docs-only PRs, is
       'scripts/tests/typed-test-helpers.ts',
       'tsconfig.scripts.json',
     ]);
+  });
+
+  // An explicit "Will review (0):" heading also yields an empty selection and
+  // therefore skips the LLM entirely. It must satisfy the same M === N proof
+  // as the omitted-heading case, otherwise a truncated render could skip
+  // review of genuinely reviewable files.
+  it('fails closed on "Will review (0)" when reviewable files were changed but not excluded', () => {
+    const truncated = [
+      '',
+      'Preview: 40 file(s) changed  |  +900  -120',
+      '',
+      'Will review (0):',
+      '',
+    ].join('\n');
+    expect(() => runPreviewParser(truncated)).toThrow(
+      'OCR preview output was malformed',
+    );
+  });
+
+  it('fails closed on "Will review (0)" when the excluded count is short of the changed count', () => {
+    const shortExcluded = [
+      '',
+      'Preview: 5 file(s) changed  |  +30  -2',
+      '',
+      'Will review (0):',
+      '',
+      'Excluded from review (3):',
+      '  [M]  docs/a.md    (unsupported_ext)',
+      '  [M]  docs/b.md    (unsupported_ext)',
+      '  [M]  docs/c.md    (unsupported_ext)',
+      '',
+    ].join('\n');
+    expect(() => runPreviewParser(shortExcluded)).toThrow(
+      'OCR preview output was malformed',
+    );
+  });
+
+  it('returns [] for "Will review (0)" when every changed file is provably excluded', () => {
+    const provablyEmpty = [
+      '',
+      'Preview: 2 file(s) changed  |  +8  -1',
+      '',
+      'Will review (0):',
+      '',
+      'Excluded from review (2):',
+      '  [M]  docs/a.md    (unsupported_ext)',
+      '  [M]  docs/b.md    (unsupported_ext)',
+      '',
+    ].join('\n');
+    expect(runPreviewParser(provablyEmpty)).toEqual([]);
+  });
+
+  it('fails closed on contradictory Preview banners', () => {
+    const contradictory = [
+      '',
+      'Preview: 2 file(s) changed  |  +8  -1',
+      'Preview: 9 file(s) changed  |  +8  -1',
+      '',
+      'Excluded from review (2):',
+      '  [M]  docs/a.md    (unsupported_ext)',
+      '  [M]  docs/b.md    (unsupported_ext)',
+      '',
+    ].join('\n');
+    expect(() => runPreviewParser(contradictory)).toThrow(
+      'OCR preview output was malformed',
+    );
+  });
+
+  it('fails closed on contradictory Excluded headings', () => {
+    const contradictory = [
+      '',
+      'Preview: 2 file(s) changed  |  +8  -1',
+      '',
+      'Excluded from review (2):',
+      '  [M]  docs/a.md    (unsupported_ext)',
+      '  [M]  docs/b.md    (unsupported_ext)',
+      'Excluded from review (7):',
+      '  [M]  docs/c.md    (unsupported_ext)',
+      '',
+    ].join('\n');
+    expect(() => runPreviewParser(contradictory)).toThrow(
+      'OCR preview output was malformed',
+    );
   });
 });

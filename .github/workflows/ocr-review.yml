@@ -1730,6 +1730,49 @@ jobs:
           if ! node <<'NODE'
           const fs = require('fs');
 
+          // An empty selection means OCR reviews nothing, which skips the LLM
+          // entirely. That is legitimate ONLY when every changed file was
+          // provably excluded (e.g. a docs-only PR). Enforce the cardinality
+          // invariant (N = files changed, M = excluded) so a truncated render
+          // that flushed the banner but lost the file sections is classified
+          // as an infrastructure failure instead of silently shipping a PR
+          // with genuinely reviewable code UNREVIEWED. Verified against all
+          // confirmed docs-only production runs:
+          //   30725255161 -> N=26, M=26
+          //   30725089201 -> N=26, M=26
+          //   30554832360 -> N=1,  M=1
+          function assertProvablyEmptySelection(lines) {
+            let changedCount = null;
+            let excludedCount = null;
+            for (const previewLine of lines) {
+              const banner = /^Preview:\s*(\d+)\s+file\(s\)\s+changed/.exec(previewLine);
+              if (banner) {
+                const value = Number.parseInt(banner[1], 10);
+                if (changedCount !== null && changedCount !== value) {
+                  throw new Error('OCR preview output was malformed');
+                }
+                changedCount = value;
+              }
+              const excluded = /^Excluded(?:\s+from\s+review)?\s*\((\d+)\)/.exec(previewLine);
+              if (excluded) {
+                const value = Number.parseInt(excluded[1], 10);
+                if (excludedCount !== null && excludedCount !== value) {
+                  throw new Error('OCR preview output was malformed');
+                }
+                excludedCount = value;
+              }
+            }
+            if (changedCount === null) {
+              throw new Error('OCR preview output was malformed');
+            }
+            if (changedCount === 0) {
+              return;
+            }
+            if (excludedCount === null || excludedCount !== changedCount) {
+              throw new Error('OCR preview output was malformed');
+            }
+          }
+
           function previewSelectionFromOutput(output) {
             const lines = String(output).split(/\r?\n/);
             const headingIndexes = [];
@@ -1744,38 +1787,7 @@ jobs:
             if (headingIndexes.length === 0) {
               // OCR omits the "Will review" section entirely only when every
               // changed file is excluded from review (e.g. a docs-only PR).
-              // That is a legitimate empty selection ONLY when the excluded
-              // count provably equals the changed-file count. Enforce that
-              // cardinality invariant (N = files changed, M = excluded) so a
-              // truncated render that flushed the banner but lost the
-              // "Will review"/"Excluded" sections is classified as an
-              // infrastructure failure instead of silently shipping a PR
-              // with genuinely reviewable code UNREVIEWED. Verified against
-              // all confirmed docs-only production runs:
-              //   30725255161 -> N=26, M=26
-              //   30725089201 -> N=26, M=26
-              //   30554832360 -> N=1,  M=1
-              let changedCount = null;
-              let excludedCount = null;
-              for (const previewLine of lines) {
-                const banner = /^Preview:\s*(\d+)\s+file\(s\)\s+changed/.exec(previewLine);
-                if (banner) {
-                  changedCount = Number.parseInt(banner[1], 10);
-                }
-                const excluded = /^Excluded(?:\s+from\s+review)?\s*\((\d+)\)/.exec(previewLine);
-                if (excluded) {
-                  excludedCount = Number.parseInt(excluded[1], 10);
-                }
-              }
-              if (changedCount === null) {
-                throw new Error('OCR preview output was malformed');
-              }
-              if (changedCount === 0) {
-                return Object.freeze([]);
-              }
-              if (excludedCount === null || excludedCount !== changedCount) {
-                throw new Error('OCR preview output was malformed');
-              }
+              assertProvablyEmptySelection(lines);
               return Object.freeze([]);
             }
             const headingIndex = headingIndexes[0];
@@ -1809,6 +1821,12 @@ jobs:
             }
             if (selected.length !== declaredCount) {
               throw new Error(`OCR preview declared ${declaredCount} files but yielded ${selected.length} unique paths`);
+            }
+            if (selected.length === 0) {
+              // "Will review (0):" also yields an empty selection and would
+              // otherwise skip review without proving every changed file was
+              // excluded. Hold it to the same cardinality invariant.
+              assertProvablyEmptySelection(lines);
             }
             return Object.freeze(selected);
           }
