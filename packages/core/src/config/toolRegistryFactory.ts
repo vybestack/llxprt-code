@@ -37,6 +37,7 @@ import {
   DirectWebFetchTool,
   MemoryTool,
   ShellTool,
+  GenerateImageTool,
 } from '@vybestack/llxprt-code-tools';
 
 import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
@@ -51,6 +52,8 @@ import { CoreSubagentServiceAdapter } from '../tools-adapters/CoreSubagentServic
 import { CoreAsyncTaskServiceAdapter } from '../tools-adapters/CoreAsyncTaskServiceAdapter.js';
 import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
 import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
+import { runImageOperation } from '../services/image/imageOperationDispatch.js';
+import type { ImageOperationBackend } from '../services/image/imageOperation.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -137,6 +140,17 @@ export interface ToolRegistryHost {
    * Returns the injected TaskToolRegistration, or undefined to use core-local default.
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined;
+  /**
+   * Returns the injected image-backend resolver closure (used by the common
+   * image-operation runner's `resolveBackend` dependency, NOT by
+   * GenerateImageTool directly), or undefined/null to register the runner with
+   * a null resolver (graceful "unavailable").
+   *
+   * The type is intentionally loose (`unknown`) so core does not need to
+   * import the providers package; the runner's own dependency injection
+   * enforces the structural contract at the composition root.
+   */
+  getImageBackendResolver?(): (() => unknown) | null | undefined;
 }
 
 function getTaskToolMissingReason(
@@ -416,8 +430,56 @@ function registerStandardTools(
   });
   registerCoreTool(DirectWebFetchTool, toolHostAdapter);
 
+  registerImageTool(registerCoreTool, config, host);
+
   void CoreIdeServiceAdapter;
   void CoreLspServiceAdapter;
+}
+
+function resolveBackendFromHost(
+  host: ToolRegistryHost,
+): ImageOperationBackend | null {
+  const resolver = host.getImageBackendResolver?.();
+  if (resolver === null || resolver === undefined) {
+    return null;
+  }
+  const resolved = resolver();
+  // Coerce undefined and any non-object to null so runImageOperation's
+  // `backend === null` capability check always fires the graceful
+  // TOOL_DISABLED path instead of a TypeError (EXECUTION_FAILED).
+  if (resolved === null || typeof resolved !== 'object') {
+    return null;
+  }
+  return resolved as ImageOperationBackend;
+}
+
+function registerImageTool(
+  registerCoreTool: RegisterCoreToolFn,
+  config: Config,
+  host: ToolRegistryHost,
+): void {
+  registerCoreTool(GenerateImageTool, {
+    runImage: (input: {
+      readonly prompt: string;
+      readonly output_path: string;
+      readonly input_paths?: readonly string[];
+      readonly signal?: AbortSignal;
+    }) =>
+      runImageOperation(
+        {
+          prompt: input.prompt,
+          outputPath: input.output_path,
+          ...(input.input_paths !== undefined
+            ? { inputPaths: input.input_paths }
+            : {}),
+          ...(input.signal !== undefined ? { signal: input.signal } : {}),
+        },
+        {
+          workspaceRoot: config.getTargetDir(),
+          resolveBackend: () => resolveBackendFromHost(host),
+        },
+      ),
+  });
 }
 
 function resolveManagers(host: ToolRegistryHost): {

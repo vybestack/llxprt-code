@@ -316,7 +316,13 @@ function signalSeatbeltProcessGroup(pid: number): void {
   }
 }
 
-function wireSeatbeltProxyCloseHandler(
+/**
+ * Terminate the sandbox when its credential proxy dies unexpectedly.
+ *
+ * Exported for direct unit testing of the ordering contract: a proxy close is
+ * fatal only while the sandbox is still running.
+ */
+export function wireSeatbeltProxyCloseHandler(
   proxyProcess: ChildProcess | undefined,
   sandboxProcess: ChildProcess,
   proxyCommand: string | undefined,
@@ -324,7 +330,19 @@ function wireSeatbeltProxyCloseHandler(
   if (!proxyProcess || !proxyCommand) {
     return;
   }
+  // The proxy is a child of this process and closes as part of normal teardown
+  // once the sandbox itself has exited. A close is therefore only a failure
+  // while the sandbox is still running; treating every close as fatal forces
+  // exit(1) at the end of an otherwise successful session.
+  let sandboxExited = false;
+  sandboxProcess.once('exit', () => {
+    sandboxExited = true;
+  });
+
   proxyProcess.on('close', (code, signal) => {
+    if (sandboxExited) {
+      return;
+    }
     const sandboxPid = sandboxProcess.pid;
     if (sandboxPid !== undefined && sandboxPid !== 0) {
       signalSeatbeltProcessGroup(sandboxPid);

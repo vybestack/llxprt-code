@@ -189,6 +189,21 @@ describe('BuiltinCommandLoader', () => {
     expect(permissionsCmd).toBeDefined();
   });
 
+  // `/help` (Help.tsx) and slash completion both render this loaded list, and
+  // Help filters on a non-empty `description`. Asserting the description here
+  // is therefore what guarantees `/image` is discoverable in both surfaces.
+  it('should include the image command with a description so it appears in /help and completion', async () => {
+    const loader = new BuiltinCommandLoader(mockConfig);
+    const commands = await loader.loadCommands(new AbortController().signal);
+
+    const imageCmd = commands.find((c) => c.name === 'image');
+    expect(imageCmd).toBeDefined();
+    expect(imageCmd?.kind).toBe(CommandKind.BUILT_IN);
+    expect(imageCmd?.description).toBeTruthy();
+    // The description doubles as the usage hint shown in completion.
+    expect(imageCmd?.description).toContain('/image <output.png>');
+  });
+
   it('should include quota command', async () => {
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);

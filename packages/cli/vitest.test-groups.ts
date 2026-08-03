@@ -69,6 +69,9 @@ const baseExclude: readonly string[] = [
   // scripts/bun-test-manifest.ts, so they run under `bun test` only and
   // must not also be discovered by Vitest (issue #2779).
   '**/src/observation/**/*.test.ts',
+  // Sandbox SSH agent preflight tests are Bun-native for the same reason
+  // (issue #1699).
+  '**/src/utils/sandbox-ssh-agent-preflight.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
@@ -483,4 +486,4 @@ export function buildTestGroups(
  * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 527;
+export const SELECTED_FILE_COUNT: number = 534;
