@@ -13,7 +13,7 @@ import {
   defaultKeyBindings,
   getDefaultKeyBindingHint,
   resolveKeyBindings,
-  windowsKeyBindingOverrides,
+  windowsKeyBindingAdditions,
 } from './keyBindings.js';
 
 function hasNonEmptyBindingTarget(binding: {
@@ -168,13 +168,36 @@ describe('keyBindings config', () => {
       }
     });
 
-    it('applies the Windows overrides on top of the defaults without dropping any command', () => {
+    it('appends the Windows additions to the defaults rather than replacing them', () => {
       const win32 = resolveKeyBindings('win32');
       for (const command of Object.values(Command)) {
-        const override = windowsKeyBindingOverrides[command];
-        expect(win32[command]).toStrictEqual(
-          override ?? defaultKeyBindings[command],
+        const additions = windowsKeyBindingAdditions[command] ?? [];
+        // Every default binding survives...
+        for (const binding of defaultKeyBindings[command]) {
+          expect(win32[command]).toContainEqual(binding);
+        }
+        // ...and every addition is present exactly once.
+        for (const addition of additions) {
+          expect(
+            win32[command].filter(
+              (binding) => JSON.stringify(binding) === JSON.stringify(addition),
+            ),
+          ).toHaveLength(1);
+        }
+        expect(win32[command]).toHaveLength(
+          defaultKeyBindings[command].length + additions.length,
         );
+      }
+    });
+
+    it('does not duplicate an addition that is already a default binding', () => {
+      // Guard against a future default gaining the same binding as an
+      // addition: resolveKeyBindings must de-duplicate rather than emit it
+      // twice.
+      const win32 = resolveKeyBindings('win32');
+      for (const command of Object.values(Command)) {
+        const seen = win32[command].map((binding) => JSON.stringify(binding));
+        expect(new Set(seen).size).toBe(seen.length);
       }
     });
   });

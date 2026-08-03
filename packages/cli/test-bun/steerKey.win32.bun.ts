@@ -12,42 +12,22 @@
  * STEER alias that key must steer the active turn while streaming and insert a
  * newline otherwise — matching the documented macOS/Linux Ctrl+Enter contract.
  *
- * The platform is pinned to 'win32' before `inputPromptKeyHandlers` (and
- * transitively `keyMatchers` -> `resolveKeyBindings`) is loaded, so the
- * module graph resolves with the Windows overrides. Bun hoists static
- * imports, but the fixture uses only `import type` and never loads the
- * key-matcher graph, so it is safe; the handler is imported dynamically after
- * the platform override.
- *
- * The pin is process-global, so it is restored in `afterAll` to keep this file
- * self-contained even if a runner ever reuses processes.
+ * `keyMatchers` resolves the platform once at module-evaluation time, so
+ * `loadKeyHandlerForPlatform` pins `process.platform` only for the duration of
+ * the dynamic import and restores it in `finally` — see its doc comment for
+ * why that makes the pin immune to test ordering and runner process reuse.
  */
 
-const originalPlatform = process.platform;
-
-Object.defineProperty(process, 'platform', {
-  value: 'win32',
-  configurable: true,
-});
-
-import { afterAll, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
   FakeTextBuffer,
+  loadKeyHandlerForPlatform,
   makeDeps,
   plainEnterKey,
   windowsCtrlEnterKey,
 } from './steerKey.fixture.js';
 
-const { handleInputKey } = await import(
-  '../src/ui/components/inputPromptKeyHandlers.js'
-);
-
-afterAll(() => {
-  Object.defineProperty(process, 'platform', {
-    value: originalPlatform,
-    configurable: true,
-  });
-});
+const handleInputKey = await loadKeyHandlerForPlatform('win32');
 
 describe('issue #2951 — Windows Ctrl+Enter steering (win32 module graph)', () => {
   it('steers when streaming with a non-empty buffer and clears the buffer', () => {

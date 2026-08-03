@@ -93,7 +93,7 @@ export function createKeyMatchers(
 
 /**
  * Default key binding matchers using the platform-resolved configuration.
- * On Windows this merges `windowsKeyBindingOverrides` (e.g. the STEER alias
+ * On Windows this appends `windowsKeyBindingAdditions` (e.g. the STEER alias
  * for the bare-LF key that Windows consoles emit for Ctrl+Enter, issue #2951);
  * elsewhere it is byte-for-byte `defaultKeyBindings`.
  */

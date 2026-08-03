@@ -7,23 +7,16 @@
 /**
  * Issue #2951 non-regression — on macOS/Linux Ctrl+J is a distinct key from
  * Ctrl+Enter and must keep inserting a newline in every state, including while
- * streaming. The platform is pinned to 'darwin' before the key-matcher module
- * graph loads so `resolveKeyBindings` returns the platform-neutral defaults.
- *
- * The pin is process-global, so it is restored in `afterAll` to keep this file
- * self-contained even if a runner ever reuses processes.
+ * streaming. `loadKeyHandlerForPlatform` pins the platform to 'darwin' only
+ * for the duration of the dynamic import (restoring it in `finally`), so
+ * `resolveKeyBindings` returns the platform-neutral defaults without leaking
+ * a process-global mutation.
  */
 
-const originalPlatform = process.platform;
-
-Object.defineProperty(process, 'platform', {
-  value: 'darwin',
-  configurable: true,
-});
-
-import { afterAll, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import {
   FakeTextBuffer,
+  loadKeyHandlerForPlatform,
   makeDeps,
   plainEnterKey,
   windowsCtrlEnterKey,
@@ -31,10 +24,11 @@ import {
 
 // `inputPromptKeyHandlers` transitively imports `clipboardy`, whose Windows
 // backend spawns a native binary at module load via `is64bitSync()`. With the
-// platform pinned to 'darwin' above, that spawn targets a macOS command that
-// does not exist on a Windows host and throws ENOENT. The stub is therefore
-// only strictly required when this file runs ON a Windows host; it is harmless
-// elsewhere, and the clipboard is irrelevant to key-binding resolution.
+// platform pinned to 'darwin' for the import, that spawn targets a macOS
+// command that does not exist on a Windows host and throws ENOENT. The stub is
+// therefore only strictly required when this file runs ON a Windows host; it is
+// harmless elsewhere, and the clipboard is irrelevant to key-binding
+// resolution.
 mock.module('clipboardy', () => ({
   default: {
     write: async () => {},
@@ -44,16 +38,7 @@ mock.module('clipboardy', () => ({
   },
 }));
 
-const { handleInputKey } = await import(
-  '../src/ui/components/inputPromptKeyHandlers.js'
-);
-
-afterAll(() => {
-  Object.defineProperty(process, 'platform', {
-    value: originalPlatform,
-    configurable: true,
-  });
-});
+const handleInputKey = await loadKeyHandlerForPlatform('darwin');
 
 describe('issue #2951 non-regression — macOS/Linux Ctrl+J (darwin module graph)', () => {
   it('inserts a newline for { name: "j", ctrl: true } even while streaming and never steers', () => {

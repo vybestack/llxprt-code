@@ -98,11 +98,13 @@ const CommandsSection: React.FC<CommandsSectionProps> = ({ commands }) => (
 
 /**
  * On Windows the console reports Ctrl+Enter and Ctrl+J as the same byte, so the
- * newline key is labelled Ctrl+Enter there and only inserts a newline while the
- * agent is idle (while streaming it steers the turn — see issue #2951).
+ * newline key is labelled Ctrl+Enter there and inserts a newline while the
+ * agent is idle, or while streaming when there is nothing to steer (empty
+ * input and no queued messages) — see issue #2951.
  */
 function newlineShortcutDescription(platform: NodeJS.Platform): string {
-  if (platform === 'win32') return '- New line (while the agent is idle)';
+  if (platform === 'win32')
+    return '- New line (while idle, or when there is nothing to steer)';
   if (platform === 'linux')
     return '- New line (Alt+Enter works for certain linux distros)';
   return '- New line';
@@ -170,7 +172,7 @@ const KeyboardShortcutsPart2: React.FC = () => (
       <Text bold color={Colors.AccentPurple}>
         Ctrl+Enter
       </Text>{' '}
-      - Steer the agent while it is responding
+      - Steer the agent (or the queued messages) while it is responding
     </Text>
     <Text color={Colors.Foreground}>
       <Text bold color={Colors.AccentPurple}>

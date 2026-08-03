@@ -20,6 +20,39 @@ import type { UseReverseSearchCompletionReturn } from '../src/ui/hooks/useRevers
 import type { UseShellPathCompletionReturn } from '../src/ui/hooks/useShellPathCompletion.js';
 
 /**
+ * Load `inputPromptKeyHandlers` (and transitively `keyMatchers` ->
+ * `resolveKeyBindings`) with `process.platform` pinned to `platform`.
+ *
+ * `keyMatchers` resolves the platform ONCE, at module-evaluation time, so the
+ * pin only has to span the import itself. It is restored in `finally`, which
+ * means the process-global mutation is scoped to a single `await` and survives
+ * neither a successful import nor a module-initialisation throw. That removes
+ * any dependence on test ordering, runner process reuse, or `afterAll` running.
+ */
+export async function loadKeyHandlerForPlatform(
+  platform: NodeJS.Platform,
+): Promise<
+  typeof import('../src/ui/components/inputPromptKeyHandlers.js').handleInputKey
+> {
+  const originalPlatform = process.platform;
+  Object.defineProperty(process, 'platform', {
+    value: platform,
+    configurable: true,
+  });
+  try {
+    const { handleInputKey } = await import(
+      '../src/ui/components/inputPromptKeyHandlers.js'
+    );
+    return handleInputKey;
+  } finally {
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
+      configurable: true,
+    });
+  }
+}
+
+/**
  * Any TextBuffer method the steering dispatch path is not expected to touch
  * throws instead of silently succeeding, so a future change that starts
  * calling it fails loudly rather than producing a false positive.
@@ -236,8 +269,12 @@ export class FakeTextBuffer implements TextBuffer {
 }
 
 /**
- * The Windows console keypress object that `parseNonEscapeKey` actually
- * produces for a bare line feed (0x0A): `{ name: 'j', ctrl: true }`.
+ * The complete keypress object that `parseNonEscapeKey` actually produces for
+ * the bare line feed (0x0A) a Windows console emits for Ctrl+Enter: the name
+ * is normalised to `'j'` with `ctrl: true`, while `sequence` still carries the
+ * raw `'
+'` byte. Both are reproduced here so the fixture stays aligned with
+ * production behaviour if downstream code ever reads `sequence`.
  */
 export const windowsCtrlEnterKey: Key = {
   name: 'j',
