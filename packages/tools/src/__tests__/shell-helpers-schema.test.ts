@@ -5,7 +5,6 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as os from 'node:os';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
@@ -13,7 +12,18 @@ import type {
 } from '../interfaces/index.js';
 import { buildCommandToExecute } from '../tools/shell-helpers.js';
 
-vi.mock('node:os');
+const { mockPlatform } = vi.hoisted(() => ({
+  mockPlatform: vi.fn(() => 'darwin'),
+}));
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    default: { platform: mockPlatform, EOL: actual.EOL },
+    platform: mockPlatform,
+    EOL: actual.EOL,
+  };
+});
 
 function createFakeShellService(): IShellExecutionService {
   return {
@@ -50,7 +60,7 @@ function getCommandDescription(tool: ShellTool): string {
 
 describe('ShellTool schema guidance on Windows', () => {
   beforeEach(() => {
-    vi.mocked(os.platform).mockReturnValue('win32');
+    mockPlatform.mockReturnValue('win32');
   });
 
   it('describes the PowerShell runtime invocation', () => {
@@ -115,7 +125,7 @@ describe('Windows command preparation', () => {
 
 describe('ShellTool schema guidance on non-Windows platforms', () => {
   it('preserves bash guidance', () => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
+    mockPlatform.mockReturnValue('darwin');
 
     expect(createShellTool().schema).toMatchObject({
       description: expect.stringContaining('bash -c'),

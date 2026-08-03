@@ -65,13 +65,31 @@ describe('isChildSuccess', () => {
     expect(isChildSuccess(child)).toBe(true);
   });
 
-  it('returns true when killed by SIGTERM but output shows (pass) without (fail)', () => {
+  it('returns true when killed by SIGTERM but output shows Ran N tests summary', () => {
+    const child: ChildExitInfo = {
+      exitCode: null,
+      signalCode: 'SIGTERM',
+      stdout: 'Ran 5 tests across 1 file.',
+    };
+    expect(isChildSuccess(child)).toBe(true);
+  });
+
+  it('returns false when killed by SIGTERM with (pass) output but no completion summary (partial execution)', () => {
     const child: ChildExitInfo = {
       exitCode: null,
       signalCode: 'SIGTERM',
       stderr: '(pass) test name ',
     };
-    expect(isChildSuccess(child)).toBe(true);
+    expect(isChildSuccess(child)).toBe(false);
+  });
+
+  it('returns false when killed by SIGKILL with multiple (pass) lines but no summary (partial execution)', () => {
+    const child: ChildExitInfo = {
+      exitCode: null,
+      signalCode: 'SIGKILL',
+      stderr: '(pass) test one\n(pass) test two\n(pass) test three',
+    };
+    expect(isChildSuccess(child)).toBe(false);
   });
 
   it('returns false when exitCode is null and signalCode is null', () => {

@@ -6,6 +6,9 @@
 
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
+import { TOOLS_MANIFEST_ENTRY } from './bun-test-manifest-data-tools.ts';
+import { MCP_MANIFEST_ENTRY } from './bun-test-manifest-data-mcp.ts';
+import { STORAGE_MANIFEST_ENTRY } from './bun-test-manifest-data-storage.ts';
 
 export interface BunTestWorkspaceEntry {
   readonly workspace: string;
@@ -628,10 +631,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/zai/usageInfo.test.ts',
     ],
   },
-  {
-    workspace: 'tools',
-    files: ['test-bun/language-analysis.followup.bun.ts'],
-  },
+  TOOLS_MANIFEST_ENTRY,
+  MCP_MANIFEST_ENTRY,
   {
     workspace: 'telemetry',
     preload: 'test-setup-storage-isolation.ts',
@@ -649,6 +650,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/telemetry/types.test.ts',
     ],
   },
+  STORAGE_MANIFEST_ENTRY,
   {
     workspace: 'test-utils',
     files: ['src/quota-guard.test.ts', 'src/util.test.ts'],

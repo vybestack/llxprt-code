@@ -470,6 +470,7 @@ describe('RefreshCoordinator', () => {
      * @then Retries twice and returns status 'error'
      */
     it('retries transient errors up to 2 times then returns error', async () => {
+      vi.useRealTimers();
       await tokenStore.saveToken('anthropic', makeToken());
 
       const transientError = Object.assign(new Error('ECONNREFUSED'), {
@@ -477,13 +478,7 @@ describe('RefreshCoordinator', () => {
       });
       refreshFn.setNextResult(transientError);
 
-      const resultPromise = coordinator.refresh('anthropic');
-
-      // Advance through retry delays (1s + 3s)
-      await vi.advanceTimersByTimeAsync(1_000);
-      await vi.advanceTimersByTimeAsync(3_000);
-
-      const result = await resultPromise;
+      const result = await coordinator.refresh('anthropic');
 
       expect(result.status).toBe('error');
       // Initial attempt + 2 retries = 3 total calls
@@ -499,6 +494,7 @@ describe('RefreshCoordinator', () => {
      * @then Returns status 'ok' with the refreshed token
      */
     it('returns ok when transient error succeeds on retry', async () => {
+      vi.useRealTimers();
       await tokenStore.saveToken('anthropic', makeToken());
 
       let attemptCount = 0;
@@ -519,12 +515,7 @@ describe('RefreshCoordinator', () => {
         cooldownMs: 30_000,
       });
 
-      const resultPromise = retryCoordinator.refresh('anthropic');
-
-      // Advance past first retry delay
-      await vi.advanceTimersByTimeAsync(1_000);
-
-      const result = await resultPromise;
+      const result = await retryCoordinator.refresh('anthropic');
 
       expect(result.status).toBe('ok');
       expect(result.token!.access_token).toBe('retry-success');

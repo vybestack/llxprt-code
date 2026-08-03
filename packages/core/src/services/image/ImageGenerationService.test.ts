@@ -16,6 +16,24 @@ import {
   type ImageResult,
 } from './ImageGenerationService.js';
 
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed via expect.fail if the operation fulfills, so tests cannot
+ * pass silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    expect.fail('expected the operation to reject');
+  }
+  return outcome;
+}
+
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
@@ -230,12 +248,16 @@ describe('persistBase64ImageResult', () => {
   it('rejects a workspace root that cannot be canonicalized without creating it', async () => {
     const missingRoot = path.join(workspaceRoot, 'missing-workspace');
 
-    await expect(
-      persistBase64ImageResult(makePngResult(), missingRoot),
-    ).rejects.toBeInstanceOf(ImagePersistenceError);
-    await expect(fs.promises.stat(missingRoot)).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    expect(
+      await captureRejection(
+        persistBase64ImageResult(makePngResult(), missingRoot),
+      ),
+    ).toBeInstanceOf(ImagePersistenceError);
+    expect(await captureRejection(fs.promises.stat(missingRoot))).toMatchObject(
+      {
+        code: 'ENOENT',
+      },
+    );
   });
 
   it('normalizes output-directory creation failures to ImagePersistenceError', async () => {
@@ -244,9 +266,11 @@ describe('persistBase64ImageResult', () => {
       'not a directory',
     );
 
-    await expect(
-      persistBase64ImageResult(makePngResult(), workspaceRoot),
-    ).rejects.toBeInstanceOf(ImagePersistenceError);
+    expect(
+      await captureRejection(
+        persistBase64ImageResult(makePngResult(), workspaceRoot),
+      ),
+    ).toBeInstanceOf(ImagePersistenceError);
   });
 
   it('rejects a non-PNG mimeType with ImagePersistenceError', async () => {
@@ -256,9 +280,9 @@ describe('persistBase64ImageResult', () => {
       data: makeRealMinimalPng().toString('base64'),
     };
 
-    await expect(
-      persistBase64ImageResult(result, workspaceRoot),
-    ).rejects.toBeInstanceOf(ImagePersistenceError);
+    expect(
+      await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+    ).toBeInstanceOf(ImagePersistenceError);
   });
 
   it('rejects a non-base64 encoding with ImagePersistenceError', async () => {
@@ -268,9 +292,9 @@ describe('persistBase64ImageResult', () => {
       data: 'https://example.invalid/image.png',
     } as ImageResult;
 
-    await expect(
-      persistBase64ImageResult(result, workspaceRoot),
-    ).rejects.toBeInstanceOf(ImagePersistenceError);
+    expect(
+      await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+    ).toBeInstanceOf(ImagePersistenceError);
   });
 
   describe('strict base64 validation', () => {
@@ -281,9 +305,9 @@ describe('persistBase64ImageResult', () => {
         data: '!!!not-valid-base64!!!',
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('normalizes non-string data to ImagePersistenceError', async () => {
@@ -293,9 +317,9 @@ describe('persistBase64ImageResult', () => {
         data: undefined,
       } as unknown as ImageResult;
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects base64 with trailing characters appended after valid data', async () => {
@@ -306,9 +330,9 @@ describe('persistBase64ImageResult', () => {
         data: `${valid}XXXX`,
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects base64 with missing/invalid padding', async () => {
@@ -323,9 +347,9 @@ describe('persistBase64ImageResult', () => {
         data: stripped,
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects base64 with padding in the wrong position', async () => {
@@ -338,9 +362,9 @@ describe('persistBase64ImageResult', () => {
         data: midPadding,
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects an empty decoded payload', async () => {
@@ -350,9 +374,9 @@ describe('persistBase64ImageResult', () => {
         data: '',
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
   });
 
@@ -364,9 +388,9 @@ describe('persistBase64ImageResult', () => {
         data: PNG_SIGNATURE.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects a payload missing the terminal IEND chunk', async () => {
@@ -390,9 +414,9 @@ describe('persistBase64ImageResult', () => {
         data: truncated.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects a payload with a bad chunk CRC', async () => {
@@ -421,9 +445,9 @@ describe('persistBase64ImageResult', () => {
         data: corrupted.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects a payload with trailing bytes after IEND', async () => {
@@ -435,9 +459,9 @@ describe('persistBase64ImageResult', () => {
         data: withTrailer.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects bytes that do not have a valid PNG signature', async () => {
@@ -448,9 +472,9 @@ describe('persistBase64ImageResult', () => {
         data: notPng.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects an IHDR chunk whose length is not 13', async () => {
@@ -465,9 +489,9 @@ describe('persistBase64ImageResult', () => {
         data: wrongLength.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects an IHDR with zero dimensions', async () => {
@@ -487,9 +511,9 @@ describe('persistBase64ImageResult', () => {
         data: zeroDim.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects a payload whose first chunk is not IHDR', async () => {
@@ -504,9 +528,9 @@ describe('persistBase64ImageResult', () => {
         data: notFirst.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects a second IHDR chunk', async () => {
@@ -526,9 +550,9 @@ describe('persistBase64ImageResult', () => {
         data: duplicateIhdr.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
 
     it('rejects an IEND chunk with nonzero data length', async () => {
@@ -543,9 +567,9 @@ describe('persistBase64ImageResult', () => {
         data: nonemptyIend.toString('base64'),
       };
 
-      await expect(
-        persistBase64ImageResult(result, workspaceRoot),
-      ).rejects.toBeInstanceOf(ImagePersistenceError);
+      expect(
+        await captureRejection(persistBase64ImageResult(result, workspaceRoot)),
+      ).toBeInstanceOf(ImagePersistenceError);
     });
   });
 
@@ -565,9 +589,11 @@ describe('persistBase64ImageResult', () => {
 
           const result = makePngResult();
 
-          await expect(
-            persistBase64ImageResult(result, workspaceRoot),
-          ).rejects.toBeInstanceOf(ImagePersistenceError);
+          expect(
+            await captureRejection(
+              persistBase64ImageResult(result, workspaceRoot),
+            ),
+          ).toBeInstanceOf(ImagePersistenceError);
 
           // The outside directory must remain empty — nothing was written there.
           const outsideEntries = await fs.promises.readdir(outsideDir);

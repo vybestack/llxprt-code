@@ -4,13 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleAuth } from 'google-auth-library';
-import { GoogleCredentialProvider } from './google-auth-provider.js';
 import type { Mock } from 'vitest';
 import { vi, describe, beforeEach, it, expect } from 'vitest';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
-vi.mock('google-auth-library');
+const { MockGoogleAuth } = vi.hoisted(() => {
+  class MockGoogleAuth {
+    static mockConstructor = vi.fn();
+    constructor(...args: unknown[]) {
+      MockGoogleAuth.mockConstructor(...args);
+    }
+  }
+  MockGoogleAuth.prototype.getClient = vi.fn();
+  return { MockGoogleAuth };
+});
+
+vi.mock('google-auth-library', () => ({
+  GoogleAuth: MockGoogleAuth,
+}));
+
+import { GoogleCredentialProvider } from './google-auth-provider.js';
 
 describe('GoogleCredentialProvider', () => {
   it('should throw an error if no scopes are provided', () => {
@@ -26,7 +39,7 @@ describe('GoogleCredentialProvider', () => {
       },
     } as MCPServerConfig;
     new GoogleCredentialProvider(config);
-    expect(GoogleAuth).toHaveBeenCalledWith({
+    expect(MockGoogleAuth.mockConstructor).toHaveBeenCalledWith({
       scopes: ['scope1', 'scope2'],
     });
   });
@@ -58,7 +71,9 @@ describe('GoogleCredentialProvider', () => {
         getAccessToken: mockGetAccessToken,
         credentials: {},
       };
-      (GoogleAuth.prototype.getClient as Mock).mockResolvedValue(mockClient);
+      (MockGoogleAuth.prototype.getClient as Mock).mockResolvedValue(
+        mockClient,
+      );
       provider = new GoogleCredentialProvider(config);
       vi.clearAllMocks();
     });

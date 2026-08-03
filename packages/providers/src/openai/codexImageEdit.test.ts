@@ -15,6 +15,24 @@ import {
 } from './codexImageBackend.js';
 import { ImageValidationError } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed via expect.fail if the operation fulfills, so tests cannot
+ * pass silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    expect.fail('expected the operation to reject');
+  }
+  return outcome;
+}
+
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
@@ -236,12 +254,14 @@ describe('CodexImageBackend.edit', () => {
 
   it('rejects zero input paths for an edit', async () => {
     const backend = makeBackend();
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: [] },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: [] },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageValidationError);
+    ).toBeInstanceOf(ImageValidationError);
   });
 
   it('rejects more than five input paths', async () => {
@@ -252,12 +272,14 @@ describe('CodexImageBackend.edit', () => {
       paths.push(p);
     }
     const backend = makeBackend();
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: paths },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: paths },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageValidationError);
+    ).toBeInstanceOf(ImageValidationError);
   });
 
   it('rejects an empty prompt before any file read or fetch', async () => {
@@ -267,35 +289,43 @@ describe('CodexImageBackend.edit', () => {
       return new Response('{}', { status: 200 });
     };
     const backend = makeBackend({ fetchImpl });
-    await expect(
-      backend.edit(
-        { prompt: '   ', inputPaths: [path.join(workspaceRoot, 'x.png')] },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: '   ', inputPaths: [path.join(workspaceRoot, 'x.png')] },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageValidationError);
+    ).toBeInstanceOf(ImageValidationError);
     expect(fetchCalled).toBe(false);
   });
 
   it('rejects a URL input path', async () => {
     const backend = makeBackend();
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: ['https://example.com/img.png'] },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: ['https://example.com/img.png'] },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toThrow(/URL/i);
+    ).toMatchObject({ message: expect.stringMatching(/URL/i) });
   });
 
   it('rejects a non-image input file', async () => {
     const txtPath = path.join(workspaceRoot, 'notimage.txt');
     await fs.promises.writeFile(txtPath, 'hello');
     const backend = makeBackend();
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: [txtPath] },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: [txtPath] },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toThrow(/unsupported|unrecognized|not a regular/i);
+    ).toMatchObject({
+      message: expect.stringMatching(/unsupported|unrecognized|not a regular/i),
+    });
   });
 
   it('surfaces a non-2xx edit response as ImageGenerationError', async () => {
@@ -306,12 +336,14 @@ describe('CodexImageBackend.edit', () => {
       body: { error: 'rate limited' },
     });
     const backend = makeBackend({ fetchImpl });
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: [inputPath] },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: [inputPath] },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageGenerationError',
       status: 429,
     });
@@ -350,12 +382,14 @@ describe('CodexImageBackend.edit', () => {
     const backend = makeBackend({ fetchImpl });
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: [inputPath] },
-        controller.signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: [inputPath] },
+          controller.signal,
+        ),
       ),
-    ).rejects.toThrow('aborted');
+    ).toMatchObject({ message: expect.stringContaining('aborted') });
   });
 
   it('rejects a RIFF file that is NOT WebP (e.g. WAV renamed .webp)', async () => {
@@ -370,12 +404,16 @@ describe('CodexImageBackend.edit', () => {
     const inputPath = path.join(workspaceRoot, 'fake.webp');
     await fs.promises.writeFile(inputPath, wavBytes);
     const backend = makeBackend();
-    await expect(
-      backend.edit(
-        { prompt: 'edit', inputPaths: [inputPath] },
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        backend.edit(
+          { prompt: 'edit', inputPaths: [inputPath] },
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toThrow(/unsupported|unrecognized/i);
+    ).toMatchObject({
+      message: expect.stringMatching(/unsupported|unrecognized/i),
+    });
   });
 
   it('accepts a valid WebP file as an input image', async () => {

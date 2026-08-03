@@ -57,6 +57,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('Metrics initialization', () => {
@@ -256,14 +257,15 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
 
   describe('Latency tracking', () => {
     it('should calculate latency from start to finish', async () => {
-      vi.useFakeTimers({ now: 0 });
+      let now = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
       const mockProvider = {
         name: 'test-provider-1',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          now = 50;
           yield {
             role: 'assistant',
             parts: [{ text: 'response' }],
@@ -276,15 +278,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       const gen = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test' }] }],
       });
-
-      const consume = (async () => {
-        for await (const _chunk of gen) {
-          // consume
-        }
-      })();
-
-      await vi.advanceTimersByTimeAsync(50);
-      await consume;
+      for await (const _chunk of gen) {
+        // consume
+      }
 
       const stats = lb.getStats();
       expect(stats.backendMetrics.backend1.totalLatencyMs).toBe(50);
@@ -292,7 +288,8 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
     });
 
     it('should compute average latency correctly', async () => {
-      vi.useFakeTimers({ now: 0 });
+      let now = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
@@ -301,9 +298,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
         name: 'test-provider-1',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           callCount++;
-          // First call: ~50ms, Second call: ~100ms
-          const delay = callCount === 1 ? 50 : 100;
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          now += callCount === 1 ? 50 : 100;
           yield {
             role: 'assistant',
             parts: [{ text: 'response' }],
@@ -318,14 +313,9 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
         const gen = lb.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
         });
-        const expectedDelay = i === 0 ? 50 : 100;
-        const consume = (async () => {
-          for await (const _chunk of gen) {
-            // consume
-          }
-        })();
-        await vi.advanceTimersByTimeAsync(expectedDelay);
-        await consume;
+        for await (const _chunk of gen) {
+          // consume
+        }
       }
 
       const stats = lb.getStats();

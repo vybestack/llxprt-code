@@ -17,6 +17,24 @@ import {
   type ImageOperationBackend,
 } from './imageOperation.js';
 
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed via expect.fail if the operation fulfills, so tests cannot
+ * pass silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    expect.fail('expected the operation to reject');
+  }
+  return outcome;
+}
+
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
@@ -187,15 +205,17 @@ describe('resolveOutputPath', () => {
   });
 
   it('rejects a path that escapes the workspace via traversal', async () => {
-    await expect(
-      resolveOutputPath('../../etc/passwd.png', workspaceRoot),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    expect(
+      await captureRejection(
+        resolveOutputPath('../../etc/passwd.png', workspaceRoot),
+      ),
+    ).toBeInstanceOf(ImageOperationError);
   });
 
   it('rejects a non-png extension', async () => {
-    await expect(
-      resolveOutputPath('cat.jpg', workspaceRoot),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    expect(
+      await captureRejection(resolveOutputPath('cat.jpg', workspaceRoot)),
+    ).toBeInstanceOf(ImageOperationError);
   });
 
   it('creates the parent directory safely', async () => {
@@ -212,9 +232,9 @@ describe('resolveOutputPath', () => {
 
   it('rejects an absolute path outside the workspace', async () => {
     const outside = path.join(os.tmpdir(), 'outside.png');
-    await expect(
-      resolveOutputPath(outside, workspaceRoot),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    expect(
+      await captureRejection(resolveOutputPath(outside, workspaceRoot)),
+    ).toBeInstanceOf(ImageOperationError);
   });
 
   it.skipIf(!SYMLINKS_SUPPORTED)(
@@ -223,9 +243,9 @@ describe('resolveOutputPath', () => {
       const linkPath = path.join(workspaceRoot, 'link.png');
       const target = path.join(os.tmpdir(), 'escape-target.png');
       await fs.promises.symlink(target, linkPath, 'file');
-      await expect(
-        resolveOutputPath('link.png', workspaceRoot),
-      ).rejects.toBeInstanceOf(ImageOperationError);
+      expect(
+        await captureRejection(resolveOutputPath('link.png', workspaceRoot)),
+      ).toBeInstanceOf(ImageOperationError);
     },
   );
 
@@ -239,9 +259,11 @@ describe('resolveOutputPath', () => {
       );
       const linkDir = path.join(workspaceRoot, 'escapelink');
       await fs.promises.symlink(outsideDir, linkDir, 'dir');
-      await expect(
-        resolveOutputPath('escapelink/out.png', workspaceRoot),
-      ).rejects.toBeInstanceOf(ImageOperationError);
+      expect(
+        await captureRejection(
+          resolveOutputPath('escapelink/out.png', workspaceRoot),
+        ),
+      ).toBeInstanceOf(ImageOperationError);
       // The outside directory must remain untouched (no file written).
       expect(fs.existsSync(path.join(outsideDir, 'out.png'))).toBe(false);
     },
@@ -272,13 +294,15 @@ describe('writeImageAtomically', () => {
   it('rejects an existing file (no silent overwrite)', async () => {
     const target = path.join(workspaceRoot, 'cat.png');
     await fs.promises.writeFile(target, 'existing');
-    await expect(
-      writeImageAtomically(
-        makeRealMinimalPng(),
-        target,
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        writeImageAtomically(
+          makeRealMinimalPng(),
+          target,
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    ).toBeInstanceOf(ImageOperationError);
     // existing content preserved
     expect(await fs.promises.readFile(target, 'utf8')).toBe('existing');
   });
@@ -287,9 +311,11 @@ describe('writeImageAtomically', () => {
     const target = path.join(workspaceRoot, 'cat.png');
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      writeImageAtomically(makeRealMinimalPng(), target, controller.signal),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    expect(
+      await captureRejection(
+        writeImageAtomically(makeRealMinimalPng(), target, controller.signal),
+      ),
+    ).toBeInstanceOf(ImageOperationError);
   });
 
   it('uses O_EXCL semantics: concurrent writes do not both succeed (race-safe no-clobber)', async () => {
@@ -329,13 +355,15 @@ describe('writeImageAtomically', () => {
   it('preserves an existing target on publish failure (no-clobber link)', async () => {
     const target = path.join(workspaceRoot, 'cat.png');
     await fs.promises.writeFile(target, 'original-content');
-    await expect(
-      writeImageAtomically(
-        makeRealMinimalPng(),
-        target,
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        writeImageAtomically(
+          makeRealMinimalPng(),
+          target,
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    ).toBeInstanceOf(ImageOperationError);
     // Original content must be intact.
     expect(await fs.promises.readFile(target, 'utf8')).toBe('original-content');
     // No temp leftovers.
@@ -347,13 +375,15 @@ describe('writeImageAtomically', () => {
     const target = path.join(workspaceRoot, 'cat.png');
     // Pre-create the target so the no-clobber link/publish fails (EEXIST).
     await fs.promises.writeFile(target, 'pre-existing');
-    await expect(
-      writeImageAtomically(
-        makeRealMinimalPng(),
-        target,
-        new AbortController().signal,
+    expect(
+      await captureRejection(
+        writeImageAtomically(
+          makeRealMinimalPng(),
+          target,
+          new AbortController().signal,
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    ).toBeInstanceOf(ImageOperationError);
     // The original target content must be preserved (no silent overwrite).
     expect(await fs.promises.readFile(target, 'utf8')).toBe('pre-existing');
     // No leftover .tmp temp files in the directory.
@@ -365,9 +395,11 @@ describe('writeImageAtomically', () => {
     const target = path.join(workspaceRoot, 'cat.png');
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      writeImageAtomically(makeRealMinimalPng(), target, controller.signal),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    expect(
+      await captureRejection(
+        writeImageAtomically(makeRealMinimalPng(), target, controller.signal),
+      ),
+    ).toBeInstanceOf(ImageOperationError);
     expect(fs.existsSync(target)).toBe(false);
     const entries = await fs.promises.readdir(workspaceRoot);
     expect(entries).toHaveLength(0);
@@ -379,9 +411,11 @@ describe('writeImageAtomically', () => {
     const target = path.join(workspaceRoot, 'cat.png');
     await fs.promises.writeFile(target, 'pre-existing');
     const png = makeRealMinimalPng();
-    await expect(
-      writeImageAtomically(png, target, new AbortController().signal),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    expect(
+      await captureRejection(
+        writeImageAtomically(png, target, new AbortController().signal),
+      ),
+    ).toBeInstanceOf(ImageOperationError);
     // pre-existing content untouched (no-clobber).
     expect(await fs.promises.readFile(target, 'utf8')).toBe('pre-existing');
   });
@@ -445,9 +479,11 @@ describe('resolveInputPaths (parent symlink escape)', () => {
       await fs.promises.writeFile(outsidePng, makeRealMinimalPng());
       const linkDir = path.join(workspaceRoot, 'escapelink');
       await fs.promises.symlink(outsideDir, linkDir, 'dir');
-      await expect(
-        resolveInputPaths(['escapelink/secret.png'], workspaceRoot),
-      ).rejects.toBeInstanceOf(ImageOperationError);
+      expect(
+        await captureRejection(
+          resolveInputPaths(['escapelink/secret.png'], workspaceRoot),
+        ),
+      ).toBeInstanceOf(ImageOperationError);
     },
   );
 
@@ -458,9 +494,11 @@ describe('resolveInputPaths (parent symlink escape)', () => {
       await fs.promises.writeFile(outsidePng, makeRealMinimalPng());
       const linkFile = path.join(workspaceRoot, 'link-input.png');
       await fs.promises.symlink(outsidePng, linkFile, 'file');
-      await expect(
-        resolveInputPaths(['link-input.png'], workspaceRoot),
-      ).rejects.toBeInstanceOf(ImageOperationError);
+      expect(
+        await captureRejection(
+          resolveInputPaths(['link-input.png'], workspaceRoot),
+        ),
+      ).toBeInstanceOf(ImageOperationError);
     },
   );
 

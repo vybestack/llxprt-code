@@ -132,7 +132,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       },
     );
 
-    it.runIf(process.platform === 'win32')(
+    it.skipIf(process.platform !== 'win32')(
       'should clean up the current fallback path after a verified OAuth write on Windows',
       async () => {
         const key = 'oauth:default';
