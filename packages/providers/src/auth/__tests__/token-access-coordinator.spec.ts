@@ -565,11 +565,15 @@ describe('TokenAccessCoordinator', () => {
       expect(isRuntimeReplacedError(error)).toBe(true);
     });
 
-    it('propagates the outage out of forceRefreshToken instead of returning null', async () => {
-      // forceRefreshToken writes the refreshed token back to the store, so the
-      // outage surfaces on the write path too. Swallowing it here would send
-      // the caller into a re-authentication that cannot persist anything.
-      const store = runtimeReplacedStore();
+    it('propagates the outage out of forceRefreshToken when the write fails', async () => {
+      // The outage surfaces on the WRITE path here, which needs the refresh to
+      // run to completion: a non-empty failedAccessToken so the baseline is
+      // taken directly, a stored token whose access_token matches it (and which
+      // carries a refresh token), and a provider that returns a refreshed
+      // token. Only then does refreshStoredToken reach tokenStore.saveToken.
+      const failedAccessToken = 'stale-access-token';
+      const store = createMockTokenStore();
+      store.getToken = vi.fn(async () => makeToken(failedAccessToken));
       store.saveToken = vi.fn(async () => {
         throw new SecureStoreError(
           "LLxprt's runtime was replaced on disk while this session was running.",
@@ -578,14 +582,20 @@ describe('TokenAccessCoordinator', () => {
         );
       });
       const provider = createMockProvider('anthropic');
+      provider.refreshToken = vi.fn(async () =>
+        makeToken('fresh-access-token'),
+      );
       const { coordinator } = makeCoordinator({
         provider,
         tokenStoreOverride: store,
       });
 
-      await expect(coordinator.forceRefreshToken('anthropic')).rejects.toThrow(
-        /replaced on disk/i,
-      );
+      await expect(
+        coordinator.forceRefreshToken('anthropic', failedAccessToken),
+      ).rejects.toThrow(/replaced on disk/i);
+      // Guards against the setup silently regressing to a read-path failure:
+      // if saveToken was never reached, this test is not covering the write.
+      expect(store.saveToken).toHaveBeenCalled();
     });
 
     it('still swallows an ordinary read failure as a cache miss', async () => {
