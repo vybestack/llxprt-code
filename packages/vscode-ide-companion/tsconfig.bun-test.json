@@ -1,6 +1,10 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "paths": { "vscode": ["./test-stubs/vscode.ts"] }
+    "paths": {
+      "vscode": ["./test-stubs/vscode.ts"],
+      "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"]
+    }
   }
 }

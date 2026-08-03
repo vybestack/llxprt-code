@@ -1,7 +1,5 @@
-test(bun): extend Bun-native runner descriptors and Vitest compat shim
+test(bun): run the interactive PTY harness on a Bun-compatible backend
 
-Adds glob-based roots, multiple preloads, per-root tsconfig/timeout/retries
-and globalSetup to the Bun-native test manifest and runner, and closes three
-Vitest-compatibility gaps (it/test/describe.runIf, accessor-safe automock,
-restoreAllMocks resetting spy state). Unblocks the settings and
-ide-integration workspaces under Bun.
+@lydell/node-pty never delivers onData/onExit under Bun on POSIX, so the
+interactive test harness selects Bun.spawn's terminal backend there. Also
+preserves the default export when the script harness patches node:fs.
