@@ -105,15 +105,15 @@ export function getOrCreateShellJobManager(
  */
 export async function disposeShellJobManager(
   manager: ShellJobManager | undefined,
-): Promise<unknown | undefined> {
+  failures: unknown[],
+): Promise<void> {
   if (!manager) {
-    return undefined;
+    return;
   }
   try {
     await manager.dispose();
-    return undefined;
   } catch (error) {
-    return error;
+    failures.push(error);
   }
 }
 

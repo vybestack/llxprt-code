@@ -999,9 +999,7 @@ export class Config extends ConfigBase {
         failures.push(error);
       }
     }
-    // #1995 slice 2 — terminate running shell jobs and remove temp dir.
-    const shellError = await disposeShellJobManager(this.shellJobManager);
-    if (shellError !== undefined) failures.push(shellError);
+    await disposeShellJobManager(this.shellJobManager, failures);
     this.shellJobManager = undefined;
     throwFailures(failures);
   }
