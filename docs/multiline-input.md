@@ -12,7 +12,7 @@ The key you press for a new line depends on your platform and terminal:
 | Platform / terminal      | Newline key                      |
 | ------------------------ | -------------------------------- |
 | macOS                    | `Ctrl+J`                         |
-| Windows                  | `Ctrl+Enter`                     |
+| Windows                  | `Ctrl+Enter` (when idle)\*       |
 | Linux                    | `Ctrl+J`                         |
 | Linux (some terminals)   | `Alt+Enter`                      |
 | VS Code / Cursor / forks | `Shift+Enter`                    |
@@ -22,6 +22,11 @@ On macOS and Linux the newline key is `Ctrl+J`. On Windows it is `Ctrl+Enter`.
 `Alt+Enter` also inserts a newline on some Linux terminals. If you are running
 LLxprt Code inside VS Code, Cursor, or another VS Code-based terminal,
 `Shift+Enter` inserts a newline as well.
+
+\* On Windows, `Ctrl+Enter` inserts a newline only while the agent is idle;
+while the agent is streaming it steers the active turn instead. See the
+[Windows note](#the-same-key-two-behaviors) below. Backslash continuation works
+in every state.
 
 > **Note:** `Ctrl+Enter` does two different things depending on what the agent
 > is doing. See [Steer a turn in progress](#steer-a-turn-in-progress) below.
@@ -103,6 +108,17 @@ This contextual resolution is why `Ctrl+Enter` appears in both lists. There is
 no separate key to remember — it always does the thing that makes sense for the
 current state.
 
+> **Windows note:** Windows consoles deliver `Ctrl+Enter` and `Ctrl+J` as the
+> exact same byte, so on Windows **both** keys steer while the agent is
+> streaming and **both** insert a newline when it is idle. To insert a newline
+> while the agent is streaming on Windows, use
+> [backslash continuation](#backslash-continuation): end the line with a
+> backslash and press `Enter`. (`Shift+Enter` only inserts a newline in
+> VS Code-based terminals that have been configured by `/terminal-setup`; a
+> plain Windows console reports it as an ordinary `Enter`.) On macOS and Linux
+> `Ctrl+J` and `Ctrl+Enter` are distinct keys and behave exactly as described in
+> the tables below.
+
 ### Steer queued messages
 
 If the input is **empty** and there are queued messages, pressing `Ctrl+Enter`
@@ -127,6 +143,12 @@ cases for an empty input line with queued messages are described in
 | `Ctrl+]`                           | Toggle the queued-messages panel | Toggle the queued-messages panel |
 | `Esc`                              | Clear the current input          | Cancel the active response       |
 
+> **Windows:** `Ctrl+J` and `Ctrl+Enter` are the same key on Windows. So the
+> `Ctrl+J` row above (newline / newline) only applies on macOS and Linux. On
+> Windows that key behaves like the `Ctrl+Enter` row — it steers while
+> streaming and inserts a newline when idle. See the
+> [Windows note](#the-same-key-two-behaviors) above.
+
 When the input is **empty** and there are queued messages, two extra behaviors
 apply:
 
@@ -135,6 +157,10 @@ apply:
 | `Enter`      | Send all queued messages now | Resume draining; messages send when idle       |
 | `Ctrl+Enter` | Insert a newline             | Steer all queued messages into the active turn |
 | `Backspace`  | Clear all queued messages    | Clear all queued messages                      |
+
+> **Windows:** on Windows `Ctrl+J` is the same key as `Ctrl+Enter`, so pressing
+> either on an empty input while streaming steers all queued messages into the
+> active turn (same as the `Ctrl+Enter` row above).
 
 ## What happens when you cancel
 

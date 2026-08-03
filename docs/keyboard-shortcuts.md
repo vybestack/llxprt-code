@@ -4,6 +4,8 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 > **macOS note:** Where you see `Ctrl`, use `Cmd` on macOS for most shortcuts. Exceptions are noted — some shortcuts (like `Ctrl+C` to cancel) use `Ctrl` on all platforms.
 
+> **Windows note (Ctrl+Enter steering):** Windows consoles deliver `Ctrl+Enter` as a bare line feed, indistinguishable from `Ctrl+J`. So on Windows `Ctrl+Enter` and `Ctrl+J` are the same key: while the agent is streaming they **steer** the active turn (see "Steer the active agent…" in the Text Input table below) — or, on an empty input with queued messages, steer all queued messages into the active turn — and when the agent is idle they insert a newline. On macOS and Linux `Ctrl+J` and `Ctrl+Enter` are distinct keys and behave exactly as listed. This platform alias is applied at runtime only; the binding table below is intentionally platform-neutral.
+
 **Quick tips:**
 
 - **Esc** clears the current input. Prefer this over `Ctrl+C`, which cancels the active request and quits if pressed again.

@@ -6,7 +6,11 @@
 
 import type { Key } from './hooks/useKeypress.js';
 import type { KeyBinding, KeyBindingConfig } from '../config/keyBindings.js';
-import { Command, defaultKeyBindings } from '../config/keyBindings.js';
+import {
+  Command,
+  defaultKeyBindings,
+  resolveKeyBindings,
+} from '../config/keyBindings.js';
 
 /**
  * Matches a KeyBinding against an actual Key press
@@ -88,9 +92,12 @@ export function createKeyMatchers(
 }
 
 /**
- * Default key binding matchers using the default configuration
+ * Default key binding matchers using the platform-resolved configuration.
+ * On Windows this merges `windowsKeyBindingOverrides` (e.g. the STEER alias
+ * for the bare-LF key that Windows consoles emit for Ctrl+Enter, issue #2951);
+ * elsewhere it is byte-for-byte `defaultKeyBindings`.
  */
-export const keyMatchers: KeyMatchers = createKeyMatchers(defaultKeyBindings);
+export const keyMatchers: KeyMatchers = createKeyMatchers(resolveKeyBindings());
 
 // Re-export Command for convenience
 export { Command };

@@ -12,6 +12,8 @@ import {
   commandDescriptions,
   defaultKeyBindings,
   getDefaultKeyBindingHint,
+  resolveKeyBindings,
+  windowsKeyBindingOverrides,
 } from './keyBindings.js';
 
 function hasNonEmptyBindingTarget(binding: {
@@ -118,6 +120,62 @@ describe('keyBindings config', () => {
         key: 'end',
         ctrl: true,
       });
+    });
+  });
+
+  describe('resolveKeyBindings (platform-aware STEER alias, issue #2951)', () => {
+    it('keeps defaultKeyBindings[STEER] as a single binding so docs are unaffected', () => {
+      expect(defaultKeyBindings[Command.STEER]).toHaveLength(1);
+      expect(defaultKeyBindings[Command.STEER]).toContainEqual({
+        key: 'return',
+        ctrl: true,
+      });
+    });
+
+    it('adds the Windows Ctrl+J alias to STEER on win32', () => {
+      const win32 = resolveKeyBindings('win32');
+      expect(win32[Command.STEER]).toContainEqual({
+        key: 'return',
+        ctrl: true,
+      });
+      expect(win32[Command.STEER]).toContainEqual({
+        key: 'j',
+        ctrl: true,
+      });
+    });
+
+    it('does NOT add the Ctrl+J alias on darwin/linux and resolves to the default bindings', () => {
+      const darwin = resolveKeyBindings('darwin');
+      const linux = resolveKeyBindings('linux');
+      expect(darwin).toStrictEqual(defaultKeyBindings);
+      expect(linux).toStrictEqual(defaultKeyBindings);
+      expect(darwin[Command.STEER]).not.toContainEqual({
+        key: 'j',
+        ctrl: true,
+      });
+      expect(linux[Command.STEER]).not.toContainEqual({
+        key: 'j',
+        ctrl: true,
+      });
+    });
+
+    it('leaves every non-STEER command identical between win32 and linux', () => {
+      const win32 = resolveKeyBindings('win32');
+      const linux = resolveKeyBindings('linux');
+      for (const command of Object.values(Command)) {
+        if (command === Command.STEER) continue;
+        expect(win32[command]).toStrictEqual(linux[command]);
+      }
+    });
+
+    it('applies the Windows overrides on top of the defaults without dropping any command', () => {
+      const win32 = resolveKeyBindings('win32');
+      for (const command of Object.values(Command)) {
+        const override = windowsKeyBindingOverrides[command];
+        expect(win32[command]).toStrictEqual(
+          override ?? defaultKeyBindings[command],
+        );
+      }
     });
   });
 
