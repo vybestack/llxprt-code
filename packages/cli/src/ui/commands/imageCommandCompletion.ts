@@ -209,10 +209,18 @@ async function listWorkspaceEntries(
  * Windows `path.relative('C:\ws', 'D:\secrets')` returns `D:\secrets`, which
  * does not start with `..` — so the absolute check is required in addition to
  * the traversal check.
+ *
+ * `pathImpl` defaults to the platform `path`. It is injectable so the
+ * cross-volume branch, which POSIX `path.relative` can never produce, is
+ * testable on every platform via `path.win32`.
  */
-function escapesRoot(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative.startsWith('..') || path.isAbsolute(relative);
+export function escapesRoot(
+  root: string,
+  candidate: string,
+  pathImpl: Pick<path.PlatformPath, 'relative' | 'isAbsolute'> = path,
+): boolean {
+  const relative = pathImpl.relative(root, candidate);
+  return relative.startsWith('..') || pathImpl.isAbsolute(relative);
 }
 
 /**

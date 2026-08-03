@@ -11,6 +11,7 @@ import os from 'node:os';
 import {
   analyzeImageCompletion,
   completeImageCommand,
+  escapesRoot,
 } from './imageCommandCompletion.js';
 import { tokenizeImageCommandRaw } from './imageCommandTokenizer.js';
 
@@ -272,4 +273,33 @@ describe('completion suggestions round-trip through the tokenizer', () => {
       expect(await suggestAndDecode(name, '.png')).toBe(name);
     },
   );
+});
+
+describe('escapesRoot cross-volume containment', () => {
+  /**
+   * On Windows, path.relative() between two different volumes returns an
+   * absolute path (for example 'D:\\secrets') rather than a '..' traversal.
+   * POSIX path.relative() can never produce that, so the workspace-root
+   * temp dirs used elsewhere in this file cannot reach the branch. Driving
+   * path.win32 directly exercises it on every platform.
+   */
+  it('treats a different Windows volume as outside the workspace', () => {
+    const root = 'C:\\ws';
+    const candidate = 'D:\\secrets';
+
+    // Guard the premise: this is the absolute-result case, not a '..' case.
+    const relative = path.win32.relative(root, candidate);
+    expect(path.win32.isAbsolute(relative)).toBe(true);
+    expect(relative.startsWith('..')).toBe(false);
+
+    expect(escapesRoot(root, candidate, path.win32)).toBe(true);
+  });
+
+  it('keeps a same-volume descendant inside the workspace', () => {
+    expect(escapesRoot('C:\\ws', 'C:\\ws\\images', path.win32)).toBe(false);
+  });
+
+  it('treats a same-volume parent traversal as outside the workspace', () => {
+    expect(escapesRoot('C:\\ws\\images', 'C:\\ws', path.win32)).toBe(true);
+  });
 });
