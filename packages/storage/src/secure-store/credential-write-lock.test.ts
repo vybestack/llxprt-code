@@ -681,6 +681,155 @@ describe('CredentialWriteLock', () => {
     expect(asSecureStoreError(error).code).toBe('UNAVAILABLE');
   });
 
+  // ─── Lock-record classification: garbage / version-mismatch recovery ──────
+  //
+  // FIX 1: an unparseable or version-mismatched lock file used to cause a
+  // PERMANENT deadlock — recovery returned false for any null parse, so
+  // every subsequent writer timed out forever. Now unparseable and
+  // older-version records are reclaimed via a fenced takeover, while a
+  // NEWER-version record fails fast with an actionable UNAVAILABLE error
+  // (not a generic TIMEOUT) because stealing it would break cross-version
+  // serialization.
+
+  it('reclaims a garbage (non-JSON) lock file via fenced takeover', async () => {
+    const ld = lockDir();
+    await fs.mkdir(ld, { recursive: true });
+    const lock = new CredentialWriteLock({ lockDir: ld });
+    const lockPath = lock.lockFilePath('garbage-svc', 'acct');
+    await fs.writeFile(lockPath, 'this is not json {{{', { mode: 0o600 });
+
+    let callbackRan = false;
+    const result = await lock.withLock('garbage-svc', 'acct', async () => {
+      callbackRan = true;
+      return 'reclaimed';
+    });
+
+    expect(result).toBe('reclaimed');
+    expect(callbackRan).toBe(true);
+    // The garbage lock file must have been replaced (and then released
+    // normally on success), so no .lock file remains.
+    const files = await fs.readdir(ld);
+    expect(files.filter((f) => f.endsWith('.lock'))).toStrictEqual([]);
+  });
+
+  it('reclaims a well-formed record with version LOCK_VERSION - 1', async () => {
+    const ld = lockDir();
+    await fs.mkdir(ld, { recursive: true });
+    const lock = new CredentialWriteLock({ lockDir: ld });
+    const lockPath = lock.lockFilePath('oldver-svc', 'acct');
+    // version 0 — one less than the current LOCK_VERSION (1).
+    await fs.writeFile(
+      lockPath,
+      JSON.stringify({
+        version: 0,
+        ownerToken: 'legacy-owner',
+        pid: 999999,
+        hostname: os.hostname(),
+        startTimeMs: Date.now(),
+        startTimeSource: 'canonical',
+      }),
+      { mode: 0o600 },
+    );
+
+    let callbackRan = false;
+    const result = await lock.withLock('oldver-svc', 'acct', async () => {
+      callbackRan = true;
+      return 'reclaimed';
+    });
+
+    expect(result).toBe('reclaimed');
+    expect(callbackRan).toBe(true);
+    const files = await fs.readdir(ld);
+    expect(files.filter((f) => f.endsWith('.lock'))).toStrictEqual([]);
+  });
+
+  it('fails fast with UNAVAILABLE (not TIMEOUT) for a newer-version lock file and leaves it untouched', async () => {
+    const ld = lockDir();
+    await fs.mkdir(ld, { recursive: true });
+    const lock = new CredentialWriteLock({ lockDir: ld, waitMs: 200 });
+    const lockPath = lock.lockFilePath('newer-svc', 'acct');
+    // version 2 — one more than the current LOCK_VERSION (1).
+    const newerPayload = JSON.stringify({
+      version: 2,
+      ownerToken: 'future-owner',
+      pid: 999999,
+      hostname: os.hostname(),
+      startTimeMs: Date.now(),
+      startTimeSource: 'canonical',
+    });
+    await fs.writeFile(lockPath, newerPayload, { mode: 0o600 });
+
+    let callbackRan = false;
+    const error = await lock
+      .withLock('newer-svc', 'acct', async () => {
+        callbackRan = true;
+        return 'should-not-reach';
+      })
+      .catch((e: unknown) => e);
+
+    // Must fail fast with UNAVAILABLE — NOT TIMEOUT.
+    expect(callbackRan).toBe(false);
+    expect(error).toBeInstanceOf(SecureStoreError);
+    const storeError = asSecureStoreError(error);
+    expect(storeError.code).toBe('UNAVAILABLE');
+    expect(storeError.code).not.toBe('TIMEOUT');
+    // Message must name the observed version and the lock file path.
+    expect(storeError.message).toContain('2');
+    expect(storeError.message).toContain(lockPath);
+    // The lock file must be left byte-for-byte untouched.
+    const afterContent = await fs.readFile(lockPath, 'utf8');
+    expect(afterContent).toBe(newerPayload);
+  });
+
+  it('two instances concurrently recovering the same corrupt lock file are serialized (max concurrent-entry depth 1) and both succeed', async () => {
+    const ld = lockDir();
+    await fs.mkdir(ld, { recursive: true });
+    const lockA = new CredentialWriteLock({ lockDir: ld });
+    const lockB = new CredentialWriteLock({ lockDir: ld });
+    const lockPath = lockA.lockFilePath('concurrent-corrupt-svc', 'acct');
+    await fs.writeFile(lockPath, 'garbage {{{ not json', { mode: 0o600 });
+
+    let currentDepth = 0;
+    let maxDepth = 0;
+
+    const track = async <T>(
+      label: string,
+      fn: () => Promise<T>,
+    ): Promise<T> => {
+      currentDepth += 1;
+      if (currentDepth > maxDepth) {
+        maxDepth = currentDepth;
+      }
+      // Yield so a concurrent caller has a chance to interleave if it is not
+      // serialized. A genuinely serialized lock will never let both critical
+      // sections overlap.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      try {
+        return await fn();
+      } finally {
+        currentDepth -= 1;
+        void label;
+      }
+    };
+
+    const opA = lockA.withLock('concurrent-corrupt-svc', 'acct', () =>
+      track('A', async () => 'A'),
+    );
+    const opB = lockB.withLock('concurrent-corrupt-svc', 'acct', () =>
+      track('B', async () => 'B'),
+    );
+
+    const [resultA, resultB] = await Promise.all([opA, opB]);
+
+    expect(resultA).toBe('A');
+    expect(resultB).toBe('B');
+    // Exactly one callback at a time — no overlap.
+    expect(maxDepth).toBe(1);
+    // Both completed; lock released.
+    const files = await fs.readdir(ld);
+    expect(files.filter((f) => f.endsWith('.lock'))).toStrictEqual([]);
+  });
+
   describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'OS-observed subprocess owner identity',
     () => {
@@ -707,7 +856,8 @@ describe('CredentialWriteLock', () => {
               "const fs=require('node:fs')",
               "const os=require('node:os')",
               "const cp=require('node:child_process')",
-              "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
+              "const raw=cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8',env:{...process.env,LC_ALL:'C',TZ:'UTC'}}).trim()",
+              "const started=Date.parse(raw+' UTC')",
               "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
               "process.stdout.write('ready\\n')",
               'setInterval(()=>{},1000)',

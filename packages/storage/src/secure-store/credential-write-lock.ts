@@ -48,6 +48,28 @@ import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 import { SecureStoreError } from './secure-store-errors.js';
 
+/**
+ * Internal sentinel error signalling that a lock file carries a NEWER
+ * version than this code understands. It is a distinct subclass — not a
+ * string match on a message — so the acquire loop can let it propagate
+ * immediately instead of swallowing it as a generic recovery failure (which
+ * would degrade to TIMEOUT and hide a precisely diagnosable condition).
+ */
+class NewerLockVersionError extends SecureStoreError {
+  constructor(version: number, lockPath: string) {
+    super(
+      `Credential lock file at ${lockPath} carries version ${version}, which ` +
+        `is newer than the supported version ${LOCK_VERSION}. A newer llxprt ` +
+        `may be holding it with an incompatible protocol; stealing it would ` +
+        `break serialization. Remove the file manually only if you are ` +
+        `certain no newer llxprt process is running.`,
+      'UNAVAILABLE',
+      `Upgrade llxprt to a version that supports lock version ${version}, ` +
+        `or remove ${lockPath} after confirming no newer process holds it`,
+    );
+  }
+}
+
 const execFileAsync = promisify(execFile);
 
 const LOCK_VERSION = 1;
@@ -75,6 +97,26 @@ type OwnerLiveness =
   | { readonly status: 'dead' }
   | { readonly status: 'live' }
   | { readonly status: 'unverifiable' };
+
+/**
+ * Discriminated result of classifying a raw owner record.
+ *
+ * - `valid`: parseable record at exactly LOCK_VERSION with all fields sane —
+ *   the only record shape this code can ever write, so it may represent a
+ *   live owner.
+ * - `newer`: a well-formed JSON object whose version is GREATER than
+ *   LOCK_VERSION. A future llxprt may hold the lock under a protocol we do
+ *   not understand; stealing it would break cross-version serialization.
+ *   Must NOT be reclaimed.
+ * - `unusable`: everything else — bad JSON, non-object, missing/invalid
+ *   fields, or a numeric version LESS than LOCK_VERSION. No supported
+ *   version of this code can produce such a record, so it cannot represent a
+ *   live owner of this protocol and may be reclaimed via a fenced takeover.
+ */
+type OwnerRecord =
+  | { readonly kind: 'valid'; readonly owner: LockOwnerMetadata }
+  | { readonly kind: 'newer'; readonly version: number }
+  | { readonly kind: 'unusable' };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -132,49 +174,77 @@ function serializeOwnerMetadata(owner: LockOwnerMetadata): string {
   return JSON.stringify(owner);
 }
 
-function parseOwnerMetadata(raw: string): LockOwnerMetadata | null {
+/**
+ * Classifies a raw owner record string into one of three buckets.
+ *
+ * This is the single source of truth for record validity. It never collapses
+ * distinct conditions to one value: a `newer` record is distinguished from
+ * an `unusable` one so callers can refuse to steal a future-version lock
+ * while still reclaiming garbage written by no supported version of this
+ * code.
+ */
+function classifyOwnerRecord(raw: string): OwnerRecord {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { kind: 'unusable' };
   }
   if (!isPlainObject(parsed)) {
-    return null;
+    return { kind: 'unusable' };
   }
-  if (typeof parsed.version !== 'number' || parsed.version !== LOCK_VERSION) {
-    return null;
+  if (typeof parsed.version !== 'number' || !Number.isFinite(parsed.version)) {
+    return { kind: 'unusable' };
+  }
+  if (parsed.version > LOCK_VERSION) {
+    return { kind: 'newer', version: parsed.version };
+  }
+  if (parsed.version !== LOCK_VERSION) {
+    return { kind: 'unusable' };
   }
   if (typeof parsed.ownerToken !== 'string' || parsed.ownerToken === '') {
-    return null;
+    return { kind: 'unusable' };
   }
   if (typeof parsed.hostname !== 'string' || parsed.hostname === '') {
-    return null;
+    return { kind: 'unusable' };
   }
   if (
     typeof parsed.pid !== 'number' ||
     !Number.isSafeInteger(parsed.pid) ||
     parsed.pid <= 0
   ) {
-    return null;
+    return { kind: 'unusable' };
   }
   if (
     typeof parsed.startTimeMs !== 'number' ||
     !Number.isFinite(parsed.startTimeMs)
   ) {
-    return null;
+    return { kind: 'unusable' };
   }
   const startTimeSource = isValidStartTimeSource(parsed.startTimeSource)
     ? parsed.startTimeSource
     : 'approximate';
   return {
-    version: parsed.version,
-    ownerToken: parsed.ownerToken,
-    pid: parsed.pid,
-    hostname: parsed.hostname,
-    startTimeMs: parsed.startTimeMs,
-    startTimeSource,
+    kind: 'valid',
+    owner: {
+      version: parsed.version,
+      ownerToken: parsed.ownerToken,
+      pid: parsed.pid,
+      hostname: parsed.hostname,
+      startTimeMs: parsed.startTimeMs,
+      startTimeSource,
+    },
   };
+}
+
+/**
+ * Thin wrapper over {@link classifyOwnerRecord} for call sites that only need
+ * a valid owner or null. Kept so the public surface stays tidy; the
+ * discriminated classifier is the source of truth.
+ */
+function parseOwnerMetadata(raw: string): LockOwnerMetadata | null {
+  const record = classifyOwnerRecord(raw);
+  return record.kind === 'valid' ? record.owner : null;
 }
 
 // ─── Process start-time probing ─────────────────────────────────────────────
@@ -577,18 +647,29 @@ export class CredentialWriteLock {
     let attempt = 0;
     let firstAttempt = true;
     while (firstAttempt || Date.now() < deadline) {
+      const isFirstPass = firstAttempt;
       firstAttempt = false;
       const created = await this.tryCreateLock(lockPath, owner);
       if (created) {
         return true;
       }
-      if (Date.now() >= deadline) {
+      // Always make at least one dead-owner recovery attempt. Acquisition
+      // setup can spawn `ps` to read a canonical start time, which under load
+      // can consume a short waitMs budget entirely. Bailing out here on the
+      // first pass would strand a lock whose owner is provably dead and is
+      // therefore reclaimable, reporting TIMEOUT without ever having tried.
+      if (!isFirstPass && Date.now() >= deadline) {
         return false;
       }
       // O4: Dead-owner recovery is best-effort. A non-ENOENT filesystem
       // error during recovery (EACCES, EIO, ENOSPC, ENOTDIR) must not abort
       // the retry loop — log it and keep backing off until the deadline,
       // after which the normal TIMEOUT error is thrown.
+      //
+      // Exception: NewerLockVersionError must propagate immediately. It
+      // represents a precisely diagnosable condition (a newer-version lock
+      // we must not steal), and swallowing it would degrade to a generic
+      // TIMEOUT that hides the actionable cause.
       let recovered: boolean;
       try {
         recovered = await this.maybeRecoverDeadOwnerLock(
@@ -597,6 +678,9 @@ export class CredentialWriteLock {
           Math.max(0, deadline - Date.now()),
         );
       } catch (error) {
+        if (error instanceof NewerLockVersionError) {
+          throw error;
+        }
         this.logger.warn(
           () =>
             `[credential-lock] dead-owner recovery failed at ${lockPath}: ${error instanceof Error ? error.message : String(error)}`,
@@ -677,12 +761,34 @@ export class CredentialWriteLock {
       throw error;
     }
 
-    const existingOwner = parseOwnerMetadata(existingContent);
-    if (existingOwner === null) {
-      return false;
+    const record = classifyOwnerRecord(existingContent);
+
+    if (record.kind === 'newer') {
+      // A newer llxprt may hold this lock under a protocol we do not
+      // understand. Stealing it would break cross-version serialization, so
+      // fail fast with an actionable error instead of grinding to a generic
+      // TIMEOUT. This is a distinct subclass so the acquire loop lets it
+      // propagate immediately rather than swallowing it.
+      throw new NewerLockVersionError(record.version, lockPath);
     }
 
-    const liveness = await probeOwnerLiveness(existingOwner, probeTimeoutMs);
+    if (record.kind === 'unusable') {
+      // No supported version of this code can write such a record, so it
+      // cannot represent a live owner of this protocol. Reclaim it via a
+      // fenced takeover that enforces EXACT byte equality (proving nobody
+      // mutated it while we decided) but skips the liveness re-probe —
+      // there is no owner to probe.
+      return this.fencedTakeover(
+        lockPath,
+        existingContent,
+        owner,
+        probeTimeoutMs,
+        false,
+      );
+    }
+
+    // valid: probe liveness, fenced takeover only when dead.
+    const liveness = await probeOwnerLiveness(record.owner, probeTimeoutMs);
     if (liveness.status !== 'dead') {
       return false;
     }
@@ -692,14 +798,23 @@ export class CredentialWriteLock {
       existingContent,
       owner,
       probeTimeoutMs,
+      true,
     );
   }
 
+  /**
+   * Wins an exclusive fence, then reclaims the lock file it covers.
+   *
+   * `reprobeLiveness` is forwarded to {@link executeFencedClaim}: true when
+   * reclaiming a `valid` record from an owner already observed dead, false
+   * when reclaiming an `unusable` record that can represent no live owner.
+   */
   private async fencedTakeover(
     lockPath: string,
     deadRawContent: string,
     owner: LockOwnerMetadata,
     probeTimeoutMs: number,
+    reprobeLiveness: boolean,
   ): Promise<boolean> {
     const fencePath = `${lockPath}.fence`;
     const fenceWon = await this.publishOwnerFile(fencePath, owner);
@@ -723,6 +838,7 @@ export class CredentialWriteLock {
         lockPath,
         deadRawContent,
         probeTimeoutMs,
+        reprobeLiveness,
       );
       if (!cleared) {
         await this.removeOwnedFile(fencePath, owner.ownerToken);
@@ -755,13 +871,22 @@ export class CredentialWriteLock {
   }
 
   /**
-   * Under the fence, re-read the lock, require exact content equality with the
-   * inspected dead-owner record, re-probe liveness, and only then unlink.
+   * Under the fence, re-read the lock and require EXACT byte equality with the
+   * record we inspected before taking the fence. That equality check is the
+   * ENTIRE safety argument — it proves nobody mutated the record while we
+   * decided — and is never skipped.
+   *
+   * `reprobeLiveness` distinguishes the two reclaim reasons. For a `valid`
+   * record the owner is re-parsed and re-probed, so a lock is only ever
+   * stolen from a confirmed-dead owner. For an `unusable` record there is no
+   * owner to probe — no supported version of this code can write one — so the
+   * probe would be meaningless and is skipped.
    */
   private async executeFencedClaim(
     lockPath: string,
     deadRawContent: string,
     probeTimeoutMs: number,
+    reprobeLiveness: boolean,
   ): Promise<boolean> {
     let postFenceContent: string;
     try {
@@ -775,13 +900,15 @@ export class CredentialWriteLock {
     if (postFenceContent !== deadRawContent) {
       return false;
     }
-    const postFenceOwner = parseOwnerMetadata(postFenceContent);
-    if (postFenceOwner === null) {
-      return false;
-    }
-    const liveness = await probeOwnerLiveness(postFenceOwner, probeTimeoutMs);
-    if (liveness.status !== 'dead') {
-      return false;
+    if (reprobeLiveness) {
+      const postFenceOwner = parseOwnerMetadata(postFenceContent);
+      if (postFenceOwner === null) {
+        return false;
+      }
+      const liveness = await probeOwnerLiveness(postFenceOwner, probeTimeoutMs);
+      if (liveness.status !== 'dead') {
+        return false;
+      }
     }
     try {
       await fs.unlink(lockPath);

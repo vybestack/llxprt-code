@@ -54,6 +54,18 @@ async function createTempFilePath(): Promise<string> {
   return path.join(dir, 'machine_secret');
 }
 
+/**
+ * Narrows a resolved secret to non-null at runtime so assertions can operate
+ * on it without a non-null type assertion. A null here is always a test
+ * failure, so failing loudly at the narrowing point reports the real cause.
+ */
+function requireSecret(secret: Buffer | null): Buffer {
+  if (secret === null) {
+    throw new Error('Expected a machine secret to be resolved, got null');
+  }
+  return secret;
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('Machine Secret Provider', () => {
@@ -365,6 +377,52 @@ describe('Machine Secret Provider — Concurrency', () => {
 
     const onDisk = await fs.readFile(tempFilePath, 'utf8');
     expect(Buffer.compare(Buffer.from(onDisk, 'base64'), results[0]!)).toBe(0);
+  });
+
+  // FIX 2: when the keyring reports the write SUCCEEDED but the read-back is
+  // missing/unusable, the freshly generated secret exists NOWHERE durable.
+  // The provider must NOT return it; instead it must fall through to the
+  // file-fallback persistence so the secret is durably stored. The second
+  // read (after a cache reset) returning the SAME value is what proves
+  // durability — if the secret were never persisted, the second read would
+  // generate a different one.
+  it('a keyring whose setPassword succeeds but getPassword returns null falls through to file persistence and is durable across cache resets', async () => {
+    const keyring: KeyringAdapter = {
+      // setPassword succeeds (reports true) and the store accepts it, but
+      // getPassword always returns null — simulating a keyring whose
+      // read-back is broken/missing.
+      getPassword: async () => null,
+      setPassword: async (
+        _service: string,
+        _account: string,
+        _password: string,
+      ) => undefined,
+      deletePassword: async () => true,
+    };
+
+    const options: MachineSecretOptions = {
+      filePath: tempFilePath,
+      keyringLoader: async () => keyring,
+    };
+
+    // Non-null — the secret was persisted via the file fallback.
+    const first = requireSecret(await getMachineSecret(options));
+    expect(first.length).toBe(32);
+
+    // The file fallback path must now hold the secret (the keyring could
+    // not be read back, so durability comes from the file).
+    const onDisk = await fs.readFile(tempFilePath, 'utf8');
+    const decoded = Buffer.from(onDisk, 'base64');
+    expect(decoded.length).toBe(32);
+    expect(Buffer.compare(decoded, first)).toBe(0);
+
+    // Reset the in-memory cache and resolve again. If the secret was not
+    // durably persisted, a DIFFERENT secret would be generated and the
+    // assertion below would fail. Returning the SAME secret proves the
+    // value survived in durable storage.
+    resetMachineSecretCache();
+    const second = requireSecret(await getMachineSecret(options));
+    expect(Buffer.compare(second, first)).toBe(0);
   });
 });
 

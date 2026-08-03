@@ -350,7 +350,15 @@ async function generatePersistAndRereadLocked(
       // different secret first (both are under the lock, but the keyring
       // itself may have a pre-existing value from before we acquired).
       const winner = await readFromKeyring(keyring);
-      return winner.status === 'found' ? winner.secret : secret;
+      if (winner.status === 'found') {
+        return winner.secret;
+      }
+      // The keyring reported the write SUCCEEDED but the read-back is missing
+      // or unusable. Returning the freshly generated secret here would hand
+      // the caller a value that exists NOWHERE durable; on the next process
+      // start a different secret would be generated, orphaning any data
+      // encrypted under this one. Fall through to the file-fallback path so
+      // the secret is always either durably stored or reported as null.
     }
   }
 
