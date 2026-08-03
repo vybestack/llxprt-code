@@ -19,16 +19,20 @@
  *   H) getToken propagates errors from Gemini normally (G4 dead-code removed)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
-import { TokenAccessCoordinator } from '../token-access-coordinator.js';
-import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
+import { TokenAccessCoordinator } from '../src/auth/token-access-coordinator.js';
+import type {
+  OAuthProvider,
+  OAuthToken,
+  TokenStore,
+} from '../src/auth/types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
   SecureStoreError,
   isRuntimeReplacedError,
 } from '@vybestack/llxprt-code-storage';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { oauthRuntimeBridge } from '../src/auth/runtime-accessor-bridge.js';
 
 // --------------------------------------------------------------------------
 // Minimal stub helpers
@@ -71,7 +75,7 @@ function createMockProvider(name: string): OAuthProvider {
 // Minimal ProviderRegistry-like object that TokenAccessCoordinator receives
 function createMockRegistry(provider?: OAuthProvider, oauthEnabled = true) {
   return {
-    getProvider: vi.fn((_name: string) => provider ?? undefined),
+    getProvider: vi.fn(() => provider ?? undefined),
     isOAuthEnabled: vi.fn(() => oauthEnabled),
     hasExplicitInMemoryOAuthState: vi.fn(() => false),
   };
@@ -87,10 +91,7 @@ function createMockRenewalManager() {
 // Minimal OAuthBucketManager-like stub
 function createMockBucketManager() {
   return {
-    getSessionBucket: vi.fn(
-      (_provider: string, _metadata?: OAuthTokenRequestMetadata) =>
-        undefined as string | undefined,
-    ),
+    getSessionBucket: vi.fn(() => undefined as string | undefined),
     setSessionBucket: vi.fn(),
     clearSessionBucket: vi.fn(),
     clearAllSessionBuckets: vi.fn(),
