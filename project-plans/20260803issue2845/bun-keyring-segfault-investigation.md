@@ -174,6 +174,25 @@ So this is unreported and unfixed upstream on both sides. Filing it is worth
 doing, and the material above (1.7s repro recipe, native backtrace, and the
 ruled-out matrix) is what such a report needs.
 
+## Round 3 eliminations (native arm64, live Secret Service)
+
+| Hypothesis | Result |
+| --- | --- |
+| **The sync `Entry` API avoids it** (attractive because it schedules no libuv async work) |  — **sync crashes too**, in the agents context. This kills the most appealing quick fix |
+| Multiple independent adapters (the agents path has two: tool-keys and machine-secret) — sequential, concurrent and re-entrant |  — all survive |
+| `AsyncLocalStorage` / async-context tracking active during the call |  — survives, sync and async |
+| All **three** addons together (ast-grep + sharp/libvips + keyring), each genuinely initialised |  — survives. `process_dlopen(3)` is a red herring |
+| A conflicting/duplicate glib, gio or libsecret |  — a `/proc/self/maps` diff shows **no** glib/gio/secret libraries mapped; the only extras in the agents case are `libresolv`, `libstdc++`, ast-grep, sharp and libvips |
+
+The key negative is the first one: **both the sync and async keyring APIs crash
+once the agents graph is loaded**, so this cannot be fixed by choosing a
+different entry point on the addon.
+
+Equally, importing the agents graph and merely `import`ing the keyring is fine —
+it is the first *call* that dies. So loading the graph leaves the process in a
+state where any credential call is fatal, and that state has not been
+reproducible by synthesising the pieces.
+
 ## Still unmeasured
 
 `@vybestack/llxprt-code-core` (barrel) does not finish importing within 120s
