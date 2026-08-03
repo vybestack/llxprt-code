@@ -128,6 +128,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/steerKey.win32.bun.ts',
       'test-bun/steerKey.darwin.bun.ts',
       'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
     ],
   },
   {

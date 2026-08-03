@@ -121,36 +121,6 @@ describe('Kitty Sequence Parsing', () => {
     });
   });
 
-  describe('Bare line feed byte-level pin (issue #2951)', () => {
-    // Windows consoles deliver Ctrl+Enter as a bare line feed (0x0A). The fix
-    // in resolveKeyBindings gives STEER a Ctrl+J alias on win32 precisely
-    // because this parser reports 0x0A as { name: 'j', ctrl: true }. If a
-    // future parser change "fixes" 0x0A to map to 'return', steering would be
-    // double-bound; this pin makes such a change fail loudly here instead.
-    it('parses a bare LF (0x0A) as { name: "j", ctrl: true }', () => {
-      const { keyHandler } = setupKeypressTest();
-
-      act(() => stdin.write('\x0a'));
-
-      expect(keyHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'j', ctrl: true }),
-      );
-      expect(keyHandler).not.toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'return' }),
-      );
-    });
-
-    it('parses a carriage return (0x0D) as { name: "return" }', () => {
-      const { keyHandler } = setupKeypressTest();
-
-      act(() => stdin.write('\x0d'));
-
-      expect(keyHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'return' }),
-      );
-    });
-  });
-
   describe('Cross-terminal Alt key handling (simulating macOS)', () => {
     let originalPlatform: NodeJS.Platform;
 

@@ -639,6 +639,27 @@ function createDragDropHandler(broadcast: (key: Key) => void) {
   return { handleKey, cleanup, flush };
 }
 
+/**
+ * Builds the full stdin-bytes-to-Key pipeline used by {@link KeypressProvider}.
+ *
+ * This is the single definition of the decoding chain: the provider consumes it
+ * for real input, and tests consume it to assert byte-level parsing without a
+ * React or ink harness. Keeping one factory means a test can never assert
+ * against a stale copy of the composition order.
+ *
+ * @param broadcast Receives each decoded key.
+ * @returns A listener accepting raw stdin string chunks.
+ */
+export function createKeypressPipeline(
+  broadcast: KeypressHandler,
+): (data: string) => void {
+  let processor = nonKeyboardEventFilter(broadcast);
+  processor = bufferFastReturn(processor);
+  processor = bufferBackslashEnter(processor);
+  processor = bufferPaste(processor);
+  return createDataListener(processor);
+}
+
 function useKeypressSetup(
   stdin: NodeJS.ReadStream & { isRaw?: boolean },
   setRawMode: (mode: boolean) => void,
@@ -654,11 +675,7 @@ function useKeypressSetup(
     };
 
     process.stdin.setEncoding('utf8');
-    let processor = nonKeyboardEventFilter(handleDragDropAndBroadcast);
-    processor = bufferFastReturn(processor);
-    processor = bufferBackslashEnter(processor);
-    processor = bufferPaste(processor);
-    const dataListener = createDataListener(processor);
+    const dataListener = createKeypressPipeline(handleDragDropAndBroadcast);
 
     stdin.on('data', dataListener);
     return () => {
