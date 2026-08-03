@@ -31,6 +31,7 @@ import { createFakeAgent } from './helpers/createFakeAgent.js';
 
 function setupHook(agent: Agent) {
   const routedEvents: AgentEvent[] = [];
+  const routedSignals: AbortSignal[] = [];
   const processAgentEventRef: React.MutableRefObject<AgentEventRouter | null> =
     { current: null };
   const addItem = vi.fn();
@@ -62,13 +63,19 @@ function setupHook(agent: Agent) {
   );
 
   // Populate the router ref so events are actually routed.
-  processAgentEventRef.current = (event: AgentEvent) => {
+  processAgentEventRef.current = (
+    event: AgentEvent,
+    _timestamp: number,
+    signal: AbortSignal,
+  ) => {
     routedEvents.push(event);
+    routedSignals.push(signal);
   };
 
   return {
     result,
     routedEvents,
+    routedSignals,
     addItem,
     flushPendingHistoryItem,
     clearPendingHistoryItem,
@@ -92,7 +99,7 @@ describe('useAgentEventStream', () => {
       { type: 'done', reason: 'stop' },
     ];
     const agent = createFakeAgent(events);
-    const { result, routedEvents } = setupHook(agent);
+    const { result, routedEvents, routedSignals } = setupHook(agent);
 
     const controller = new AbortController();
     await act(async () => {
@@ -106,6 +113,7 @@ describe('useAgentEventStream', () => {
     expect(routedEvents).toHaveLength(2);
     expect(routedEvents[0]).toStrictEqual({ type: 'text', text: 'Hello' });
     expect(routedEvents[1]).toStrictEqual({ type: 'done', reason: 'stop' });
+    expect(routedSignals).toStrictEqual([controller.signal, controller.signal]);
   });
 
   it('breaks iteration when the abort signal fires', async () => {

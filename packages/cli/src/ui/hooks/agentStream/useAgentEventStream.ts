@@ -49,6 +49,7 @@ const logger = DebugLogger.getLogger('llxprt:cli:agent-event-stream');
 export type AgentEventRouter = (
   event: AgentEvent,
   userMessageTimestamp: number,
+  signal: AbortSignal,
 ) => void;
 
 export interface UseAgentEventStreamArgs {
@@ -291,7 +292,11 @@ function iterateAgentStream(
     for await (const event of iterator) {
       if (signal.aborted) break;
       try {
-        args.processAgentEventRef.current?.(event, userMessageTimestamp);
+        args.processAgentEventRef.current?.(
+          event,
+          userMessageTimestamp,
+          signal,
+        );
       } catch (error) {
         // One bad event must not abort the entire stream.
         logger.error('Error processing agent event:', error);
