@@ -96,6 +96,60 @@ The crash report shows `process_dlopen(3)` — three native libraries were loade
 in the crashing process — so a third native module beyond keyring and ast-grep
 is likely involved.
 
+## Native backtrace (the key artifact)
+
+Obtained on a **native arm64** Linux container, where the crash reproduces in
+**1.7 seconds** instead of minutes — x86_64 on Apple Silicon runs under
+emulation, which is both slow and breaks `ptrace`, so gdb only works on arm64.
+Bun's GC suspends threads with `SIGPWR`, which must be passed through or gdb
+halts on normal runtime activity:
+
+```
+gdb -q -batch \
+  -ex "handle SIGPWR nostop noprint pass" \
+  -ex "handle SIGSEGV stop print nopass" \
+  -ex run -ex "bt 30" -ex "info sharedlibrary" \
+  --args "$(command -v bun)" test --timeout 30000 <file>
+```
+
+Result:
+
+```
+Thread 1 "bun" received signal SIGSEGV, Segmentation fault.
+0x0000ffff5c62885c in ?? () from .../@napi-rs/keyring-linux-arm64-gnu/keyring.linux-arm64-gnu.node
+#0  0x0000ffff5c62885c in ?? () from .../keyring.linux-arm64-gnu.node
+#1  0x0000ffff5c61e51c in ?? () from .../keyring.linux-arm64-gnu.node
+#2  0x0000fffffffdb7b0 in ?? ()
+Backtrace stopped: previous frame inner to this frame (corrupt stack?)
+```
+
+**The fault is inside `keyring.node` itself**, on the main thread, with a
+corrupted unwind. On x86_64 the faulting address is `0x88` — a small struct
+offset, i.e. a null/garbage pointer dereference.
+
+`info sharedlibrary` identifies the three native addons behind
+`process_dlopen(3)`:
+
+- `@ast-grep/napi`
+- `@img/sharp` + `libvips-cpp.so.8.18.3`
+- `@napi-rs/keyring`
+
+## Additional hypotheses ruled out (arm64, live Secret Service)
+
+| Hypothesis | Result |
+| --- | --- |
+| `sharp`/libvips interferes with keyring |  — sharp imported **and exercised** (real `metadata()` call so libvips initialises), then keyring: survives. Also survives keyring-before-sharp |
+| Concurrent credential access (thread-safety) |  — 5 rounds × 16 concurrent `AsyncEntry.getPassword()` all succeed |
+
+Every pairwise combination of the three addons has now been cleared. The crash
+still requires the **full** agents import graph.
+
+## Still unmeasured
+
+`@vybestack/llxprt-code-core` (barrel) does not finish importing within 120s
+even on native arm64, so it remains untested. That slowness is itself worth a
+look and is the main obstacle to finishing the bisect.
+
 ## Suggested next steps
 
 1. Resolve the core-import slowness (or run the probe on a machine with more
