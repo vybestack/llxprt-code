@@ -135,7 +135,6 @@ export class JspProducer {
   private readonly queue: JspBoundedQueue;
   private readonly identity: JspProducerIdentity;
   private state: JspProducerState;
-  private sessionId: string | null = null;
   private agentId = DEFAULT_AGENT_SCOPE;
   private todoRevision = 0;
   private started = false;
@@ -177,8 +176,12 @@ export class JspProducer {
     });
   }
 
-  setSession(sessionId: string, agentId: string | undefined): void {
-    this.sessionId = sessionId;
+  /**
+   * Bind the producer to an agent scope. Deliberately does not take a session
+   * id: `Config.adoptSessionId` rebinds the CLI session at runtime, so a copy
+   * held here would go stale and silently filter this agent's own events.
+   */
+  setAgentScope(agentId: string | undefined): void {
     this.agentId = agentId ?? DEFAULT_AGENT_SCOPE;
   }
 
@@ -456,15 +459,17 @@ export class JspProducer {
   }
 
   observeTodosReplaced(
-    sessionId: string,
     agentId: string | undefined,
     todos: readonly NativeTodoLike[],
   ): void {
+    // Scope by agent only. Subagent todos stay out of the projection (they are
+    // out of scope for the observation contract), but the CLI session id must
+    // NOT gate publication: `Config.adoptSessionId` rebinds it at runtime when
+    // a conversation is resumed or picked from the session browser, and this
+    // producer is constructed once per process. Comparing against a cached copy
+    // silently dropped every later replacement for the rest of the session.
     const scopedAgent = agentId ?? DEFAULT_AGENT_SCOPE;
-    if (
-      this.sessionId !== null &&
-      (sessionId !== this.sessionId || scopedAgent !== this.agentId)
-    ) {
+    if (scopedAgent !== this.agentId) {
       return;
     }
     this.todoRevision += 1;
