@@ -191,6 +191,21 @@ describe('ConversationManager stamps the live provider model, not the stale snap
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
   });
+
+  it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', () => {
+    // `RuntimeProvider.getCurrentModel` is optional in the contract, so a
+    // provider may not implement it at all. Recording must fall back rather
+    // than calling a non-function.
+    const { conversationManager, historyService } = buildConversationManager(
+      STALE_SNAPSHOT_MODEL,
+      GENERATING_BASE_URL,
+    );
+
+    recordSimpleAiTurn(conversationManager);
+
+    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
+    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+  });
 });
 
 function buildChatSessionWithLiveProvider(
@@ -304,6 +319,19 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
       STALE_SNAPSHOT_MODEL,
       { liveModel: 'throw' },
     );
+
+    await chat.sendMessage(
+      { message: [{ text: 'Write a haiku' }] },
+      'test-prompt-id',
+    );
+
+    const ai = historyService.getAll().find((c) => c.speaker === 'ai');
+    expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
+  });
+
+  it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', async () => {
+    const { chat, historyService } =
+      buildChatSessionWithLiveProvider(STALE_SNAPSHOT_MODEL);
 
     await chat.sendMessage(
       { message: [{ text: 'Write a haiku' }] },
