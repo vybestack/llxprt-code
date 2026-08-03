@@ -22,6 +22,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
+import { resolveGeneratingModel } from './generatingModelResolver.js';
 import { validateHistory } from './MessageConverter.js';
 
 /**
@@ -106,18 +107,15 @@ function mergeTurnMetadata(
 export class ConversationManager {
   private readonly historyService: HistoryService;
   private readonly runtimeContext: AgentRuntimeContext;
-  private readonly model: string;
   private readonly baseURL: string | undefined;
 
   constructor(
     historyService: HistoryService,
     runtimeContext: AgentRuntimeContext,
-    model: string,
     baseURL?: string,
   ) {
     this.historyService = historyService;
     this.runtimeContext = runtimeContext;
-    this.model = model;
     this.baseURL = baseURL;
   }
 
@@ -233,6 +231,11 @@ export class ConversationManager {
 
     const userContent: IContent | IContent[] = userInput;
 
+    // Resolve the generating model from the LIVE active provider at record
+    // time (issue #2511) — not from a construction-time snapshot that goes
+    // stale when a profile is loaded mid-session.
+    const generatingModel = resolveGeneratingModel(this.runtimeContext);
+
     // Capture user input characteristics for model turn logic
     const userInputWasArray =
       options?.userInputWasArray ?? Array.isArray(userInput);
@@ -253,6 +256,8 @@ export class ConversationManager {
       userContent,
       automaticFunctionCallingHistory,
       newHistoryEntries,
+      generatingModel,
+      this.baseURL,
     );
 
     // Record model turn
@@ -264,11 +269,13 @@ export class ConversationManager {
       userInputWasArray,
       userInputWasFunctionResponse,
       hasAfc,
+      generatingModel,
+      this.baseURL,
     );
 
     // Add all entries to history service
     for (const entry of newHistoryEntries) {
-      this.historyService.add(entry, this.model);
+      this.historyService.add(entry, generatingModel);
     }
   }
 
@@ -282,6 +289,8 @@ export class ConversationManager {
     userInput: IContent | IContent[],
     automaticFunctionCallingHistory: IContent[] | undefined,
     newHistoryEntries: IContent[],
+    generatingModel: string | undefined,
+    baseURL: string | undefined,
   ): void {
     if (
       automaticFunctionCallingHistory &&
@@ -307,7 +316,7 @@ export class ConversationManager {
         matchingPrefixLength,
       )) {
         newHistoryEntries.push(
-          stampAiTurnModel(content, this.model, this.baseURL),
+          stampAiTurnModel(content, generatingModel, baseURL),
         );
       }
     } else {
@@ -365,6 +374,8 @@ export class ConversationManager {
     userInputWasArray: boolean,
     userInputWasFunctionResponse: boolean,
     hasAfc: boolean,
+    generatingModel: string | undefined,
+    baseURL: string | undefined,
   ): void {
     // Filter out thoughts based on reasoning configuration
     const includeThoughtsInHistory =
@@ -419,6 +430,8 @@ export class ConversationManager {
       usageMetadata,
       options,
       newHistoryEntries,
+      generatingModel,
+      baseURL,
     );
   }
 
@@ -468,6 +481,8 @@ export class ConversationManager {
     usageMetadata: UsageStats | null | undefined,
     options: RecordHistoryOptions | undefined,
     newHistoryEntries: IContent[],
+    generatingModel: string | undefined,
+    baseURL: string | undefined,
   ): void {
     let didAttachThoughtBlocks = false;
 
@@ -489,11 +504,10 @@ export class ConversationManager {
 
       // Stamp the generating model and base URL so downstream consumers can
       // detect cross-model and cross-endpoint turns (issues #2335, #1469).
-      // this.model/this.baseURL reflect the model/endpoint that produced this
-      // output; on a switch the ChatSession/ConversationManager is rebuilt with
-      // the new values while HistoryService is reused.
+      // generatingModel/baseURL are resolved at record time from the live
+      // active provider (issue #2511), not a stale construction-time snapshot.
       newHistoryEntries.push(
-        stampAiTurnModel(iContent, this.model, this.baseURL),
+        stampAiTurnModel(iContent, generatingModel, baseURL),
       );
     }
 
@@ -507,7 +521,7 @@ export class ConversationManager {
       };
       mergeTurnMetadata(iContent, usageMetadata, options);
       newHistoryEntries.push(
-        stampAiTurnModel(iContent, this.model, this.baseURL),
+        stampAiTurnModel(iContent, generatingModel, baseURL),
       );
     }
   }
@@ -541,7 +555,7 @@ export class ConversationManager {
     const turnKey = this.historyService.generateTurnKey();
     this.historyService.add(
       { ...content, metadata: { ...content.metadata, turnId: turnKey } },
-      this.model,
+      this.runtimeContext.state.model,
     );
   }
 
@@ -549,12 +563,17 @@ export class ConversationManager {
    * Sets the full chat history, replacing any existing history.
    */
   setHistory(history: IContent[]): void {
+    // The second argument to historyService.add is only a logging/token-
+    // estimation hint, not attribution. This is a restore path that may run
+    // before any provider is active, so read the runtime-state model directly
+    // rather than resolving the active provider (issue #2511).
+    const generatingModel = this.runtimeContext.state.model;
     this.historyService.clear();
     for (const content of history) {
       const turnKey = this.historyService.generateTurnKey();
       this.historyService.add(
         { ...content, metadata: { ...content.metadata, turnId: turnKey } },
-        this.model,
+        generatingModel,
       );
     }
   }

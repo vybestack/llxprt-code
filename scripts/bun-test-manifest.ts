@@ -94,7 +94,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   },
   {
     workspace: 'agents',
-    files: ['test-bun/subagentAnthropicTextSettings.issue1738.bun.ts'],
+    files: [
+      'test-bun/generatingModelStamp.issue2511.bun.ts',
+      'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
+    ],
   },
   {
     workspace: 'cli',
@@ -114,6 +117,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
+      'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
   },
