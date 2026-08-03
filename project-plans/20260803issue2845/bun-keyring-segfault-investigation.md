@@ -144,6 +144,36 @@ offset, i.e. a null/garbage pointer dereference.
 Every pairwise combination of the three addons has now been cleared. The crash
 still requires the **full** agents import graph.
 
+## Is there a newer library, or an existing report?
+
+Checked — **no** on all counts, so there is no upgrade path out of this:
+
+| | Pinned / installed | Latest available | Verdict |
+| --- | --- | --- | --- |
+| `@napi-rs/keyring` | 1.3.0 | **1.3.0** (published 2026-04-30) | already newest |
+| Bun (stable) | 1.3.14 | **1.3.14** | already newest |
+| Bun (canary) | — | 1.4.0-canary.1+1f447a73e | **still crashes** |
+
+The canary run reproduces identically:
+
+```
+1.4.0-canary.1+1f447a73e
+panic(main thread): Segmentation fault at address 0x4003B794520
+```
+
+Existing upstream reports searched, none matching:
+
+- `Brooooooklyn/keyring-node` — 8 issues total, none mentioning Bun. The one
+  Linux-native-binding issue (#93) is about binding resolution on 1.1.9 and is
+  closed.
+- `oven-sh/bun` — no open issue matches "napi segfault", "napi crash",
+  "Segmentation fault addon" or keyring. The only near neighbour is #15197
+  (nfc-pcsc native module segfault), closed.
+
+So this is unreported and unfixed upstream on both sides. Filing it is worth
+doing, and the material above (1.7s repro recipe, native backtrace, and the
+ruled-out matrix) is what such a report needs.
+
 ## Still unmeasured
 
 `@vybestack/llxprt-code-core` (barrel) does not finish importing within 120s
