@@ -135,3 +135,163 @@ exports[`<HistoryItemDisplay /> > should render a truncated gemini_content item 
    49 Line 49
    50 Line 50"
 `;
+
+exports[`<HistoryItemDisplay /> should render a truncated gemini item 1`] = `
+"
+  ERROR  RuntimeContextProvider is missing from the component tree.
+
+ src/ui/contexts/RuntimeContext.tsx:245:15
+
+ 242: export function useRuntimeBridge(): RuntimeContextBridge {
+ 243:   const context = useContext(RuntimeContext);
+ 244:   if (!context) {
+ 245:     throw new Error(
+ 246:       'RuntimeContextProvider is missing from the component tree.',
+ 247:     );
+ 248:   }
+
+ - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:245:15)
+ - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:253:10)
+ - AiMessage (src/ui/components/messages/AiMessage.tsx:54:35)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+"
+`;
+
+exports[`<HistoryItemDisplay /> should render a full gemini item when using availableTerminalHeightAi 1`] = `
+"
+  ERROR  RuntimeContextProvider is missing from the component tree.
+
+ src/ui/contexts/RuntimeContext.tsx:245:15
+
+ 242: export function useRuntimeBridge(): RuntimeContextBridge {
+ 243:   const context = useContext(RuntimeContext);
+ 244:   if (!context) {
+ 245:     throw new Error(
+ 246:       'RuntimeContextProvider is missing from the component tree.',
+ 247:     );
+ 248:   }
+
+ - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:245:15)
+ - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:253:10)
+ - AiMessage (src/ui/components/messages/AiMessage.tsx:54:35)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+"
+`;
+
+exports[`<HistoryItemDisplay /> should render a truncated gemini_content item 1`] = `
+"
+  ERROR  RuntimeContextProvider is missing from the component tree.
+
+ src/ui/contexts/RuntimeContext.tsx:245:15
+
+ 242: export function useRuntimeBridge(): RuntimeContextBridge {
+ 243:   const context = useContext(RuntimeContext);
+ 244:   if (!context) {
+ 245:     throw new Error(
+ 246:       'RuntimeContextProvider is missing from the component tree.',
+ 247:     );
+ 248:   }
+
+ - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:245:15)
+ - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:253:10)
+ - useResolvedWorkspaceDirectories (src/ui/hooks/useResolvedWorkspaceDirectories.ts:24:37)
+ - AiMessageContent (src/ui/components/messages/AiMessageContent.tsx:36:5)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+"
+`;
+
+exports[`<HistoryItemDisplay /> should render a full gemini_content item when using availableTerminalHeightAi 1`] = `
+"
+  ERROR  RuntimeContextProvider is missing from the component tree.
+
+ src/ui/contexts/RuntimeContext.tsx:245:15
+
+ 242: export function useRuntimeBridge(): RuntimeContextBridge {
+ 243:   const context = useContext(RuntimeContext);
+ 244:   if (!context) {
+ 245:     throw new Error(
+ 246:       'RuntimeContextProvider is missing from the component tree.',
+ 247:     );
+ 248:   }
+
+ - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:245:15)
+ - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:253:10)
+ - useResolvedWorkspaceDirectories (src/ui/hooks/useResolvedWorkspaceDirectories.ts:24:37)
+ - AiMessageContent (src/ui/components/messages/AiMessageContent.tsx:36:5)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+"
+`;

@@ -36,3 +36,40 @@ exports[`<ToolMessage /> > renders emphasis correctly 2`] = `
 │                                                                              │
 │    MockMarkdown:Test result                                                  │"
 `;
+
+exports[`<ToolMessage /> renders DiffRenderer for diff results 1`] = `
+"│                                                                              │
+│ ✓                                                                            │
+│ test-tool A tool for testing                                                 │
+│                                                                              │
+│    MockDiff:--- a/file.txt                                                   │
+│    +++ b/file.txt                                                            │
+│    @@ -1 +1 @@                                                               │
+│    -old                                                                      │
+│    +new                                                                      │"
+`;
+
+exports[`<ToolMessage /> renders emphasis correctly 1`] = `
+"│                                                                              │
+│ ✓                                                                            │
+│ test-tool A tool for testing                                                 │
+│  ←                                                                           │
+│                                                                              │
+│    MockMarkdown:Test result                                                  │"
+`;
+
+exports[`<ToolMessage /> renders emphasis correctly 2`] = `
+"│                                                                              │
+│ ✓                                                                            │
+│ test-tool A tool for testing                                                 │
+│                                                                              │
+│    MockMarkdown:Test result                                                  │"
+`;
+
+exports[`<ToolMessage /> renders AnsiOutputText for AnsiOutput results 1`] = `
+"│                                                                              │
+│ ✓                                                                            │
+│ test-tool A tool for testing                                                 │
+│                                                                              │
+│    hello                                                                     │"
+`;

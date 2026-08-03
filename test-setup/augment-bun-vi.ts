@@ -25,6 +25,7 @@ import {
   describe as bunDescribe,
   expect,
 } from 'bun:test';
+import { drainMicrotasks } from 'bun:jsc';
 import { createRequire, isBuiltin } from 'node:module';
 import {
   StubRegistry,
@@ -358,14 +359,19 @@ function automockValue(
         value: state.prototype,
       });
       for (const key of Reflect.ownKeys(value)) {
-        if (!['length', 'name', 'prototype'].includes(String(key))) {
-          Object.defineProperty(mockedConstructor, key, {
-            configurable: true,
-            enumerable: true,
-            writable: true,
-            value: automockValue(Reflect.get(value, key), references),
-          });
+        if (['length', 'name', 'prototype'].includes(String(key))) continue;
+        const staticDescriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!staticDescriptor) continue;
+        if (!('value' in staticDescriptor)) {
+          Object.defineProperty(mockedConstructor, key, staticDescriptor);
+          continue;
         }
+        Object.defineProperty(mockedConstructor, key, {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: automockValue(staticDescriptor.value, references),
+        });
       }
       return mockedConstructor;
     }
@@ -379,15 +385,33 @@ function automockValue(
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor) continue;
+    // Accessor properties are copied as accessors rather than read. Invoking a
+    // getter on a prototype (e.g. ChildProcess.prototype.stdin in
+    // node:child_process) throws because `this` is the prototype and not a
+    // real instance, which would abort the whole automock.
+    if (!('value' in descriptor)) {
+      Object.defineProperty(mockedObject, key, descriptor);
+      continue;
+    }
     Object.defineProperty(mockedObject, key, {
       configurable: true,
       enumerable: descriptor.enumerable,
       writable: true,
-      value: automockValue(Reflect.get(value, key), references),
+      value: automockValue(descriptor.value, references),
     });
   }
   return mockedObject;
 }
+
+/**
+ * Normalizes a mock factory result into a module namespace object. Factories
+ * that return a non-object (rare, but legal for default-only modules) are
+ * wrapped so consumers still see a `default` export.
+ */
+const toNamespace = (exports: unknown): object =>
+  typeof exports === 'object' && exports !== null
+    ? (exports as object)
+    : { default: exports };
 
 const registerModuleMock = (
   id: string,
@@ -477,21 +501,34 @@ const registerModuleMock = (
     return mock.module(mockId, () => factoryResult as object);
   }
 
-  // Async factory result — Bun can't await inside mock.module factories.
-  // Register a placeholder (real module) and re-register when resolved.
-  // This is a race: if the module is imported before the factory resolves,
-  // the real module is returned. In practice, vi.mock() is called at module
-  // evaluation time, well before the module is first imported by test code.
-  // IMPORTANT: Factory bodies that call `await import('./local.js')` will
-  // STILL hang because ESM import() inside factories is intercepted by
-  // mock.module. Those test files must be refactored.
+  // Async factory result — Bun cannot await inside a mock.module factory, and
+  // Vitest hoists vi.mock() so the mocked exports exist before the test module
+  // body runs. Test modules rely on that ordering (e.g. `const spy = imported
+  // as Mock` at module scope), so deferring registration to a microtask is not
+  // equivalent. Every async factory in this repository only awaits values that
+  // are already available synchronously (vi.importActual / importOriginal), so
+  // draining the microtask queue settles the promise immediately and lets the
+  // mock be registered before the module body continues.
+  drainMicrotasks();
+  const settled = Bun.peek(factoryResult);
+  if (settled !== factoryResult) {
+    return mock.module(mockId, () => toNamespace(settled));
+  }
+
+  // Genuinely pending factory (real async work). Register a placeholder with
+  // the real module and re-register once the promise settles.
   mock.module(mockId, () => syncActual as object);
   factoryResult
     .then((exports) => {
-      if (typeof exports === 'object' && exports !== null) {
-        mock.module(mockId, () => exports as object);
-      } else {
-        mock.module(mockId, () => ({ default: exports }));
+      const namespace = toNamespace(exports);
+      // Bun resolves a *relative* mock.module specifier against the module
+      // that is executing when the call is made. Re-registration happens in a
+      // microtask, after the test module finished evaluating, so a relative
+      // specifier no longer resolves to the same module and the mock silently
+      // does not apply. Registering the absolute path resolved at vi.mock()
+      // time is caller-independent and always targets the right module.
+      for (const id of new Set([mockId, resolvedId])) {
+        mock.module(id, () => namespace);
       }
     })
     .catch(() => {

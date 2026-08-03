@@ -367,3 +367,347 @@ exports[`SettingsDialog > Snapshot Tests > should render 'various boolean settin
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
+
+exports[`SettingsDialog Snapshot Tests should render default state correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render various boolean settings enabled correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render mixed boolean and number settings correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render focused on scope selector correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render accessibility settings enabled correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render file filtering settings configured correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render tools and security settings correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render all boolean settings disabled correctly 1`] = `
+"
+  ERROR  useVimMode must be used within a VimModeProvider
+
+ src/ui/contexts/VimModeContext.tsx:87:15
+
+ 84: export const useVimMode = () => {
+ 85:   const context = useContext(VimModeContext);
+ 86:   if (context === undefined) {
+ 87:     throw new Error('useVimMode must be used within a VimModeProvider');
+ 88:   }
+ 89:   return context;
+ 90: };
+
+ - useVimMode (src/ui/contexts/VimModeContext.tsx:87:15)
+ - SettingsDialog (src/ui/components/SettingsDialog.tsx:36:26)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+"
+`;

@@ -123,3 +123,81 @@ exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match
  - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
 "
 `;
+
+exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots): command-search-render-collapsed-match 1`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ src/ui/contexts/MouseContext.tsx:40:15
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (src/ui/contexts/MouseContext.tsx:40:15)
+ - useMouse (src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (src/ui/components/inputPromptHooks.ts:544:3)
+ - InputPrompt (src/ui/components/InputPrompt.tsx:69:3)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+"
+`;
+
+exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots): command-search-render-expanded-match 1`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ src/ui/contexts/MouseContext.tsx:40:15
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (src/ui/contexts/MouseContext.tsx:40:15)
+ - useMouse (src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (src/ui/components/inputPromptHooks.ts:544:3)
+ - InputPrompt (src/ui/components/InputPrompt.tsx:69:3)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+"
+`;

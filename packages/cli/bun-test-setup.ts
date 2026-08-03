@@ -18,7 +18,18 @@
 import { JSDOM } from 'jsdom';
 import { join } from 'node:path';
 import React from 'react';
-import { mock, afterEach } from 'bun:test';
+import {
+  mock,
+  afterEach,
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  test,
+  vi,
+} from 'bun:test';
 import {
   clearActiveProviderRuntimeContext,
   DebugLogger,
@@ -44,6 +55,36 @@ Object.assign(globalThis, {
   MutationObserver: dom.window.MutationObserver,
   getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
 });
+
+// ---------------------------------------------------------------------------
+// Test globals
+//
+// The Vitest configuration for this workspace sets `globals: true`, so many
+// test files reference `describe` / `it` / `expect` without importing them.
+// Bun only injects those names into files that import from 'bun:test' or
+// 'vitest', so expose the same globals here to preserve that contract.
+// ---------------------------------------------------------------------------
+const testGlobals: Record<string, unknown> = {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  test,
+  vi,
+};
+for (const [name, value] of Object.entries(testGlobals)) {
+  if (!(name in globalThis)) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -275,6 +316,13 @@ const { __resetCleanupStateForTesting } = await import(
   './src/utils/cleanup.js'
 );
 
+// Bun's mock.module patches a module namespace in place and shares it with
+// this preload, so a test that mocks '@vybestack/llxprt-code-core' would
+// otherwise replace the cleanup helpers this file relies on. Capture the real
+// implementations now, before any test file can register a module mock.
+const resetDebugLoggerForTesting = DebugLogger.resetForTesting.bind(DebugLogger);
+const clearProviderRuntimeContext = clearActiveProviderRuntimeContext;
+
 const managedProcessEvents = [
   'exit',
   'SIGINT',
@@ -319,7 +367,7 @@ afterEach(async () => {
   for (const eventName of managedProcessEvents) {
     restoreProcessListeners(eventName);
   }
-  await DebugLogger.resetForTesting();
+  await resetDebugLoggerForTesting();
   __resetCleanupStateForTesting();
-  clearActiveProviderRuntimeContext();
+  clearProviderRuntimeContext();
 });
