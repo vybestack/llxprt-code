@@ -6,7 +6,6 @@
 
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { spawn as cpSpawn, type ChildProcess } from 'node:child_process';
 import { getShellConfiguration } from '../utils/shell-utils.js';
 import { SIGKILL_TIMEOUT_MS } from './shellProcessKill.js';
 import { ShellJobBudget } from './shellJobBudget.js';
@@ -35,6 +34,7 @@ import {
   type TerminalDetails,
 } from './shellJobTypes.js';
 import { ShellExecutionService } from './shellExecutionService.js';
+import { spawnDetached } from './shellJobSpawn.js';
 
 export type {
   ShellJob,
@@ -54,6 +54,11 @@ export interface ShellJobPrefixLookup {
  * Manages background shell jobs using direct detached spawn. Each job runs in
  * its own process group; cancellation targets the group with SIGTERM → SIGKILL
  * escalation. Terminal transitions are exactly-once through a guarded primitive.
+ *
+ * Under Bun, `Bun.spawn` is used instead of `node:child_process.spawn` because
+ * Bun's ChildProcess `exit` event is intermittently not delivered for the first
+ * spawned detached process group. `Bun.spawn`'s `exited` Promise does not have
+ * this bug.
  */
 export class ShellJobManager {
   private readonly jobs: Map<string, ShellJobContext> = new Map();
@@ -110,7 +115,14 @@ export class ShellJobManager {
       throw e;
     }
 
-    const child = this.spawnJob(input, logFd);
+    const { executable, argsPrefix, env } = this.prepareSpawn();
+    const spawned = spawnDetached(
+      executable,
+      [...argsPrefix, input.command],
+      input.cwd,
+      env,
+      logFd,
+    );
 
     let resolveTerminal!: () => void;
     const terminalPromise = new Promise<void>((resolve) => {
@@ -124,16 +136,18 @@ export class ShellJobManager {
       state: 'running',
       phase: 'starting',
       startedAt: Date.now(),
-      pid: child.pid ?? -1,
+      pid: spawned.pid,
       logPath,
-      child,
+      child: spawned.child,
+      exited: spawned.exited,
+      onError: spawned.onError,
       terminalPromise,
       resolveTerminal,
     };
     record.phase = null;
 
     const ctx = createJobContext(record, this.emitter);
-    this.attachListeners(ctx, child);
+    this.attachListeners(ctx);
     this.jobs.set(id, ctx);
     this.budget.consume();
 
@@ -142,13 +156,16 @@ export class ShellJobManager {
     } catch {
       // Parent's copy of the fd may already be closed by the OS after spawn.
     }
-    child.unref();
 
     this.ensureCapPollRunning();
     return toPublicJob(record);
   }
 
-  private spawnJob(input: ShellJobLaunchInput, logFd: number): ChildProcess {
+  private prepareSpawn(): {
+    executable: string;
+    argsPrefix: string[];
+    env: Record<string, string | undefined>;
+  } {
     const { executable, argsPrefix } = getShellConfiguration();
     const env = ShellExecutionService.sanitizeEnvironment(
       {
@@ -160,21 +177,28 @@ export class ShellJobManager {
       false,
     );
     delete env.BASH_ENV;
-
-    return cpSpawn(executable, [...argsPrefix, input.command], {
-      cwd: input.cwd,
-      detached: true,
-      shell: false,
-      stdio: ['ignore', logFd, logFd],
-      env,
-    });
+    return { executable, argsPrefix, env };
   }
 
-  private attachListeners(ctx: ShellJobContext, child: ChildProcess): void {
-    child.on('exit', (code, signal) => {
-      this.handleExit(ctx, code, signal);
-    });
-    child.on('error', (err) => {
+  /**
+   * Wire the process exit and error handlers. Uses the unified `exited`
+   * Promise (backed by `Bun.spawn.exited` under Bun, `child.exit` under
+   * Node.js) for reliable exit detection.
+   */
+  private attachListeners(ctx: ShellJobContext): void {
+    const { record } = ctx;
+
+    record.exited
+      .then(({ exitCode, signal }) => {
+        this.handleExit(ctx, exitCode, signal);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error) {
+          this.handleError(ctx, err);
+        }
+      });
+
+    record.onError((err) => {
       this.handleError(ctx, err);
     });
   }
@@ -182,7 +206,7 @@ export class ShellJobManager {
   private handleExit(
     ctx: ShellJobContext,
     code: number | null,
-    signal: NodeJS.Signals | null,
+    signal: string | null,
   ): void {
     const isCancelling = ctx.record.phase === 'cancelling';
     const { state, details } = classifyExit(code, signal, isCancelling);
@@ -338,8 +362,9 @@ export class ShellJobManager {
   }
 
   /**
-   * Terminate every running job (TERM → bounded wait → KILL), reconcile
-   * terminal state, and delete the temp dir. Zero orphans.
+   * Terminate every running job CONCURRENTLY (not sequentially). Each job
+   * receives SIGTERM → SIGKILL escalation; cancel() returns promptly because
+   * the `exited` Promise resolves reliably. Zero orphans.
    */
   async dispose(): Promise<void> {
     this.stopCapPoll();

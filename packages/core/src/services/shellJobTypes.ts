@@ -6,6 +6,17 @@
 
 import type { ChildProcess } from 'node:child_process';
 
+/**
+ * Resolves with the process exit information when the child exits, regardless
+ * of whether the runtime delivers the `exit` event reliably. Under Bun, this
+ * is backed by `Bun.spawn`'s `proc.exited` Promise; under Node.js, by the
+ * ChildProcess `exit` event.
+ */
+export interface ProcessExitInfo {
+  exitCode: number | null;
+  signal: string | null;
+}
+
 export const SHELL_JOB_ID_PREFIX = 'shell_';
 export const DEFAULT_MAX_BACKGROUND_JOBS = 10;
 export const DEFAULT_LOG_MAX_BYTES = 8 * 1024 * 1024;
@@ -66,6 +77,8 @@ export interface ShellJobRecord {
   notifiedAt?: number;
   logPath: string;
   child: ChildProcess;
+  exited: Promise<ProcessExitInfo>;
+  onError: (handler: (err: Error) => void) => void;
   escalateTimer?: ReturnType<typeof setTimeout>;
   terminalPromise: Promise<void>;
   resolveTerminal: () => void;
