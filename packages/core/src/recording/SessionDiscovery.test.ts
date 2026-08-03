@@ -22,7 +22,7 @@
  * SessionRecordingService instances to create genuine session JSONL files
  * in real temp directories — no mock theater.
  *
- * Property-based tests use @fast-check/vitest (≥30% of total tests).
+ * Property-based tests use fast-check (≥30% of total tests).
  * All tests expect real behavior. They will fail against the Phase 18 stub
  * — that is correct TDD.
  */

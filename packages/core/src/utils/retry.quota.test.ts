@@ -460,16 +460,20 @@ describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
       return 'success';
     });
 
-    const promise = retryWithBackoff(mockFn, {
+    // Settle the promise into a tagged outcome up front. The fake-timer drain
+    // below is what actually runs the retry loop, so a rejection would
+    // otherwise surface while the promise still has no handler attached.
+    const outcome = retryWithBackoff(mockFn, {
       maxAttempts: 3,
       initialDelayMs: 10,
-    });
+    }).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
 
-    await Promise.all([
-      expect(promise).resolves.toBe('success'),
-      vi.runAllTimersAsync(),
-    ]);
+    await vi.runAllTimersAsync();
 
+    expect(await outcome).toStrictEqual({ ok: true, value: 'success' });
     expect(mockFn).toHaveBeenCalledTimes(3);
   });
 
