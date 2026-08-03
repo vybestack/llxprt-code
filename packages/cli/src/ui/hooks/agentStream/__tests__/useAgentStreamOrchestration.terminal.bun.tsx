@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import React, { act, useState } from 'react';
+import { vi } from '../../../../test-utils/bunTest.js';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
   useSubmitQuery,
@@ -56,7 +57,7 @@ const SAMPLE_ERROR: StructuredError = {
   status: 500,
 };
 
-const TERMINAL_EVENTS: readonly AgentEvent[] = [
+const TERMINAL_EVENTS: AgentEvent[] = [
   { type: 'error', error: SAMPLE_ERROR },
   { type: 'idle-timeout', error: SAMPLE_ERROR },
 ];

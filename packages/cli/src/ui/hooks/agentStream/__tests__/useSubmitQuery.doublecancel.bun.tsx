@@ -17,8 +17,9 @@
  * shared React state.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
+import { vi } from '../../../../test-utils/bunTest.js';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
   useSubmitQuery,
@@ -504,8 +505,11 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
 
     try {
       await act(async () => {
-        await expect(result.current.submitQuery('prepare me')).rejects.toBe(
-          preparationError,
+        await result.current.submitQuery('prepare me').then(
+          () => {
+            throw new Error('Expected query preparation to reject');
+          },
+          (error: unknown) => expect(error).toBe(preparationError),
         );
       });
     } finally {

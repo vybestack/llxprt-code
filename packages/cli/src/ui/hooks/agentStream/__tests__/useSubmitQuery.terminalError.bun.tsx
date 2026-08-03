@@ -23,8 +23,9 @@
  * leaf infrastructure (`turnPreparation`, `SessionContext`) is stubbed.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
+import { vi } from '../../../../test-utils/bunTest.js';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
   useSubmitQuery,
@@ -604,8 +605,12 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     );
 
     await act(async () => {
-      await expect(result.current.submitQuery('turn-1')).rejects.toThrow(
-        'session init explosion',
+      await result.current.submitQuery('turn-1').then(
+        () => {
+          throw new Error('Expected session initialization to reject');
+        },
+        (error: unknown) =>
+          expect(error).toEqual(new Error('session init explosion')),
       );
     });
 
