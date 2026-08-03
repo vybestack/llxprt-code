@@ -205,12 +205,11 @@ describe.sequential('#2946 BaseProvider proxy-aware key storage', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
     }
     resetFactorySingletons();
-    if (server) {
-      try {
-        await server.stop();
-      } catch {
-        // already stopped
-      }
+    if (server !== undefined) {
+      // No catch: each test starts the server exactly once and never stops it,
+      // so a failure here is a real teardown defect (an unreleased Unix socket
+      // would break the next run) and should fail the test.
+      await server.stop();
       server = undefined;
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });

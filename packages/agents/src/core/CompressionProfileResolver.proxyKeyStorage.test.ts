@@ -151,11 +151,10 @@ describe.sequential(
       }
       resetFactorySingletons();
       if (server !== undefined) {
-        try {
-          await server.stop();
-        } catch {
-          // already stopped
-        }
+        // No catch: each test starts the server exactly once and never stops
+        // it, so a failure here is a real teardown defect (an unreleased Unix
+        // socket would break the next run) and should fail the test.
+        await server.stop();
         server = undefined;
       }
       fs.rmSync(tmpDir, { recursive: true, force: true });

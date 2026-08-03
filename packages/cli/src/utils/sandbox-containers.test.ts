@@ -19,19 +19,21 @@ import {
 
 // Explicit factory mock: Bun's automock walks every export of
 // node:child_process and hits getters that access private fields
-// (this.#stdin), crashing the compat shim. Supply only the exports the
-// module under test actually imports (execSync, spawn, exec) as mock
-// functions. exec must be a real function so promisify(exec) at module
-// scope succeeds. Spread importOriginal so other modules in the graph
-// that import e.g. execFile still receive the real implementations —
+// (this.#stdin), crashing the compat shim. Spread importOriginal so
+// everything else in the module graph keeps the real implementations —
 // Vitest replaces the entire module namespace with the factory return.
+//
+// Only execSync and spawn are stubbed: those are the process-launching
+// calls these tests must not actually perform. `exec` is deliberately left
+// real, because sandbox-containers.ts evaluates promisify(exec) at module
+// scope; a stub there would produce an execAsync that never settles and
+// would hang the first test to reach that path.
 vi.mock('node:child_process', async (importOriginal) => {
   const actual: typeof import('node:child_process') = await importOriginal();
   return {
     ...actual,
     execSync: vi.fn(),
     spawn: vi.fn(),
-    exec: vi.fn(),
   };
 });
 
@@ -288,6 +290,39 @@ describe.sequential('#2946 container credential isolation', () => {
     expect(envPairs).toContain('GOOGLE_GENAI_USE_VERTEXAI=true');
     expect(envPairs).toContain('GOOGLE_GENAI_USE_GCA=true');
     expect(envPairs).toContain('GEMINI_MODEL=gemini-2.5-pro');
+  });
+
+  // Guards against the opposite failure mode: a blanket blocklist keyed on a
+  // GEMINI_/GOOGLE_ prefix would drop the secrets but take the non-secret
+  // configuration with it. Both kinds must be set at once to catch that.
+  it('drops only the secrets when secret and non-secret vars are set together', () => {
+    process.env.GEMINI_API_KEY = 'sentinel-gemini-key-2946';
+    process.env.GOOGLE_API_KEY = 'sentinel-google-key-2946';
+    process.env.GOOGLE_CLOUD_PROJECT = 'my-project';
+    process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
+    process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
+
+    const args: string[] = [];
+    addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace');
+
+    const envPairs: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--env' && i + 1 < args.length) {
+        envPairs.push(args[i + 1]);
+      }
+    }
+    expect(envPairs).toContain('GOOGLE_CLOUD_PROJECT=my-project');
+    expect(envPairs).toContain('GOOGLE_CLOUD_LOCATION=us-central1');
+    expect(envPairs).toContain('GOOGLE_GENAI_USE_VERTEXAI=true');
+    expect(envPairs.some((pair) => pair.startsWith('GEMINI_API_KEY='))).toBe(
+      false,
+    );
+    expect(envPairs.some((pair) => pair.startsWith('GOOGLE_API_KEY='))).toBe(
+      false,
+    );
+    const joined = args.join(' ');
+    expect(joined).not.toContain('sentinel-gemini-key-2946');
+    expect(joined).not.toContain('sentinel-google-key-2946');
   });
 
   it('does not mount the gcloud config directory', () => {
