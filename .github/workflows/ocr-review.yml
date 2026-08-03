@@ -3749,10 +3749,13 @@ jobs:
               }
               // A grouped retry is only worth sending when classification
               // actually removed something (an out-of-diff comment, or one we
-              // could not judge). If every comment survived, the payload would
-              // be byte-identical to the one GitHub just rejected, so the
-              // resend is a guaranteed second 422 against an endpoint that may
-              // already be throttling us.
+              // could not judge). If every comment here survived, we have found
+              // nothing wrong with the payload GitHub just rejected, so a
+              // resend would very likely earn a second 422 from an endpoint
+              // that may already be throttling us. (`pairs` is the
+              // dedup-filtered candidate set rather than the exact rejected
+              // batch, so this is a strong likelihood rather than a certainty —
+              // the per-comment loop still publishes every one of them.)
               if (validPairs.length === 0 || validPairs.length === pairs.length) {
                 return {
                   posted: 0,

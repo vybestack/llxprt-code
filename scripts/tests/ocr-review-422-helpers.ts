@@ -24,6 +24,8 @@ export interface HunkRange {
 export interface HunkInventory {
   ranges: HunkRange[];
   complete: boolean;
+  additions: number;
+  deletions: number;
 }
 
 export interface DiffInventory {
@@ -49,6 +51,11 @@ export interface RegroupResult {
   posted: number;
   invalidPairs: Pair[];
   remaining: Pair[];
+  /**
+   * True when a grouped write was sent and threw. The write may still have
+   * landed, so the caller must re-read what exists before reposting.
+   */
+  secondaryFailed: boolean;
 }
 
 export interface ListFilesEntry {

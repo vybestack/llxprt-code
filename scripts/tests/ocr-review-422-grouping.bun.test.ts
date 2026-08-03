@@ -9,8 +9,10 @@ import { useWorkflowFixture } from './ocr-manifest-test-helpers.ts';
 import {
   A_TS,
   type DiffInventory,
+  type FakeGithubOptions,
   type HunkRange,
   type ListFilesEntry,
+  type Pair,
   loadHarness,
   pair,
 } from './ocr-review-422-helpers.ts';
@@ -580,6 +582,23 @@ describe('.github/workflows/ocr-review.yml — HTTP 422 line-resolution grouping
       expect(result.invalidPairs.map((p) => p.finding['id'])).toEqual(['bad']);
       // The survivors go back to the per-comment loop rather than vanishing.
       expect(result.remaining.map((p) => p.finding['id'])).toEqual(['good']);
+      // The grouped write may have landed before it threw, so the caller is
+      // told to re-read before reposting.
+      expect(result.secondaryFailed).toBe(true);
+    });
+
+    it('does not ask for a re-read when no grouped write was attempted', async () => {
+      const harness = harnessWithDiff();
+      const good = pair({ path: 'a.ts', line: 3 }, 'good-1');
+      const alsoGood = pair({ path: 'a.ts', line: 4 }, 'good-2');
+
+      const result = await harness.regroupLineResolutionFailure(
+        [good, alsoGood],
+        'sha-1',
+      );
+
+      expect(harness.createReviewCalls.length).toBe(0);
+      expect(result.secondaryFailed).toBe(false);
     });
 
     it('falls through untouched when the diff inventory read throws', async () => {
