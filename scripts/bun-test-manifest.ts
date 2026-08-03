@@ -233,6 +233,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.tools.test.ts',
       'src/anthropic/AnthropicRateLimitHandler.test.ts',
       'test-bun/AnthropicRequestBuilder.issue1738.bun.ts',
+      'test-bun/token-access-coordinator.bun.ts',
       'src/anthropic/AnthropicRequestBuilder.modelParams.test.ts',
       'src/anthropic/AnthropicResponseParser.issue1844.test.ts',
       'src/anthropic/AnthropicStreamProcessor.retryOwnership.test.ts',
@@ -277,7 +278,6 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // 'src/auth/__tests__/proactive-renewal-manager.spec.ts',
       'src/auth/__tests__/provider-registry.spec.ts',
       'src/auth/__tests__/provider-usage-info.spec.ts',
-      'src/auth/__tests__/token-access-coordinator.spec.ts',
       'src/auth/anthropic-oauth-provider.local-flow.spec.ts',
       'src/auth/anthropic-oauth-provider.no-refresh-on-gettoken.spec.ts',
       'src/auth/anthropic-oauth-provider.refresh.spec.ts',
@@ -644,6 +644,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/machine-secret.concurrent-write.bun.ts',
       'test-bun/secure-store.bun.ts',
       'test-bun/secure-store.concurrent-write.bun.ts',
+      'test-bun/secure-store.runtime-replaced.bun.ts',
       'test-bun/storage.bun.ts',
     ],
   },
@@ -722,6 +723,16 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'issue-planner-enrichment',
     cwd: '.',
     files: ['scripts/tests/issue-planner-enrichment.bun.test.ts'],
+  },
+  {
+    // Bun-native tests for the macOS system-Bun launcher preference (#2962).
+    // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
+    workspace: 'scripts-launcher',
+    cwd: '.',
+    files: [
+      'scripts/tests/issue-2603-launcher.bun.test.ts',
+      'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
+    ],
   },
 ];
 
