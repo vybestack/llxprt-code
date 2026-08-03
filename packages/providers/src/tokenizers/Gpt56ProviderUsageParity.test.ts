@@ -5,7 +5,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { projectOpenAIResponsesPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { estimateGpt56Prompt } from './Gpt56O200kPromptEstimator.js';
 

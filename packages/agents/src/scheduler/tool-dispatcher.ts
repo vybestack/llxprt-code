@@ -15,6 +15,7 @@ import type { ToolCallRequestInfo } from '../core/turn.js';
 import type {
   AnyDeclarativeTool,
   AnyToolInvocation,
+  ToolContext,
 } from '@vybestack/llxprt-code-tools';
 import type { ToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolGovernance } from '../core/toolGovernance.js';
@@ -61,7 +62,12 @@ export class ToolDispatcher {
           };
         }
 
-        const toolInstance = this.toolRegistry.getTool(reqInfo.name);
+        const context: ToolContext = {
+          sessionId: this.config.getSessionId(),
+          agentId: reqInfo.agentId ?? DEFAULT_AGENT_ID,
+          interactiveMode,
+        };
+        const toolInstance = this.toolRegistry.getTool(reqInfo.name, context);
         if (!toolInstance) {
           const suggestion = this.getToolSuggestion(reqInfo.name);
           const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
@@ -79,9 +85,9 @@ export class ToolDispatcher {
 
         setToolContext(
           toolInstance,
-          this.config.getSessionId(),
-          reqInfo.agentId ?? DEFAULT_AGENT_ID,
-          interactiveMode,
+          context.sessionId,
+          context.agentId ?? DEFAULT_AGENT_ID,
+          context.interactiveMode ?? interactiveMode,
         );
 
         const invocationOrError = this.buildInvocation(

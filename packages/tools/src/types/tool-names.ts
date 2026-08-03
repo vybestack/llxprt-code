@@ -19,6 +19,9 @@
 // Web Search Tools
 export const EXA_WEB_SEARCH_TOOL = 'exa_web_search';
 
+// Image Generation Tools
+export const GENERATE_IMAGE_TOOL = 'generate_image';
+
 // Aliases for upstream compatibility
 export const EDIT_TOOL_NAME = 'replace';
 export const GREP_TOOL_NAME = 'search_file_content';
@@ -79,6 +82,7 @@ export const EDIT_TOOL_NAMES = new Set([EDIT_TOOL_NAME, WRITE_FILE_TOOL]);
  */
 export type ToolName =
   | typeof EXA_WEB_SEARCH_TOOL
+  | typeof GENERATE_IMAGE_TOOL
   | typeof READ_FILE_TOOL
   | typeof WRITE_FILE_TOOL
   | typeof EDIT_TOOL

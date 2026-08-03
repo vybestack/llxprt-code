@@ -238,6 +238,11 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'MCP prompt completion (UI)',
     'MCP prompt listing is CLI-local; execution routes to the runtime',
   ),
+  runtime(
+    '/image',
+    'config.getRunImageOperation',
+    'Resolves the auxiliary image capability from the live composition root; it performs a provider request but never changes the active conversational provider or model',
+  ),
   cliLocal('/help', 'help rendering (UI)', 'Pure UI with no core dependency'),
   cliLocal('/clear', 'screen clear (UI)', 'Pure UI with no core dependency'),
   cliLocal('/theme', 'theme switching (UI)', 'Pure UI with no core dependency'),

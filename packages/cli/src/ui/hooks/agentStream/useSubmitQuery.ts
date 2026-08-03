@@ -41,6 +41,11 @@ import {
 } from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import {
+  observeAgentEvent,
+  observeTurnFailed,
+  observeTurnStarted,
+} from '../../../observation/jspWiring.js';
 
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 export type SubmissionDisposition =
@@ -286,6 +291,7 @@ function useProcessAgentEvent(
         latestDeps.current.setIsResponding(false);
         agentBufferRef.current = '';
       }
+      observeAgentEvent(event);
       const result = dispatchAgentEvent(
         event,
         {
@@ -677,6 +683,7 @@ async function runSubmitQueryCore(
   );
   cbd.setIsResponding(true);
   cbd.setInitError(null);
+  observeTurnStarted();
 
   try {
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
@@ -685,6 +692,7 @@ async function runSubmitQueryCore(
     // errors (e.g. AbortError or auth failures from a cancelled request)
     // must not leak into the newer turn (issue #2259).
     if (isCurrentTurn(cbd, turn.abortSignal)) {
+      observeTurnFailed();
       handleSubmissionError(
         error,
         cbd.addItem,

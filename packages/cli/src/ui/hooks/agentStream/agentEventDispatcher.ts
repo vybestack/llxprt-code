@@ -38,6 +38,7 @@ import {
   buildRefusalNoticeMessage,
   buildFinishReasonMessage,
 } from './streamUtils.js';
+import { observeAssistantMessageCommitted } from '../../../observation/jspWiring.js';
 
 export interface AgentEventDeps {
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
@@ -121,10 +122,12 @@ function flushPendingAiContent(
   deps: AgentEventDeps,
   userMessageTimestamp: number,
 ): void {
-  if (
-    deps.pendingHistoryItemRef.current?.type === 'gemini' ||
-    deps.pendingHistoryItemRef.current?.type === 'gemini_content'
-  ) {
+  const pending = deps.pendingHistoryItemRef.current;
+  if (pending?.type === 'gemini' || pending?.type === 'gemini_content') {
+    const sanitized = deps.sanitizeContent(pending.text);
+    if (!sanitized.blocked) {
+      observeAssistantMessageCommitted(sanitized.text, Date.now());
+    }
     deps.flushPendingHistoryItem(userMessageTimestamp);
     deps.setPendingHistoryItem(null);
   }

@@ -33,6 +33,7 @@ import type {
   SubagentSchedulerFactory,
   TelemetrySettings,
   ToolRegistry,
+  ImageOperationRunner,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -458,6 +459,12 @@ export interface StreamRuntime {
   interactive: InteractiveRuntime;
   ephemeral: EphemeralSettingsRuntime;
   storage: Storage;
+  /**
+   * Resolves the image-operation runner bound to the Config composition root,
+   * or undefined when no image backend is configured. Forwarded from the bare
+   * source so nested runtime consumers can resolve image capability.
+   */
+  getRunImageOperation?: () => ImageOperationRunner | undefined;
 }
 
 /**
@@ -499,6 +506,13 @@ export interface StreamRuntimeBareSource
     InteractiveRuntime,
     EphemeralSettingsRuntime {
   readonly storage: Storage;
+  /**
+   * Resolves the image-operation runner bound to the Config composition root,
+   * or undefined when no image backend is configured. Used by the `/image`
+   * slash command. Exposed as a getter so the runtime adapts the Config
+   * capability without exposing a mutable property.
+   */
+  getRunImageOperation?: () => ImageOperationRunner | undefined;
 }
 
 export interface UiRuntimeBareSource
@@ -716,6 +730,9 @@ function buildStreamRuntimeFromSource(
       getEphemeralSetting: (key) => source.getEphemeralSetting(key),
     },
     storage: source.storage,
+    ...(source.getRunImageOperation !== undefined
+      ? { getRunImageOperation: () => source.getRunImageOperation!() }
+      : {}),
   };
 }
 
@@ -782,11 +799,21 @@ export type SlashCommandRuntime = CliUiRuntime;
 export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
 ): CliUiRuntime {
-  const { storage, ...capabilities } = buildUiRuntimeFromSource(source);
+  // Non-slice members must be destructured out and re-attached explicitly.
+  // The spread below only flattens capability SLICE OBJECTS; a member whose
+  // value is a bare function (or any non-object) contributes no own enumerable
+  // properties to Object.assign and would be dropped silently.
+  const { storage, getRunImageOperation, ...capabilities } =
+    buildUiRuntimeFromSource(source);
   // This flattening assumes every capability object exposes unique property
   // names. If a future capability overlaps an existing one, Object.assign will
   // keep the last value silently, so add an explicit test when adding slices.
-  return Object.assign({}, ...Object.values(capabilities), { storage });
+  return Object.assign(
+    {},
+    ...Object.values(capabilities),
+    { storage },
+    getRunImageOperation !== undefined ? { getRunImageOperation } : {},
+  );
 }
 
 /**

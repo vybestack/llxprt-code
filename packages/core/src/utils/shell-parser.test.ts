@@ -74,6 +74,26 @@ describe('shell-parser', () => {
     });
 
     it.skipIf(!parserInitialized)(
+      'should share initialization across concurrent calls',
+      async () => {
+        resetParser();
+
+        const firstInitialization = initializeParser();
+        const secondInitialization = initializeParser();
+
+        expect(secondInitialization).toBe(firstInitialization);
+
+        const results = await Promise.all([
+          firstInitialization,
+          secondInitialization,
+        ]);
+
+        expect(results).toStrictEqual([true, true]);
+        expect(isParserAvailable()).toBe(true);
+      },
+    );
+
+    it.skipIf(!parserInitialized)(
       'should have no initialization error when parser is available',
       async () => {
         await initializeParser();

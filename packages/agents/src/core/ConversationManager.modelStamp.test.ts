@@ -107,7 +107,6 @@ function buildConversationManager(
   const conversationManager = new ConversationManager(
     historyService,
     view,
-    model,
     baseURL,
   );
 

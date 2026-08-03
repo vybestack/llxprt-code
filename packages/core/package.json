@@ -143,6 +143,26 @@
       "bun": "./src/services/fileDiscoveryService.ts",
       "import": "./dist/src/services/fileDiscoveryService.js"
     },
+    "./services/image.js": {
+      "types": "./dist/src/services/image/index.d.ts",
+      "bun": "./src/services/image/index.ts",
+      "import": "./dist/src/services/image/index.js"
+    },
+    "./services/image/ImageGenerationService.js": {
+      "types": "./dist/src/services/image/ImageGenerationService.d.ts",
+      "bun": "./src/services/image/ImageGenerationService.ts",
+      "import": "./dist/src/services/image/ImageGenerationService.js"
+    },
+    "./services/image/imageOperation.js": {
+      "types": "./dist/src/services/image/imageOperation.d.ts",
+      "bun": "./src/services/image/imageOperation.ts",
+      "import": "./dist/src/services/image/imageOperation.js"
+    },
+    "./services/image/imageOperationDispatch.js": {
+      "types": "./dist/src/services/image/imageOperationDispatch.d.ts",
+      "bun": "./src/services/image/imageOperationDispatch.ts",
+      "import": "./dist/src/services/image/imageOperationDispatch.js"
+    },
     "./services/history/ContentConverters.js": {
       "bun": "./src/services/history/ContentConverters.ts",
       "import": "./dist/src/services/history/ContentConverters.js"
@@ -518,7 +538,6 @@
     "format": "prettier --write .",
     "test": "bun run-bun-tests.ts",
     "test:ci": "bun run-bun-tests.ts",
-    "test:vitest": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },

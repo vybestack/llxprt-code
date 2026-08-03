@@ -363,6 +363,25 @@ export const innerCommandOptions: Record<string, Options> = {
     description: 'Skip browser OAuth flow, use manual code entry',
     default: false,
   },
+  'image-input': {
+    alias: 'I',
+    type: 'array',
+    string: true,
+    description:
+      'Input image path for image editing mode. Repeatable up to 5 times (preserves order, no comma split).',
+  },
+  'image-output': {
+    alias: 'O',
+    type: 'string',
+    description:
+      'Output image path (.png) for direct image generation/editing mode.',
+  },
+  'image-prompt': {
+    alias: 'P',
+    type: 'string',
+    description:
+      'Prompt for direct image generation/editing mode. Requires --image-output.',
+  },
 };
 
 /** Options that are deprecated and should show deprecation warnings. */

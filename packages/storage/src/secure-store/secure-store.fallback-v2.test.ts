@@ -68,6 +68,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -88,6 +89,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -103,6 +105,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const store1 = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -110,6 +113,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const store2 = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -126,6 +130,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const writer = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: providerA.loader,
       machineSecretPath,
@@ -133,6 +138,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const reader = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: providerB.loader,
       machineSecretPath,
@@ -156,6 +162,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const writer = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -166,6 +173,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const reader = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: nullSecretProvider().loader,
       machineSecretPath,
@@ -187,6 +195,7 @@ describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -223,6 +232,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const writer = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -241,6 +251,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const degradedWriter = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: nullSecretProvider().loader,
       machineSecretPath,
@@ -267,6 +278,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const reader = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -280,6 +292,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const writer = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -305,6 +318,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
       const degradedWriter = new SecureStore('test-service', {
         keyringLoader: async () => null,
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         machineSecretLoader: nullSecretProvider().loader,
         machineSecretPath,
@@ -324,6 +338,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: nullSecretProvider().loader,
       machineSecretPath,
@@ -342,6 +357,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const v1Writer = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: nullSecretProvider().loader,
       machineSecretPath,
@@ -382,6 +398,7 @@ describe('SecureStore — Legacy v:1 envelope compatibility', () => {
     const v1Writer = new SecureStore('legacy-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: nullSecretProvider().loader,
       machineSecretPath,
@@ -398,6 +415,7 @@ describe('SecureStore — Legacy v:1 envelope compatibility', () => {
     const reader = new SecureStore('legacy-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -412,6 +430,7 @@ describe('SecureStore — Legacy v:1 envelope compatibility', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -438,6 +457,7 @@ describe('SecureStore — Legacy v:1 envelope compatibility', () => {
     const storeA = new SecureStore('service-a', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,
@@ -445,6 +465,7 @@ describe('SecureStore — Legacy v:1 envelope compatibility', () => {
     const storeB = new SecureStore('service-b', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
       machineSecretLoader: provider.loader,
       machineSecretPath,

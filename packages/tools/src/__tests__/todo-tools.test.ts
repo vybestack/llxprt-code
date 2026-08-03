@@ -261,7 +261,7 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
       expect(activeTodo).toBe('active');
     });
 
-    it('emits interactive todo updates when a service context tracker is present', async () => {
+    it('emits persisted todo replacements independently of presentation mode', async () => {
       let todos: Array<Record<string, unknown>> = [];
       const events: TodoUpdateEvent[] = [];
       const store: TodoStore = {
@@ -290,7 +290,7 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
         writeTool.context = {
           sessionId: 'session-42',
           agentId: 'agent-7',
-          interactiveMode: true,
+          interactiveMode: false,
         };
 
         await executeToolForBehavioralAssertion(writeTool, {

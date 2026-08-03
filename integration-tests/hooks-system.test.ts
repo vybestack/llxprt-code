@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TestRig, poll } from './test-helper.js';
 import { join } from 'node:path';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 
 describe('Hooks System Integration', () => {
   let rig: TestRig;
@@ -129,7 +129,7 @@ process.exit(2);
       // Result should mention the blocking reason from stderr
       expect(result).toContain('File writing blocked by security policy');
 
-      // Verify hook telemetry shows exit code 2 and stderr
+      // Verify hook telemetry shows exit code 2, stderr and the deny decision
       const hookLogs = rig.readHookLogs();
       const blockHook = hookLogs.find((log) => log.hookCall.exit_code === 2);
       expect(blockHook).toBeDefined();
@@ -137,6 +137,82 @@ process.exit(2);
         'File writing blocked by security policy',
       );
       expect(blockHook?.hookCall.success).toBe(false);
+      // Telemetry serializes hook_output as a JSON string.
+      const stderrHookOutput = JSON.parse(
+        String(blockHook?.hookCall.hook_output),
+      ) as {
+        decision?: string;
+        reason?: string;
+      };
+      expect(stderrHookOutput.decision).toBe('deny');
+      expect(stderrHookOutput.reason).toBe(
+        'File writing blocked by security policy',
+      );
+    });
+
+    it('should block tool execution with default reason when hook exits code 2 with empty stderr', async () => {
+      rig.setup(
+        'should block tool execution with default reason when hook exits code 2 with empty stderr',
+        {
+          fakeResponsesPath: join(
+            import.meta.dirname,
+            'hooks-system.block-tool.responses',
+          ),
+          settings: {
+            hooks: {
+              enabled: true,
+              BeforeTool: [
+                {
+                  matcher: 'write_file',
+                  hooks: [
+                    {
+                      type: 'command',
+                      command: 'bun exit2_block_hook.ts',
+                      timeout: 5000,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      );
+      const exit2HookPath = join(rig.testDir!, 'exit2_block_hook.ts');
+      writeFileSync(
+        exit2HookPath,
+        `import process from 'node:process';
+process.exit(2);
+`,
+      );
+
+      await rig.run({
+        args: 'Create a file called test.txt with content "Hello World"',
+      });
+
+      // The tool must not run at all, successfully or otherwise
+      const toolLogs = rig.readToolLogs();
+      const writeFileCalls = toolLogs.filter(
+        (t) => t.toolRequest.name === 'write_file' && t.toolRequest.success,
+      );
+      expect(writeFileCalls).toHaveLength(0);
+      expect(existsSync(join(rig.testDir!, 'test.txt'))).toBe(false);
+
+      // Verify hook telemetry shows exit code 2 and the synthesized deny decision
+      const hookLogs = rig.readHookLogs();
+      const blockHook = hookLogs.find((log) => log.hookCall.exit_code === 2);
+      expect(blockHook).toBeDefined();
+      expect(blockHook?.hookCall.success).toBe(false);
+      // Telemetry serializes hook_output as a JSON string.
+      const hookOutput = JSON.parse(
+        String(blockHook?.hookCall.hook_output),
+      ) as {
+        decision?: string;
+        reason?: string;
+      };
+      expect(hookOutput.decision).toBe('deny');
+      expect(hookOutput.reason).toBe(
+        'Hook exited with code 2 without an error message',
+      );
     });
 
     it('should allow tool execution when hook returns allow decision', async () => {

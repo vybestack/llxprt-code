@@ -108,7 +108,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
   function createManager(includeThoughts: boolean): ConversationManager {
     const ctx = makeRuntimeContext(includeThoughts);
-    return new ConversationManager(historyService, ctx, 'test-model');
+    return new ConversationManager(historyService, ctx);
   }
 
   beforeEach(() => {
@@ -151,7 +151,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
   it('filters thoughts from recorded text when includeThoughts=false', () => {
     const ctx = makeRuntimeContext(false);
-    const mgr = new ConversationManager(historyService, ctx, 'test-model');
+    const mgr = new ConversationManager(historyService, ctx);
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'hi' }],
@@ -180,7 +180,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
   it('drops thinking blocks and their signatures from history when includeThoughts=false', () => {
     const ctx = makeRuntimeContext(false);
-    const mgr = new ConversationManager(historyService, ctx, 'test-model');
+    const mgr = new ConversationManager(historyService, ctx);
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'hi' }],
@@ -273,7 +273,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
       fc.property(chunksArb, (texts: string[]) => {
         const hs = new HistoryService();
         const ctx = makeRuntimeContext(true);
-        const mgr = new ConversationManager(hs, ctx, 'test-model');
+        const mgr = new ConversationManager(hs, ctx);
 
         const userInput: IContent = {
           speaker: 'human',
@@ -311,7 +311,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
         (thought: string, answer: string, sig: string) => {
           const hs = new HistoryService();
           const ctx = makeRuntimeContext(false);
-          const mgr = new ConversationManager(hs, ctx, 'test-model');
+          const mgr = new ConversationManager(hs, ctx);
 
           const userInput: IContent = {
             speaker: 'human',
@@ -351,7 +351,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
       fc.property(textArb, (text: string) => {
         const hs = new HistoryService();
         const ctx = makeRuntimeContext(true);
-        const mgr = new ConversationManager(hs, ctx, 'test-model');
+        const mgr = new ConversationManager(hs, ctx);
 
         const userInput: IContent = {
           speaker: 'human',
@@ -700,7 +700,7 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
       finishReason: string | undefined,
       usage?: UsageStats,
     ): Promise<void> {
-      const mgr = new ConversationManager(hs, ctx, 'test-model');
+      const mgr = new ConversationManager(hs, ctx);
       const compHandler = makeCompressionHandlerStub(null);
       const acc: ModelOutput = {
         content: {
@@ -800,7 +800,7 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
 
     it('records AFC history atomically without duplicating the current user', async () => {
       const ctx = makeRuntimeContext(true);
-      const mgr = new ConversationManager(historyService, ctx, 'test-model');
+      const mgr = new ConversationManager(historyService, ctx);
       const prior: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'prior' }],
@@ -852,7 +852,7 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
 
     it('does not replay an existing prefix from full AFC history', async () => {
       const ctx = makeRuntimeContext(true);
-      const mgr = new ConversationManager(historyService, ctx, 'test-model');
+      const mgr = new ConversationManager(historyService, ctx);
       const priorHuman: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'prior question' }],

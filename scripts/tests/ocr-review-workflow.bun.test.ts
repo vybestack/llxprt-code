@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import yaml from 'js-yaml';
 import {
   WORKFLOW_PATH,
@@ -49,10 +49,8 @@ describe('.github/workflows/ocr-review.yml', () => {
 
   beforeAll(() => {
     workflowYml = readRootFile(WORKFLOW_PATH);
-    expect(
-      workflowYml.trim(),
-      `${WORKFLOW_PATH} should have content`,
-    ).toBeTruthy();
+    if (!workflowYml.trim())
+      throw new Error(`${WORKFLOW_PATH} should have content`);
     notifierWorkflowYml = readRootFile(NOTIFIER_WORKFLOW_PATH);
     try {
       workflow = parseWorkflowYaml(workflowYml);
@@ -63,34 +61,31 @@ describe('.github/workflows/ocr-review.yml', () => {
         cause: error,
       });
     }
-    expect(
-      workflow && typeof workflow === 'object',
-      `${WORKFLOW_PATH} should parse to a YAML mapping`,
-    ).toBeTruthy();
-    expect(
-      notifierWorkflow && typeof notifierWorkflow === 'object',
-      `${NOTIFIER_WORKFLOW_PATH} should parse to a YAML mapping`,
-    ).toBeTruthy();
+    if (!(workflow && typeof workflow === 'object'))
+      throw new Error(`${WORKFLOW_PATH} should parse to a YAML mapping`);
+    if (!(notifierWorkflow && typeof notifierWorkflow === 'object'))
+      throw new Error(
+        `${NOTIFIER_WORKFLOW_PATH} should parse to a YAML mapping`,
+      );
     const jobs = asOptionalRecord(workflow.jobs);
     codeReviewJob = asOptionalRecord(jobs?.['code-review']);
-    expect(
-      codeReviewJob,
-      'workflow should contain job: code-review',
-    ).toBeTruthy();
+    if (!codeReviewJob)
+      throw new Error('workflow should contain job: code-review');
     mergeabilityGateJob = asOptionalRecord(jobs?.['mergeability-gate']);
-    expect(
-      mergeabilityGateJob,
-      'workflow should contain job: mergeability-gate',
-    ).toBeTruthy();
-    expect(jobs?.['notify-ocr-infrastructure-failure']).toBeUndefined();
+    if (!mergeabilityGateJob)
+      throw new Error('workflow should contain job: mergeability-gate');
+    if (jobs?.['notify-ocr-infrastructure-failure'] !== undefined)
+      throw new Error(
+        'main workflow must not contain job: notify-ocr-infrastructure-failure',
+      );
     const notifierJobs = asOptionalRecord(notifierWorkflow.jobs);
     notifyJob = asOptionalRecord(
       notifierJobs?.['notify-ocr-infrastructure-failure'],
     );
-    expect(
-      notifyJob,
-      'notifier workflow should contain job: notify-ocr-infrastructure-failure',
-    ).toBeTruthy();
+    if (!notifyJob)
+      throw new Error(
+        'notifier workflow should contain job: notify-ocr-infrastructure-failure',
+      );
     postStep = stepNamed(codeReviewJob ?? {}, 'Post OCR results');
     postScript = commandText(postStep);
     notifyStep = stepNamed(
@@ -267,7 +262,8 @@ describe('.github/workflows/ocr-review.yml', () => {
   it('uses explicit bash shells for workflow run scripts', () => {
     const runSteps = jobSteps().filter((step) => step.run);
     for (const step of runSteps) {
-      expect(step.shell, `${step.name} should use bash`).toBe('bash');
+      if (step.shell !== 'bash')
+        throw new Error(`${step.name} should use bash`);
     }
     expect(notifyStep?.shell).toBe('bash');
   });
@@ -771,5 +767,73 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Skipping duplicate OCR inline comment',
       'INLINE_MARKER',
     ]);
+  });
+});
+
+describe('.github/workflows/ocr-review.yml — no-reviewable-files short-circuit (issue #2824)', () => {
+  let codeReviewJob: Record<string, unknown> | undefined;
+  let initializeRun: string;
+  let previewRun: string;
+  let reviewRun: string;
+  let placeholderRun: string;
+  let redactRun: string;
+
+  beforeAll(() => {
+    const workflowYml = readRootFile(WORKFLOW_PATH);
+    const workflow = parseWorkflowYaml(workflowYml);
+    const jobs = asOptionalRecord(workflow.jobs);
+    codeReviewJob = asOptionalRecord(jobs?.['code-review']);
+    initializeRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Initialize OCR artifact files'),
+    );
+    previewRun = commandText(
+      stepNamed(
+        codeReviewJob ?? {},
+        'Verify review scope includes changed tests',
+      ),
+    );
+    reviewRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Run OpenCodeReview'),
+    );
+    placeholderRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Ensure OCR artifact placeholders exist'),
+    );
+    redactRun = commandText(
+      stepNamed(codeReviewJob ?? {}, 'Redact OCR diagnostic artifacts'),
+    );
+  });
+
+  it('initializes the no-reviewable-files marker alongside the other markers', () => {
+    expect(initializeRun).toContain(': > ocr-no-reviewable-files.txt');
+  });
+
+  it('records the marker in the preview step when selected files are empty', () => {
+    expect(previewRun).toContain('ocr-no-reviewable-files.txt');
+  });
+
+  it('short-circuits the review step to skipped when no files are reviewable', () => {
+    expectContainsAll(reviewRun, [
+      'ocr-no-reviewable-files.txt',
+      '"status": "skipped"',
+      'No reviewable files in range; all changed files were excluded from review.',
+      'cp ocr-result.json ocr-stdout.raw',
+      'echo "0" > ocr-exit-code.txt',
+      'echo "no-reviewable-files" > ocr-phase.txt',
+      'exit 0',
+    ]);
+  });
+
+  it('does not invoke ocr review before the no-reviewable-files short-circuit', () => {
+    const markerIndex = reviewRun.indexOf('ocr-no-reviewable-files.txt');
+    expect(markerIndex).toBeGreaterThan(-1);
+    // The ocr review invocation must come AFTER the short-circuit guard, so a
+    // docs-only PR never reaches the LLM.
+    const ocrReviewIndex = reviewRun.indexOf('ocr review');
+    expect(ocrReviewIndex).toBeGreaterThan(markerIndex);
+  });
+
+  it('includes the marker in the artifact placeholder and redaction lists', () => {
+    expect(placeholderRun).toContain('ocr-no-reviewable-files.txt');
+    expect(redactRun).toContain('ocr-no-reviewable-files.txt');
   });
 });
