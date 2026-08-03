@@ -151,6 +151,8 @@ interface TestResult {
   readonly file: string;
   readonly passed: boolean;
   readonly exitCode: number | null;
+  /** Set when the child was terminated by a signal rather than exiting. */
+  readonly signal: NodeJS.Signals | null;
   readonly timedOut: boolean;
 }
 
@@ -196,18 +198,25 @@ function runTestFile(file: string, reportPath: string): Promise<TestResult> {
 
     // `close` rather than `exit`: it fires once the child's stdio has been
     // released, so a slot is not reused while the process is still tearing down.
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       settleOnce({
         file,
         passed: !killedByTimeout && code === 0,
         exitCode: code,
+        signal,
         timedOut: killedByTimeout,
       });
     });
 
     child.on('error', (error: Error) => {
       console.error(`Error spawning test for ${file}: ${error.message}`);
-      settleOnce({ file, passed: false, exitCode: -1, timedOut: false });
+      settleOnce({
+        file,
+        passed: false,
+        exitCode: -1,
+        signal: null,
+        timedOut: false,
+      });
     });
   });
 }
@@ -221,9 +230,15 @@ function escapeXml(value: string): string {
 }
 
 function describeFailure(result: TestResult): string {
-  return result.timedOut
-    ? `TIMEOUT after ${PER_FILE_TIMEOUT_MS}ms`
-    : `exit code ${result.exitCode ?? -1}`;
+  if (result.timedOut) {
+    return `TIMEOUT after ${PER_FILE_TIMEOUT_MS}ms`;
+  }
+  if (result.signal !== null) {
+    // Distinguishes an external kill (typically the OOM killer on a small CI
+    // runner) from a genuine test failure, which would report an exit code.
+    return `killed by signal ${result.signal}`;
+  }
+  return `exit code ${result.exitCode ?? -1}`;
 }
 
 /** Totals scraped from the root `<testsuites>` element of a Bun JUnit report. */
@@ -367,7 +382,13 @@ async function main(): Promise<void> {
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        results.push({ file, passed: false, exitCode: -1, timedOut: false });
+        results.push({
+          file,
+          passed: false,
+          exitCode: -1,
+          signal: null,
+          timedOut: false,
+        });
       }
     }
   };

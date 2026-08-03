@@ -278,8 +278,7 @@ describe('subagent.ts', () => {
 
       // Advance past the custom timeout
       await vi.advanceTimersByTimeAsync(20_000);
-      // Let the event loop settle so the timeout is processed.
-      await flushEventLoop();
+      await Promise.resolve();
 
       // Run to completion
       await vi.runAllTimersAsync();
@@ -360,18 +359,19 @@ describe('subagent.ts', () => {
 
       // Advance 30 minutes - no timeout because watchdog is disabled
       await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
-      // Let the event loop settle so the consumer can process state.
-      await flushEventLoop();
+      await Promise.resolve();
 
       // No timeout yet
       expect(scope.output.terminate_reason).not.toBe(
         SubagentTerminateMode.TIMEOUT,
       );
 
-      // Resolve the iterator to let the test complete
+      // Resolve the iterator so the run can finish. `runAllTimersAsync` must
+      // NOT be used here: it would also fire the 60-minute max_time_minutes
+      // watchdog and report a TIMEOUT this test exists to rule out. Yielding
+      // to the real event loop lets the generator resume without moving the
+      // fake clock at all.
       resolveIterator!();
-      // Yield to the real event loop so the generator can process the
-      // resolved iterator promise before awaiting runPromise.
       await flushEventLoop();
 
       await runPromise;
@@ -458,8 +458,7 @@ describe('subagent.ts', () => {
 
       // Advance past the env timeout (8s) but before config timeout (45s)
       await vi.advanceTimersByTimeAsync(12_000);
-      // Let the event loop settle so the timeout is processed.
-      await flushEventLoop();
+      await Promise.resolve();
 
       // Run to completion
       await vi.runAllTimersAsync();

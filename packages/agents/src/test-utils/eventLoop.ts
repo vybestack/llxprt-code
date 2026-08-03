@@ -16,17 +16,25 @@
  * `vi.waitFor` is not usable either: it polls on timers, which are frozen while
  * fake timers are installed.
  *
- * The real `setImmediate` is captured at module load — before any test body
- * calls `vi.useFakeTimers()`. Vitest's fake timers replace the global
- * `setImmediate`; Bun's do not. Holding the original reference makes these
- * helpers behave identically under both runners.
+ * The yield goes through a `MessageChannel` rather than `setTimeout` or
+ * `setImmediate`. Both of those belong to the timer subsystem that fake timers
+ * take over — Vitest replaces the globals outright, and on Linux a real
+ * `setImmediate` scheduled after the fake clock has been advanced does not fire
+ * at all. A `MessageChannel` port message is a genuine macrotask that neither
+ * runner intercepts, so it behaves identically on every platform whether or not
+ * fake timers are installed.
  */
-const realSetImmediate = globalThis.setImmediate;
 
 /** Yields once to the real event loop, bypassing installed fake timers. */
 export function flushEventLoop(): Promise<void> {
   return new Promise<void>((resolve) => {
-    realSetImmediate(() => resolve());
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      channel.port2.close();
+      resolve();
+    };
+    channel.port2.postMessage(undefined);
   });
 }
 
