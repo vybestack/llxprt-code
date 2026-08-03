@@ -19,7 +19,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as os from 'node:os';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
@@ -33,7 +32,20 @@ import type {
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
-vi.mock('node:os');
+const { mockPlatform, mockTmpdir } = vi.hoisted(() => ({
+  mockPlatform: vi.fn(() => 'darwin'),
+  mockTmpdir: vi.fn(() => '/tmp'),
+}));
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
+    ...actual,
+    platform: mockPlatform,
+    tmpdir: mockTmpdir,
+  };
+});
 
 /**
  * Fake IShellExecutionService that returns controlled stdout/stderr/exitCode.
@@ -68,8 +80,8 @@ function createFakeMessageBus(
 
 describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
   beforeEach(() => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    mockPlatform.mockReturnValue('darwin');
+    mockTmpdir.mockReturnValue('/tmp');
   });
 
   describe('ShellTool execution through IShellExecutionService adapter', () => {
@@ -214,8 +226,8 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
 
 describe('is_background managed job behavior @plan:issue1995', () => {
   beforeEach(() => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    mockPlatform.mockReturnValue('darwin');
+    mockTmpdir.mockReturnValue('/tmp');
   });
 
   /**
@@ -458,7 +470,7 @@ describe('is_background managed job behavior @plan:issue1995', () => {
   });
 
   it('Windows rejects is_background: true with a message naming Start-Process (T21)', () => {
-    vi.mocked(os.platform).mockReturnValue('win32');
+    mockPlatform.mockReturnValue('win32');
     const tool = new ShellTool(
       createFakeShellService(new Map<string, ShellResult>()),
       createFakeMessageBus('proceed_once'),
