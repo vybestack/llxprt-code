@@ -19,7 +19,7 @@ Bun execution command (or explains why it still requires Vitest).
 | packages/policy               | 6                | 6             | 0                 | 0                         |
 | packages/providers            | 478              | 1             | 0                 | 477                       |
 | packages/settings             | 13               | 0             | 0                 | 13                        |
-| packages/storage              | 24               | 0             | 0                 | 24                        |
+| packages/storage              | 31               | 7             | 0                 | 24                        |
 | packages/telemetry            | 11               | 11 (manifest) | 0                 | 0                         |
 | packages/test-utils           | 5                | 2             | 1                 | 2                         |
 | packages/tools                | 62               | 0             | 0                 | 62                        |
@@ -162,6 +162,52 @@ runner.
 
 - `src/BaseProvider.test.ts`
 
+### packages/storage (7 files)
+
+Seven storage secure-store test files are genuinely Bun-native: they live under
+`test-bun/` with the `.bun.ts` suffix and import from `bun:test`, following the
+same convention as `packages/tools/test-bun`. They run via
+`scripts/run_bun_tests.ts --workspace storage` (isolated process per file) and
+use the `test-setup-storage-isolation.ts` preload (the same setup file the
+Vitest config uses) so `isolateStorageRoots()` runs before any test module
+imports the `Storage` singleton.
+
+Because the `.bun.ts` suffix does not match Vitest's default
+`*.{test,spec}.*` include pattern, these files are invisible to `vitest run` —
+they are executed only by Bun, with no dual-runner shim involved.
+
+The workspace primary `test` script still uses Vitest (`vitest run`) for the
+remaining 24 storage test files, which are untouched by this work.
+
+Neither of the two files that previously needed Vitest module mocking still
+does. `storage.test.ts` mocked `fs` only to stub `mkdirSync`, but the sole
+caller of `mkdirSync` is `ensureProjectTempDirExists()`, which that file never
+invokes — the mock was dead weight and was removed rather than reproduced.
+
+- `test-bun/credential-write-lock.bun.ts`
+- `test-bun/keyring-write-verification.bun.ts`
+- `test-bun/machine-secret.bun.ts`
+- `test-bun/machine-secret.concurrent-write.bun.ts`
+- `test-bun/secure-store.bun.ts`
+- `test-bun/secure-store.concurrent-write.bun.ts`
+- `test-bun/storage.bun.ts`
+
+### packages/cli — extension settings storage
+
+`src/config/extensions/settingsStorage.test.ts` is Bun-native and registered in
+the manifest, following the CLI's existing convention of keeping such files
+under `src/` and excluding them from the Vitest selection (see `baseExclude` in
+`vitest.test-groups.ts`).
+
+It previously replaced the entire storage module with a stand-in `SecureStore`
+via `vi.mock`. Rather than reproduce that in bun:test, the production class now
+accepts optional `SecureStoreOptions`, so the test drives the REAL `SecureStore`
+against a temp fallback dir, temp lock dir, and an in-memory keyring adapter.
+Only the OS keychain — the one part a test genuinely cannot touch — is
+substituted. Consequently CONFLICT, TIMEOUT, and error classification are now
+exercised through SecureStore's actual code paths instead of hand-thrown
+error-shaped objects.
+
 ### packages/telemetry (11 files)
 
 All 11 telemetry test files are verified Bun-native and run via
@@ -199,7 +245,7 @@ will be migrated in a bounded vertical slice:
 1. **packages/test-utils** (remaining 2 PTY-based files) — Slice 2
 2. **packages/settings** (13 files) — Slice 3
 3. **packages/ide-integration** (10 files) — Slice 4
-4. **packages/storage** (24 files) — Slice 5
+4. **packages/storage** (24 remaining files) — Slice 5
 5. **packages/vscode-ide-companion** (6 files) — Slice 6
 6. **packages/mcp** (46 files) — Slice 7
 7. **packages/tools** (62 files) — Slice 8

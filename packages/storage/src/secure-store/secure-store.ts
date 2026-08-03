@@ -31,10 +31,7 @@ import {
   SALT_LEN,
   type Envelope,
 } from './envelope.js';
-import {
-  clearMismatchedKeyringValue,
-  verifyKeyringWrite,
-} from './keyring-write-verification.js';
+import { verifyKeyringWrite } from './keyring-write-verification.js';
 import {
   assertRuntimeNotReplaced,
   RUNTIME_REPLACED_REMEDIATION,
@@ -43,6 +40,7 @@ import {
   createDefaultKeyringAdapter,
   setKeyringLogger,
 } from './default-keyring-adapter.js';
+import { CredentialWriteLock } from './credential-write-lock.js';
 
 export { createDefaultKeyringAdapter } from './default-keyring-adapter.js';
 export { resetRuntimeReplacedWarningForTesting } from './runtime-replaced-errors.js';
@@ -93,6 +91,7 @@ export interface SecureStoreOptions {
   logger?: StorageLogger;
   machineSecretLoader?: () => Promise<Buffer | null>;
   machineSecretPath?: string;
+  lockDir?: string;
 }
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
@@ -135,6 +134,8 @@ function getRemediation(code: SecureStoreErrorCode): string {
       return 'Save the key first';
     case 'RUNTIME_REPLACED':
       return RUNTIME_REPLACED_REMEDIATION;
+    case 'CONFLICT':
+      return 'Retry the operation; another process wrote this credential concurrently';
     default:
       return 'An unexpected error occurred';
   }
@@ -160,6 +161,7 @@ export class SecureStore {
   private readonly logger: StorageLogger;
   private readonly machineSecretLoaderFn: () => Promise<Buffer | null>;
   private readonly machineSecretFilePath: string | undefined;
+  private readonly lock: CredentialWriteLock;
 
   private keyringInstance: KeyringAdapter | null | undefined = undefined;
   private keyringLoadAttempted = false;
@@ -188,6 +190,10 @@ export class SecureStore {
     this.machineSecretLoaderFn =
       options?.machineSecretLoader ?? this.defaultMachineSecretLoader;
     this.machineSecretFilePath = options?.machineSecretPath;
+    this.lock = new CredentialWriteLock({
+      lockDir: options?.lockDir ?? Storage.getCredentialLocksDir(),
+      logger: this.logger,
+    });
     setKeyringLogger(this.logger);
   }
 
@@ -352,52 +358,6 @@ export class SecureStore {
     return deleted;
   }
 
-  /**
-   * Best-effort stale keyring clear — swallows errors because the caller
-   * throws UNAVAILABLE regardless.
-   */
-  private async safeClearStaleKeyring(
-    adapter: KeyringAdapter,
-    key: string,
-  ): Promise<void> {
-    try {
-      await clearMismatchedKeyringValue(adapter, this.serviceName, key);
-    } catch {
-      // Best-effort — caller throws UNAVAILABLE regardless.
-    }
-  }
-
-  /** Compensating transaction: write fallback, clear stale, roll back on failure. */
-  private async writeFallbackAndClearStale(
-    adapter: KeyringAdapter,
-    key: string,
-    value: string,
-    verification: { hasStaleValue: boolean },
-  ): Promise<void> {
-    this.logger.debug(
-      () =>
-        `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
-    );
-    await this.writeFallbackFile(key, value);
-    if (!verification.hasStaleValue) return;
-    let cleared = false;
-    try {
-      cleared = await clearMismatchedKeyringValue(
-        adapter,
-        this.serviceName,
-        key,
-      );
-    } catch {
-      cleared = false;
-    }
-    if (!cleared) {
-      await this.deleteFallbackFiles(key);
-      throw this.unavailableError(
-        'Mismatched keyring value could not be removed',
-      );
-    }
-  }
-
   private unavailableError(message: string): SecureStoreError {
     return new SecureStoreError(
       message,
@@ -411,7 +371,12 @@ export class SecureStore {
   async set(key: string, value: string): Promise<void> {
     this.validateKey(key);
     assertRuntimeNotReplaced();
+    await this.lock.withLock(this.serviceName, key, () =>
+      this.setLocked(key, value),
+    );
+  }
 
+  private async setLocked(key: string, value: string): Promise<void> {
     const adapter = await this.getKeyring();
     let keyringWriteSucceeded = false;
     let keyringWriteError: unknown = null;
@@ -436,7 +401,7 @@ export class SecureStore {
         key,
         value,
       );
-      if (result.verified) {
+      if (result.outcome === 'verified') {
         this.recordKeyringSuccess();
         this.logger.debug(() => `[set] key='${key}' → verified keyring`);
         await this.deleteFallbackFiles(key);
@@ -444,15 +409,26 @@ export class SecureStore {
       }
 
       this.recordKeyringFailure();
+
+      if (result.outcome === 'conflict') {
+        throw new SecureStoreError(
+          'Keyring write verification detected a conflicting value from another process',
+          'CONFLICT',
+          getRemediation('CONFLICT'),
+        );
+      }
+
+      // outcome === 'unverified': preserve existing fallback behavior.
       if (this.fallbackPolicy === 'deny') {
-        if (result.hasStaleValue) {
-          await this.safeClearStaleKeyring(adapter, key);
-        }
         throw this.unavailableError(
           'Keyring write could not be verified and fallback is denied',
         );
       }
-      await this.writeFallbackAndClearStale(adapter, key, value, result);
+      this.logger.debug(
+        () =>
+          `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
+      );
+      await this.writeFallbackFile(key, value);
       return;
     }
 
@@ -541,7 +517,12 @@ export class SecureStore {
   async delete(key: string): Promise<boolean> {
     this.validateKey(key);
     assertRuntimeNotReplaced();
+    return this.lock.withLock(this.serviceName, key, () =>
+      this.deleteLocked(key),
+    );
+  }
 
+  private async deleteLocked(key: string): Promise<boolean> {
     let deletedFromKeyring = false;
     let deletedFromFile = false;
 
