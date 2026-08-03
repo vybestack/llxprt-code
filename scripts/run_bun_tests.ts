@@ -212,30 +212,24 @@ const RAN_TESTS_PATTERN = /\bRan \d+ tests?\b/;
 /**
  * Detects whether the child process output contains a completed Bun summary.
  *
- * Bun always prints a summary line ("N pass / N fail" followed by "Ran N
- * tests") after every finished run. If the process was killed by a signal
- * (e.g. our per-file timeout), the presence of this summary proves that all
- * tests executed and the process was only killed because it didn't exit on
- * its own (e.g. lingering handles). The absence of a summary proves that
- * tests were still running (partial execution) and the kill prevented
- * silently skipped or hung tests from being reported green.
- *
- * Either "0 fail" (all-pass summary) or "Ran N tests" (any completed run
- * summary) is sufficient evidence. Both are only printed by Bun after the
- * test suite finishes.
+ * Bun prints both a failure count and a "Ran N tests" line after every
+ * finished run. A signaled process is accepted only when both lines prove
+ * the full run completed with zero failures; either line alone is ambiguous.
+ * Their absence means execution was partial when the process was killed, so
+ * remaining tests must not be reported green.
  */
 function outputShowsCompleteSummary(stdout?: string, stderr?: string): boolean {
   const combined = `${stdout ?? ''}\n${stderr ?? ''}`;
-  return ZERO_FAIL_PATTERN.test(combined) || RAN_TESTS_PATTERN.test(combined);
+  return ZERO_FAIL_PATTERN.test(combined) && RAN_TESTS_PATTERN.test(combined);
 }
 
 /**
  * Returns true when the spawned child process completed successfully.
  * Bun's SyncSubprocess.exitCode is `null` when the process was terminated
  * by a signal rather than exiting voluntarily, so we also treat a null
- * exitCode as a failure — UNLESS the output shows a completed Bun summary
- * (tests passed but the process didn't exit cleanly, e.g. due to lingering
- * handles). A timed-out or signaled process that only printed partial output
+ * exitCode as a failure — UNLESS the output shows a completed zero-failure Bun
+ * summary (tests passed but the process didn't exit cleanly, e.g. due to
+ * lingering handles). A timed-out or signaled process that only printed partial output
  * (some "(pass)" lines without the final summary) must NOT be accepted as
  * success, because partial execution silently skips the remaining tests.
  */

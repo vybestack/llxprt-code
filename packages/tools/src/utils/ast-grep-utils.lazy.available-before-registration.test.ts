@@ -62,5 +62,6 @@ describe('ast-grep-utils lazy initialization — availability before registratio
 
     // The binding loaded, so report true without forcing the native dlopen.
     expect(mod.isAstGrepAvailable()).toBe(true);
+    expect(registerSpy).not.toHaveBeenCalled();
   });
 });

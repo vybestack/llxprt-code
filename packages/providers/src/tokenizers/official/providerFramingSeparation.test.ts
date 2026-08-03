@@ -28,8 +28,8 @@ import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js'
 
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
- * Fails closed via expect.fail if the operation fulfills, so tests cannot
- * pass silently when the promise resolves with an Error-shaped value.
+ * Fails closed by throwing if the operation fulfills, so tests cannot pass
+ * silently when the promise resolves with an Error-shaped value.
  */
 const NOT_REJECTED = Symbol('not-rejected');
 
@@ -39,7 +39,7 @@ async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
     (error: unknown) => error,
   );
   if (outcome === NOT_REJECTED) {
-    expect.fail('expected the operation to reject');
+    throw new Error('expected the operation to reject');
   }
   return outcome;
 }
