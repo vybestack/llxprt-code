@@ -86,9 +86,10 @@ export function extractPlanFeedback(body: string | null): string | null {
 const RELATED_SEARCH_KEYWORD_LIMIT = 10;
 
 /**
- * Reduce an issue title to a GitHub-search-safe keyword query. Strips all
- * #NNN issue references and every non-alphanumeric metacharacter so the
- * result can never produce invalid search syntax. Returns a space-joined,
+ * Reduce an issue title to a GitHub-search-safe keyword query. Folds
+ * combining diacritics to their ASCII base, strips all #NNN issue
+ * references, and drops every non-alphanumeric metacharacter so the result
+ * can never produce invalid search syntax. Returns a space-joined,
  * de-duplicated keyword string (empty when the title yields no usable
  * keywords).
  */
@@ -96,7 +97,9 @@ export function buildRelatedSearchQuery(title: string): string {
   if (typeof title !== 'string') {
     return '';
   }
-  const withoutRefs = title.replace(/#[0-9]+/g, ' ');
+  // Fold diacritics to ASCII (cafe) so i18n titles keep usable keywords.
+  const folded = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const withoutRefs = folded.replace(/#[0-9]+/g, ' ');
   const tokens = withoutRefs
     .split(/[^A-Za-z0-9_]+/)
     .map((token) => token.trim())

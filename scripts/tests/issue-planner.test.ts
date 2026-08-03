@@ -377,9 +377,9 @@ describe('buildRelatedSearchQuery', () => {
     expect(result).not.toContain('#');
   });
 
-  it('preserves numeric tokens and strips non-ASCII characters', () => {
+  it('preserves numeric tokens and folds diacritics to ASCII', () => {
     expect(buildRelatedSearchQuery('Fix 123 crash')).toBe('Fix 123 crash');
-    expect(buildRelatedSearchQuery('café bug')).toBe('caf bug');
+    expect(buildRelatedSearchQuery('café bug')).toBe('cafe bug');
   });
 
   it('de-duplicates tokens case-insensitively', () => {
