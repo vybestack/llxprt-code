@@ -357,7 +357,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
     expect(deps.flushPendingHistoryItem).not.toHaveBeenCalled();
     expect(deps.setPendingHistoryItem).not.toHaveBeenCalled();
-    expect(deps.loopDetectedRef.current).toBe(false);
+    expect(deps.loopDetectedRef.current).toBe(true);
     expect(deps.handleLoopDetectedEvent).not.toHaveBeenCalled();
     expect(flushAtTurnBoundary).not.toHaveBeenCalled();
   });

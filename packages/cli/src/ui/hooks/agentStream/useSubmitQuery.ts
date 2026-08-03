@@ -739,6 +739,7 @@ function initTurn(
 ): TurnInit {
   const userMessageTimestamp = Date.now();
   deps.setTurnCancelled(false);
+  deps.loopDetectedRef.current = false;
 
   const resolvedPromptId =
     promptId ??
@@ -772,11 +773,8 @@ async function executeStream(
   // A newer turn may have started while runStream was settling (e.g. the user
   // cancelled this turn and submitted a new prompt). If the current
   // AbortController no longer belongs to this turn, skip post-stream cleanup
-  // so it does not clobber the newer turn's state. Clear loopDetectedRef
-  // silently to prevent a stale detection from leaking into the new turn
-  // (issue #2259).
+  // so it does not clobber the newer turn's state (issue #2259).
   if (!isCurrentTurn(deps, turn.abortSignal)) {
-    deps.loopDetectedRef.current = false;
     return;
   }
 
