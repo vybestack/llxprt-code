@@ -616,6 +616,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'tools',
+    files: ['test-bun/language-analysis.followup.bun.ts'],
+  },
+  {
     workspace: 'telemetry',
     preload: 'test-setup-storage-isolation.ts',
     files: [
