@@ -6,7 +6,7 @@
 
 import { deepStrictEqual } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { get_encoding } from '@dqbd/tiktoken';
 import {
   createGpt56RuntimeTokenizer,
