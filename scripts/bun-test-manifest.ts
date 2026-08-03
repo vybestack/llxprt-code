@@ -744,6 +744,11 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
     ],
   },
+  {
+    workspace: 'scripts-manifest',
+    cwd: '.',
+    files: ['scripts/tests/bun-test-manifest.bun.test.ts'],
+  },
 ];
 
 /**

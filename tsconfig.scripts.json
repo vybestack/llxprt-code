@@ -69,7 +69,7 @@
     "scripts/version.ts",
     "scripts/bun-test-manifest.ts",
     "scripts/run_bun_tests.ts",
-    "scripts/tests/bun-test-manifest.test.ts",
+    "scripts/tests/bun-test-manifest.bun.test.ts",
     "scripts/tests/issue-2342.test.ts",
     "scripts/tests/run_bun_tests.test.ts",
     "scripts/tests/stub-helpers.test.ts",
