@@ -11,7 +11,7 @@ Bun execution command (or explains why it still requires Vitest).
 | packages/a2a-server           | 15               | 15            | 0                 | 0                         |
 | packages/agents               | 348              | 0             | 0                 | 348                       |
 | packages/auth                 | 37               | 37            | 0                 | 0                         |
-| packages/cli                  | 650              | 2             | 0                 | 648                       |
+| packages/cli                  | 658              | 10            | 0                 | 648                       |
 | packages/core                 | 322              | 322           | 0                 | 0                         |
 | packages/ide-integration      | 10               | 0             | 0                 | 10                        |
 | packages/lsp                  | 0                | all           | 0                 | 0                         |
@@ -127,10 +127,24 @@ All 6 test files are Bun-native. The `research/` directory is excluded via
 These files run under Bun via `scripts/run_bun_tests.ts` but their workspace
 primary `test` script still uses Vitest for the bulk of files.
 
-### packages/cli (2 files)
+### packages/cli (10 files)
 
 - `src/__tests__/cliSessionDispatch.characterization.test.tsx`
 - `test-utils/augment-bun-vi-cleanup.bun.ts`
+
+The JSP/1 observation producer suite (issue #2779) is Bun-native from the start
+rather than migrated. These eight files are excluded from the Vitest selection
+in `packages/cli/vitest.test-groups.ts`, so they run under `bun test` only and
+do not change `SELECTED_FILE_COUNT`:
+
+- `src/observation/jspBounds.test.ts`
+- `src/observation/jspProducer.test.ts`
+- `src/observation/jspProducerState.test.ts`
+- `src/observation/jspRedaction.test.ts`
+- `src/observation/jspSchema.test.ts`
+- `src/observation/jspTransport.test.ts`
+- `src/observation/jspWiring.test.ts`
+- `src/observation/observationTap.test.ts`
 
 ### packages/core — fully migrated (see above)
 
@@ -140,22 +154,26 @@ primary `test` script still uses Vitest for the bulk of files.
 
 ### packages/storage (4 files)
 
-Four storage secure-store test files are verified Bun-native and run via
-`scripts/run_bun_tests.ts --workspace storage` (isolated process per file).
-They use the `test-setup-storage-isolation.ts` preload (the same setup file the
+Four storage secure-store test files are genuinely Bun-native: they live under
+`test-bun/` with the `.bun.ts` suffix and import from `bun:test`, following the
+same convention as `packages/tools/test-bun`. They run via
+`scripts/run_bun_tests.ts --workspace storage` (isolated process per file) and
+use the `test-setup-storage-isolation.ts` preload (the same setup file the
 Vitest config uses) so `isolateStorageRoots()` runs before any test module
 imports the `Storage` singleton.
 
-The workspace primary `test` script still uses Vitest (`vitest run`) because
-the broader storage migration is deferred. The 4 Bun-native files must pass
-under **both** runners — they are verified green under `bun test` and
-`vitest run`. The remaining 27 storage test files are deferred to a future
-slice.
+Because the `.bun.ts` suffix does not match Vitest's default
+`*.{test,spec}.*` include pattern, these files are invisible to `vitest run` —
+they are executed only by Bun, with no dual-runner shim involved.
 
-- `src/secure-store/credential-write-lock.test.ts`
-- `src/secure-store/keyring-write-verification.test.ts`
-- `src/secure-store/machine-secret.concurrent-write.test.ts`
-- `src/secure-store/secure-store.concurrent-write.test.ts`
+The workspace primary `test` script still uses Vitest (`vitest run`) because
+the broader storage migration is deferred; the remaining 27 storage test files
+are deferred to a future slice.
+
+- `test-bun/credential-write-lock.bun.ts`
+- `test-bun/keyring-write-verification.bun.ts`
+- `test-bun/machine-secret.concurrent-write.bun.ts`
+- `test-bun/secure-store.concurrent-write.bun.ts`
 
 ### packages/telemetry (11 files)
 

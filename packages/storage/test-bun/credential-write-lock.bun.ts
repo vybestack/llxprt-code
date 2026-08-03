@@ -19,14 +19,14 @@
  * @requirement R3, R4
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { CredentialWriteLock } from './credential-write-lock.js';
-import { SecureStoreError } from './secure-store-errors.js';
+import { CredentialWriteLock } from '../src/secure-store/credential-write-lock.js';
+import { SecureStoreError } from '../src/secure-store/secure-store-errors.js';
 
 /**
  * Narrows a caught value to a SecureStoreError at runtime.

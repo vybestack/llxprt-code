@@ -37,12 +37,14 @@ export interface TokenizerAdapterDeps {
  * dependency when using the injection path.
  */
 export function getTokenizerForModel(
+  activeProvider: string | undefined,
   modelName: string,
   deps: TokenizerAdapterDeps,
 ): ITokenizer {
   const { tokenizerCache, tokenizerFactory } = deps;
+  const cacheKey = `${activeProvider ?? ''}\0${modelName}`;
 
-  const cached = tokenizerCache.get(modelName);
+  const cached = tokenizerCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -51,14 +53,17 @@ export function getTokenizerForModel(
   // @requirement:REQ-DEP-001
   // Prefer injected factory when available — this is the injection path
   if (tokenizerFactory) {
-    const runtimeTokenizer = tokenizerFactory.getTokenizer(modelName);
+    const runtimeTokenizer = tokenizerFactory.getTokenizer(
+      activeProvider ?? '',
+      modelName,
+    );
     if (runtimeTokenizer) {
-      // Adapt RuntimeTokenizer to ITokenizer interface for backward compatibility
       const adapter: ITokenizer = {
+        fallbackPolicy: runtimeTokenizer.fallbackPolicy,
         countTokens: (text: string, _model?: string) =>
           Promise.resolve(runtimeTokenizer.countTokens(text)),
       };
-      tokenizerCache.set(modelName, adapter);
+      tokenizerCache.set(cacheKey, adapter);
       return adapter;
     }
   }
@@ -75,6 +80,6 @@ export function getTokenizerForModel(
     },
   };
 
-  tokenizerCache.set(modelName, tokenizer);
+  tokenizerCache.set(cacheKey, tokenizer);
   return tokenizer;
 }

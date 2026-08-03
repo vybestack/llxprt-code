@@ -51,6 +51,9 @@ function createConfigBoundary(
   return {
     getCoreTools: () => ['TaskTool', 'ListSubagentsTool', 'check_async_tasks'],
     getExcludeTools: () => [],
+    // No broker transport wired, so the github tool is not registered.
+    // @plan PLAN-20260731-GHBROKER.P15
+    getGitHubBrokerClient: () => undefined,
     getToolDiscoveryCommand: () => undefined,
     getToolCallCommand: () => undefined,
     getPromptRegistry: () => undefined,

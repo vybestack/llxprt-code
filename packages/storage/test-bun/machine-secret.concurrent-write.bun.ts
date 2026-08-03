@@ -31,12 +31,15 @@
  * @requirement R3, R5
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import type { KeyringAdapter } from './secure-store.js';
-import { getMachineSecret, resetMachineSecretCache } from './machine-secret.js';
+import type { KeyringAdapter } from '../src/secure-store/secure-store.js';
+import {
+  getMachineSecret,
+  resetMachineSecretCache,
+} from '../src/secure-store/machine-secret.js';
 
 /**
  * A tagged event record appended to a shared array. The counter is

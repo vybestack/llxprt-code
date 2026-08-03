@@ -16,12 +16,12 @@
  * @requirement R1, R2
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   verifyKeyringWrite,
   type KeyringWriteOutcome,
-} from './keyring-write-verification.js';
-import type { KeyringAdapter } from './secure-store.js';
+} from '../src/secure-store/keyring-write-verification.js';
+import type { KeyringAdapter } from '../src/secure-store/secure-store.js';
 
 function createInMemoryKeyring(
   store: Map<string, string>,
@@ -120,7 +120,9 @@ describe('verifyKeyringWrite', () => {
 
 describe('keyring-write-verification module surface (R1 regression guard)', () => {
   it('does not export a delete/clear helper', async () => {
-    const mod = await import('./keyring-write-verification.js');
+    const mod = await import(
+      '../src/secure-store/keyring-write-verification.js'
+    );
     const exportedNames = Object.keys(mod);
     expect(exportedNames).not.toContain('clearMismatchedKeyringValue');
     expect(exportedNames).not.toContain('clearMismatchedValue');

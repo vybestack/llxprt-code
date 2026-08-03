@@ -114,13 +114,20 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       stepNamed(codeReviewJob, 'Run OpenCodeReview'),
     );
     expectContainsAll(reviewRun, [
-      'grep -Eqi "429|rate limit" ocr-stderr.log',
+      // The structured usage record OCR >= 1.8.0 writes to stderr is dropped
+      // before classification so its counters are never read as HTTP statuses,
+      // and only an object carrying the record's own signature is dropped.
+      'ocr_diagnostics="$(awk \'',
+      'if ($0 ~ /^  "summary":/) { summary_seen = 1 }',
+      'if ($0 ~ /^  "tool_calls":/) { tools_seen = 1 }',
+      'if (summary_seen == 0 || tools_seen == 0) { print buffered }',
+      'grep -Eqi "(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)|rate limit"',
       'OCR review failed: HTTP 429 rate limit',
-      'grep -Eqi "529|overloaded" ocr-stderr.log',
+      'grep -Eqi "(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)|overloaded"',
       'OCR review failed: HTTP 529 provider overloaded',
-      'grep -Eqi "401|403|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key" ocr-stderr.log',
+      'grep -Eqi "(^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key"',
       'OCR review failed: authentication or configuration error',
-      'grep -Eqi "timeout|timed out" ocr-stderr.log',
+      'grep -Eqi "timeout|timed out"',
       'OCR review failed: timeout',
       'all OCR per-file reviews failed; likely LLM provider/config/auth failure',
       'OCR review command failed',
@@ -142,6 +149,17 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     expect(timeoutIndex).toBeGreaterThan(authIndex);
     expect(allFileIndex).toBeGreaterThan(timeoutIndex);
     expect(genericIndex).toBeGreaterThan(allFileIndex);
+    // Every branch must classify the stripped diagnostics, never the raw log:
+    // reverting to `grep -Eqi "..." ocr-stderr.log` would silently reinstate
+    // the usage-record false positives.
+    expect(reviewRun).not.toMatch(/grep\s+-Eqi\s+"[^"]*"\s+ocr-stderr\.log/);
+    expect(
+      reviewRun.split('grep -Eqi').length - 1,
+      'every classification branch greps the stripped diagnostics',
+    ).toBe(
+      reviewRun.split(`printf '%s\\n' "$ocr_diagnostics" | grep -Eqi`).length -
+        1,
+    );
   });
 
   it('redacts artifacts with an atomic temporary-file rename (Behavior 4)', () => {

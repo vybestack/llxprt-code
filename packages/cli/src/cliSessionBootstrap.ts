@@ -30,10 +30,14 @@ import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import { registerCleanup } from './utils/cleanup.js';
 import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { promises as fsPromises } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import { resolveForegroundRuntimeId } from './config/profileBootstrap.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
+import {
+  initializeObservationProducer,
+  stopObservationProducer,
+} from './observation/jspWiring.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
 export function formatSessionSummaryLine(
@@ -200,6 +204,41 @@ async function releaseResumedResources(
  * service (new or resumed), restore history when resuming, and register the
  * recording cleanup hook.
  */
+function setupObservation(config: Config): void {
+  const projectRoot = config.getProjectRoot();
+  initializeObservationProducer(
+    {
+      repository: basename(projectRoot),
+      path: projectRoot,
+      agentKind: 'llxprt',
+      displayName: basename(projectRoot),
+    },
+    config.getSessionId(),
+  );
+}
+
+function registerRecordingCleanup(
+  recordingIntegration: RecordingIntegration,
+  recordingService: SessionRecordingService,
+  lockHandle: LockHandle | null,
+): void {
+  registerCleanup(async () => {
+    // Observation is ancillary; a failed telemetry shutdown must not skip
+    // recording disposal or lock release.
+    try {
+      await stopObservationProducer();
+    } catch {
+      // Telemetry-only failure.
+    }
+    recordingIntegration.dispose();
+    try {
+      await recordingService.dispose();
+    } finally {
+      await lockHandle?.release();
+    }
+  });
+}
+
 export async function setupSessionRecording(
   config: Config,
   argv: ParsedCliArgs,
@@ -282,15 +321,15 @@ export async function setupSessionRecording(
   }
 
   const recordingIntegration = new RecordingIntegration(activeRecordingService);
-
-  registerCleanup(async () => {
-    recordingIntegration.dispose();
-    try {
-      await activeRecordingService.dispose();
-    } finally {
-      await activeLockHandle?.release();
-    }
-  });
+  // Register cleanup before observation setup. An explicitly invalid bootstrap
+  // is meant to fail startup, but it must not strand the recording service or
+  // the already-acquired lock handle on the way out.
+  registerRecordingCleanup(
+    recordingIntegration,
+    activeRecordingService,
+    activeLockHandle,
+  );
+  setupObservation(config);
 
   return {
     recordingService: activeRecordingService,

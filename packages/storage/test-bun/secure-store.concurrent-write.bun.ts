@@ -23,11 +23,9 @@
  *   assertion genuinely detects the lock — if the lock broke, the barrier
  *   would deadlock (test timeout), not pass silently.
  *
- * NOTE: Storage tests run under vitest on Node and cannot spawn a child that
- * imports the TypeScript sources (no ts-node/tsx loader in the vitest child),
- * so a literal two-OS-process SecureStore test is not available here. The
- * real cross-process coverage is in credential-write-lock.test.ts, which
- * spawns a real Node child that writes a canonical owner record. This test
+ * NOTE: this file asserts in-process serialization only. The real
+ * cross-OS-process coverage lives in credential-write-lock.bun.ts, which
+ * spawns a genuine child process that writes a canonical owner record. This test
  * instead verifies that two in-process SecureStore instances with independent
  * CredentialWriteLock instances (distinct owner tokens) serialize through the
  * shared filesystem lock dir.
@@ -36,11 +34,14 @@
  * @requirement R5
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { SecureStore, type KeyringAdapter } from './secure-store.js';
+import {
+  SecureStore,
+  type KeyringAdapter,
+} from '../src/secure-store/secure-store.js';
 
 function isErrorWithCode(value: unknown): value is { code: string } {
   if (typeof value !== 'object' || value === null || !('code' in value)) {
@@ -152,7 +153,7 @@ function createInstrumentedKeyring(): KeyringAdapter & {
  *
  * O8: The barrier is bounded by a timeout so that if a caller rejects before
  * reaching setPassword (e.g. because set() threw early), the barrier fails
- * fast with an explicit message instead of hanging until the vitest timeout.
+ * fast with an explicit message instead of hanging until the test-runner timeout.
  *
  * O11: StoreId is derived deterministically from the value being written.
  */

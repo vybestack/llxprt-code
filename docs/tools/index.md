@@ -47,6 +47,15 @@ The shell tool is the only tool that can reach **outside your workspace**. All f
 | `direct_web_fetch` | Fetch and convert a URL to text/markdown      |
 | `codesearch`       | Search for code snippets, APIs, documentation |
 
+### GitHub
+
+| Tool     | What It Does                                       |
+| -------- | -------------------------------------------------- |
+| `github` | Work with issues, pull requests, checks and labels |
+
+Runs on the host, so no GitHub credential is needed inside a sandbox. See
+[GitHub](./github.md).
+
 ### Memory and Context
 
 | Tool          | What It Does                                       |
@@ -133,6 +142,7 @@ The **shell tool is the exception** — it can run any command your user account
 
 ## Related
 
+- [GitHub](./github.md) — issues, pull requests and checks without a token in the sandbox
 - [MCP Servers](./mcp-server.md) — adding third-party tools
 - [Memory](./memory.md) — how long-term memory works
 - [Sandboxing](../sandbox.md) — running in a container

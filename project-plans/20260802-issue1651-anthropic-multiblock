@@ -1,0 +1,98 @@
+# Plan: Issue #1651 — Anthropic user message assembly multi-block content loss investigation
+
+Generated: 2026-08-02
+Issue: #1651 (packages/core)
+Branch: issue1651
+
+## Summary
+
+The original issue investigated whether the Anthropic provider's user message
+assembly path could silently lose content, because the non-media branch used
+`.find()` to extract only the first text block.
+
+**Investigation outcome: the `.find()` pattern no longer exists.** The provider
+was refactored into `AnthropicMessageNormalizer.ts`, where `processHumanContent()`
+delegates to `concatenateTextAndCodeBlocks()` which iterates ALL blocks with a
+`for...of` loop. The fix is already in place.
+
+The remaining work (per the issue's accepted plan and the CodeRabbit
+confirmation in the issue thread) is **regression-proofing**: add behavioral
+tests that lock in the correct multi-block concatenation behavior so it cannot
+silently regress.
+
+## Phase 1 — Verification findings (no code changes)
+
+Documented by reading the source:
+
+1. **`.find()` pattern gone.** `concatenateTextAndCodeBlocks()`
+   (`AnthropicMessageNormalizer.ts:562-573`) uses `for (const block of blocks)`
+   and joins all segments with `''`. No `.find()` anywhere in
+   `AnthropicProvider.ts` or `AnthropicMessageNormalizer.ts`.
+
+2. **`trimStart()` is NOT applied to human messages.** `blocksToText()` (line 348)
+   calls `trimStart()`, but it is only used for AI messages (line 642) and tool
+   response text (line 433). The human path uses
+   `concatenateTextAndCodeBlocks()` which does NOT trim. The trimStart concern
+   from the ticket does not apply to human messages.
+
+3. **CodeBlock is dead code for human messages (defensive only).** The only
+   production code that creates `{ type: 'code' }` is
+   `executableCodeToBlock()` in `gemini/neutralConverters.ts`, which converts a
+   Gemini model response part → AI-speaker IContent. No human-speaker path
+   produces CodeBlock. `concatenateTextAndCodeBlocks()` handles it defensively
+   (fenced markdown) for forward safety.
+
+4. **Other providers already iterate correctly.**
+   - OpenAI `OpenAIRequestBuilder.ts:210-211,234-237` — `.filter().map().join()`
+   - OpenAI Responses `buildResponsesRequest.ts:289-295` — `.filter().map().join()`
+   - Gemini `GeminiMessageConverter.ts:43,57` — `for...of` loops
+
+5. **Multi-block human message sources all route correctly** through
+   `processHumanContent()`: `createUserMessage()` (single TextBlock, no risk),
+   `convertMixedPartsToIContent()` (Gemini parts → multiple TextBlocks, handled),
+   `ContentConverters.toIContent()` and Vercel deserialization (TextBlock +
+   MediaBlock → media branch).
+
+## Phase 2 — Add regression test coverage
+
+**No production code changes.** Pure additive test coverage.
+
+### Files to create
+
+- `packages/providers/src/anthropic/AnthropicProvider.multiBlock.test.ts`
+  - Behavioral tests through the public `provider.generateChatCompletion()` path
+    (same harness as `AnthropicProvider.mediaBlock.test.ts`), with
+    `prompt-caching` OFF so plain-string content is preserved end-to-end.
+  - Tests that the captured `request.messages` user message content is the full
+    concatenation of all blocks (proving NO content loss).
+
+### Acceptance criteria (each is one `it` block, Arrange-Act-Assert)
+
+1. **Multi-TextBlock concatenation** — human IContent with
+   `[TextBlock("First"), TextBlock("Second")]` → user message `content === "FirstSecond"`.
+2. **Inter-block spacing preserved** —
+   `[TextBlock("Hello"), TextBlock(" World")]` → `content === "Hello World"`.
+3. **Non-media output is a plain string** — for a text-only multi-block message,
+   `typeof content === 'string'` (not an array).
+4. **Leading/trailing whitespace preserved (no trimStart)** —
+   `[TextBlock(" First"), TextBlock("Second ")]` → `content === " FirstSecond "`
+   (non-empty so it bypasses the empty-sanitizer; proves no trim).
+5. **Mixed TextBlock + CodeBlock (defensive path)** —
+   `[TextBlock("Here's code:"), CodeBlock("const x = 1", "typescript")]` →
+   `content === "Here's code:\n\n\`\`\`typescript\nconst x = 1\n\`\`\`\n"`.
+6. **Empty blocks edge case** — `blocks: []` → content is the
+   `'[Empty message]'` placeholder (documents the sanitizer behavior; correct,
+   not a bug — strict endpoints reject zero-length content).
+7. **Empty-string TextBlock edge case** —
+   `blocks: [{ type: 'text', text: '' }]` → content is `'[Empty message]'`
+   (falsy text is skipped by the concatenator, then sanitizer replaces the empty
+   result).
+
+### Out of scope
+
+- Exporting `concatenateTextAndCodeBlocks` for direct unit testing (would test an
+  implementation detail; RULES.md prefers behavioral tests through the public API).
+- Any production code change (the bug is already fixed).
+- Defensive warning log (issue step 5) — unnecessary because multi-block is
+  already handled correctly; the log was the pre-refactor suggestion.
+- Changes to other providers (already correct).

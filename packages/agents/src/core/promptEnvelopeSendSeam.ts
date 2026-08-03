@@ -216,7 +216,22 @@ export async function prepareAtSendSeam(
   if (projection === undefined) {
     return { estimate: null, options };
   }
-  const estimate = await estimatePromptEnvelope(projection);
+  const config = options.config ?? options.runtime?.config;
+  const getTokenizerFactory = config?.getTokenizerFactory;
+  const tokenizerFactory =
+    typeof getTokenizerFactory === 'function'
+      ? getTokenizerFactory.call(config)
+      : undefined;
+  if (tokenizerFactory === undefined) {
+    throw new Error(
+      'Prompt-envelope projection requires the configured runtime prompt estimator factory',
+    );
+  }
+  const estimate = await estimatePromptEnvelope(
+    provider.name,
+    projection,
+    tokenizerFactory,
+  );
   return {
     estimate,
     options: {

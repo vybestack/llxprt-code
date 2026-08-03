@@ -1,5 +1,17 @@
 # Policy Configuration Guide
 
+> **Warning — priority examples on this page are outdated.** The TOML loader
+> requires `priority` to be an **integer from 0 to 999**, not a decimal. Values
+> such as `priority = 2.6` or `priority = 2.3` are **rejected** and your policy
+> file will fail to load. The decimal numbers shown by the `/policies` command
+> are **resolved** priorities — the engine computes them as `tier + priority /
+1000` (for example, `priority = 500` in a user file resolves to `2.500`). The
+> remaining examples below still use the old decimal form and have not yet been
+> converted; treat them as illustrative of intent only and write integers in
+> your own files. For the correct, current explanation see
+> [Controlling Tool Execution](tool-permissions.md). This page is being rewritten
+> (issue #2941).
+
 ## Overview
 
 Policies control which tools can execute, which require user confirmation, and which are blocked. This guide covers the TOML policy file syntax, rule structure, and common use cases.
@@ -413,46 +425,43 @@ priority = 2.6
 
 ## Creating Custom Policies
 
-### Step 1: Create a TOML file
+### Step 1: Create a TOML file in your user policy directory
 
-Create a new file (e.g., `<config>/my-policy.toml` in LLxprt's [config directory](./reference/application-directories.md)):
+Policy files are discovered by directory, not by a path you configure. Create
+your file inside the user policy directory — the `policies` subdirectory of
+LLxprt's [config directory](./reference/application-directories.md) — for
+example `<config>/policies/my-policy.toml`:
 
 ```toml
 # My custom policy
 
 [[rule]]
-toolName = "edit"
+toolName = "replace"
 decision = "allow"
-priority = 2.5
+priority = 500
 ```
 
-### Step 2: Configure Settings
+Every file in that directory is loaded at tier 2, so the `priority = 500` above
+resolves to **2.500**.
 
-Add to your [settings.json](./reference/application-directories.md):
+> **Note:** There is no per-project policy directory and no setting that points
+> the loader at a specific file. Files are read from the built-in policy
+> directory (tier 1), your user policy directory (tier 2), and the system policy
+> directory (tier 3).
 
-```json
-{
-  "tools": {
-    "policyPath": "/absolute/path/to/my-policy.toml"
-  }
-}
-```
+### Step 2: Test Your Policy
 
-**Important:** Use absolute paths, not relative paths or `~`.
-
-### Step 3: Test Your Policy
-
-1. Restart llxprt-code
+1. Restart LLxprt Code
 2. Run `/policies` to verify your rules loaded
 3. Test tool execution to confirm behavior
 
-### Step 4: Debug Issues
+### Step 3: Debug Issues
 
 If rules don't appear in `/policies`:
 
-- Check TOML syntax (use online validator)
-- Verify file path is absolute and correct
-- Check llxprt-code startup logs for errors
+- Check TOML syntax (use an online validator)
+- Verify the file is inside the user policy directory and ends in `.toml`
+- Check LLxprt Code startup logs for policy load errors
 
 ## Legacy --allowed-tools Migration
 
@@ -710,7 +719,7 @@ priority = 1.0
 
 ## Next Steps
 
-- See [Message Bus Guide](message-bus.md) for overview and architecture
+- See [Message Bus Guide](tool-permissions.md) for overview and architecture
 - See [Migration Guide](migration/approval-mode-to-policies.md) for migrating from legacy approval modes
 - Review the built-in policy files under `packages/core/src/policy/policies` in
   a repository checkout for worked examples

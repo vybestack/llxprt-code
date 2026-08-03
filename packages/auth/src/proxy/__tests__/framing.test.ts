@@ -6,6 +6,7 @@
 
 /**
  * @plan PLAN-20250214-CREDPROXY.P04
+ * @plan PLAN-20260731-GHBROKER.P05
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -98,11 +99,39 @@ describe('encodeFrame', () => {
    * @scenario Oversized payload exceeding MAX_FRAME_SIZE throws
    */
   it('throws when payload exceeds MAX_FRAME_SIZE bytes', () => {
-    // Build a payload whose JSON representation exceeds 65536 bytes
+    // Derived from the constant rather than a literal, so raising the cap
+    // cannot silently leave this asserting against the old size.
     const bigString = 'x'.repeat(MAX_FRAME_SIZE + 1);
     const payload = { data: bigString };
 
     expect(() => encodeFrame(payload)).toThrow(/exceeds maximum size/);
+  });
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-006
+   * @pseudocode 002-frame-and-cancel.md lines 01-11, T2 (I1)
+   * @scenario MAX_FRAME_SIZE is 4 MiB so fully-commented GitHub issues and
+   *           PR review threads (50 KB–500 KB) fit in a single frame.
+   */
+  it('MAX_FRAME_SIZE is 4 MiB (4_194_304 bytes)', () => {
+    expect(MAX_FRAME_SIZE).toBe(4_194_304);
+  });
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-006, I1
+   * @pseudocode 002-frame-and-cancel.md line 02, T2
+   * @scenario The cap is enforced on the decode side too: a length prefix
+   *           exceeding MAX_FRAME_SIZE throws FrameError in FrameDecoder.feed
+   *           before allocating a buffer.
+   */
+  it('T2: FrameDecoder.feed throws FrameError on oversize length prefix', () => {
+    const decoder = new FrameDecoder();
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(MAX_FRAME_SIZE + 1, 0);
+
+    expect(() => decoder.feed(header)).toThrow(/exceeds maximum size/);
   });
 
   /**

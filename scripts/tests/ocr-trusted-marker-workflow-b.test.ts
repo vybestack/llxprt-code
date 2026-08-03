@@ -411,7 +411,7 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
         MERGE_BASE: 'merge-base-sha',
         HEAD_SHA: 'current-head-sha',
         API_BASE_SHA: FULL_BASE_SHA,
-        OCR_VERSION: '1.7.17',
+        OCR_VERSION: '1.8.4',
         CHECKPOINT_FOUND: readerResult.outputs['CHECKPOINT_FOUND'] || 'false',
         CHECKPOINT_VALID: readerResult.outputs['CHECKPOINT_VALID'] || 'false',
         CHECKPOINT_SCHEMA: readerResult.outputs['CHECKPOINT_SCHEMA'] || '',

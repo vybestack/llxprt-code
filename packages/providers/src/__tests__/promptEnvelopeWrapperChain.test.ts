@@ -117,7 +117,8 @@ class EstimatingProvider implements IProvider {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(count),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(count),
     };
   }
 }
@@ -168,7 +169,7 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     expect(projection.protocol).toBe('anthropic-messages');
     expect(projection.model).toBe('test-model');
 
-    const tokens = await projection.countProjectedTokens();
+    const tokens = await projection.legacyEstimate();
     expect(tokens).toBeGreaterThan(0);
   });
 
@@ -184,7 +185,7 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     expect(base.projectionInvoked).toBe(true);
     expect(projection.protocol).toBe('anthropic-messages');
 
-    const tokens = await projection.countProjectedTokens();
+    const tokens = await projection.legacyEstimate();
     expect(tokens).toBeGreaterThan(0);
   });
 
@@ -205,7 +206,7 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     expect(projection.protocol).toBe('anthropic-messages');
     expect(projection.method).toBe('messages/v1');
 
-    const tokens = await projection.countProjectedTokens();
+    const tokens = await projection.legacyEstimate();
     expect(tokens).toBeGreaterThan(0);
   });
 
@@ -237,8 +238,8 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
       ]),
     );
 
-    const smallTokens = await small.countProjectedTokens();
-    const largeTokens = await large.countProjectedTokens();
+    const smallTokens = await small.legacyEstimate();
+    const largeTokens = await large.legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 });

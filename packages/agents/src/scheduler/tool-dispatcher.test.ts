@@ -21,6 +21,7 @@ import {
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
 import {
   type ToolCallConfirmationDetails,
+  type ToolContext,
   type ToolInvocation,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
@@ -156,7 +157,12 @@ function makeGovernance(
 
 function makeMockRegistry(tool?: MockTool | null) {
   return {
-    getTool: vi.fn().mockReturnValue(tool ?? null),
+    getTool: vi.fn((_name: string, context?: ToolContext) => {
+      if (tool instanceof ContextAwareMockTool && context) {
+        tool.context = context;
+      }
+      return tool ?? null;
+    }),
     getAllToolNames: vi.fn().mockReturnValue(tool ? [tool.name] : []),
   };
 }
@@ -291,7 +297,11 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
-      expect(registry.getTool).toHaveBeenCalledWith('my_tool');
+      expect(registry.getTool).toHaveBeenCalledWith('my_tool', {
+        sessionId: 'test-session-id',
+        agentId: 'primary',
+        interactiveMode: false,
+      });
     });
 
     it('drops requests blocked by hookRestrictedAllowed before validation', () => {
@@ -322,7 +332,11 @@ describe('ToolDispatcher', () => {
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
       expect(registry.getTool).toHaveBeenCalledTimes(1);
-      expect(registry.getTool).toHaveBeenCalledWith('read_file');
+      expect(registry.getTool).toHaveBeenCalledWith('read_file', {
+        sessionId: 'test-session-id',
+        agentId: 'primary',
+        interactiveMode: false,
+      });
     });
 
     it('drops all requests when hookRestrictedAllowed is empty', () => {

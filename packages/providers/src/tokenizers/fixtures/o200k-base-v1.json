@@ -1,0 +1,65 @@
+{
+  "encoding": "o200k_base",
+  "ordinaryText": true,
+  "fixtures": [
+    {
+      "name": "prose",
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "count": 10,
+      "tokens": [976, 4853, 19705, 68347, 65613, 1072, 290, 29082, 6446, 13]
+    },
+    {
+      "name": "code",
+      "text": "function add(a, b) { return a + b; }",
+      "count": 13,
+      "tokens": [2706, 1147, 6271, 11, 287, 8, 354, 622, 261, 659, 287, 26, 388]
+    },
+    {
+      "name": "json-tool-like",
+      "text": "{\"tool\":\"read_file\",\"arguments\":{\"path\":\"/tmp/你好.json\",\"limit\":25}}",
+      "count": 20,
+      "tokens": [
+        10848, 17952, 7534, 1293, 5933, 4294, 34317, 70649, 4189, 1243, 6378,
+        11669, 14, 177519, 7677, 4294, 19698, 1243, 1161, 6478
+      ]
+    },
+    {
+      "name": "cjk-unicode",
+      "text": "请考试我的软件！Καλημέρα κόσμε — café",
+      "count": 13,
+      "tokens": [
+        10394, 111782, 61932, 9941, 3393, 176579, 19058, 17752, 7648, 100616,
+        11702, 2733, 30469
+      ]
+    },
+    {
+      "name": "emoji",
+      "text": "👩🏽‍💻🚀🙂‍↕️🏳️‍🌈",
+      "count": 20,
+      "tokens": [
+        28823, 102, 52622, 121, 2524, 31446, 119, 112927, 222, 37459, 2524,
+        18707, 243, 15148, 52622, 111, 15148, 2524, 64364, 230
+      ]
+    },
+    {
+      "name": "special-token-looking",
+      "text": "<|endoftext|> hello <|fim_prefix|> <|endofprompt|>",
+      "count": 21,
+      "tokens": [
+        27, 91, 419, 1440, 919, 91, 29, 40617, 464, 91, 103473, 33197, 91, 29,
+        464, 91, 419, 1440, 82467, 91, 29
+      ]
+    },
+    {
+      "name": "empty",
+      "text": "",
+      "count": 0,
+      "tokens": []
+    },
+    {
+      "name": "long",
+      "repeat": { "text": "x", "count": 100000 },
+      "count": 12500
+    }
+  ]
+}

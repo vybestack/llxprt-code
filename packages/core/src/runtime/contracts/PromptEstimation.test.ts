@@ -24,7 +24,35 @@ import type {
   PromptEnvelopeEstimate,
   UnsupportedMediaEntry,
 } from './PromptEstimation.js';
-import { estimatePromptEnvelope } from './PromptEstimation.js';
+import { estimatePromptEnvelope as estimatePromptEnvelopeImpl } from './PromptEstimation.js';
+import type {
+  RuntimePromptEstimateRequest,
+  RuntimeTokenizerFactory,
+} from './RuntimeTokenizerFactory.js';
+
+const estimatorFactory: RuntimeTokenizerFactory = {
+  getTokenizer: () => undefined,
+  async estimatePrompt(request: RuntimePromptEstimateRequest) {
+    return {
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'legacy-unregistered',
+      estimatorVersion: 'core-estimate-tokens-v1',
+      assetRevision: 'none',
+      projectionRevision: request.projectionRevision,
+    };
+  },
+};
+
+function estimatePromptEnvelope(
+  projection: PromptEnvelopeProjection,
+): Promise<PromptEnvelopeEstimate> {
+  return estimatePromptEnvelopeImpl(
+    'test-provider',
+    projection,
+    estimatorFactory,
+  );
+}
 
 describe('PromptEnvelopeProjection contract (issue #2817)', () => {
   it('describes its protocol, method, model, projection revision, and unsupported media', () => {
@@ -41,7 +69,8 @@ describe('PromptEnvelopeProjection contract (issue #2817)', () => {
         },
       ],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(0),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(0),
     };
 
     expect(projection.protocol).toBe('anthropic-messages');
@@ -52,7 +81,7 @@ describe('PromptEnvelopeProjection contract (issue #2817)', () => {
     expect(projection.unsupportedMedia[0].kind).toBe('unsupported');
   });
 
-  it('counts tokens against its finalized representation via countProjectedTokens', async () => {
+  it('counts tokens against its finalized representation via legacyEstimate', async () => {
     const projection: PromptEnvelopeProjection = {
       model: 'gpt-4o',
       protocol: 'openai-chat',
@@ -60,10 +89,11 @@ describe('PromptEnvelopeProjection contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(1234),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(1234),
     };
 
-    const tokens = await projection.countProjectedTokens();
+    const tokens = await projection.legacyEstimate();
     expect(tokens).toBe(1234);
   });
 
@@ -75,7 +105,8 @@ describe('PromptEnvelopeProjection contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(0),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(0),
     };
 
     const protocol: PromptEnvelopeProtocol = projection.protocol;
@@ -89,9 +120,14 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
   it('carries model identity, protocol, method/version, projection revision, token count, and unsupported media', () => {
     const estimate: PromptEnvelopeEstimate = {
       estimatedPromptTokens: 842,
+      activeProvider: 'anthropic',
       model: 'claude-3-5-sonnet',
       protocol: 'anthropic-messages',
       method: 'messages/v1',
+      estimatorMethod: 'calibrated',
+      estimatorFamily: 'legacy-unregistered',
+      estimatorVersion: 'core-estimate-tokens-v1',
+      assetRevision: 'none',
       projectionRevision: 1,
       unsupportedMedia: [
         {
@@ -121,7 +157,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(100),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(100),
     });
 
     expect(estimate.estimatedPromptTokens).toBe(100);
@@ -153,18 +190,69 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(555),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(555),
     };
 
     const estimate = await estimatePromptEnvelope(projection);
 
     expect(estimate.estimatedPromptTokens).toBe(555);
+    expect(estimate.activeProvider).toBe('test-provider');
+    expect(estimate.estimatorMethod).toBe('calibrated');
+    expect(estimate.estimatorFamily).toBe('legacy-unregistered');
+    expect(estimate.estimatorVersion).toBe('core-estimate-tokens-v1');
+    expect(estimate.assetRevision).toBe('none');
     expect(estimate.model).toBe('gpt-4o');
     expect(estimate.protocol).toBe('openai-responses');
+
     expect(estimate.method).toBe('responses/v1');
     expect(estimate.projectionRevision).toBe(1);
     expect(estimate.unsupportedMedia).toStrictEqual([]);
   });
+
+  it.each([
+    [
+      'mismatched projection revision',
+      { projectionRevision: 2 },
+      /projection revision/i,
+    ],
+    [
+      'invalid estimator method',
+      { method: 'approximate' },
+      /estimator method/i,
+    ],
+  ])(
+    'rejects %s returned by the estimator factory',
+    async (_name, invalid, expected) => {
+      const projection: PromptEnvelopeProjection = {
+        model: 'gpt-4o',
+        protocol: 'openai-responses',
+        method: 'responses/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: Object.freeze({}),
+        legacyEstimate: () => Promise.resolve(10),
+      };
+      const invalidFactory: RuntimeTokenizerFactory = {
+        getTokenizer: () => undefined,
+        estimatePrompt: async (request) =>
+          ({
+            count: 10,
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+            ...invalid,
+          }) as Awaited<ReturnType<RuntimeTokenizerFactory['estimatePrompt']>>,
+      };
+
+      await expect(
+        estimatePromptEnvelopeImpl('test-provider', projection, invalidFactory),
+      ).rejects.toThrow(expected);
+    },
+  );
 
   it('preserves unsupported media entries from the projection into the estimate', async () => {
     const unsupported: UnsupportedMediaEntry = {
@@ -179,7 +267,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 2,
       unsupportedMedia: [unsupported],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(300),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(300),
     };
 
     const estimate = await estimatePromptEnvelope(projection);
@@ -202,7 +291,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
         },
       ],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(10),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(10),
     };
 
     const estimate = await estimatePromptEnvelope(projection);
@@ -220,7 +310,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(10),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(10),
     } as unknown as PromptEnvelopeProjection;
 
     await expect(estimatePromptEnvelope(projection)).rejects.toThrow(/model/i);
@@ -234,7 +325,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(-5),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(-5),
     } as unknown as PromptEnvelopeProjection;
 
     await expect(estimatePromptEnvelope(projection)).rejects.toThrow(/token/i);
@@ -253,7 +345,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(tokenCount),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(tokenCount),
     } as unknown as PromptEnvelopeProjection;
 
     await expect(estimatePromptEnvelope(projection)).rejects.toThrow(/token/i);
@@ -267,7 +360,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: null,
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(10),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(10),
     } as unknown as PromptEnvelopeProjection;
 
     await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
@@ -283,7 +377,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [{ kind: 'other', reason: '' }],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(10),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(10),
     } as unknown as PromptEnvelopeProjection;
 
     await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
@@ -291,7 +386,7 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
     );
   });
 
-  it('fail-fast: validates synchronous projection identity (including unsupportedMedia) before awaiting countProjectedTokens', async () => {
+  it('fail-fast: validates synchronous projection identity (including unsupportedMedia) before awaiting legacyEstimate', async () => {
     // A projection with invalid unsupportedMedia must reject WITHOUT ever
     // paying for the async token count — proving synchronous fields are
     // validated up front (fail-fast before async work).
@@ -303,7 +398,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: 'not-an-array',
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => {
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => {
         tokenCountCalls += 1;
         return Promise.resolve(10);
       },
@@ -323,7 +419,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: -1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(10),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(10),
     } as unknown as PromptEnvelopeProjection;
 
     await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
@@ -345,7 +442,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: inputUnsupportedMedia,
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.resolve(10),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(10),
     };
 
     const estimate = await estimatePromptEnvelope(projection);
@@ -365,7 +463,7 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
     expect(Object.isFrozen(originalEntry)).toBe(false);
   });
 
-  it('propagates rejection from countProjectedTokens without masking', async () => {
+  it('propagates rejection from legacyEstimate without masking', async () => {
     const projectionError = new Error('provider tokenizer unavailable');
     const projection: PromptEnvelopeProjection = {
       model: 'gpt-4o',
@@ -374,7 +472,8 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => Promise.reject(projectionError),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.reject(projectionError),
     };
 
     await expect(estimatePromptEnvelope(projection)).rejects.toBe(
@@ -398,7 +497,8 @@ describe('protocol/method pair validation (issue #2817)', () => {
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken: Object.freeze({}),
-        countProjectedTokens: () => Promise.resolve(11),
+        finalizedProjection: Object.freeze({}),
+        legacyEstimate: () => Promise.resolve(11),
       };
 
       const estimate = await estimatePromptEnvelope(projection);
@@ -425,7 +525,8 @@ describe('protocol/method pair validation (issue #2817)', () => {
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken: Object.freeze({}),
-        countProjectedTokens: () => {
+        finalizedProjection: Object.freeze({}),
+        legacyEstimate: () => {
           tokenCountCalls += 1;
           return Promise.resolve(11);
         },
@@ -447,7 +548,8 @@ describe('protocol/method pair validation (issue #2817)', () => {
       projectionRevision: 1,
       unsupportedMedia: [],
       transportToken: Object.freeze({}),
-      countProjectedTokens: () => {
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => {
         tokenCountCalls += 1;
         return Promise.resolve(11);
       },

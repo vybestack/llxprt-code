@@ -32,7 +32,7 @@ export function checkpointMarkerBody(headSha: string): string {
     head_sha: headSha,
     base_sha: FULL_BASE_SHA,
     completion_state: 'complete',
-    ocr_version: '1.7.17',
+    ocr_version: '1.8.4',
     ocr_model: '',
     rules_hash: '',
     policy_hash: '',

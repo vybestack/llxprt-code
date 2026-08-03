@@ -578,7 +578,6 @@ export class TurnProcessor {
         this.compressionHandler.tokenUsageLogger,
         promptId,
         prepared.estimate,
-        provider.name,
       );
       const transportPrepared = bindPreparedTransportSignal(
         prepared,
