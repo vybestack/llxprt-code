@@ -120,12 +120,13 @@ export function loadHarness(
     postScript,
     'regroupLineResolutionFailure',
   );
-  const blockEnd = postScript.indexOf(lastFunction) + lastFunction.length;
-  if (blockEnd <= blockStart) {
+  const lastFunctionStart = postScript.indexOf(lastFunction);
+  if (lastFunctionStart < blockStart) {
     throw new Error(
       'regroupLineResolutionFailure should follow LINE_RESOLUTION_PATTERNS contiguously',
     );
   }
+  const blockEnd = lastFunctionStart + lastFunction.length;
   const block = postScript.slice(blockStart, blockEnd);
 
   const createReviewCalls: CreateReviewCall[] = [];

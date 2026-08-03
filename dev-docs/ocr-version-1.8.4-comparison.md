@@ -434,9 +434,11 @@ The port is deliberately conservative:
   today, so `shouldAdvanceCheckpoint` behaviour is unchanged. The port is
   strictly "same outcomes, fewer API writes".
 
-We do **not** adopt upstream's separate failed-comment summary block; routed
-findings continue to render in our existing `### Inline overflow` section so the
-sticky summary keeps one shape.
+Provably out-of-diff findings render under their own
+`### Findings outside the PR diff` heading and carry their own `out_of_diff`
+telemetry count, rather than being folded into `### Inline overflow`. They were
+not held back by the inline cap, so reporting them as cap overflow would state
+the wrong reason in both the summary and the metadata artifact.
 
 ### #2931 — upstream fail-open publication controls (1.8.1) vs our routing
 

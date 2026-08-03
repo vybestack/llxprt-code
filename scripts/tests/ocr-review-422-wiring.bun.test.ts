@@ -19,7 +19,12 @@ import {
 } from './ocr-review-422-helpers.ts';
 
 // Security note: the vm.runInContext call below executes JavaScript extracted
-// from the trusted, version-controlled ocr-review.yml workflow.
+// from the trusted, version-controlled ocr-review.yml workflow, read from the
+// checked-out HEAD. This is equivalent to eval, and is only acceptable because
+// that file is repository content containing no untrusted input: nothing from a
+// user, a pull request, or the network reaches it. If the workflow ever
+// interpolates untrusted data into this step's script, this harness must be
+// re-evaluated.
 
 let fixture: ReturnType<typeof useWorkflowFixture>;
 
@@ -37,6 +42,7 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
     failedInline: number;
     skippedExactHistoryCount: number;
     overflowRouted: Array<Record<string, unknown>>;
+    outOfDiffRouted: Array<Record<string, unknown>>;
     remaining: Pair[];
     createReviewCalls: CreateReviewCall[];
     listKeyCalls: number;
@@ -129,6 +135,7 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
         listKeyCalls += 1;
         return options.existingKeyBodies ?? [];
       },
+      __listKeyCallCount: () => listKeyCalls,
     };
     vm.createContext(sandbox);
     const source = [
@@ -144,6 +151,11 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
       'let failedInline = 0;',
       'let skippedExactHistoryCount = 0;',
       'const overflowRouted = [];',
+      'const outOfDiffRouted = [];',
+      // Snapshot the count AFTER the prelude's own priming read, so the
+      // assertion measures only what the extracted block did. Subtracting a
+      // hard-coded 1 would silently drift if the prelude ever changed.
+      'const __preludeListCalls = __listKeyCallCount();',
       '__RESULT__ = (async () => {',
       wiringBlock,
       '  return {',
@@ -151,7 +163,9 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
       '    failedInline,',
       '    skippedExactHistoryCount,',
       '    overflowRouted,',
+      '    outOfDiffRouted,',
       '    remaining: pairsToPostIndividually,',
+      '    listKeyCalls: __listKeyCallCount() - __preludeListCalls,',
       '  };',
       '})();',
     ].join(String.fromCharCode(10));
@@ -161,14 +175,11 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
       failedInline: number;
       skippedExactHistoryCount: number;
       overflowRouted: Array<Record<string, unknown>>;
+      outOfDiffRouted: Array<Record<string, unknown>>;
       remaining: Pair[];
+      listKeyCalls: number;
     };
-    return {
-      ...settled,
-      createReviewCalls,
-      // The prelude's own priming read is not part of the workflow.
-      listKeyCalls: listKeyCalls - 1,
-    };
+    return { ...settled, createReviewCalls };
   }
 
   const LINE_422 = Object.assign(new Error('Unprocessable Entity'), {
@@ -191,7 +202,10 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
     // The invariant shouldAdvanceCheckpoint depends on: a comment we decline
     // to post must still count as failed AND reach the sticky summary.
     expect(result.failedInline).toBe(1);
-    expect(result.overflowRouted).toEqual([bad.finding]);
+    // It is reported as out-of-diff, not as inline-cap overflow, because the
+    // cap is not why it was held back.
+    expect(result.outOfDiffRouted).toEqual([bad.finding]);
+    expect(result.overflowRouted).toEqual([]);
     expect(result.remaining).toEqual([]);
   });
 
@@ -208,6 +222,7 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
     expect(result.postedInline).toBe(0);
     expect(result.failedInline).toBe(0);
     expect(result.overflowRouted).toEqual([]);
+    expect(result.outOfDiffRouted).toEqual([]);
     expect(result.remaining.map((p) => p.finding['id'])).toEqual([
       'one',
       'two',
@@ -250,7 +265,7 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
     expect(result.createReviewCalls.length).toBe(1);
     // The already-posted comment must not be re-sent by the grouped review.
     expect(result.createReviewCalls[0].comments).toEqual([good.comment]);
-    expect(result.overflowRouted).toEqual([bad.finding]);
+    expect(result.outOfDiffRouted).toEqual([bad.finding]);
   });
 
   it('re-reads what landed when the grouped write throws', async () => {

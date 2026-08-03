@@ -3039,6 +3039,11 @@ jobs:
             let rawFindingCount = 0;
             let schemaInvalidCount = 0;
             const overflowRouted = [];
+            // Issue #2930: findings the 422 fallback proved sit outside the PR
+            // diff. Kept separate from overflowRouted because they were not
+            // held back by the inline cap — reporting them as cap overflow
+            // would state the wrong reason in both the summary and telemetry.
+            const outOfDiffRouted = [];
             const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
             const exitCode = readExitCode('ocr-exit-code.txt');
             if (exitCode !== 0) {
@@ -3760,8 +3765,15 @@ jobs:
               // resend would very likely earn a second 422 from an endpoint
               // that may already be throttling us. (`pairs` is the
               // dedup-filtered candidate set rather than the exact rejected
-              // batch, so this is a strong likelihood rather than a certainty —
-              // the per-comment loop still publishes every one of them.)
+              // batch, so this is a strong likelihood rather than a certainty.)
+              //
+              // Falling through to the per-comment loop is not merely the safe
+              // choice here, it is the more USEFUL one: GitHub rejects the
+              // whole batch when ANY single comment is unresolvable, so posting
+              // one at a time still publishes every good comment and isolates
+              // the offending one. A repeated batch can only fail as a unit and
+              // tells us nothing about which comment was at fault. Upstream
+              // skips its secondary batch under the same condition.
               if (validPairs.length === 0 || validPairs.length === pairs.length) {
                 return {
                   posted: 0,
@@ -4543,7 +4555,7 @@ jobs:
                   for (const p of regrouped.invalidPairs) {
                     core.warning(`Skipping OCR inline comment on ${p.comment.path}:${p.comment.line}; it is outside the PR diff hunks. Routing it to the sticky summary.`);
                     failedInline += 1;
-                    overflowRouted.push(p.finding);
+                    outOfDiffRouted.push(p.finding);
                   }
                   pairsToPostIndividually = regrouped.remaining;
                   // A grouped write that threw may still have been committed,
@@ -4757,6 +4769,16 @@ jobs:
               body.push('', '### Inline overflow (exceeds inline comment cap)', '');
               for (const f of overflowRouted) {
                 const where = f && f.path ? `\`${f.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
+                const rawText = f.content || f.comment || f.message || f.body;
+                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                body.push(`- ${where}${label}${text}`);
+              }
+            }
+            if (outOfDiffRouted.length > 0) {
+              body.push('', '### Findings outside the PR diff', '');
+              for (const f of outOfDiffRouted) {
+                const where = f && f.path ? ``${f.path}`: ` : '';
                 const label = categorySeverityLabel(f);
                 const rawText = f.content || f.comment || f.message || f.body;
                 const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
@@ -5217,8 +5239,9 @@ jobs:
                 schema_invalid: schemaInvalidCount,
                 policy_tiered: summaryRouted.length + overflowRouted.length,
                 inline_overflow: overflowRouted.length,
+                out_of_diff: outOfDiffRouted.length,
                 inline: postedInline,
-                summary: lineless.length + summaryRouted.length + overflowRouted.length,
+                summary: lineless.length + summaryRouted.length + overflowRouted.length + outOfDiffRouted.length,
                 overflow: overflowRouted.length,
                 failed: failedInline,
                 severity_distribution: severityDistribution,
