@@ -565,6 +565,29 @@ describe('TokenAccessCoordinator', () => {
       expect(isRuntimeReplacedError(error)).toBe(true);
     });
 
+    it('propagates the outage out of forceRefreshToken instead of returning null', async () => {
+      // forceRefreshToken writes the refreshed token back to the store, so the
+      // outage surfaces on the write path too. Swallowing it here would send
+      // the caller into a re-authentication that cannot persist anything.
+      const store = runtimeReplacedStore();
+      store.saveToken = vi.fn(async () => {
+        throw new SecureStoreError(
+          "LLxprt's runtime was replaced on disk while this session was running.",
+          'RUNTIME_REPLACED',
+          'Restart LLxprt to recover.',
+        );
+      });
+      const provider = createMockProvider('anthropic');
+      const { coordinator } = makeCoordinator({
+        provider,
+        tokenStoreOverride: store,
+      });
+
+      await expect(coordinator.forceRefreshToken('anthropic')).rejects.toThrow(
+        /replaced on disk/i,
+      );
+    });
+
     it('still swallows an ordinary read failure as a cache miss', async () => {
       // Regression guard: only the terminal identity is promoted to a throw.
       // Routine store errors must keep degrading to null as before.

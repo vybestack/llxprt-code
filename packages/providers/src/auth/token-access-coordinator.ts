@@ -1044,6 +1044,7 @@ export class TokenAccessCoordinator {
       }
       return refreshedToken;
     } catch (refreshError) {
+      rethrowIfStoreOutage(refreshError);
       logger.debug(
         () =>
           `[FLOW] Force refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,

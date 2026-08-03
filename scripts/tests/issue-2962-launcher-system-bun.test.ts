@@ -197,6 +197,10 @@ describeDarwinOnly('POSIX launcher system-Bun preference (issue #2962)', () => {
       `${stubDir}:/usr/bin:/bin`,
     );
     expectNoSpawnError(result);
+    // Assert the fallback actually succeeded, not merely that the stub was
+    // skipped: an unreadable pin must still launch via the bundled runtime.
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(BUNDLED_MARKER);
     expect(result.stdout).not.toContain(STUB_MARKER);
   });
 
