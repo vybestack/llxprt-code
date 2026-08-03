@@ -112,8 +112,15 @@ function restoreWriteBits(root: string): void {
 }
 
 function removeTempDir(dir: string): void {
-  restoreWriteBits(dir);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    restoreWriteBits(dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    // Best-effort cleanup: surface the failure so it is visible, but never
+    // re-throw — a cleanup error thrown from `finally` would mask the real
+    // assertion failure. rmSync(force) already tolerates a missing path.
+    console.warn(`temp cleanup failed for ${dir}:`, error);
+  }
 }
 
 describe('issue-planner confinement script (textual)', () => {
