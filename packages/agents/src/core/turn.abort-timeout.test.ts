@@ -12,6 +12,7 @@ import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
+import { flushEventLoop } from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -182,9 +183,12 @@ describe('Turn run - abort and idle timeout', () => {
         }
       })();
 
-      for (let i = 0; i < 200; i++) {
-        await Promise.resolve();
-      }
+      // Drain the event loop so the async consumer processes the first chunk
+      // and aborts the controller. waitForCondition cannot be used here
+      // because abortController.abort() is called synchronously inside the
+      // for-await body — the for-await loop must make at least one iteration,
+      // which requires a macrotask yield, not a microtask drain.
+      await flushEventLoop();
       await vi.advanceTimersByTimeAsync(100);
       await runPromise;
 
@@ -351,9 +355,11 @@ describe('Turn run - abort and idle timeout', () => {
         return events;
       })();
 
-      for (let i = 0; i < 200; i++) {
-        await Promise.resolve();
-      }
+      // Drain the event loop so the async consumer processes the first chunk
+      // and the provider signal is captured. waitForCondition cannot be used
+      // here because the provider signal is pushed inside the mock's async
+      // generator body, which requires a macrotask yield to enter.
+      await flushEventLoop();
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
       const events = await eventsPromise;
 

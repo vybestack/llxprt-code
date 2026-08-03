@@ -43,15 +43,16 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js', () => ({
-  ChatSession: vi.fn(),
-  StreamEventType: {
-    CHUNK: 'chunk',
-    RETRY: 'retry',
-    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
-    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
-  },
-}));
+vi.mock('./chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('./chatSession.js')) => ({
+    ...actual,
+    ChatSession: vi.fn(),
+  });
+  const result = importOriginal() as
+    | typeof import('./chatSession.js')
+    | Promise<typeof import('./chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {

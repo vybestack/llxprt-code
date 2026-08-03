@@ -33,17 +33,16 @@ const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
     mockExecuteToolCall: vi.fn(),
   }));
 
-vi.mock('../core/chatSession.js', () => ({
-  // Re-export StreamEventType string-enum values for production code
-  // (executor-stream-processor.ts) that imports them from this module.
-  StreamEventType: {
-    CHUNK: 'chunk',
-    RETRY: 'retry',
-    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
-    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
-  },
-  ChatSession: MockedChatSession,
-}));
+vi.mock('../core/chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('../core/chatSession.js')) => ({
+    ...actual,
+    ChatSession: MockedChatSession,
+  });
+  const result = importOriginal() as
+    | typeof import('../core/chatSession.js')
+    | Promise<typeof import('../core/chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 
 vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,

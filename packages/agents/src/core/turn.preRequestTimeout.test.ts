@@ -23,6 +23,7 @@ import {
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { flushEventLoop } from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -156,7 +157,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     await vi.advanceTimersByTimeAsync(
       DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS - 1,
     );
-    await Promise.resolve();
+    // Let the event loop settle so the consumer processes any pending state.
+    await flushEventLoop();
     expect(events).toHaveLength(0);
 
     // Advance past the default first-response timeout (300000ms). Drain all

@@ -118,7 +118,7 @@ vi.mock('./turn', (importOriginal) => {
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {
-    pendingToolCalls = [];
+    pendingToolCalls: unknown[] = [];
     run = mockTurnRunFn;
     constructor() {}
   }

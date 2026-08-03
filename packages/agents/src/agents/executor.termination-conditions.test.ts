@@ -25,6 +25,7 @@ import {
   type ExecutorTestFixture,
   type MockFn,
 } from './executor-test-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
   vi.hoisted(() => ({
@@ -33,17 +34,16 @@ const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
     mockExecuteToolCall: vi.fn(),
   }));
 
-vi.mock('../core/chatSession.js', () => ({
-  // Re-export StreamEventType string-enum values for production code
-  // (executor-stream-processor.ts) that imports them from this module.
-  StreamEventType: {
-    CHUNK: 'chunk',
-    RETRY: 'retry',
-    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
-    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
-  },
-  ChatSession: MockedChatSession,
-}));
+vi.mock('../core/chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('../core/chatSession.js')) => ({
+    ...actual,
+    ChatSession: MockedChatSession,
+  });
+  const result = importOriginal() as
+    | typeof import('../core/chatSession.js')
+    | Promise<typeof import('../core/chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 
 vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
@@ -179,14 +179,12 @@ describe('AgentExecutor run (Termination Conditions)', () => {
 
     // Flush microtasks so the executor's async setup chain registers the
     // stream-idle-timeout timer before we advance fake time.
-    for (let i = 0; i < 200; i++) {
-      await Promise.resolve();
-    }
+    expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+      true,
+    );
     await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
     await runRejection;
-    expect(capturedSignal?.aborted).toBe(true);
-    expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     expect(capturedSignal?.aborted).toBe(true);
     expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
   });

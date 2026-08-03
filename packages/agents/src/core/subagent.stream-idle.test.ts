@@ -35,6 +35,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { flushEventLoop } from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -52,15 +53,16 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js', () => ({
-  ChatSession: vi.fn(),
-  StreamEventType: {
-    CHUNK: 'chunk',
-    RETRY: 'retry',
-    AGENT_EXECUTION_STOPPED: 'agent_execution_stopped',
-    AGENT_EXECUTION_BLOCKED: 'agent_execution_blocked',
-  },
-}));
+vi.mock('./chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('./chatSession.js')) => ({
+    ...actual,
+    ChatSession: vi.fn(),
+  });
+  const result = importOriginal() as
+    | typeof import('./chatSession.js')
+    | Promise<typeof import('./chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -276,7 +278,8 @@ describe('subagent.ts', () => {
 
       // Advance past the custom timeout
       await vi.advanceTimersByTimeAsync(20_000);
-      await Promise.resolve();
+      // Let the event loop settle so the timeout is processed.
+      await flushEventLoop();
 
       // Run to completion
       await vi.runAllTimersAsync();
@@ -357,7 +360,8 @@ describe('subagent.ts', () => {
 
       // Advance 30 minutes - no timeout because watchdog is disabled
       await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
-      await Promise.resolve();
+      // Let the event loop settle so the consumer can process state.
+      await flushEventLoop();
 
       // No timeout yet
       expect(scope.output.terminate_reason).not.toBe(
@@ -366,9 +370,9 @@ describe('subagent.ts', () => {
 
       // Resolve the iterator to let the test complete
       resolveIterator!();
-      for (let i = 0; i < 200; i++) {
-        await Promise.resolve();
-      }
+      // Yield to the real event loop so the generator can process the
+      // resolved iterator promise before awaiting runPromise.
+      await flushEventLoop();
 
       await runPromise;
       // Should complete normally (not timeout)
@@ -454,7 +458,8 @@ describe('subagent.ts', () => {
 
       // Advance past the env timeout (8s) but before config timeout (45s)
       await vi.advanceTimersByTimeAsync(12_000);
-      await Promise.resolve();
+      // Let the event loop settle so the timeout is processed.
+      await flushEventLoop();
 
       // Run to completion
       await vi.runAllTimersAsync();

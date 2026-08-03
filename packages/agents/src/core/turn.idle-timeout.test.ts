@@ -11,6 +11,7 @@ import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
+import { waitForCondition, flushEventLoop } from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -99,15 +100,21 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     );
     mockGetHistory.mockReturnValue([]);
 
+    // Controllable gate: the generator pauses until the gate resolves,
+    // modeling a finite inter-chunk gap. The test resolves the gate after
+    // the idle timeout fires to verify the late output is suppressed.
+    let resolveGate: () => void;
+    const gate = new Promise<void>((resolve) => {
+      resolveGate = resolve;
+    });
+
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'First chunk' }),
       };
       // Inter-chunk gap that exceeds the 30s inter-chunk idle timeout.
-      // Use a never-resolving promise instead of advanceTimersByTimeAsync
-      // so the generator doesn't eagerly advance timers under Bun.
-      await new Promise<void>(() => undefined);
+      await gate;
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'Late response' }),
@@ -126,23 +133,16 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    // Let the consumer process the first chunk. Under Bun, the async generator
-    // consumer needs enough microtask rounds to pull the first chunk through
-    // Turn.run's internal pipeline. We drain incrementally and check whether
-    // the first Content event has arrived.
-    for (let i = 0; i < 100; i++) {
-      await Promise.resolve();
-      if (events.length >= 1) break;
-    }
+    // Let the consumer process the first chunk through Turn.run's internal
+    // pipeline before advancing fake time.
+    expect(await waitForCondition(() => events.length >= 1)).toBe(true);
     vi.advanceTimersByTime(29_999);
-    await Promise.resolve();
     // First chunk arrived immediately (Content), but the inter-chunk idle
     // timeout (30s gap before the second chunk) has not yet elapsed.
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe(AgentEventType.Content);
 
     await vi.advanceTimersByTimeAsync(2);
-    await Promise.resolve();
 
     await vi.runAllTimersAsync();
     await runPromise;
@@ -151,6 +151,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       (e) => e.type === AgentEventType.StreamIdleTimeout,
     );
     expect(timeoutEvent).toBeDefined();
+    // The late "Late response" chunk must NOT appear — the iterator cleans up
+    // after the idle timeout so the gate resolution is harmless but the late
+    // output is suppressed.
+    resolveGate!();
+    // The runPromise has already resolved (the idle timeout ended the
+    // iterator), so just drain the macrotask queue to ensure the gate
+    // promise's resolution propagates without surfacing any late output.
+    await flushEventLoop();
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ value: 'Late response' }),
+    );
     expect(mockGetConfig).toHaveBeenCalled();
   });
 
@@ -255,7 +266,8 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
 
     await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
-    await Promise.resolve();
+    // Let the event loop settle so the consumer processes any pending state.
+    await flushEventLoop();
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
@@ -329,7 +341,8 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
 
     await vi.advanceTimersByTimeAsync(16_000);
-    await Promise.resolve();
+    // Let the event loop settle so the consumer processes any pending state.
+    await flushEventLoop();
 
     await vi.runAllTimersAsync();
     await runPromise;
@@ -398,7 +411,8 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
 
     await vi.advanceTimersByTimeAsync(700_000);
-    await Promise.resolve();
+    // Let the event loop settle so the consumer processes any pending state.
+    await flushEventLoop();
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),

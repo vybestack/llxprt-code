@@ -34,6 +34,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 function createContentGeneratorStub(): ContentGenerator {
   return {
@@ -318,13 +319,9 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
         .catch((error: unknown) => error);
 
-      // Drain microtasks so the provider stream is entered and pendingReads
-      // increments. vi.waitFor uses real timers which may not fire under
-      // Bun's fake timers.
-      for (let i = 0; i < 2000; i++) {
-        await Promise.resolve();
-        if (pendingReads >= 1) break;
-      }
+      // Wait for the provider stream to be entered so pendingReads has
+      // incremented before advancing fake timers.
+      expect(await waitForCondition(() => pendingReads >= 1)).toBe(true);
       expect(pendingReads).toBeGreaterThanOrEqual(1);
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
       const firstError = await firstSend;
@@ -454,24 +451,14 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
         .catch((error: unknown) => error);
 
-      // Wait for the first send to reach the blocked read.
-      for (let i = 0; i < 2000; i++) {
-        await Promise.resolve();
-        if (capturedSignals.length >= 1) break;
-      }
-      expect(capturedSignals.length).toBeGreaterThanOrEqual(1);
+      // Wait for BOTH sends to reach the blocked read before advancing time.
+      // Reaching the second provider call crosses a macrotask boundary, so a
+      // microtask-only drain would spin forever.
+      expect(await waitForCondition(() => capturedSignals.length >= 2)).toBe(
+        true,
+      );
 
-      // Advance past timeout for the first stream. Under Bun, ChatSession
-      // may serialize sends, so the second stream starts only after the first
-      // aborts. Advance in steps with microtask draining between each step
-      // so the second send can register its own timeout watchdog.
-      await vi.advanceTimersByTimeAsync(timeoutMs + 1);
-      for (let i = 0; i < 2000; i++) {
-        await Promise.resolve();
-        if (capturedSignals.length >= 2) break;
-      }
-      // Advance past the second timeout too (the second send may have started
-      // after the first aborted due to ChatSession serialization).
+      // Advance past timeout for BOTH concurrent streams.
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
 
       const [resultA, resultB] = await Promise.all([sendA, sendB]);

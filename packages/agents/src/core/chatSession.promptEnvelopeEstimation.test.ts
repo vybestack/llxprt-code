@@ -53,6 +53,7 @@ import type {
 } from '@vybestack/llxprt-code-providers/IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 /**
  * A fake provider that implements projectPromptEnvelope by serializing the
@@ -544,9 +545,7 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
 
     // Advance past the default 5s retry backoff delay so no real wall-clock
     // time is consumed by the test.
-    for (let i = 0; i < 200; i++) {
-      await Promise.resolve();
-    }
+    expect(await waitForCondition(() => attempt >= 1)).toBe(true);
     await vi.advanceTimersByTimeAsync(10_000);
     await sendPromise;
 

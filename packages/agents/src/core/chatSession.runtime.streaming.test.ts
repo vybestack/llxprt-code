@@ -34,6 +34,7 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 describe('ChatSession runtime streaming and abort behavior', () => {
   let settingsService: SettingsService;
@@ -254,11 +255,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
-      for (let i = 0; i < 200; i++) {
-        await Promise.resolve();
-      }
+      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+        true,
+      );
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
@@ -356,11 +355,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
-      for (let i = 0; i < 200; i++) {
-        await Promise.resolve();
-      }
+      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+        true,
+      );
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
