@@ -621,8 +621,11 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: [
       'test-bun/credential-write-lock.bun.ts',
       'test-bun/keyring-write-verification.bun.ts',
+      'test-bun/machine-secret.bun.ts',
       'test-bun/machine-secret.concurrent-write.bun.ts',
+      'test-bun/secure-store.bun.ts',
       'test-bun/secure-store.concurrent-write.bun.ts',
+      'test-bun/storage-credential-locks-dir.bun.ts',
     ],
   },
   {

@@ -16,20 +16,20 @@
  * provider logic is exercised; the module under test is never mocked.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
-import type { KeyringAdapter } from './secure-store.js';
+import type { KeyringAdapter } from '../src/secure-store/secure-store.js';
 import {
   getMachineSecret,
   resetMachineSecretCache,
   isLockInfrastructureError,
   type MachineSecretOptions,
-} from './machine-secret.js';
-import { CredentialWriteLock } from './credential-write-lock.js';
-import { SecureStoreError } from './secure-store-errors.js';
+} from '../src/secure-store/machine-secret.js';
+import { CredentialWriteLock } from '../src/secure-store/credential-write-lock.js';
+import { SecureStoreError } from '../src/secure-store/secure-store-errors.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -392,11 +392,7 @@ describe('Machine Secret Provider — Concurrency', () => {
       // getPassword always returns null — simulating a keyring whose
       // read-back is broken/missing.
       getPassword: async () => null,
-      setPassword: async (
-        _service: string,
-        _account: string,
-        _password: string,
-      ) => undefined,
+      setPassword: async () => undefined,
       deletePassword: async () => true,
     };
 
@@ -910,7 +906,9 @@ describe('Machine Secret Provider — narrowed error handling (F3)', () => {
     });
 
     expect(secret).toBeNull();
-  });
+    // This test deliberately waits out the lock's real DEFAULT_WAIT_MS (5 s),
+    // so it needs a timeout above the default per-test budget.
+  }, 20_000);
 
   it('returns null on lock UNAVAILABLE (lock dir cannot be created)', async () => {
     // Point lockDir at a path whose parent is a regular file, so mkdir fails

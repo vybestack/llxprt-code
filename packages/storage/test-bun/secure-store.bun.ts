@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   SecureStore,
   SecureStoreError,
   type KeyringAdapter,
-} from './secure-store.js';
+} from '../src/secure-store/secure-store.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -137,7 +137,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       },
     );
 
-    it.runIf(process.platform === 'win32')(
+    it.skipIf(process.platform !== 'win32')(
       'should clean up the current fallback path after a verified OAuth write on Windows',
       async () => {
         const key = 'oauth:default';

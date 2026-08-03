@@ -19,7 +19,7 @@ Bun execution command (or explains why it still requires Vitest).
 | packages/policy               | 6                | 6             | 0                 | 0                         |
 | packages/providers            | 478              | 1             | 0                 | 477                       |
 | packages/settings             | 13               | 0             | 0                 | 13                        |
-| packages/storage              | 31               | 4             | 0                 | 27                        |
+| packages/storage              | 32               | 7             | 0                 | 25                        |
 | packages/telemetry            | 11               | 11 (manifest) | 0                 | 0                         |
 | packages/test-utils           | 5                | 2             | 1                 | 2                         |
 | packages/tools                | 62               | 0             | 0                 | 62                        |
@@ -152,9 +152,9 @@ do not change `SELECTED_FILE_COUNT`:
 
 - `src/BaseProvider.test.ts`
 
-### packages/storage (4 files)
+### packages/storage (7 files)
 
-Four storage secure-store test files are genuinely Bun-native: they live under
+Seven storage secure-store test files are genuinely Bun-native: they live under
 `test-bun/` with the `.bun.ts` suffix and import from `bun:test`, following the
 same convention as `packages/tools/test-bun`. They run via
 `scripts/run_bun_tests.ts --workspace storage` (isolated process per file) and
@@ -167,13 +167,23 @@ Because the `.bun.ts` suffix does not match Vitest's default
 they are executed only by Bun, with no dual-runner shim involved.
 
 The workspace primary `test` script still uses Vitest (`vitest run`) because
-the broader storage migration is deferred; the remaining 27 storage test files
+the broader storage migration is deferred; the remaining 25 storage test files
 are deferred to a future slice.
+
+Two files that remain on Vitest do so for a concrete reason rather than by
+default: `src/config/storage.test.ts` mocks `fs` via `vi.mock`, and
+`packages/cli/src/config/extensions/settingsStorage.test.ts` mocks the whole
+storage module the same way. Vitest module mocking has no direct bun:test
+equivalent, so converting them is not mechanical and belongs to the migration
+slice.
 
 - `test-bun/credential-write-lock.bun.ts`
 - `test-bun/keyring-write-verification.bun.ts`
+- `test-bun/machine-secret.bun.ts`
 - `test-bun/machine-secret.concurrent-write.bun.ts`
+- `test-bun/secure-store.bun.ts`
 - `test-bun/secure-store.concurrent-write.bun.ts`
+- `test-bun/storage-credential-locks-dir.bun.ts`
 
 ### packages/telemetry (11 files)
 
@@ -212,7 +222,7 @@ will be migrated in a bounded vertical slice:
 1. **packages/test-utils** (remaining 2 PTY-based files) — Slice 2
 2. **packages/settings** (13 files) — Slice 3
 3. **packages/ide-integration** (10 files) — Slice 4
-4. **packages/storage** (27 remaining files) — Slice 5
+4. **packages/storage** (25 remaining files) — Slice 5
 5. **packages/vscode-ide-companion** (6 files) — Slice 6
 6. **packages/mcp** (46 files) — Slice 7
 7. **packages/tools** (62 files) — Slice 8
