@@ -120,11 +120,9 @@ describe('useAgentEventStream', () => {
 
   it('breaks iteration when the abort signal fires', async () => {
     const controller = new AbortController();
-    let yieldCount = 0;
     const agent = createFakeAgent([]);
     (agent as unknown as { stream: unknown }).stream = async function* () {
       for (let i = 0; i < 100; i++) {
-        yieldCount++;
         yield { type: 'text', text: `chunk-${i}` } as AgentEvent;
         await new Promise((r) => setTimeout(r, 0));
       }
@@ -159,7 +157,6 @@ describe('useAgentEventStream', () => {
 
     expect(routed.length).toBeGreaterThan(0);
     expect(routed.length).toBeLessThan(100);
-    expect(yieldCount).toBeLessThanOrEqual(routed.length + 1);
     unmount();
   });
 

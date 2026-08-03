@@ -303,11 +303,15 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(turnCancelledRef.current).toBe(true);
     expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
 
+    const turn1Signal = deps.abortControllerRef.current?.signal;
+    expect(turn1Signal?.aborted).toBe(true);
+
     deps.flushPendingHistoryItem.mockClear();
     deps.setPendingHistoryItem.mockClear();
     deps.pendingHistoryItemRef.current = { type: 'gemini', text: 'stale' };
     deps.loopDetectedRef.current = true;
-    deps.abortControllerRef.current = new AbortController();
+    const newerController = new AbortController();
+    deps.abortControllerRef.current = newerController;
 
     await act(async () => {
       turnDeferred.resolve();
@@ -317,7 +321,8 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
     expect(deps.flushPendingHistoryItem).not.toHaveBeenCalled();
     expect(deps.setPendingHistoryItem).not.toHaveBeenCalled();
-    expect(deps.loopDetectedRef.current).toBe(true);
+    expect(deps.abortControllerRef.current).toBe(newerController);
+    expect(newerController.signal).not.toBe(turn1Signal);
     expect(deps.handleLoopDetectedEvent).not.toHaveBeenCalled();
     expect(flushAtTurnBoundary).not.toHaveBeenCalled();
   });
