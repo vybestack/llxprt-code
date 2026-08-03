@@ -114,7 +114,9 @@ export class GeminiProvider extends BaseProvider {
     }
 
     throw new Error(
-      'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
+      process.env.LLXPRT_CREDENTIAL_SOCKET
+        ? 'No Gemini authentication configured inside the sandbox. Ambient Google credentials (GEMINI_API_KEY, GOOGLE_API_KEY, ADC, gcloud) are intentionally not available inside a container sandbox. Save your Gemini API key on the host with `/key save <name> <key>` and reference it with `--key-name <name>` or a profile `auth-key-name`; it is resolved through the credential proxy.'
+        : 'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
     );
   }
 

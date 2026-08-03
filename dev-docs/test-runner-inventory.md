@@ -6,27 +6,27 @@ Bun execution command (or explains why it still requires Vitest).
 
 ## Summary
 
-| Area                          | Total test files | Bun-native    | Vitest (retained) | Deferred to future slices |
-| ----------------------------- | ---------------- | ------------- | ----------------- | ------------------------- |
-| packages/a2a-server           | 15               | 15            | 0                 | 0                         |
-| packages/agents               | 348              | 0             | 0                 | 348                       |
-| packages/auth                 | 37               | 37            | 0                 | 0                         |
-| packages/cli                  | 659              | 11            | 0                 | 648                       |
-| packages/core                 | 322              | 322           | 0                 | 0                         |
-| packages/ide-integration      | 10               | 0             | 0                 | 10                        |
-| packages/lsp                  | 0                | all           | 0                 | 0                         |
-| packages/mcp                  | 46               | 0             | 0                 | 46                        |
-| packages/policy               | 6                | 6             | 0                 | 0                         |
-| packages/providers            | 478              | 1             | 0                 | 477                       |
-| packages/settings             | 13               | 0             | 0                 | 13                        |
-| packages/storage              | 31               | 7             | 0                 | 24                        |
-| packages/telemetry            | 11               | 11 (manifest) | 0                 | 0                         |
-| packages/test-utils           | 5                | 2             | 1                 | 2                         |
-| packages/tools                | 62               | 0             | 0                 | 62                        |
-| packages/vscode-ide-companion | 6                | 0             | 0                 | 6                         |
-| scripts/tests                 | 97               | 0             | 0                 | 97                        |
-| evals                         | 2                | 0             | 0                 | 2                         |
-| integration-tests             | 26               | 0             | 0                 | 26                        |
+| Area                          | Total test files | Bun-native     | Vitest (retained) | Deferred to future slices |
+| ----------------------------- | ---------------- | -------------- | ----------------- | ------------------------- |
+| packages/a2a-server           | 15               | 15             | 0                 | 0                         |
+| packages/agents               | 349              | 2 (manifest)   | 0                 | 347                       |
+| packages/auth                 | 37               | 37             | 0                 | 0                         |
+| packages/cli                  | 659              | 12 (manifest)  | 0                 | 647                       |
+| packages/core                 | 322              | 322            | 0                 | 0                         |
+| packages/ide-integration      | 10               | 0              | 0                 | 10                        |
+| packages/lsp                  | 0                | all            | 0                 | 0                         |
+| packages/mcp                  | 46               | 0              | 0                 | 46                        |
+| packages/policy               | 6                | 6              | 0                 | 0                         |
+| packages/providers            | 479              | 479 (manifest) | 0                 | 0                         |
+| packages/settings             | 13               | 0              | 0                 | 13                        |
+| packages/storage              | 31               | 7              | 0                 | 24                        |
+| packages/telemetry            | 11               | 11 (manifest)  | 0                 | 0                         |
+| packages/test-utils           | 5                | 2              | 1                 | 2                         |
+| packages/tools                | 62               | 0              | 0                 | 62                        |
+| packages/vscode-ide-companion | 6                | 0              | 0                 | 6                         |
+| scripts/tests                 | 97               | 0              | 0                 | 97                        |
+| evals                         | 2                | 0              | 0                 | 2                         |
+| integration-tests             | 26               | 0              | 0                 | 26                        |
 
 ## Fully migrated workspaces (Bun-native as primary `test` script)
 
@@ -127,9 +127,16 @@ All 6 test files are Bun-native. The `research/` directory is excluded via
 These files run under Bun via `scripts/run_bun_tests.ts` but their workspace
 primary `test` script still uses Vitest for the bulk of files.
 
-### packages/cli (11 files)
+### packages/agents (2 files)
+
+- `src/core/CompressionProfileResolver.proxyKeyStorage.test.ts`
+- `test-bun/subagentAnthropicTextSettings.issue1738.bun.ts`
+
+### packages/cli (12 files)
 
 - `src/__tests__/cliSessionDispatch.characterization.test.tsx`
+- `src/utils/sandbox-containers.test.ts`
+- `src/zed-integration/zed-session-lifecycle.test.ts`
 - `test-utils/augment-bun-vi-cleanup.bun.ts`
 
 The JSP/1 observation producer suite (issue #2779) is Bun-native from the start
@@ -158,9 +165,17 @@ runner.
 
 ### packages/core — fully migrated (see above)
 
-### packages/providers (1 file)
+### packages/providers (manifest-driven, ~474 files)
 
-- `src/BaseProvider.test.ts`
+The providers workspace primary `test` script is fully manifest-driven
+(`bun ../../scripts/run_bun_tests.ts --workspace providers`). All listed
+manifest files run under Bun in isolated processes. The manifest has grown
+well beyond the single file listed at issue #2578 time; see
+`scripts/bun-test-manifest.ts` for the authoritative file list. Notable
+#2946 additions:
+
+- `src/__tests__/BaseProvider.proxyKeyStorage.test.ts`
+- `src/gemini/GeminiProvider.auth.test.ts`
 
 ### packages/storage (7 files)
 
@@ -249,9 +264,9 @@ will be migrated in a bounded vertical slice:
 5. **packages/vscode-ide-companion** (6 files) — Slice 6
 6. **packages/mcp** (46 files) — Slice 7
 7. **packages/tools** (62 files) — Slice 8
-8. **packages/providers** (477 files) — Slice 10
-9. **packages/agents** (348 files) — Slice 11
-10. **packages/cli** (648 files) — Slice 12
+8. **packages/providers** (~4 remaining files) — Slice 10
+9. **packages/agents** (~346 remaining files) — Slice 11
+10. **packages/cli** (~646 remaining files) — Slice 12
 11. **scripts/tests** (97 files) — Slice 13
 12. **evals** (2 files) — Slice 14
 13. **integration-tests** (26 files) — Slice 15
