@@ -144,7 +144,7 @@ describe('buildRipgrepArgs', () => {
 });
 
 describe('parseRipgrepLine', () => {
-  it.runIf(process.platform === 'win32')(
+  it.skipIf(process.platform !== 'win32')(
     'parses null-delimited Windows drive-letter paths',
     () => {
       const basePath = 'C:\\repo';

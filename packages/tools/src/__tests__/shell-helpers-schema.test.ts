@@ -5,7 +5,6 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as os from 'node:os';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
@@ -13,7 +12,18 @@ import type {
 } from '../interfaces/index.js';
 import { buildCommandToExecute } from '../tools/shell-helpers.js';
 
-vi.mock('node:os');
+const { mockPlatform } = vi.hoisted(() => ({
+  mockPlatform: vi.fn(() => 'darwin'),
+}));
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    default: { platform: mockPlatform, EOL: actual.EOL },
+    platform: mockPlatform,
+    EOL: actual.EOL,
+  };
+});
 
 function createFakeShellService(): IShellExecutionService {
   return {
@@ -50,7 +60,7 @@ function getCommandDescription(tool: ShellTool): string {
 
 describe('ShellTool schema guidance on Windows', () => {
   beforeEach(() => {
-    vi.mocked(os.platform).mockReturnValue('win32');
+    mockPlatform.mockReturnValue('win32');
   });
 
   it('describes the PowerShell runtime invocation', () => {
@@ -115,7 +125,7 @@ describe('Windows command preparation', () => {
 
 describe('ShellTool schema guidance on non-Windows platforms', () => {
   it('preserves bash guidance', () => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
+    mockPlatform.mockReturnValue('darwin');
 
     expect(createShellTool().schema).toMatchObject({
       description: expect.stringContaining('bash -c'),
@@ -132,7 +142,7 @@ describe('ShellTool schema guidance on non-Windows platforms', () => {
 
 describe('buildCommandToExecute foreground wrapping (non-Windows)', () => {
   beforeEach(() => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
+    mockPlatform.mockReturnValue('darwin');
   });
 
   it('wraps a foreground command in the expected group wrapper', () => {
@@ -150,7 +160,7 @@ describe('buildCommandToExecute foreground wrapping (non-Windows)', () => {
 
 describe('buildCommandToExecute on Windows', () => {
   beforeEach(() => {
-    vi.mocked(os.platform).mockReturnValue('win32');
+    mockPlatform.mockReturnValue('win32');
   });
 
   it('returns the command unchanged', () => {
@@ -161,7 +171,7 @@ describe('buildCommandToExecute on Windows', () => {
 
 describe('ShellTool schema is_background property', () => {
   it('exposes is_background as a boolean with the managed job contract on non-Windows', () => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
+    mockPlatform.mockReturnValue('darwin');
 
     const properties = getObjectProperty(
       createShellTool().schema.parametersJsonSchema,
@@ -181,7 +191,7 @@ describe('ShellTool schema is_background property', () => {
   });
 
   it('does not expose is_background on Windows', () => {
-    vi.mocked(os.platform).mockReturnValue('win32');
+    mockPlatform.mockReturnValue('win32');
 
     const properties = getObjectProperty(
       createShellTool().schema.parametersJsonSchema,
@@ -193,7 +203,7 @@ describe('ShellTool schema is_background property', () => {
 
 describe('ShellTool description mentions managed background jobs', () => {
   it('documents the trailing & managed job path on non-Windows', () => {
-    vi.mocked(os.platform).mockReturnValue('darwin');
+    mockPlatform.mockReturnValue('darwin');
 
     const description = createShellTool().schema.description ?? '';
     expect(description).toContain('managed background job');

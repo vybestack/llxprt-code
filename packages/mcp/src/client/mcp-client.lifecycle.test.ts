@@ -43,7 +43,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js');
 vi.mock('../auth/oauth-provider.js');
 vi.mock('../auth/oauth-token-storage.js');
 vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library');
+vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
 vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
@@ -67,6 +67,7 @@ describe('mcp-client', () => {
   let testWorkspace: string;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     testWorkspace = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-agent-test-'),
     );

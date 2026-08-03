@@ -204,28 +204,34 @@ export function writeJUnitReport(
 const ZERO_FAIL_PATTERN = /\b0 fail\b/;
 
 /**
- * Detects "tests passed but process didn't exit" by checking output for
- * passing test lines without any failures. Bun's test runner writes test
- * results to stderr, so both streams are combined for analysis. Some test
- * files leave lingering handles (e.g. credential proxy Unix sockets) that
- * prevent Bun's process from exiting even after all tests pass. The summary
- * line ("0 fail") may not be printed in that case, so we also check for
- * "(pass)" without "(fail)".
+ * Regex that matches Bun's "Ran N tests" completion summary line, printed
+ * after every finished test run regardless of pass/fail count.
  */
-function outputShowsTestsPassed(stdout?: string, stderr?: string): boolean {
+const RAN_TESTS_PATTERN = /\bRan \d+ tests?\b/;
+
+/**
+ * Detects whether the child process output contains a completed Bun summary.
+ *
+ * Bun prints both a failure count and a "Ran N tests" line after every
+ * finished run. A signaled process is accepted only when both lines prove
+ * the full run completed with zero failures; either line alone is ambiguous.
+ * Their absence means execution was partial when the process was killed, so
+ * remaining tests must not be reported green.
+ */
+function outputShowsCompleteSummary(stdout?: string, stderr?: string): boolean {
   const combined = `${stdout ?? ''}\n${stderr ?? ''}`;
-  if (ZERO_FAIL_PATTERN.test(combined)) return true;
-  const hasPass = /\(pass\)/.test(combined);
-  const hasFail = /\(fail\)/.test(combined);
-  return hasPass && !hasFail;
+  return ZERO_FAIL_PATTERN.test(combined) && RAN_TESTS_PATTERN.test(combined);
 }
 
 /**
  * Returns true when the spawned child process completed successfully.
  * Bun's SyncSubprocess.exitCode is `null` when the process was terminated
  * by a signal rather than exiting voluntarily, so we also treat a null
- * exitCode as a failure — UNLESS the output shows "0 fail" (tests passed
- * but the process didn't exit cleanly, e.g. due to lingering handles).
+ * exitCode as a failure — UNLESS the output shows a completed zero-failure Bun
+ * summary (tests passed but the process didn't exit cleanly, e.g. due to
+ * lingering handles). A timed-out or signaled process that only printed partial output
+ * (some "(pass)" lines without the final summary) must NOT be accepted as
+ * success, because partial execution silently skips the remaining tests.
  */
 export function isChildSuccess(child: ChildExitInfo): boolean {
   if (child.exitCode === 0) {
@@ -236,7 +242,7 @@ export function isChildSuccess(child: ChildExitInfo): boolean {
   if (!killedByTimeout) {
     return false;
   }
-  return outputShowsTestsPassed(child.stdout, child.stderr);
+  return outputShowsCompleteSummary(child.stdout, child.stderr);
 }
 
 /**

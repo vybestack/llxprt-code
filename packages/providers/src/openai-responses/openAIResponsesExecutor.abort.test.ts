@@ -214,7 +214,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
   });
 
   it('aborts during retry backoff promptly with AbortError and issues no further fetch/retry', async () => {
-    vi.useFakeTimers();
+    vi.useRealTimers();
     const controller = new AbortController();
     const fetchSpy = vi
       .fn()
@@ -254,16 +254,13 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
     // Abort DURING the backoff delay (before it elapses).
     controller.abort();
 
-    // Advance fake timers to let the aborted delay reject promptly.
-    await vi.advanceTimersByTimeAsync(1);
-
     const result = await caughtPromise;
     expect(isNamedError(result, 'AbortError')).toBe(true);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('classifies an AbortError as an AbortError (no retry) even on a retryable transient failure', async () => {
-    vi.useFakeTimers();
+    vi.useRealTimers();
     const controller = new AbortController();
     // First attempt: aborted fetch rejects with an AbortError (not retried).
     const abortError = new DOMException('aborted', 'AbortError');

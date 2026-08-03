@@ -379,7 +379,7 @@ describe('OAuthUtils', () => {
 
     it('should throw an error for invalid URLs', () => {
       expect(() => OAuthUtils.buildResourceParameter('not-a-url')).toThrow(
-        /Invalid URL/,
+        /Invalid URL|cannot be parsed as a URL/i,
       );
     });
   });

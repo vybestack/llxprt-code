@@ -343,7 +343,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       collectionProbe,
     );
     const nativeTestStart = runText.indexOf(
-      'npm run test:ci --workspace @vybestack/llxprt-code-storage',
+      'npm run test:vitest --workspace @vybestack/llxprt-code-storage',
       unlockedCheck,
     );
     const sessionEnd = runText.indexOf("\n  '\nelse", nativeTestStart);
