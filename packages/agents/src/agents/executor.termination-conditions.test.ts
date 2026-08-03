@@ -155,11 +155,16 @@ describe('AgentExecutor run (Termination Conditions)', () => {
           if (!capturedSignal) {
             throw new Error('Abort signal was not provided');
           }
-          await new Promise<void>((resolve) => {
-            capturedSignal!.addEventListener('abort', () => resolve(), {
-              once: true,
+          const signal = capturedSignal;
+          // The already-aborted case must be handled before subscribing:
+          // adding an `abort` listener to a signal that has already aborted
+          // never fires, so waiting on the event alone would hang whenever the
+          // idle-timeout wins the race to abort before this line runs.
+          if (!signal.aborted) {
+            await new Promise<void>((resolve) => {
+              signal.addEventListener('abort', () => resolve(), { once: true });
             });
-          });
+          }
           throw createAbortError();
         })();
       },
