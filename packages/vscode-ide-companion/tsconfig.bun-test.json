@@ -1,0 +1,6 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "vscode": ["./test-stubs/vscode.ts"] }
+  }
+}

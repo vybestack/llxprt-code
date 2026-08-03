@@ -1,0 +1,604 @@
+FAIL scripts/tests/affected-lint-targets.test.ts
+      (pass) affected-lint-targets selector — docs and metadata > selects only integration-tests for a docs-only change [0.25ms]
+      (pass) affected-lint-targets selector — docs and metadata > selects only integration-tests for a README change [0.13ms]
+      (pass) affected-lint-targets selector — docs and metadata > selects only integration-tests for a project-plan change [0.10ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for a shared package.json change [0.12ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for a tsconfig.json change [0.09ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for a bun.lock change [0.08ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for an eslint.config.js change [0.12ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for an integration-tests path [0.09ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for an unknown path [0.09ms]
+      (pass) affected-lint-targets selector — fail closed to full > selects full (.) for an empty changed-paths list in a PR [0.07ms]
+      (pass) affected-lint-targets selector — non-PR events > selects full (.) for a push event [0.11ms]
+      (pass) affected-lint-targets selector — non-PR events > selects full (.) for a merge_group event [0.07ms]
+      (pass) affected-lint-targets selector — non-PR events > selects full (.) for a workflow_dispatch event [0.07ms]
+      (pass) affected-lint-targets selector — integration-tests always included > includes integration-tests in every non-full scoped selection [0.10ms]
+      (pass) affected-lint-targets selector — integration-tests always included > does not list integration-tests separately when full run is selected [0.09ms]
+      (pass) affected-lint-targets selector — deterministic output > produces stable targets for the same input [0.17ms]
+      (pass) affected-lint-targets selector — deterministic output > produces per-path reasons [0.13ms]
+      (pass) affected-lint-targets selector — data graph reuse > uses the same checked-in graph as affected-test-shards [0.05ms]
+      (pass) affected-lint-targets selector — audit trail on full-run fallback > records all changed paths in pathReasons even when one triggers a full run [0.11ms]
+      (pass) affected-lint-targets selector — audit trail on full-run fallback > marks not-yet-classified paths as not classified after the triggering path [0.13ms]
+       26 pass
+       0 fail
+       1 error
+       69 expect() calls
+      Ran 26 tests across 1 file. [221.00ms]
+PASS scripts/tests/affected-test-shards.test.ts
+PASS scripts/tests/agentsNeutralGate.test.ts
+PASS scripts/tests/agentsNeutralTestGate.test.ts
+PASS scripts/tests/aggregate-cardinality.test.ts
+PASS scripts/tests/aggregate-cli.test.ts
+PASS scripts/tests/aggregate-historical-isolation.test.ts
+PASS scripts/tests/aggregate-historical-process.test.ts
+PASS scripts/tests/aggregate-historical.test.ts
+PASS scripts/tests/aggregate-malformed.test.ts
+PASS scripts/tests/aggregate-missing-reports.test.ts
+PASS scripts/tests/aggregate-ocr-telemetry.test.ts
+PASS scripts/tests/aggregate-pagination.test.ts
+PASS scripts/tests/aggregate-run-entry.test.ts
+PASS scripts/tests/aggregate-schema.test.ts
+PASS scripts/tests/aggregate-status-type.test.ts
+PASS scripts/tests/assign-harness-diagnostics.test.ts
+PASS scripts/tests/assign-remediation.test.ts
+PASS scripts/tests/assign-remediation10.test.ts
+PASS scripts/tests/assign-remediation11.test.ts
+PASS scripts/tests/assign-remediation2.test.ts
+PASS scripts/tests/assign-remediation2b.test.ts
+PASS scripts/tests/assign-remediation3.test.ts
+PASS scripts/tests/assign-remediation4.test.ts
+PASS scripts/tests/assign-remediation5.test.ts
+PASS scripts/tests/assign-remediation5b.test.ts
+PASS scripts/tests/assign-remediation6.test.ts
+PASS scripts/tests/assign-remediation7.test.ts
+PASS scripts/tests/assign-remediation8.test.ts
+PASS scripts/tests/assign-remediation8b.test.ts
+PASS scripts/tests/assign-remediation9.test.ts
+FAIL scripts/tests/assign-workflow-behaviors.test.ts
+      (pass) assign-issue.sh behavioral > assigns a user in the assignment-history backfill file [2301.09ms]
+      (pass) assign-issue.sh behavioral > assigns a user with a history label (per-login O(1) lookup) [2381.84ms]
+      (pass) assign-issue.sh behavioral > refuses to assign when issue is already assigned [709.27ms]
+      (pass) assign-issue.sh behavioral > refuses to assign when user is at the 3-issue cap [878.33ms]
+      (pass) assign-issue.sh behavioral > refuses ineligible user with no merged PR and no prior assignment [1289.46ms]
+      (pass) assign-issue.sh behavioral > fails closed (nonzero, no mutation) when guard API fails [631.04ms]
+      (pass) assign-issue.sh behavioral > atomic assignee+label transition preserves existing labels [2852.72ms]
+      (pass) assign-issue.sh behavioral > sticky feedback lookup only selects bot-authored marker comments [704.24ms]
+      (pass) unassign-stale-issues.sh behavioral > preserves manual co-assignees when removing stale bot-assignee [2377.65ms]
+      (pass) unassign-stale-issues.sh behavioral > never unassigns acoliver [667.57ms]
+      (pass) unassign-stale-issues.sh behavioral > removes stale bot-assignee with no qualifying linked PR [2703.18ms]
+      (pass) unassign-stale-issues.sh behavioral > retains recent assignment (younger than 14 days) [908.22ms]
+      (pass) unassign-stale-issues.sh behavioral > retains assignment when a qualifying linked PR exists after assignment [660.96ms]
+      (pass) unassign-stale-issues.sh behavioral > preserves state and reports nonzero when timeline query fails [1000.36ms]
+      (pass) unassign-stale-issues.sh behavioral > removes no human assignee when there is no bot-assigned provenance [819.80ms]
+      (fail) unassign-stale-issues.sh behavioral > paginates candidate discovery beyond one page [60052.72ms]
+        ^ this test timed out after 60000ms.
+      (pass) CONTRIBUTING.md self-assign docs > documents /assign eligibility, cap, and stale cleanup without OWNER/MEMBER [0.96ms]
+      1 tests failed:
+      (fail) unassign-stale-issues.sh behavioral > paginates candidate discovery beyond one page [60052.72ms]
+        ^ this test timed out after 60000ms.
+       31 pass
+       1 fail
+       105 expect() calls
+      Ran 32 tests across 1 file. [83.65s]
+PASS scripts/tests/assign-workflow.test.ts
+FAIL scripts/tests/autogen.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/autogen.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [185.00ms]
+PASS scripts/tests/bun-script-migration.test.ts
+PASS scripts/tests/bun-test-manifest.test.ts
+PASS scripts/tests/bun-workflow-setup.test.ts
+PASS scripts/tests/bun-workspaces.test.ts
+PASS scripts/tests/check-agents-api-surface.test.ts
+PASS scripts/tests/check-copyright-year.test.ts
+PASS scripts/tests/check-no-new-js-files.test.ts
+PASS scripts/tests/ci-acplint-workflow.test.ts
+FAIL scripts/tests/ci-quota-check.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ci-quota-check.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [110.00ms]
+PASS scripts/tests/ci-secure-store-workflow.test.ts
+PASS scripts/tests/cli-import-boundary.test.ts
+PASS scripts/tests/codemod-import-type-annotations.test.ts
+PASS scripts/tests/codex-credential-scripts.test.ts
+PASS scripts/tests/constants-readEnvMs.test.ts
+PASS scripts/tests/detect-installer.test.ts
+PASS scripts/tests/doc-links-guard.test.ts
+PASS scripts/tests/doc-placement-guard.test.ts
+PASS scripts/tests/doc-tree-invariants.test.ts
+PASS scripts/tests/eslint-guard.test.ts
+PASS scripts/tests/evals-nightly-workflow.test.ts
+FAIL scripts/tests/evals-save-memory-assertion.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/evals-save-memory-assertion.test.ts:
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) eval JSON output contract > (unnamed) [205.30ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) saveMemoryFactEquals predicate (deterministic exact-value) > (unnamed) [0.17ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) assertFavoriteColorBlueOutput predicate (deterministic exact-value) > (unnamed) [0.08ms]
+       0 pass
+       3 fail
+      Ran 3 tests across 1 file. [320.00ms]
+PASS scripts/tests/evals-typescript-compliance.test.ts
+FAIL scripts/tests/evals-vitest-config.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/evals-vitest-config.test.ts:
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) evals/vitest.config.ts JSON report path under --root ./evals > resolves report.json to evals/logs/report.json when run under the evals root [69.74ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) evals/vitest.config.ts JSON report path under --root ./evals > keeps the json reporter enabled so report.json is produced [0.14ms]
+       0 pass
+       2 fail
+      Ran 2 tests across 1 file. [189.00ms]
+PASS scripts/tests/genai-enclave-adversarial.test.ts
+PASS scripts/tests/genai-enclave-guard-allowlist.test.ts
+PASS scripts/tests/genai-enclave-guard-deleted-files.test.ts
+PASS scripts/tests/genai-enclave-guard-manifest.test.ts
+PASS scripts/tests/genai-enclave-guard-maxbuffer.test.ts
+PASS scripts/tests/genai-enclave-guard.test.ts
+PASS scripts/tests/genai-enclave-review-regressions.test.ts
+PASS scripts/tests/genai-enclave-scanner-alias.test.ts
+PASS scripts/tests/genai-enclave-scanner-bypass.test.ts
+PASS scripts/tests/genai-enclave-scanner-exports.test.ts
+PASS scripts/tests/genai-enclave-scanner-regressions.test.ts
+PASS scripts/tests/genai-enclave-scanner.test.ts
+PASS scripts/tests/genai-import-inventory.test.ts
+PASS scripts/tests/genai-manifest-enforcement.test.ts
+PASS scripts/tests/genai-published-root.test.ts
+FAIL scripts/tests/generate-keybindings-doc.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/generate-keybindings-doc.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [123.00ms]
+FAIL scripts/tests/generate-settings-doc.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/generate-settings-doc.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [995.00ms]
+FAIL scripts/tests/generate-settings-schema.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/generate-settings-schema.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [897.00ms]
+FAIL scripts/tests/get-release-version.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/get-release-version.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [106.00ms]
+PASS scripts/tests/gpt56-bundle-runtime.test.ts
+PASS scripts/tests/interactive-ui.test.ts
+PASS scripts/tests/issue-2342.test.ts
+PASS scripts/tests/issue-2603-install-layouts.test.ts
+PASS scripts/tests/issue-2603-install-native-launchers-contract.test.ts
+PASS scripts/tests/issue-2603-install.test.ts
+PASS scripts/tests/issue-2603-launcher-hardening.test.ts
+PASS scripts/tests/issue-2603-launcher-signals.test.ts
+PASS scripts/tests/issue-2603-launcher-source-workspace.test.ts
+PASS scripts/tests/issue-2603-launcher.test.ts
+FAIL scripts/tests/issue-2603-release-install.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/issue-2603-release-install.test.ts:
+      (pass) release-like CLI pack/install smoke (issue #2603) > the standalone smoke script exists and is invocable via npm script [0.20ms]
+      (pass) release-like CLI pack/install smoke (issue #2603) > the release-pack helper exports packReleaseLikeCli [2.20ms]
+      252 |     'release-like global + local install runs --version and exits 0, release manifest has exact versions',
+      253 |     async (ctx) => {
+      254 |       const smoke = runSmokeAsync();
+      255 |       // Guarantee the child is killed and listeners cleared even if the test is
+      256 |       // cancelled (timeout) or fails before reaching the finally below.
+      257 |       ctx.onTestFinished(() => smoke.dispose());
+                      ^
+      TypeError: ctx.onTestFinished is not a function. (In 'ctx.onTestFinished(() => smoke.dispose())', 'ctx.onTestFinished' is undefined)
+            at <anonymous> (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/scripts/tests/issue-2603-release-install.test.ts:257:11)
+      (fail) release-like CLI pack/install smoke (issue #2603) > release-like global + local install runs --version and exits 0, release manifest has exact versions [3.49ms]
+      (pass) rewriteOnePkgDeps does not rewrite peerDependencies > rewrites dependencies, devDependencies, and optionalDependencies to file: tarballs [0.84ms]
+      (pass) rewriteOnePkgDeps does not rewrite peerDependencies > does NOT rewrite peerDependencies (peers are consumer-provided) [0.69ms]
+       4 pass
+       1 fail
+       9 expect() calls
+      Ran 5 tests across 1 file. [111.00ms]
+PASS scripts/tests/issue-2603-shim-separator-tests.test.ts
+PASS scripts/tests/issue-2603-smoke-fail-fast.test.ts
+PASS scripts/tests/issue-2603-smoke-helpers.test.ts
+PASS scripts/tests/issue-2603-windows-lineage-helpers.test.ts
+PASS scripts/tests/issue-2852-memory-benchmark.test.ts
+PASS scripts/tests/issue-planner.test.ts
+PASS scripts/tests/legacy-paths-ast-scanner.test.ts
+PASS scripts/tests/legacy-paths-guard.test.ts
+PASS scripts/tests/legacy-paths-scanned-trees-validation.test.ts
+PASS scripts/tests/lint-cli.test.ts
+PASS scripts/tests/loading-indicator-nowrap.test.ts
+FAIL scripts/tests/native-timer-regression.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/native-timer-regression.test.ts:
+      21 |     setTimeout(() => order.push(`nested@${Date.now()}`), 5);
+      22 |   }, 10);
+      23 | 
+      24 |   await vi.advanceTimersByTimeAsync(20);
+      25 | 
+      26 |   expect(order).toEqual(['first@10', 'nested@5']);
+                           ^
+      error: expect(received).toEqual(expected)
+        [
+          "first@10",
+      -   "nested@5",
+      +   "nested@15",
+        ]
+      - Expected  - 1
+      + Received  + 1
+            at <anonymous> (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/scripts/tests/native-timer-regression.test.ts:26:17)
+      (fail) advances natively when a callback clears timers and schedules after await [1.89ms]
+       0 pass
+       1 fail
+       1 expect() calls
+      Ran 1 test across 1 file. [176.00ms]
+PASS scripts/tests/nightly-bun-native-smoke.test.ts
+PASS scripts/tests/nightly-notifier-repository.test.ts
+PASS scripts/tests/npm-command.test.ts
+PASS scripts/tests/ocr-auto-review-limit.test.ts
+FAIL scripts/tests/ocr-canary-compare-2673-cli.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ocr-canary-compare-2673-cli.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [130.00ms]
+FAIL scripts/tests/ocr-concurrency-canary-2673-artifacts.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ocr-concurrency-canary-2673-artifacts.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [140.00ms]
+PASS scripts/tests/ocr-concurrency-canary-2673-comparator.test.ts
+FAIL scripts/tests/ocr-concurrency-canary-2673-evidence.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ocr-concurrency-canary-2673-evidence.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [143.00ms]
+FAIL scripts/tests/ocr-concurrency-canary-2673.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ocr-concurrency-canary-2673.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [152.00ms]
+PASS scripts/tests/ocr-failure-classification.test.ts
+PASS scripts/tests/ocr-heredoc-extraction.test.ts
+PASS scripts/tests/ocr-notifier-classification.test.ts
+FAIL scripts/tests/ocr-review-coverage-integration-b.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ocr-review-coverage-integration-b.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [118.00ms]
+FAIL scripts/tests/ocr-review-coverage-integration.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ocr-review-coverage-integration.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [130.00ms]
+PASS scripts/tests/ocr-review-coverage.test.ts
+PASS scripts/tests/ocr-review-incremental-checkpoint.test.ts
+PASS scripts/tests/ocr-review-metadata-validation.test.ts
+PASS scripts/tests/ocr-review-phase2.test.ts
+PASS scripts/tests/ocr-review-phase3.test.ts
+PASS scripts/tests/ocr-review-routing.test.ts
+PASS scripts/tests/ocr-review-rules-calibration.test.ts
+PASS scripts/tests/ocr-review-workflow-behaviors.test.ts
+PASS scripts/tests/ocr-review-workflow-features.test.ts
+PASS scripts/tests/ocr-reviewed-range-manifest-wiring.test.ts
+PASS scripts/tests/ocr-reviewed-range-manifest.test.ts
+PASS scripts/tests/ocr-telemetry-cli.test.ts
+PASS scripts/tests/ocr-telemetry-lifecycle.test.ts
+PASS scripts/tests/ocr-telemetry-schema.test.ts
+PASS scripts/tests/ocr-telemetry-workflow.test.ts
+FAIL scripts/tests/ocr-telemetry.test.ts
+      (pass) buildGuaranteedTelemetry — malformed input fallback > returns a schema-valid failed record for malformed identity and lifecycle context [0.27ms]
+      (pass) buildGuaranteedTelemetry — malformed input fallback > returns a schema-valid failed record when the input is missing [0.05ms]
+      (pass) renderTelemetryMarkdown > renders a compact deterministic summary [0.40ms]
+      (pass) renderTelemetryMarkdown > renders unavailable wall-clock explicitly [0.29ms]
+      (pass) renderTelemetryMarkdown > escapes Markdown-sensitive identity values [0.15ms]
+      (pass) renderTelemetryMarkdown > renders already-resolved publication volume [0.09ms]
+      (pass) renderTelemetryMarkdown > renders malformed token counts as unavailable [0.04ms]
+      (pass) elapsedToSeconds — strict grammar > rejects malformed ordered-unit elapsed value 1m 2s [0.02ms]
+      (pass) elapsedToSeconds — strict grammar > rejects malformed ordered-unit elapsed value 1s2m
+      (pass) elapsedToSeconds — strict grammar > rejects malformed ordered-unit elapsed value 1m2m
+      (pass) elapsedToSeconds — strict grammar > rejects malformed ordered-unit elapsed value 1ms2s
+      (pass) elapsedToSeconds — strict grammar > rejects malformed ordered-unit elapsed value 1h2h
+      (pass) elapsedToSeconds — strict grammar > rejects malformed ordered-unit elapsed value 1s1ms1ms
+      (pass) routing decision validation > rejects malformed routing decision null [0.05ms]
+      (fail) routing decision validation > rejects malformed routing decision %j [30002.28ms]
+        ^ this test timed out after 30000ms, before its done callback was called. If a done callback was not intended, remove the last parameter from the test callback function
+      (pass) routing decision validation > rejects malformed routing decision {"category":1,"severity":"high"} [0.20ms]
+      (pass) routing decision validation > rejects malformed routing decision {"category":"bug","severity":null} [0.02ms]
+      1 tests failed:
+      (fail) routing decision validation > rejects malformed routing decision %j [30002.28ms]
+        ^ this test timed out after 30000ms, before its done callback was called. If a done callback was not intended, remove the last parameter from the test callback function
+       47 pass
+       1 fail
+       73 expect() calls
+      Ran 48 tests across 1 file. [30.11s]
+PASS scripts/tests/ocr-trusted-marker-workflow-b.test.ts
+PASS scripts/tests/ocr-trusted-marker-workflow.test.ts
+PASS scripts/tests/ocr-trusted-marker.test.ts
+PASS scripts/tests/postinstall-manager-aware.test.ts
+PASS scripts/tests/pr-mergeability-gate.test.ts
+PASS scripts/tests/pr-mergeability-workflow-wiring-b.test.ts
+PASS scripts/tests/pr-mergeability-workflow-wiring.test.ts
+PASS scripts/tests/pr-review-llm-helpers.test.ts
+PASS scripts/tests/pr-review-walkthrough-b.test.ts
+PASS scripts/tests/pr-review-walkthrough-prompts.test.ts
+PASS scripts/tests/pr-review-walkthrough-workflow.test.ts
+PASS scripts/tests/pr-review-walkthrough.test.ts
+PASS scripts/tests/pr-workflow-concurrency.test.ts
+FAIL scripts/tests/preflight-ci.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/preflight-ci.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      381 |     if (!descriptor) continue;
+      382 |     Object.defineProperty(mockedObject, key, {
+      383 |       configurable: true,
+      384 |       enumerable: descriptor.enumerable,
+      385 |       writable: true,
+      386 |       value: automockValue(Reflect.get(value, key), references),
+                      ^
+      TypeError: Cannot access invalid private field (evaluating 'this.#stdin')
+            at get (node:child_process:780:27)
+            at get (1:11)
+            at automockValue (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+            at automockValue (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+            at automockValue (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+            at /Users/acoliver/projects/llxprt/branch-8/llxprt-code/scripts/tests/preflight-ci.test.ts:13:4
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [119.00ms]
+PASS scripts/tests/preinstall-manager-aware.test.ts
+PASS scripts/tests/providers-directive-guard.test.ts
+PASS scripts/tests/pse-disable.test.ts
+PASS scripts/tests/publish-dependency-helpers.test.ts
+PASS scripts/tests/publish-dependency-protocols.test.ts
+PASS scripts/tests/publish-integrity.test.ts
+PASS scripts/tests/published-closure-regressions.test.ts
+PASS scripts/tests/re-embed-trusted-marker.test.ts
+PASS scripts/tests/release-notes/classification.test.ts
+PASS scripts/tests/release-notes/contributors.test.ts
+PASS scripts/tests/release-notes/curated-headline.test.ts
+PASS scripts/tests/release-notes/diff-selection.test.ts
+PASS scripts/tests/release-notes/filtering.test.ts
+PASS scripts/tests/release-notes/gh-port.test.ts
+PASS scripts/tests/release-notes/git-port.test.ts
+PASS scripts/tests/release-notes/llm-port.test.ts
+PASS scripts/tests/release-notes/markdown.test.ts
+PASS scripts/tests/release-notes/orchestrator.test.ts
+PASS scripts/tests/release-notes/processing-noise.test.ts
+PASS scripts/tests/release-notes/processing.test.ts
+PASS scripts/tests/release-notes/provenance-user-impact.test.ts
+PASS scripts/tests/release-notes/provenance.test.ts
+PASS scripts/tests/release-notes/release-metadata-port.test.ts
+PASS scripts/tests/release-notes/rendering.test.ts
+PASS scripts/tests/release-notes/validation.test.ts
+PASS scripts/tests/release-process-b.test.ts
+PASS scripts/tests/release-process.test.ts
+FAIL scripts/tests/run_bun_tests.test.ts
+      (pass) reapStaleBunTestProcesses > logs a warning when processes are reaped [0.07ms]
+      (pass) resolveTsconfigOverride > returns an absolute path resolved from the invocation directory [2.21ms]
+      (pass) resolveTsconfigOverride > rejects a missing override before child processes are started [0.28ms]
+      (pass) resolveTsconfigOverride > rejects a directory passed as an override [0.19ms]
+      (pass) runBunTests > executes every entry with exact argv, cwd, and env and reports all failure modes [0.96ms]
+      (pass) runBunTests > reports a spawn exception for its file and continues with later entries [0.23ms]
+      (pass) runBunTests > returns success and reports the complete passing summary [0.10ms]
+      (pass) runBunTests > rejects a fractional --timeout value before any child is spawned [0.09ms]
+      (pass) runBunTests > passes every declared preload and the entry tsconfig to the child [0.11ms]
+      (pass) runBunTests > retries a failing file up to its retry budget and passes on a later attempt [0.09ms]
+      (pass) runBunTests > stops retrying once the budget is exhausted and reports the failure [0.09ms]
+      (pass) runBunTests > runs global setup before any child and teardown after the last one [0.12ms]
+      (pass) runBunTests > runs global teardown even when a test file fails [0.11ms]
+      (pass) processTimeoutFor > keeps the default process budget for ordinary per-test timeouts [0.01ms]
+      (pass) processTimeoutFor > scales past the default when a root declares a long per-test timeout
+      (pass) collectGlobalSetups > returns each distinct setup module once, in first-seen order [0.02ms]
+      (pass) production Bun native test runner > executes the real runner in dry-run mode from a different cwd [426.57ms]
+      (pass) production Bun native test runner > forwards an invocation-relative tsconfig to a real isolated Bun test [530.30ms]
+      (pass) Bun subprocess main-guard integration (path with spaces) > executes main when the script is run directly [364.31ms]
+      (pass) Bun subprocess main-guard integration (path with spaces) > does not execute main when the script is imported (not run directly) [979.24ms]
+       42 pass
+       0 fail
+       1 error
+       69 expect() calls
+      Ran 42 tests across 1 file. [2.42s]
+PASS scripts/tests/run-lint.test.ts
+PASS scripts/tests/runner-image-consistency.test.ts
+PASS scripts/tests/scripts-quality-coverage.test.ts
+PASS scripts/tests/scrollback-regression.test.ts
+PASS scripts/tests/session-browser-e2e.test.ts
+PASS scripts/tests/smoke-cli-entry.test.ts
+PASS scripts/tests/stub-helpers.test.ts
+FAIL scripts/tests/stub-helpers.wait-for.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/stub-helpers.wait-for.test.ts:
+      (pass) waitFor Vitest 3.2.6 compatibility > invokes successful callbacks synchronously [0.49ms]
+PASS scripts/tests/tar-command.test.ts
+PASS scripts/tests/telemetry-doc-accuracy.test.ts
+PASS scripts/tests/test-orchestrator.test.ts
+PASS scripts/tests/test-shard-orchestrator.test.ts
+PASS scripts/tests/test-shards.test.ts
+FAIL scripts/tests/tmux-harness-io.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/tmux-harness-io.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [83.00ms]
+FAIL scripts/tests/tmux-harness.test.ts
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) expandScriptMacros > expands a macro step [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) expandScriptMacros > detects macro cycles [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) expandScriptMacros > rejects non-array steps [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) expandScriptMacros > rejects non-object macros [0.03ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) expandScriptMacros > rejects empty-named macro [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) expandScriptMacros > rejects non-array macro template [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) parseToolConfirmationOptions > parses numbered options with Yes/No/Modify labels [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) parseToolConfirmationOptions > detects selected option with bullet [0.04ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) parseToolConfirmationOptions > ignores options that do not start with yes/no/modify [0.05ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) parseToolConfirmationOptions > returns empty array for no matches [0.03ms]
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      (fail) parseToolConfirmationOptions > handles box-drawing characters in line [0.03ms]
+       0 pass
+       65 fail
+      Ran 65 tests across 1 file. [91.00ms]
+PASS scripts/tests/token-divergence.test.ts
+PASS scripts/tests/typed-test-helpers.test.ts
+FAIL scripts/tests/ui-image-harness.test.ts
+      bun test v1.3.14 (d1632b29)
+      scripts/tests/ui-image-harness.test.ts:
+      # Unhandled error between tests
+      -------------------------------
+      SyntaxError: Missing 'default' export in module 'node:fs'.
+      -------------------------------
+       0 pass
+       1 fail
+       1 error
+      Ran 1 test across 1 file. [85.00ms]
+PASS scripts/tests/validate-acplint-report.test.ts
+PASS scripts/tests/verify-bun-workspace-links.test.ts
+PASS scripts/tests/virtualized-list-scrolltop.test.ts
+FAIL scripts/tests/vitest-coverage.test.ts
+      554 | // Augment Bun's vi in-place with Vitest-compatible methods that Bun's
+      555 | // built-in test runner does not provide.
+      556 | const unsupportedModuleIsolation = (): never => {
+      557 |   throw new Error(
+      558 |     'Bun does not support resetting or unmocking modules; run the test in an isolated process',
+      559 |   );
+              ^
+      error: Bun does not support resetting or unmocking modules; run the test in an isolated process
+            at unsupportedModuleIsolation (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/test-setup/augment-bun-vi.ts:559:3)
+            at <anonymous> (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/scripts/tests/vitest-coverage.test.ts:25:8)
+      (fail) isCoverageEnabled > returns true when LLXPRT_COVERAGE === "true" [0.06ms]
+      554 | // Augment Bun's vi in-place with Vitest-compatible methods that Bun's
+      555 | // built-in test runner does not provide.
+      556 | const unsupportedModuleIsolation = (): never => {
+      557 |   throw new Error(
+      558 |     'Bun does not support resetting or unmocking modules; run the test in an isolated process',
+      559 |   );
+              ^
+      error: Bun does not support resetting or unmocking modules; run the test in an isolated process
+            at unsupportedModuleIsolation (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/test-setup/augment-bun-vi.ts:559:3)
+            at <anonymous> (/Users/acoliver/projects/llxprt/branch-8/llxprt-code/scripts/tests/vitest-coverage.test.ts:25:8)
+      (fail) isCoverageEnabled > returns true for any value other than "false" [0.13ms]
+       0 pass
+       4 fail
+      Ran 4 tests across 1 file. [80.00ms]
+PASS scripts/tests/vscode-notices-prepare.test.ts
+PASS scripts/tests/workflow-quota-selection.test.ts
+PASS scripts/tests/workspace-source-helpers.test.ts
+
+170/196 passed
+FAILED FILES:
+  scripts/tests/affected-lint-targets.test.ts
+  scripts/tests/assign-workflow-behaviors.test.ts
+  scripts/tests/autogen.test.ts
+  scripts/tests/ci-quota-check.test.ts
+  scripts/tests/evals-save-memory-assertion.test.ts
+  scripts/tests/evals-vitest-config.test.ts
+  scripts/tests/generate-keybindings-doc.test.ts
+  scripts/tests/generate-settings-doc.test.ts
+  scripts/tests/generate-settings-schema.test.ts
+  scripts/tests/get-release-version.test.ts
+  scripts/tests/issue-2603-release-install.test.ts
+  scripts/tests/native-timer-regression.test.ts
+  scripts/tests/ocr-canary-compare-2673-cli.test.ts
+  scripts/tests/ocr-concurrency-canary-2673-artifacts.test.ts
+  scripts/tests/ocr-concurrency-canary-2673-evidence.test.ts
+  scripts/tests/ocr-concurrency-canary-2673.test.ts
+  scripts/tests/ocr-review-coverage-integration-b.test.ts
+  scripts/tests/ocr-review-coverage-integration.test.ts
+  scripts/tests/ocr-telemetry.test.ts
+  scripts/tests/preflight-ci.test.ts
+  scripts/tests/run_bun_tests.test.ts
+  scripts/tests/stub-helpers.wait-for.test.ts
+  scripts/tests/tmux-harness-io.test.ts
+  scripts/tests/tmux-harness.test.ts
+  scripts/tests/ui-image-harness.test.ts
+  scripts/tests/vitest-coverage.test.ts

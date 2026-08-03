@@ -11,20 +11,18 @@
  * A fresh process per file preserves the isolation expected by the existing
  * workspace suites while still executing every test with Bun's native runner.
  *
- * **Important**: This script does NOT discover test files by glob. Only files
- * explicitly listed in `scripts/bun-test-manifest.ts` are executed. Bun's
- * native test runner does not support several Vitest-specific APIs (relative
- * `vi.importActual`, `vi.resetModules`, process-wide `mock.module`), so
- * silently attempting all legacy test files would produce failures that look
- * like real regressions but are actually module-lifecycle incompatibilities.
- * The manifest ensures `test:bun` only runs files that have been verified to
- * pass under Bun, giving honest CI signal.
+ * **Important**: every executed file comes from a root declared in
+ * `scripts/bun-test-manifest.ts`. A root either curates an explicit `files`
+ * list (used while a workspace is only partly migrated, where Bun's
+ * module-lifecycle differences still block some files) or declares `include`
+ * globs (used once a root is fully migrated, so a newly added test file runs
+ * automatically and cannot be silently dropped).
  *
  * Usage:
  *   bun scripts/run_bun_tests.ts [options]
  *
  * Options:
- *   --workspace <name>    Only run tests for the named workspace
+ *   --workspace <name>    Only run tests for the named root (--root is an alias)
  *   --tsconfig <path>     Path to tsconfig override (passed via --tsconfig-override)
  *   --timeout <ms>        Per-test timeout in milliseconds (defaults to 30000)
  *   --junit <path>        Write a JUnit XML report to this path after the run
@@ -307,6 +305,7 @@ function parseArgs(argv: string[]): CliOptions {
     const arg = argv[i];
     switch (arg) {
       case '--workspace':
+      case '--root':
       case '-w':
         options.workspace = readOptionValue(argv, i++, arg);
         break;
@@ -349,6 +348,15 @@ export interface BunTestSpawnOptions {
   readonly timeout?: number;
 }
 
+/**
+ * Shape of a manifest `globalSetup` module. Both hooks are optional so a root
+ * can declare setup-only or teardown-only behaviour.
+ */
+export interface BunGlobalSetupModule {
+  readonly setup?: () => void | Promise<void>;
+  readonly teardown?: () => void | Promise<void>;
+}
+
 export interface BunTestRunnerDependencies {
   readonly repoRoot: string;
   readonly invocationDirectory: string;
@@ -366,82 +374,141 @@ export interface BunTestRunnerDependencies {
     command: readonly string[],
     options: BunTestSpawnOptions,
   ) => ChildExitInfo;
+  readonly loadGlobalSetup: (path: string) => Promise<BunGlobalSetupModule>;
   readonly stdout: (line: string) => void;
   readonly stderr: (line: string) => void;
 }
 
 /**
- * Builds the base Bun test arguments (shared across all files in a run).
+ * Builds the full spawn args for a single Bun test file. The manifest entry
+ * may override the tsconfig and the per-test timeout, and may declare any
+ * number of preload scripts (the Bun-native equivalent of Vitest's
+ * `setupFiles`).
  */
-function buildBaseArgs(
-  tsconfigOverride: string | null,
-  timeout: number,
-): readonly string[] {
-  const args = ['test'];
-  if (tsconfigOverride) {
-    args.push('--tsconfig-override', tsconfigOverride);
-  }
-  args.push('--max-concurrency', '1', '--timeout', String(timeout));
-  return args;
-}
-
-/**
- * Builds the full spawn args for a single Bun test file, including the
- * preload script when the manifest entry defines one.
- */
-function buildSpawnArgs(
+export function buildSpawnArgs(
   executable: string,
-  baseArgs: readonly string[],
   entry: BunTestFile,
+  cliTsconfigOverride: string | null,
+  cliTimeout: number,
 ): readonly string[] {
-  const args = [executable, ...baseArgs];
-  if (entry.preload !== undefined) {
-    args.push('--preload', entry.preload);
+  const args = [executable, 'test'];
+  const tsconfig = entry.tsconfig ?? cliTsconfigOverride;
+  if (tsconfig) {
+    args.push('--tsconfig-override', tsconfig);
+  }
+  args.push(
+    '--max-concurrency',
+    '1',
+    '--timeout',
+    String(entry.timeout ?? cliTimeout),
+  );
+  for (const preload of entry.preloads) {
+    args.push('--preload', preload);
   }
   args.push(entry.file);
   return args;
 }
 
-function runSingleTestFile(
+/**
+ * Per-file process timeout, scaled so a file whose per-test timeout exceeds
+ * the default process budget is not killed while a legitimately slow test is
+ * still running. E2E roots declare `timeout: 300000`, which alone can exceed
+ * `PER_FILE_PROCESS_TIMEOUT_MS`.
+ */
+export function processTimeoutFor(testTimeoutMs: number): number {
+  return Math.max(PER_FILE_PROCESS_TIMEOUT_MS, testTimeoutMs * 2);
+}
+
+function spawnTestFileOnce(
   entry: BunTestFile,
-  baseArgs: readonly string[],
+  cliTsconfigOverride: string | null,
+  cliTimeout: number,
   dependencies: BunTestRunnerDependencies,
-): FileTestResult {
-  const relativeName = entry.file.replace(entry.cwd + '/', '');
+): { passed: boolean; stdout: string; diagnostic: string } {
   try {
     const child = dependencies.spawn(
-      buildSpawnArgs(dependencies.executable, baseArgs, entry),
+      buildSpawnArgs(
+        dependencies.executable,
+        entry,
+        cliTsconfigOverride,
+        cliTimeout,
+      ),
       {
         cwd: entry.cwd,
         env: dependencies.environment,
         stdin: 'inherit',
         stdout: 'pipe',
         stderr: 'pipe',
-        timeout: PER_FILE_PROCESS_TIMEOUT_MS,
+        timeout: processTimeoutFor(entry.timeout ?? cliTimeout),
       },
     );
-
-    const passed = isChildSuccess(child);
-    if (!passed) {
-      dependencies.stderr(
-        `Native Bun test failed: ${entry.file}${formatFailureDiagnostic(child)}`,
-      );
-    }
-    return { name: relativeName, passed, stdout: child.stdout ?? '' };
+    return {
+      passed: isChildSuccess(child),
+      stdout: child.stdout ?? '',
+      diagnostic: formatFailureDiagnostic(child),
+    };
   } catch (error: unknown) {
     const diagnostic =
       error instanceof Error
         ? (error.stack ?? error.toString())
         : String(error);
-    dependencies.stderr(`Native Bun test failed: ${entry.file}\n${diagnostic}`);
-    return { name: relativeName, passed: false, stdout: '' };
+    return { passed: false, stdout: '', diagnostic: `\n${diagnostic}` };
   }
 }
 
-export function runBunTests(
+function runSingleTestFile(
+  entry: BunTestFile,
+  cliTsconfigOverride: string | null,
+  cliTimeout: number,
+  dependencies: BunTestRunnerDependencies,
+): FileTestResult {
+  const relativeName = entry.file.replace(entry.cwd + '/', '');
+  const attempts = (entry.retries ?? 0) + 1;
+  let last = { passed: false, stdout: '', diagnostic: '' };
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    last = spawnTestFileOnce(
+      entry,
+      cliTsconfigOverride,
+      cliTimeout,
+      dependencies,
+    );
+    if (last.passed) {
+      break;
+    }
+    if (attempt < attempts) {
+      dependencies.stderr(
+        `Native Bun test failed (attempt ${attempt}/${attempts}), retrying: ${entry.file}${last.diagnostic}`,
+      );
+    }
+  }
+  if (!last.passed) {
+    dependencies.stderr(
+      `Native Bun test failed: ${entry.file}${last.diagnostic}`,
+    );
+  }
+  return { name: relativeName, passed: last.passed, stdout: last.stdout };
+}
+
+/**
+ * Collects the distinct global-setup modules declared by the selected files,
+ * preserving manifest order so setup runs in a deterministic sequence.
+ */
+export function collectGlobalSetups(
+  files: readonly BunTestFile[],
+): readonly string[] {
+  const seen = new Set<string>();
+  for (const { globalSetup } of files) {
+    if (globalSetup !== undefined) {
+      seen.add(globalSetup);
+    }
+  }
+  return [...seen];
+}
+
+export async function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
-): number {
+): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = options.tsconfig
     ? dependencies.resolveTsconfig(
@@ -460,7 +527,7 @@ export function runBunTests(
       : 'any workspace';
     dependencies.stderr(`No native Bun test files found for ${scope}.`);
     dependencies.stderr(
-      'Files must be explicitly listed in scripts/bun-test-manifest.ts.',
+      'Roots must be declared in scripts/bun-test-manifest.ts.',
     );
     return 1;
   }
@@ -477,10 +544,35 @@ export function runBunTests(
     `Running ${files.length} native Bun test files in isolated processes`,
   );
 
-  const baseArgs = buildBaseArgs(tsconfigOverride, options.timeout);
-  const testResults: FileTestResult[] = files.map((entry) =>
-    runSingleTestFile(entry, baseArgs, dependencies),
-  );
+  // Global setup mutates process.env in this process; every spawned test
+  // process inherits it, which is exactly the contract Vitest's globalSetup
+  // provided for the evals and integration-test roots.
+  const setups = collectGlobalSetups(files);
+  const started: string[] = [];
+  let testResults: FileTestResult[] = [];
+  try {
+    for (const setup of setups) {
+      const module = await dependencies.loadGlobalSetup(setup);
+      started.push(setup);
+      await module.setup?.();
+    }
+    testResults = files.map((entry) =>
+      runSingleTestFile(entry, tsconfigOverride, options.timeout, dependencies),
+    );
+  } finally {
+    for (const setup of started.reverse()) {
+      try {
+        const module = await dependencies.loadGlobalSetup(setup);
+        await module.teardown?.();
+      } catch (error: unknown) {
+        dependencies.stderr(
+          `Global teardown failed for ${setup}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+  }
 
   const passed = testResults.filter((r) => r.passed).length;
   const failed = testResults.length - passed;
@@ -499,7 +591,7 @@ export function runBunTests(
   return failed > 0 ? 1 : 0;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = resolve(scriptDir, '..');
 
@@ -542,13 +634,15 @@ function main(): void {
   process.on('SIGINT', () => handleSignal('SIGINT'));
   process.on('SIGHUP', () => handleSignal('SIGHUP'));
 
-  process.exitCode = runBunTests(process.argv.slice(2), {
+  process.exitCode = await runBunTests(process.argv.slice(2), {
     repoRoot,
     invocationDirectory: process.cwd(),
     executable: process.execPath,
     environment: process.env,
     resolveFiles: resolveBunNativeTestFiles,
     resolveTsconfig: resolveTsconfigOverride,
+    loadGlobalSetup: async (path) =>
+      (await import(pathToFileURL(path).href)) as BunGlobalSetupModule,
     spawn: (command, options) => {
       const result = Bun.spawnSync([...command], options);
       const stdoutText = decodeOutput(result.stdout);
@@ -587,5 +681,5 @@ export function isMainModule(
 
 const isMain = isMainModule(process.argv[1], import.meta.url);
 if (isMain) {
-  main();
+  await main();
 }

@@ -12,11 +12,20 @@ import {
   BUN_NATIVE_TEST_MANIFEST,
   BunManifestStatError,
   resolveBunNativeTestFiles,
+  resolveEntryFileNames,
   resolveWorkspaceCwd,
 } from '../bun-test-manifest.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const temporaryRoots: string[] = [];
+
+/** Stat/glob stubs for tests that must never touch the real filesystem. */
+const throwingStat = (error: unknown) => ({
+  stat: (): never => {
+    throw error;
+  },
+  glob: (): readonly string[] => [],
+});
 
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
@@ -72,10 +81,20 @@ describe('Bun native test manifest', () => {
 
   it('contains only nonempty workspace entries and existing files', () => {
     for (const entry of BUN_NATIVE_TEST_MANIFEST) {
-      expect(entry.files.length, entry.workspace).toBeGreaterThan(0);
-      expect(resolveBunNativeTestFiles(repoRoot, entry.workspace)).toHaveLength(
-        entry.files.length,
-      );
+      const resolved = resolveBunNativeTestFiles(repoRoot, entry.workspace);
+      expect(resolved.length, entry.workspace).toBeGreaterThan(0);
+      if (entry.files !== undefined) {
+        expect(resolved, entry.workspace).toHaveLength(entry.files.length);
+      }
+    }
+  });
+
+  it('declares exactly one of files or include for every entry', () => {
+    for (const entry of BUN_NATIVE_TEST_MANIFEST) {
+      expect(
+        (entry.files === undefined) !== (entry.include === undefined),
+        entry.workspace,
+      ).toBe(true);
     }
   });
 
@@ -98,11 +117,7 @@ describe('Bun native test manifest', () => {
     });
 
     expect(() =>
-      resolveBunNativeTestFiles('/fixture', 'core', {
-        stat: () => {
-          throw cause;
-        },
-      }),
+      resolveBunNativeTestFiles('/fixture', 'core', throwingStat(cause)),
     ).toThrow('Bun native test manifest contains missing files');
   });
 
@@ -114,11 +129,7 @@ describe('Bun native test manifest', () => {
     let thrown: unknown;
 
     try {
-      resolveBunNativeTestFiles('/fixture', 'core', {
-        stat: () => {
-          throw cause;
-        },
-      });
+      resolveBunNativeTestFiles('/fixture', 'core', throwingStat(cause));
     } catch (error: unknown) {
       thrown = error;
     }
@@ -145,6 +156,89 @@ describe('Bun native test manifest', () => {
     expect(() => resolveBunNativeTestFiles(fixtureRoot, 'core')).toThrow(
       'Bun native test manifest contains non-files',
     );
+  });
+});
+
+describe('resolveEntryFileNames', () => {
+  const globDependencies = (matches: Record<string, readonly string[]>) => ({
+    stat: () => ({ isFile: () => true }),
+    glob: (pattern: string): readonly string[] => matches[pattern] ?? [],
+  });
+
+  it('returns a curated file list verbatim', () => {
+    expect(
+      resolveEntryFileNames(
+        { workspace: 'w', files: ['b.test.ts', 'a.test.ts'] },
+        '/root',
+        globDependencies({}),
+      ),
+    ).toEqual(['b.test.ts', 'a.test.ts']);
+  });
+
+  it('expands include globs and sorts the result', () => {
+    expect(
+      resolveEntryFileNames(
+        { workspace: 'w', include: ['**/*.test.ts'] },
+        '/root',
+        globDependencies({ '**/*.test.ts': ['b.test.ts', 'a.test.ts'] }),
+      ),
+    ).toEqual(['a.test.ts', 'b.test.ts']);
+  });
+
+  it('removes exclude matches from the include result', () => {
+    expect(
+      resolveEntryFileNames(
+        {
+          workspace: 'w',
+          include: ['**/*.test.ts'],
+          exclude: ['**/*.bun.test.ts'],
+        },
+        '/root',
+        globDependencies({
+          '**/*.test.ts': ['a.test.ts', 'b.bun.test.ts'],
+          '**/*.bun.test.ts': ['b.bun.test.ts'],
+        }),
+      ),
+    ).toEqual(['a.test.ts']);
+  });
+
+  it('deduplicates files matched by more than one include pattern', () => {
+    expect(
+      resolveEntryFileNames(
+        { workspace: 'w', include: ['a*.ts', '*.test.ts'] },
+        '/root',
+        globDependencies({
+          'a*.ts': ['a.test.ts'],
+          '*.test.ts': ['a.test.ts', 'b.test.ts'],
+        }),
+      ),
+    ).toEqual(['a.test.ts', 'b.test.ts']);
+  });
+
+  it('rejects an entry declaring both files and include', () => {
+    expect(() =>
+      resolveEntryFileNames(
+        { workspace: 'w', files: ['a.test.ts'], include: ['*.test.ts'] },
+        '/root',
+        globDependencies({}),
+      ),
+    ).toThrow('declares both "files" and "include"');
+  });
+
+  it('rejects an entry declaring neither files nor include', () => {
+    expect(() =>
+      resolveEntryFileNames({ workspace: 'w' }, '/root', globDependencies({})),
+    ).toThrow('declares neither "files" nor "include"');
+  });
+
+  it('fails loudly when include globs match nothing', () => {
+    expect(() =>
+      resolveEntryFileNames(
+        { workspace: 'w', include: ['**/*.test.ts'] },
+        '/root',
+        globDependencies({}),
+      ),
+    ).toThrow('matched no test files');
   });
 });
 

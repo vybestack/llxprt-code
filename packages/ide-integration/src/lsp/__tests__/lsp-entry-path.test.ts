@@ -29,13 +29,14 @@ describe('LSP entry path resolution', () => {
   it.runIf(hasImportMetaResolve)(
     'resolves via import.meta.resolve when package is installed',
     () => {
-      const resolveImportMeta = (
+      // Call through `import.meta` rather than detaching `resolve` into a
+      // local: some runtimes require the method stay bound to its
+      // `import.meta` receiver.
+      const packageUrl = (
         import.meta as unknown as {
           resolve: (specifier: string) => string;
         }
-      ).resolve;
-
-      const packageUrl = resolveImportMeta('@vybestack/llxprt-code-lsp');
+      ).resolve('@vybestack/llxprt-code-lsp');
       const packagePath = fileURLToPath(packageUrl);
       expect(packagePath).toBeTruthy();
       expect(existsSync(packagePath)).toBe(true);

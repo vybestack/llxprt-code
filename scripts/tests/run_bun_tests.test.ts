@@ -23,6 +23,8 @@ import {
   resolveTsconfigOverride,
   runBunTests,
   reapStaleBunTestProcesses,
+  processTimeoutFor,
+  collectGlobalSetups,
   type BunTestRunnerDependencies,
   type BunTestSpawnOptions,
   type ChildExitInfo,
@@ -260,15 +262,27 @@ describe('resolveTsconfigOverride', () => {
   });
 });
 
+/** Global setup loader stub for runs whose entries declare none. */
+const noGlobalSetup = async (): Promise<Record<string, never>> => ({});
+
 describe('runBunTests', () => {
-  it('executes every entry with exact argv, cwd, and env and reports all failure modes', () => {
+  it('executes every entry with exact argv, cwd, and env and reports all failure modes', async () => {
     const environment = { RUNNER_TEST: '1' };
     const entries = [
-      { cwd: '/repo/packages/one', file: '/repo/packages/one/one.test.ts' },
-      { cwd: '/repo/packages/two', file: '/repo/packages/two/two.test.ts' },
+      {
+        cwd: '/repo/packages/one',
+        file: '/repo/packages/one/one.test.ts',
+        preloads: [],
+      },
+      {
+        cwd: '/repo/packages/two',
+        file: '/repo/packages/two/two.test.ts',
+        preloads: [],
+      },
       {
         cwd: '/repo/packages/three',
         file: '/repo/packages/three/three.test.ts',
+        preloads: [],
       },
     ];
     const results: ChildExitInfo[] = [
@@ -301,11 +315,12 @@ describe('runBunTests', () => {
         }
         return result;
       },
+      loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     };
 
-    const status = runBunTests(
+    const status = await runBunTests(
       [
         '--workspace',
         'selected',
@@ -351,7 +366,7 @@ describe('runBunTests', () => {
     expect(status).toBe(1);
   });
 
-  it('reports a spawn exception for its file and continues with later entries', () => {
+  it('reports a spawn exception for its file and continues with later entries', async () => {
     const stdout: string[] = [];
     const stderr: string[] = [];
     let spawnCount = 0;
@@ -361,8 +376,8 @@ describe('runBunTests', () => {
       executable: '/bin/bun',
       environment: {},
       resolveFiles: () => [
-        { cwd: '/repo/one', file: '/repo/one/throws.test.ts' },
-        { cwd: '/repo/two', file: '/repo/two/passes.test.ts' },
+        { cwd: '/repo/one', file: '/repo/one/throws.test.ts', preloads: [] },
+        { cwd: '/repo/two', file: '/repo/two/passes.test.ts', preloads: [] },
       ],
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => {
@@ -374,11 +389,12 @@ describe('runBunTests', () => {
         }
         return { exitCode: 0, signalCode: null };
       },
+      loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     };
 
-    const status = runBunTests([], dependencies);
+    const status = await runBunTests([], dependencies);
 
     expect(spawnCount).toBe(2);
     expect(stderr).toHaveLength(1);
@@ -392,42 +408,258 @@ describe('runBunTests', () => {
     expect(status).toBe(1);
   });
 
-  it('returns success and reports the complete passing summary', () => {
+  it('returns success and reports the complete passing summary', async () => {
     const stdout: string[] = [];
     const dependencies: BunTestRunnerDependencies = {
       repoRoot: '/repo',
       invocationDirectory: '/invoke',
       executable: '/bin/bun',
       environment: {},
-      resolveFiles: () => [{ cwd: '/repo/core', file: '/repo/core/test.ts' }],
+      resolveFiles: () => [
+        { cwd: '/repo/core', file: '/repo/core/test.ts', preloads: [] },
+      ],
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => ({ exitCode: 0, signalCode: null }),
+      loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
       stderr: () => {},
     };
 
-    const status = runBunTests([], dependencies);
+    const status = await runBunTests([], dependencies);
 
     expect(stdout.at(-1)).toBe('Passed 1/1 isolated native Bun test files');
     expect(status).toBe(0);
   });
 
-  it('rejects a fractional --timeout value before any child is spawned', () => {
+  it('rejects a fractional --timeout value before any child is spawned', async () => {
     const dependencies: BunTestRunnerDependencies = {
       repoRoot: '/repo',
       invocationDirectory: '/invoke',
       executable: '/bin/bun',
       environment: {},
-      resolveFiles: () => [{ cwd: '/repo/core', file: '/repo/core/test.ts' }],
+      resolveFiles: () => [
+        { cwd: '/repo/core', file: '/repo/core/test.ts', preloads: [] },
+      ],
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => ({ exitCode: 0, signalCode: null }),
+      loadGlobalSetup: noGlobalSetup,
       stdout: () => {},
       stderr: () => {},
     };
 
-    expect(() => runBunTests(['--timeout', '1.5'], dependencies)).toThrow(
-      'Invalid --timeout value: 1.5',
+    await expect(
+      runBunTests(['--timeout', '1.5'], dependencies),
+    ).rejects.toThrow('Invalid --timeout value: 1.5');
+  });
+
+  it('passes every declared preload and the entry tsconfig to the child', async () => {
+    const calls: Array<readonly string[]> = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/ws',
+          file: '/repo/ws/a.test.ts',
+          preloads: ['/repo/shared/augment.ts', '/repo/ws/setup.ts'],
+          tsconfig: '/repo/ws/tsconfig.bun-test.json',
+          timeout: 300_000,
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: (command) => {
+        calls.push(command);
+        return { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    await runBunTests([], dependencies);
+
+    expect(calls[0]).toEqual([
+      '/bin/bun',
+      'test',
+      '--tsconfig-override',
+      '/repo/ws/tsconfig.bun-test.json',
+      '--max-concurrency',
+      '1',
+      '--timeout',
+      '300000',
+      '--preload',
+      '/repo/shared/augment.ts',
+      '--preload',
+      '/repo/ws/setup.ts',
+      '/repo/ws/a.test.ts',
+    ]);
+  });
+
+  it('retries a failing file up to its retry budget and passes on a later attempt', async () => {
+    let attempts = 0;
+    const stdout: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/flaky.test.ts',
+          preloads: [],
+          retries: 2,
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        attempts++;
+        return attempts < 3
+          ? { exitCode: 1, signalCode: null }
+          : { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: (line) => stdout.push(line),
+      stderr: () => {},
+    };
+
+    const status = await runBunTests([], dependencies);
+
+    expect(attempts).toBe(3);
+    expect(status).toBe(0);
+    expect(stdout.at(-1)).toBe('Passed 1/1 isolated native Bun test files');
+  });
+
+  it('stops retrying once the budget is exhausted and reports the failure', async () => {
+    let attempts = 0;
+    const stderr: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/broken.test.ts',
+          preloads: [],
+          retries: 1,
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        attempts++;
+        return { exitCode: 1, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: () => {},
+      stderr: (line) => stderr.push(line),
+    };
+
+    const status = await runBunTests([], dependencies);
+
+    expect(attempts).toBe(2);
+    expect(status).toBe(1);
+    expect(stderr.at(-1)).toBe(
+      'Native Bun test failed: /repo/e2e/broken.test.ts (exit code: 1)',
     );
+  });
+
+  it('runs global setup before any child and teardown after the last one', async () => {
+    const order: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/a.test.ts',
+          preloads: [],
+          globalSetup: '/repo/e2e/globalSetup.ts',
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        order.push('spawn');
+        return { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: async () => ({
+        setup: () => {
+          order.push('setup');
+        },
+        teardown: () => {
+          order.push('teardown');
+        },
+      }),
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    await runBunTests([], dependencies);
+
+    expect(order).toEqual(['setup', 'spawn', 'teardown']);
+  });
+
+  it('runs global teardown even when a test file fails', async () => {
+    const order: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/a.test.ts',
+          preloads: [],
+          globalSetup: '/repo/e2e/globalSetup.ts',
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => ({ exitCode: 1, signalCode: null }),
+      loadGlobalSetup: async () => ({
+        setup: () => {
+          order.push('setup');
+        },
+        teardown: () => {
+          order.push('teardown');
+        },
+      }),
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    const status = await runBunTests([], dependencies);
+
+    expect(status).toBe(1);
+    expect(order).toEqual(['setup', 'teardown']);
+  });
+});
+
+describe('processTimeoutFor', () => {
+  it('keeps the default process budget for ordinary per-test timeouts', () => {
+    expect(processTimeoutFor(30_000)).toBe(120_000);
+  });
+
+  it('scales past the default when a root declares a long per-test timeout', () => {
+    expect(processTimeoutFor(300_000)).toBe(600_000);
+  });
+});
+
+describe('collectGlobalSetups', () => {
+  it('returns each distinct setup module once, in first-seen order', () => {
+    expect(
+      collectGlobalSetups([
+        { cwd: '/a', file: '/a/1.test.ts', preloads: [], globalSetup: '/a/s.ts' },
+        { cwd: '/a', file: '/a/2.test.ts', preloads: [], globalSetup: '/a/s.ts' },
+        { cwd: '/b', file: '/b/1.test.ts', preloads: [] },
+        { cwd: '/c', file: '/c/1.test.ts', preloads: [], globalSetup: '/c/s.ts' },
+      ]),
+    ).toEqual(['/a/s.ts', '/c/s.ts']);
   });
 });
 

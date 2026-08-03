@@ -9,7 +9,25 @@ import { join } from 'node:path';
 
 export interface BunTestWorkspaceEntry {
   readonly workspace: string;
-  readonly files: readonly string[];
+  /**
+   * Explicit list of test files, relative to the resolved cwd. Used by
+   * workspaces that are only partially migrated, where naming alone cannot
+   * distinguish a Bun-ready file from one still owned by Vitest.
+   *
+   * Mutually exclusive with `include`: an entry declares exactly one of the
+   * two so it is always obvious whether its file set is curated or derived.
+   */
+  readonly files?: readonly string[];
+  /**
+   * Glob patterns (relative to the resolved cwd) that select every test file
+   * for a fully migrated root. This is the Bun-native equivalent of a Vitest
+   * config's `include`, and it is what makes "no test file can be silently
+   * dropped" mechanically true: a newly added test file is picked up without
+   * any manifest edit.
+   */
+  readonly include?: readonly string[];
+  /** Glob patterns removed from the `include` result. */
+  readonly exclude?: readonly string[];
   /**
    * Optional explicit working directory override. When omitted, the workspace
    * name is resolved under `packages/` (e.g. `packages/core`). When set, this
@@ -17,27 +35,64 @@ export interface BunTestWorkspaceEntry {
    */
   readonly cwd?: string;
   /**
-   * Optional Bun `--preload` script path (relative to the workspace cwd) run
-   * before any test module is imported. Used by workspaces whose tests must
-   * isolate global state (e.g. Storage roots) before test modules import the
-   * singleton — `bun test` does not run Vitest `setupFiles`, so a preload is
-   * the only way to guarantee ordering under Bun.
+   * Optional Bun `--preload` script path(s) (relative to the workspace cwd)
+   * run before any test module is imported. Used by workspaces whose tests
+   * must isolate global state (e.g. Storage roots) before test modules import
+   * the singleton — `bun test` does not run Vitest `setupFiles`, so a preload
+   * is the only way to guarantee ordering under Bun.
    */
-  readonly preload?: string;
+  readonly preload?: string | readonly string[];
+  /**
+   * Optional tsconfig (relative to the workspace cwd) passed to Bun as
+   * `--tsconfig-override`. Used where test-only module resolution differs from
+   * the build configuration (e.g. stubbing the editor-injected `vscode`
+   * module), so the production tsconfig stays honest.
+   */
+  readonly tsconfig?: string;
+  /**
+   * Per-test timeout in milliseconds for this root, overriding the runner's
+   * global `--timeout`. Mirrors a Vitest config's `testTimeout`.
+   */
+  readonly timeout?: number;
+  /**
+   * Number of times a failing file is re-run before it is reported as failed.
+   * Mirrors a Vitest config's `retry`, which real-provider E2E suites rely on.
+   */
+  readonly retries?: number;
+  /**
+   * Module (relative to the workspace cwd) exporting `setup()` and/or
+   * `teardown()`, executed once in the runner process around the whole root.
+   * Mirrors a Vitest config's `globalSetup`: mutations it makes to
+   * `process.env` are inherited by every spawned test process.
+   */
+  readonly globalSetup?: string;
 }
 
 export interface BunTestFile {
   readonly file: string;
   readonly cwd: string;
   /**
-   * Resolved absolute preload path for this file's workspace, or undefined
-   * when the workspace declares no preload. Passed to `bun test --preload`.
+   * Resolved absolute preload paths for this file's workspace (empty when the
+   * workspace declares none). Passed to `bun test --preload`.
    */
-  readonly preload?: string;
+  readonly preloads: readonly string[];
+  /** Resolved absolute `--tsconfig-override` path, when the entry declares one. */
+  readonly tsconfig?: string;
+  /** Per-test timeout override in milliseconds, when the entry declares one. */
+  readonly timeout?: number;
+  /** Retry budget for this file, when the entry declares one. */
+  readonly retries?: number;
+  /** Resolved absolute global setup module path, when the entry declares one. */
+  readonly globalSetup?: string;
 }
 
 export interface BunManifestDependencies {
   stat(path: string): { isFile(): boolean };
+  /**
+   * Expands a glob pattern to file paths relative to `cwd`. Injected so the
+   * resolver stays testable without touching the real filesystem.
+   */
+  glob(pattern: string, cwd: string): readonly string[];
 }
 
 export class BunManifestStatError extends Error {
@@ -59,6 +114,8 @@ export class BunManifestStatError extends Error {
 
 const defaultManifestDependencies: BunManifestDependencies = {
   stat: statSync,
+  glob: (pattern, cwd) =>
+    Array.from(new Bun.Glob(pattern).scanSync({ cwd, onlyFiles: true })).sort(),
 };
 
 function getErrorCode(error: unknown): string | undefined {
@@ -745,6 +802,58 @@ export function resolveWorkspaceCwd(
   return join(repoRoot, cwd);
 }
 
+/**
+ * Expands one manifest entry into its relative test-file list.
+ *
+ * `files` is returned verbatim (curated set). `include` is expanded through
+ * the injected glob and then filtered by `exclude`, mirroring how a Vitest
+ * config's include/exclude pair selects files. Declaring both, or neither, is
+ * a manifest authoring error and fails loudly rather than silently running a
+ * partial set.
+ */
+export function resolveEntryFileNames(
+  entry: BunTestWorkspaceEntry,
+  resolvedCwd: string,
+  dependencies: BunManifestDependencies,
+): readonly string[] {
+  const { workspace, files, include, exclude } = entry;
+  if (files !== undefined && include !== undefined) {
+    throw new Error(
+      `Bun native test manifest entry "${workspace}" declares both "files" and "include"; choose one.`,
+    );
+  }
+  if (files !== undefined) {
+    return files;
+  }
+  if (include === undefined) {
+    throw new Error(
+      `Bun native test manifest entry "${workspace}" declares neither "files" nor "include".`,
+    );
+  }
+  const excluded = new Set(
+    (exclude ?? []).flatMap((pattern) => dependencies.glob(pattern, resolvedCwd)),
+  );
+  const selected = new Set(
+    include.flatMap((pattern) => dependencies.glob(pattern, resolvedCwd)),
+  );
+  const remaining = [...selected].filter((file) => !excluded.has(file)).sort();
+  if (remaining.length === 0) {
+    throw new Error(
+      `Bun native test manifest entry "${workspace}" matched no test files under ${resolvedCwd}.`,
+    );
+  }
+  return remaining;
+}
+
+function toPreloadList(
+  preload: string | readonly string[] | undefined,
+): readonly string[] {
+  if (preload === undefined) {
+    return [];
+  }
+  return typeof preload === 'string' ? [preload] : preload;
+}
+
 export function resolveBunNativeTestFiles(
   repoRoot: string,
   workspaceFilter?: string,
@@ -752,15 +861,32 @@ export function resolveBunNativeTestFiles(
 ): BunTestFile[] {
   const files = BUN_NATIVE_TEST_MANIFEST.filter(
     ({ workspace }) => !workspaceFilter || workspace === workspaceFilter,
-  ).flatMap(({ workspace, files, cwd, preload }) => {
-    const resolvedCwd = resolveWorkspaceCwd(repoRoot, workspace, cwd);
-    const resolvedPreload =
-      preload !== undefined ? join(resolvedCwd, preload) : undefined;
-    return files.map((file) => ({
-      cwd: resolvedCwd,
-      file: join(resolvedCwd, file),
-      preload: resolvedPreload,
-    }));
+  ).flatMap((entry) => {
+    const resolvedCwd = resolveWorkspaceCwd(
+      repoRoot,
+      entry.workspace,
+      entry.cwd,
+    );
+    const resolvedPreloads = toPreloadList(entry.preload).map((preload) =>
+      join(resolvedCwd, preload),
+    );
+    return resolveEntryFileNames(entry, resolvedCwd, dependencies).map(
+      (file) => ({
+        cwd: resolvedCwd,
+        file: join(resolvedCwd, file),
+        preloads: resolvedPreloads,
+        tsconfig:
+          entry.tsconfig !== undefined
+            ? join(resolvedCwd, entry.tsconfig)
+            : undefined,
+        timeout: entry.timeout,
+        retries: entry.retries,
+        globalSetup:
+          entry.globalSetup !== undefined
+            ? join(resolvedCwd, entry.globalSetup)
+            : undefined,
+      }),
+    );
   });
   const missingFiles: string[] = [];
   const nonFiles: string[] = [];
@@ -778,11 +904,17 @@ export function resolveBunNativeTestFiles(
       }
     }
   }
-  // Validate declared preload scripts exist (deduplicated — one per workspace).
+  // Validate declared support scripts exist (deduplicated across workspaces).
   const preloadPaths = new Set<string>();
-  for (const { preload } of files) {
-    if (preload !== undefined) {
+  for (const { preloads, tsconfig, globalSetup } of files) {
+    for (const preload of preloads) {
       preloadPaths.add(preload);
+    }
+    if (tsconfig !== undefined) {
+      preloadPaths.add(tsconfig);
+    }
+    if (globalSetup !== undefined) {
+      preloadPaths.add(globalSetup);
     }
   }
   for (const preload of preloadPaths) {

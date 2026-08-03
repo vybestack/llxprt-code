@@ -1,0 +1,7 @@
+test(bun): extend Bun-native runner descriptors and Vitest compat shim
+
+Adds glob-based roots, multiple preloads, per-root tsconfig/timeout/retries
+and globalSetup to the Bun-native test manifest and runner, and closes three
+Vitest-compatibility gaps (it/test/describe.runIf, accessor-safe automock,
+restoreAllMocks resetting spy state). Unblocks the settings and
+ide-integration workspaces under Bun.

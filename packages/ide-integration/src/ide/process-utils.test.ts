@@ -10,25 +10,36 @@ import {
   expect,
   vi,
   afterEach,
+  beforeAll,
   beforeEach,
   type Mock,
 } from 'vitest';
-import { getIdeProcessInfo } from './process-utils.js';
-import os from 'node:os';
 
 const mockedExec = vi.hoisted(() => vi.fn());
 vi.mock('node:util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
-vi.mock('node:os', () => ({
-  default: {
-    platform: vi.fn(),
-    homedir: vi.fn(),
-  },
+vi.mock('util', () => ({
+  promisify: vi.fn().mockReturnValue(mockedExec),
+}));
+const mockedOs = vi.hoisted(() => ({
+  platform: vi.fn(),
   homedir: vi.fn(),
 }));
+vi.mock('node:os', () => ({ default: mockedOs, ...mockedOs }));
+vi.mock('os', () => ({ default: mockedOs, ...mockedOs }));
+
+// `process-utils.js` calls `promisify(exec)` at module scope, so it must be
+// loaded only after the module mocks above are registered. A static import
+// would evaluate it first and capture the real `promisify`.
+let getIdeProcessInfo: typeof import('./process-utils.js').getIdeProcessInfo;
+const os = mockedOs;
 
 describe('getIdeProcessInfo', () => {
+  beforeAll(async () => {
+    ({ getIdeProcessInfo } = await import('./process-utils.js'));
+  });
+
   beforeEach(() => {
     Object.defineProperty(process, 'pid', { value: 1000, configurable: true });
     mockedExec.mockReset();
