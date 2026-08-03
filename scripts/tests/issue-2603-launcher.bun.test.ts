@@ -29,6 +29,14 @@ import {
 } from './launcher-test-helpers.js';
 
 /**
+ * Creating a symlink on Windows requires elevation or Developer Mode, so
+ * `symlinkSync` throws EPERM on an unprivileged host. CI runs this suite on
+ * ubuntu-latest only, but a local Windows run should skip those cases rather
+ * than error inside the fixture before reaching any launcher assertion.
+ */
+const itNeedsSymlinks = process.platform === 'win32' ? it.skip : it;
+
+/**
  * Extracts the inner `case "$_llxprt_magic"` block that follows a kernel
  * marker (e.g. 'Darwin)') in the launcher source, so platform-gated magic
  * acceptance can be asserted per-branch.
@@ -73,24 +81,27 @@ describe('POSIX launcher portability', () => {
     expect(source).toMatch(/od -An -tx1 -N4 -- "\$_llxprt_bun"/);
   });
 
-  it('readlink -- resolves symlinks on stock macOS (behavioral proof)', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-readlink-'));
-    try {
-      const target = join(tempDir, 'real-target');
-      writeFileSync(target, '#!/bin/sh\necho ok\n');
-      chmodSync(target, 0o755);
-      const link = join(tempDir, 'mylink');
-      symlinkSync(target, link);
-      const r = spawnSync('sh', ['-c', `readlink -- "${link}"`], {
-        encoding: 'utf8',
-        timeout: SHELL_PROBE_TIMEOUT_MS,
-      });
-      expectExitOk(r);
-      expect(r.stdout.trim()).toBe(target);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
+  itNeedsSymlinks(
+    'readlink -- resolves symlinks on stock macOS (behavioral proof)',
+    () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-readlink-'));
+      try {
+        const target = join(tempDir, 'real-target');
+        writeFileSync(target, '#!/bin/sh\necho ok\n');
+        chmodSync(target, 0o755);
+        const link = join(tempDir, 'mylink');
+        symlinkSync(target, link);
+        const r = spawnSync('sh', ['-c', `readlink -- "${link}"`], {
+          encoding: 'utf8',
+          timeout: SHELL_PROBE_TIMEOUT_MS,
+        });
+        expectExitOk(r);
+        expect(r.stdout.trim()).toBe(target);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('dirname -- handles dash-prefixed names on stock macOS (behavioral proof)', () => {
     const r = spawnSync('sh', ['-c', `dirname -- "-weird-name"`], {
@@ -574,21 +585,24 @@ describe('POSIX launcher execution behavior', () => {
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/entry point|index\.ts|corrupt/i);
   });
-  it('resolves symlinks so $0 works through npm .bin links', () => {
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir);
-    const binLink = join(pkgRoot, 'node_modules', '.bin', 'llxprt');
-    mkdirSync(dirname(binLink), { recursive: true });
-    symlinkSync(launcherTarget, binLink);
+  itNeedsSymlinks(
+    'resolves symlinks so $0 works through npm .bin links',
+    () => {
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir);
+      const binLink = join(pkgRoot, 'node_modules', '.bin', 'llxprt');
+      mkdirSync(dirname(binLink), { recursive: true });
+      symlinkSync(launcherTarget, binLink);
 
-    const result = spawnSync(binLink, ['--version'], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expectNoSpawnError(result);
-    expect(result.status).toBe(0);
-  });
+      const result = spawnSync(binLink, ['--version'], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expectNoSpawnError(result);
+      expect(result.status).toBe(0);
+    },
+  );
   it('does not mutate the environment with LLXPRT_BUN_RELAUNCHED', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: `console.log(process.env.LLXPRT_BUN_RELAUNCHED ?? 'unset');`,
