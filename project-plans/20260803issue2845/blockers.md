@@ -22,7 +22,59 @@ Install takes ~9s; the container is still running and ready to iterate in.
 
 ---
 
-# Blocker 1 — Bun segfaults on the native keyring
+# Blocker 1 — RESOLVED: the secure store misclassified "no keyring on this machine"
+
+**Status: fixed.** The original framing below ("Bun segfaults on the native
+keyring") was the symptom, not the cause. Root cause found by reproducing in a
+keyring-less Linux container:
+
+`SecureStore.get()` already implements exactly the right degrade — it swallows
+`UNAVAILABLE`, `NOT_FOUND` and `TIMEOUT` and falls through to the encrypted
+file. But `classifyError()` is a substring match on the error message, and a
+machine with no Secret Service reports:
+
+```
+Couldn't access platform storage: PermissionDenied
+```
+
+That contains both "permission" and "denied", so it was classified `DENIED` — a
+hard error that surfaces to the caller — when it actually means "there is no
+credential backend here", i.e. `UNAVAILABLE`. The `UNAVAILABLE` remediation
+string literally describes this case: *"install a keyring backend … or allow
+encrypted fallback storage"*.
+
+This is a **product bug, not a test artifact**. The shipped `bin/llxprt` is a
+POSIX launcher that execs Bun, so any Linux user without a Secret Service —
+headless server, container, ssh session, WSL — reading a provider key got a
+thrown `SecureStoreError` instead of the encrypted-file fallback the design
+intends. The agents test was right; it was simply the first thing to exercise
+that surface on a keyring-less machine.
+
+Fix: classify "access platform storage" as `UNAVAILABLE` before the generic
+denied/permission test. Pinned by three behavioral tests in
+`secure-store.fallback-behavior.test.ts` (verified red before the fix).
+
+Evidence, keyring-less Linux container:
+
+| | Before | After |
+| --- | --- | --- |
+| `capabilityGaps.integration.spec.ts` | 17 pass / 1 fail | 18 pass / 0 fail |
+| both files together | — | 33 pass / 0 fail |
+| `packages/storage` secure-store suite | — | 236 pass / 0 fail |
+
+No test file was changed to achieve this.
+
+**Remaining uncertainty:** the bare container fails early — the `AsyncEntry`
+constructor throws cleanly and the classifier fix handles it. GitHub's runner
+has more of the libsecret/D-Bus stack present, gets deeper into native code and
+Bun segfaults there. If CI still crashes, the durable fix is pre-flight
+detection (skip the native call entirely when there is no Secret Service, e.g.
+no `DBUS_SESSION_BUS_ADDRESS` on Linux) so we never enter the crashing path.
+That would also protect real users from a hard crash rather than a degrade.
+
+## Original symptom analysis (kept for context)
+
+# Blocker 1 (original framing) — Bun segfaults on the native keyring
 
 ## What happens
 
