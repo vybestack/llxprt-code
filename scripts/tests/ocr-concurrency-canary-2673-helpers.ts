@@ -6,6 +6,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import type { ChildProcessByStdio } from 'node:child_process';
+import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -22,10 +23,16 @@ import {
 import {
   WORKFLOW_PATH,
   commandText,
-  extractFunctionSource,
   readRootFile,
   stepNamed,
 } from './ocr-review-workflow-helpers.ts';
+
+const requireFromModule = createRequire(import.meta.url);
+const canaryModule = requireFromModule(
+  '../../.github/scripts/ocr-canary-metrics.cjs',
+) as {
+  buildCanaryMetrics: (input: unknown) => Record<string, unknown>;
+};
 
 export const REPRESENTATIVE_RESULT = {
   status: 'success',
@@ -444,31 +451,18 @@ export function metricsScript(): string {
 }
 
 export function runBuild(input: RunBuildInput): Record<string, unknown> {
-  const source = extractFunctionSource(metricsScript(), 'buildCanaryMetrics');
-  const sandbox: Record<string, unknown> = {
-    JSON,
-    Number,
-    String,
-    Object,
-    Array,
-    Map,
-    Set,
-    Math,
-    Error,
-    RegExp,
-    Boolean,
-    __INPUT__: input,
-  };
-  vm.runInNewContext(
-    `${source}\n__RESULT__ = buildCanaryMetrics(__INPUT__);`,
-    sandbox,
-  );
-  return asRecord(sandbox.__RESULT__);
+  return asRecord(canaryModule.buildCanaryMetrics(input));
+}
+
+export interface EmbeddedMetricsResult {
+  [key: string]: unknown;
+  _failed: boolean;
+  _failureMessage: string | null;
 }
 
 export function runEmbeddedMetricsScript(
   versionOutput: string | NodeJS.ArrayBufferView<ArrayBufferLike>,
-) {
+): EmbeddedMetricsResult {
   const metadata = completeMetadata();
   return withTempDirectory('ocr-metrics-2673-', (directory: string) => {
     const homeDirectory = path.join(directory, 'home');
@@ -509,12 +503,14 @@ export function runEmbeddedMetricsScript(
     fs.writeFileSync(path.join(ocrDirectory, 'rule.json'), '{}\n');
     fs.writeFileSync(path.join(ocrDirectory, 'config.json'), '{}\n');
 
+    const failureMarkerPath = path.join(directory, 'ocr-driver-failed.txt');
     const scriptPath = path.join(directory, 'metrics.cjs');
     fs.writeFileSync(
       scriptPath,
       [
         "const context = { serverUrl: 'https://github.com', repo: { owner: 'owner', repo: 'repo' }, runId: 123 };",
-        'const core = { setFailed(message) { throw new Error(message); } };',
+        `const __failureMarkerPath = ${JSON.stringify(failureMarkerPath)};`,
+        'const core = { setFailed(message) { fs.writeFileSync(__failureMarkerPath, String(message)); process.exitCode = 1; } };',
         metricsScript(),
       ].join('\n'),
     );
@@ -552,7 +548,14 @@ export function runEmbeddedMetricsScript(
         { cause: execError },
       );
     }
-    return JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    const metrics: Record<string, unknown> = JSON.parse(
+      fs.readFileSync(artifactPath, 'utf8'),
+    );
+    const failed = fs.existsSync(failureMarkerPath);
+    const failureMessage = failed
+      ? fs.readFileSync(failureMarkerPath, 'utf8')
+      : null;
+    return { ...metrics, _failed: failed, _failureMessage: failureMessage };
   });
 }
 

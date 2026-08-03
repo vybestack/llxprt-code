@@ -160,7 +160,7 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
       const env = getEnv(telemetryStep);
       expect(env?.OCR_RUN_ID).toBe('${{ github.run_id }}');
       expect(env?.OCR_RUN_ATTEMPT).toBe('${{ github.run_attempt }}');
-      expect(env?.OCR_PR_NUMBER).toBe('${{ steps.pr-context.outputs.number }}');
+      expect(env?.OCR_PR_NUMBER).toBe('${{ env.OCR_EFFECTIVE_PR_NUMBER }}');
       expect(env?.OCR_SHA).toBe('${{ env.HEAD_SHA }}');
     });
 
