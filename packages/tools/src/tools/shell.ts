@@ -10,6 +10,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -34,12 +35,13 @@ import type {
   IShellToolHost,
   ShellExecutionResult,
   ShellOutputEvent,
+  HostShellJobInfo,
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
+  buildShellSchema,
   collectProcessInfo,
   createShellToolHostFromExecutionService,
-  getCommandDescription,
   getShellToolDescription,
   isShellToolHost,
   prepareShellExecution,
@@ -49,6 +51,10 @@ import {
 
 /** Throttle interval for shell output updates. */
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
+
+/** Windows validation error for is_background. */
+const BACKGROUND_WINDOWS_ERROR =
+  'is_background is not supported on Windows. Start independent background processes with Start-Process instead.';
 
 export interface ShellToolParams {
   /** The shell command to execute. */
@@ -69,6 +75,8 @@ export interface ShellToolParams {
   grep_flags?: string[];
   /** Optional timeout in seconds (-1 for unlimited). */
   timeout_seconds?: number;
+  /** Start the command as a managed background job (non-Windows only). */
+  is_background?: boolean;
 }
 
 export class ShellToolInvocation extends BaseToolInvocation<
@@ -109,6 +117,9 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
     if (this.params.description) {
       description += ` (${this.params.description.replace(/\n/g, ' ')})`;
+    }
+    if (this.params.is_background === true) {
+      description += ' [background]';
     }
     return description;
   }
@@ -180,6 +191,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
       },
     };
 
+    if (this.params.is_background === true) {
+      confirmationDetails.isBackground = true;
+    }
+
     return confirmationDetails;
   }
 
@@ -191,6 +206,122 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
     const strippedCommand = this.host.stripShellWrapper(this.params.command);
 
+    if (this.shouldRunAsBackground(strippedCommand)) {
+      const backgroundCommand = this.resolveBackgroundCommand(strippedCommand);
+      return this.executeBackground(backgroundCommand);
+    }
+
+    return this.executeForeground(strippedCommand, signal, updateOutput);
+  }
+
+  /**
+   * Determines whether the command should be launched as a managed background
+   * job. This happens when `is_background` is explicitly set OR when the
+   * AST-based detector recognises a trailing `&` operator (#1995 slice 6).
+   */
+  private shouldRunAsBackground(strippedCommand: string): boolean {
+    if (this.params.is_background === true) {
+      return true;
+    }
+    if (os.platform() === 'win32') {
+      return false;
+    }
+    return this.host.detectTrailingBackground(strippedCommand).promoted;
+  }
+
+  /**
+   * Resolves the command string to launch for a background job. When
+   * `is_background` is true the original command is used. When the trailing
+   * `&` was detected via AST, the operator is stripped from the command.
+   */
+  private resolveBackgroundCommand(strippedCommand: string): string {
+    if (this.params.is_background === true) {
+      return strippedCommand;
+    }
+    return this.host.detectTrailingBackground(strippedCommand).command;
+  }
+
+  /**
+   * Launch a managed background job. The timeout/abort machinery is NOT
+   * wired in because a background job's lifetime is unbounded —
+   * `timeout_seconds` bounds launch only (#1995 slice 5).
+   */
+  private executeBackground(backgroundCommand: string): ToolResult {
+    const cwd = this.resolveCwd();
+    const job = this.host.launchBackgroundJob({
+      command: backgroundCommand,
+      cwd,
+    });
+
+    const { llmContent, returnDisplay } = this.formatBackgroundResult(job);
+    return {
+      llmContent,
+      returnDisplay,
+    };
+  }
+
+  /**
+   * Formats the deterministic job-shaped result for a background launch.
+   * Always returns the same schema regardless of whether the job has already
+   * reached a terminal state. When the job is terminal, includes the real
+   * exit code/signal and a bounded output tail.
+   */
+  private formatBackgroundResult(job: HostShellJobInfo): {
+    llmContent: string;
+    returnDisplay: string;
+  } {
+    const lines: string[] = [
+      `Background job launched.`,
+      `Job ID: ${job.id}`,
+      `Command: ${job.command}`,
+      `State: ${job.state}`,
+    ];
+
+    if (job.state === 'running') {
+      lines.push('Use check_async_tasks to inspect output or cancel this job.');
+    } else {
+      if (job.exitCode !== undefined) {
+        lines.push(`Exit Code: ${job.exitCode}`);
+      }
+      if (job.signal !== undefined) {
+        lines.push(`Signal: ${job.signal}`);
+      }
+      if (job.failureReason !== undefined) {
+        lines.push(`Failure Reason: ${job.failureReason}`);
+      }
+      const tail = this.host.tailBackgroundJob(job.id);
+      if (tail.output.trim() !== '') {
+        lines.push(`Output tail:`);
+        lines.push(tail.output);
+      }
+      lines.push('Use check_async_tasks to inspect this job.');
+    }
+
+    const llmContent = lines.join('\n');
+
+    const displayLines: string[] = [
+      `Background job **${job.id}** — ${job.state}`,
+      `Command: \`${job.command}\``,
+    ];
+    if (job.state === 'running') {
+      displayLines.push('Use `check_async_tasks` to inspect or cancel.');
+    } else {
+      if (job.exitCode !== undefined) {
+        displayLines.push(`Exit code: ${job.exitCode}`);
+      }
+      if (job.signal !== undefined) {
+        displayLines.push(`Signal: ${job.signal}`);
+      }
+    }
+
+    return { llmContent, returnDisplay: displayLines.join('\n') };
+  }
+
+  private async executeForeground(
+    strippedCommand: string,
+    signal: AbortSignal,
+    updateOutput?: (update: LiveOutputUpdate) => void,
+  ): Promise<ToolResult> {
     const timeoutConfig = this.host.getTimeoutConfig();
     const timeoutSeconds = this.resolveTimeoutSeconds(
       this.params.timeout_seconds,
@@ -303,25 +434,36 @@ export class ShellToolInvocation extends BaseToolInvocation<
         signal,
       );
 
-      const limitedResult = this.host.limitOutputTokens(llmPayload);
-      if (limitedResult.wasTruncated) {
-        return {
-          llmContent: `${limitedResult.content}\n\n(output exceeded token limit)`,
-          returnDisplay: displayWithFilter,
-          ...executionError,
-        };
-      }
+      return this.buildToolResult(
+        llmPayload,
+        displayWithFilter,
+        executionError,
+      );
+    } finally {
+      fs.rmSync(tempFilePath, { force: true });
+    }
+  }
 
+  private buildToolResult(
+    llmPayload: string,
+    returnDisplay: string,
+    executionError:
+      | { error: { message: string; type: ToolErrorType } }
+      | Record<string, never>,
+  ): ToolResult {
+    const limitedResult = this.host.limitOutputTokens(llmPayload);
+    if (limitedResult.wasTruncated) {
       return {
-        llmContent: limitedResult.content,
-        returnDisplay: displayWithFilter,
+        llmContent: `${limitedResult.content}\n\n(output exceeded token limit)`,
+        returnDisplay,
         ...executionError,
       };
-    } finally {
-      if (fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
     }
+    return {
+      llmContent: limitedResult.content,
+      returnDisplay,
+      ...executionError,
+    };
   }
 
   private async summarizeIfNeeded(
@@ -439,6 +581,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
     return path.resolve(targetDir, dirPath);
   }
+
   private formatOutputContent(
     result: ShellExecutionResult,
     rawOutput: string,
@@ -481,35 +624,54 @@ export class ShellToolInvocation extends BaseToolInvocation<
         }
       }
     } else {
-      const finalError = result.error
-        ? result.error.message.replace(commandToExecute, this.params.command)
-        : '(none)';
+      ({ llmContent, returnDisplayMessage } = this.formatNormalOutput(
+        result,
+        filteredOutput,
+        commandToExecute,
+        backgroundPIDs,
+        pgid,
+      ));
+    }
 
-      llmContent = [
-        `Command: ${this.params.command}`,
-        `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
-        `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
-        `Stderr: (empty)`,
-        `Error: ${finalError}`,
-        `Exit Code: ${result.exitCode ?? '(none)'}`,
-        `Signal: ${result.signal ?? '(none)'}`,
-        `Background PIDs: ${
-          backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
-        }`,
-        `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
-      ].join('\n');
+    return { llmContent, returnDisplayMessage };
+  }
 
-      if (this.host.getDebugMode()) {
-        returnDisplayMessage = llmContent;
-      } else if (filteredOutput.trim() !== '') {
-        returnDisplayMessage = filteredOutput;
-      } else if (result.signal !== null) {
-        returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
-      } else if (result.error !== null) {
-        returnDisplayMessage = `Command failed: ${result.error.message}`;
-      } else if (result.exitCode !== null && result.exitCode !== 0) {
-        returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
-      }
+  private formatNormalOutput(
+    result: ShellExecutionResult,
+    filteredOutput: string,
+    commandToExecute: string,
+    backgroundPIDs: number[],
+    pgid: number | null,
+  ): { llmContent: string; returnDisplayMessage: string } {
+    const finalError = result.error
+      ? result.error.message.replace(commandToExecute, this.params.command)
+      : '(none)';
+
+    const llmContent = [
+      `Command: ${this.params.command}`,
+      `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
+      `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
+      `Stderr: (empty)`,
+      `Error: ${finalError}`,
+      `Exit Code: ${result.exitCode ?? '(none)'}`,
+      `Signal: ${result.signal ?? '(none)'}`,
+      `Background PIDs: ${
+        backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
+      }`,
+      `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
+    ].join('\n');
+
+    let returnDisplayMessage = '';
+    if (this.host.getDebugMode()) {
+      returnDisplayMessage = llmContent;
+    } else if (filteredOutput.trim() !== '') {
+      returnDisplayMessage = filteredOutput;
+    } else if (result.signal !== null) {
+      returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
+    } else if (result.error !== null) {
+      returnDisplayMessage = `Command failed: ${result.error.message}`;
+    } else if (result.exitCode !== null && result.exitCode !== 0) {
+      returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
     }
 
     return { llmContent, returnDisplayMessage };
@@ -618,36 +780,7 @@ export class ShellTool extends BaseDeclarativeTool<
       'Shell',
       getShellToolDescription(),
       Kind.Execute,
-      {
-        type: 'object',
-        properties: {
-          command: {
-            type: 'string',
-            description: getCommandDescription(),
-          },
-          description: {
-            type: 'string',
-            description:
-              'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
-          },
-          dir_path: {
-            type: 'string',
-            description:
-              '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages"), a relative path (e.g., "src/utils"), or an absolute path within the workspace.',
-          },
-          directory: {
-            type: 'string',
-            description:
-              'Alternative parameter name for dir_path (for backward compatibility).',
-          },
-          timeout_seconds: {
-            type: 'number',
-            description:
-              '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
-          },
-        },
-        required: ['command'],
-      },
+      buildShellSchema(),
       false,
       true,
       messageBus,
@@ -662,6 +795,9 @@ export class ShellTool extends BaseDeclarativeTool<
   ): string | null {
     if (!params.command.trim()) {
       return 'Command cannot be empty.';
+    }
+    if (params.is_background === true && os.platform() === 'win32') {
+      return BACKGROUND_WINDOWS_ERROR;
     }
     const commandCheck = this.host.isCommandAllowed(params.command);
     if (!commandCheck.allowed) {

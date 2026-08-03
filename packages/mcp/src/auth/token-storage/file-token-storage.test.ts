@@ -490,7 +490,7 @@ describe('FileTokenStorage', () => {
     it('should not throw when file does not exist', async () => {
       mockFs.unlink.mockRejectedValue({ code: 'ENOENT' });
 
-      await expect(storage.clearAll()).resolves.not.toThrow();
+      await expect(storage.clearAll()).resolves.toBeUndefined();
     });
   });
 });

@@ -311,7 +311,7 @@ jobs:
           TEST_CONFIG: 'vitest.config.native-keyring.ts'
           KEYRING_PASSWORD: 'llxprt-ci-keyring'
         run: |-
-          npm run test:ci --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
+          npm run test:vitest --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
 
   e2e_full:
     name: 'E2E Full - ${{ matrix.os }} - ${{ matrix.sandbox }}'

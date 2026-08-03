@@ -206,15 +206,12 @@ async function releaseResumedResources(
  */
 function setupObservation(config: Config): void {
   const projectRoot = config.getProjectRoot();
-  initializeObservationProducer(
-    {
-      repository: basename(projectRoot),
-      path: projectRoot,
-      agentKind: 'llxprt',
-      displayName: basename(projectRoot),
-    },
-    config.getSessionId(),
-  );
+  initializeObservationProducer({
+    repository: basename(projectRoot),
+    path: projectRoot,
+    agentKind: 'llxprt',
+    displayName: basename(projectRoot),
+  });
 }
 
 function registerRecordingCleanup(

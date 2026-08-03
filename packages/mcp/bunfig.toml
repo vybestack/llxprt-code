@@ -1,0 +1,2 @@
+[test]
+preload = ["../../test-setup/augment-bun-vi.ts", "./test-setup-storage-isolation.ts"]

@@ -42,6 +42,16 @@ export function isShellToolHost(
 const WRAPPED_PREFIX = '{ ';
 const WRAPPED_SUFFIX = ' }; __code=$?; pgrep -g 0 >';
 
+/**
+ * Wraps a value in single quotes using POSIX-safe escaping so it can be
+ * interpolated into a bash command without word-splitting or command
+ * substitution. Every embedded single quote is escaped using the standard
+ * close-quote, escaped-quote, reopen-quote sequence.
+ */
+export function singleQuoteForShell(value: string): string {
+  return `'${value.split("'").join("'\\''")}'`;
+}
+
 function buildShellResultError(result: ShellResult): Error | null {
   const trimmedStderr = result.stderr.trim();
   if (trimmedStderr !== '') {
@@ -69,6 +79,23 @@ function unwrapCommandForExecutionService(command: string): string {
   return innerCommand.endsWith(';')
     ? innerCommand.slice(0, -1).trimEnd()
     : innerCommand;
+}
+
+const STANDALONE_BACKGROUND_ERROR =
+  'Background jobs are not supported in the standalone execution-service adapter. ' +
+  'This capability requires a configured ShellJobManager.';
+
+function standaloneValidatePathWithinWorkspace(
+  targetDir: string,
+  dirPath: string,
+): string | null {
+  const resolvedPath = path.isAbsolute(dirPath)
+    ? dirPath
+    : path.resolve(targetDir, dirPath);
+  return resolvedPath === targetDir ||
+    resolvedPath.startsWith(`${targetDir}${path.sep}`)
+    ? null
+    : `Directory '${dirPath}' is not a registered workspace directory`;
 }
 
 export function createShellToolHostFromExecutionService(
@@ -124,15 +151,8 @@ export function createShellToolHostFromExecutionService(
       return root ? [root] : [];
     },
     stripShellWrapper: (command: string) => command,
-    validatePathWithinWorkspace: (_workspaceContext, dirPath) => {
-      const resolvedPath = path.isAbsolute(dirPath)
-        ? dirPath
-        : path.resolve(targetDir, dirPath);
-      return resolvedPath === targetDir ||
-        resolvedPath.startsWith(`${targetDir}${path.sep}`)
-        ? null
-        : `Directory '${dirPath}' is not a registered workspace directory`;
-    },
+    validatePathWithinWorkspace: (_workspaceContext, dirPath) =>
+      standaloneValidatePathWithinWorkspace(targetDir, dirPath),
     isPtyActive: () => false,
     formatMemoryUsage: (bytes: number) => {
       if (bytes < 1024) return `${bytes} bytes`;
@@ -141,6 +161,16 @@ export function createShellToolHostFromExecutionService(
     trySummarizeOutput: async (content: string) => content,
     getSummarizeConfig: () => undefined,
     limitOutputTokens: (content: string) => ({ content, wasTruncated: false }),
+    launchBackgroundJob: () => {
+      throw new Error(STANDALONE_BACKGROUND_ERROR);
+    },
+    tailBackgroundJob: () => {
+      throw new Error(STANDALONE_BACKGROUND_ERROR);
+    },
+    detectTrailingBackground: (command: string) => ({
+      promoted: false,
+      command,
+    }),
   };
 }
 
@@ -249,11 +279,20 @@ export function buildCommandToExecute(
   if (isWindows) {
     return strippedCommand;
   }
-  let command = strippedCommand.trim();
-  if (!command.endsWith('&')) {
-    command += ';';
-  }
-  return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+  const body = buildWrappedBody(strippedCommand.trim());
+  return `{ ${body} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+}
+
+/**
+ * Builds the body that sits between the wrapper's `{ ` prefix and its
+ * ` }; __code=$?; ...` suffix. A trailing-`;` is normalised away so the
+ * generated `{ cmd; }` is syntactically clean.
+ */
+function buildWrappedBody(trimmed: string): string {
+  const normalised = trimmed.endsWith(';')
+    ? trimmed.slice(0, -1).trimEnd()
+    : trimmed;
+  return `${normalised};`;
 }
 
 export function parsePgrepFile(
@@ -337,7 +376,7 @@ export function getShellToolDescription(): string {
   if (os.platform() === 'win32') {
     return `This tool executes a given shell command using PowerShell (\`powershell.exe\` or \`pwsh\`) with \`-NoProfile -Command <command>\`. Use PowerShell-compatible syntax: quote paths containing spaces with single quotes (for example, \`New-Item -ItemType Directory -Force -Path 'C:\\My Folder'\`) and represent an apostrophe inside a single-quoted path with two single quotes. Independent background processes can be started with \`Start-Process\`.${returnedInfo}`;
   }
-  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
+  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`: a trailing \`&\` is detected via AST parsing and the command is launched as a managed background job with a stable job id (use check_async_tasks to inspect or cancel it). Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`. Note: a command that daemonizes (e.g. setsid or double-fork) escapes the process group and cannot be stopped by job cancellation.${returnedInfo}`;
 }
 
 export function getCommandDescription(): string {
@@ -353,4 +392,54 @@ export function getCommandDescription(): string {
     'Exact bash command to execute as `bash -c <command>`' +
     cmd_substitution_warning
   );
+}
+
+/** Description for the `is_background` schema property (non-Windows only). */
+export function getBackgroundParamDescription(): string {
+  return 'When true, the command is launched as a managed background job and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. A background job runs until it exits on its own — timeout_seconds bounds only the launch, not the job lifetime.';
+}
+
+/** JSON Schema for the run_shell_command tool parameters. */
+export function buildShellSchema(): {
+  type: 'object';
+  properties: Record<string, { type: string; description: string }>;
+  required: string[];
+} {
+  const properties: Record<string, { type: string; description: string }> = {
+    command: {
+      type: 'string',
+      description: getCommandDescription(),
+    },
+    description: {
+      type: 'string',
+      description:
+        'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
+    },
+    dir_path: {
+      type: 'string',
+      description:
+        '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages"), a relative path (e.g., "src/utils"), or an absolute path within the workspace.',
+    },
+    directory: {
+      type: 'string',
+      description:
+        'Alternative parameter name for dir_path (for backward compatibility).',
+    },
+    timeout_seconds: {
+      type: 'number',
+      description:
+        '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
+    },
+  };
+  if (os.platform() !== 'win32') {
+    properties['is_background'] = {
+      type: 'boolean',
+      description: getBackgroundParamDescription(),
+    };
+  }
+  return {
+    type: 'object',
+    properties,
+    required: ['command'],
+  };
 }

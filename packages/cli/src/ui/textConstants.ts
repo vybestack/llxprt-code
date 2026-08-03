@@ -18,3 +18,7 @@ export const REDIRECTION_WARNING_NOTE_TEXT =
 export const REDIRECTION_WARNING_TIP_LABEL = 'Tip:  '; // Padded to align with "Note: "
 export const REDIRECTION_WARNING_TIP_TEXT =
   'Use the allowRedirection policy rule to permit redirections without confirmation.';
+
+export const BACKGROUND_NOTE_LABEL = 'Background: ';
+export const BACKGROUND_NOTE_TEXT =
+  'this command will keep running after the tool returns; its output goes to a log file.';

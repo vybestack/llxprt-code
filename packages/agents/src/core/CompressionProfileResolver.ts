@@ -14,7 +14,7 @@ import type {
   LoadBalancerProfile,
   StandardProfile,
 } from '@vybestack/llxprt-code-settings';
-import { getProviderKeyStorage } from '@vybestack/llxprt-code-core/storage/provider-key-storage.js';
+import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -255,7 +255,7 @@ export async function resolveCompressionProfileAuthToken(
     profileSettings.get('auth-key-name'),
   ]);
   if (keyName) {
-    const token = await getProviderKeyStorage().getKey(keyName);
+    const token = await createProviderKeyStorage().getKey(keyName);
     if (token) {
       return { authToken: token };
     }

@@ -20,6 +20,7 @@ import { HookSystem } from '../hooks/hookSystem.js';
 import { ContextManager } from '../services/contextManager.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
+import type { ShellJobManager } from '../services/shellJobManager.js';
 import {
   loadServerHierarchicalMemory,
   loadJitSubdirectoryMemory,
@@ -50,6 +51,8 @@ import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
 import {
   getOrCreateAsyncTaskManager,
   getOrCreateAsyncTaskReminderService,
+  getOrCreateShellJobManager,
+  disposeShellJobManager,
   setupAsyncTaskAutoTrigger,
 } from './asyncTaskServices.js';
 import { LiveTrustTransitionLifecycle } from './liveTrustTransitionLifecycle.js';
@@ -734,9 +737,15 @@ export class Config extends ConfigBase {
     return getOrCreateAsyncTaskManager(
       this.getSettingsService(),
       () => this.asyncTaskManager,
-      (manager) => {
-        this.asyncTaskManager = manager;
-      },
+      (manager) => (this.asyncTaskManager = manager),
+    );
+  }
+
+  getShellJobManager(): ShellJobManager | undefined {
+    return getOrCreateShellJobManager(
+      this.getSettingsService(),
+      () => this.shellJobManager,
+      (m) => (this.shellJobManager = m),
     );
   }
 
@@ -748,13 +757,9 @@ export class Config extends ConfigBase {
     return getOrCreateAsyncTaskReminderService(
       this.getSettingsService(),
       () => this.asyncTaskManager,
-      (manager) => {
-        this.asyncTaskManager = manager;
-      },
+      (manager) => (this.asyncTaskManager = manager),
       () => this.asyncTaskReminderService,
-      (service) => {
-        this.asyncTaskReminderService = service;
-      },
+      (service) => (this.asyncTaskReminderService = service),
     );
   }
 
@@ -773,17 +778,12 @@ export class Config extends ConfigBase {
       this.getSettingsService(),
       {
         getManager: () => this.asyncTaskManager,
-        setManager: (manager) => {
-          this.asyncTaskManager = manager;
-        },
+        setManager: (manager) => (this.asyncTaskManager = manager),
         getReminder: () => this.asyncTaskReminderService,
-        setReminder: (service) => {
-          this.asyncTaskReminderService = service;
-        },
+        setReminder: (service) => (this.asyncTaskReminderService = service),
         getAutoTrigger: () => this.asyncTaskAutoTrigger,
-        setAutoTrigger: (trigger) => {
-          this.asyncTaskAutoTrigger = trigger;
-        },
+        setAutoTrigger: (trigger) => (this.asyncTaskAutoTrigger = trigger),
+        getShellJobManager: () => this.getShellJobManager(),
       },
       isAgentBusy,
       triggerAgentTurn,
@@ -999,14 +999,21 @@ export class Config extends ConfigBase {
         failures.push(error);
       }
     }
-    if (failures.length === 1) {
-      throw failures[0];
-    }
-    if (failures.length > 1) {
-      throw new AggregateError(failures, 'Config disposal failed');
-    }
+    await disposeShellJobManager(this.shellJobManager, failures);
+    this.shellJobManager = undefined;
+    throwFailures(failures);
   }
 }
+
+function throwFailures(failures: unknown[]): void {
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  if (failures.length > 1) {
+    throw new AggregateError(failures, 'Config disposal failed');
+  }
+}
+
 // Re-export scheduler types for external use
 export { type SchedulerCallbacks, type SchedulerOptions };
 // Export model constants for use in CLI

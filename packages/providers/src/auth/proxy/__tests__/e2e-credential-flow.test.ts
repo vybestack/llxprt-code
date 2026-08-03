@@ -18,7 +18,7 @@
  * @plan:PLAN-20250214-CREDPROXY.P37
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -284,14 +284,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('Scenario 5: Proactive Renewal', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
     /**
      * @requirement E2E.5
      * @scenario Proactive token renewal
@@ -308,12 +300,14 @@ describe('E2E Credential Flow (Phase 37)', () => {
       void _socketPath;
 
       try {
-        // Store near-expiry token
+        // Store near-expiry token. Expiry is set so that the lead time causes
+        // the renewal timer to fire almost immediately with real timers.
         const nowSec = Math.floor(Date.now() / 1000);
+        const leadTimeSec = 1;
         const nearExpiryToken: OAuthToken = {
           access_token: 'near-expiry-access',
           refresh_token: 'refresh-for-renewal',
-          expiry: nowSec + 600, // Expires in 10 minutes
+          expiry: nowSec + leadTimeSec + 1,
           token_type: 'Bearer',
         };
         await tokenStore.saveToken('anthropic', nearExpiryToken, 'default');
@@ -337,16 +331,18 @@ describe('E2E Credential Flow (Phase 37)', () => {
               );
             }
           },
-          leadTimeSec: 300, // 5 minutes before expiry
+          leadTimeSec,
           maxJitterSec: 0, // No jitter for deterministic testing
         });
 
-        // Schedule renewal (should fire at expiry - 300 = 300 seconds from now)
+        // Schedule renewal (should fire at expiry - leadTimeSec seconds from now)
         scheduler.schedule('anthropic', 'default', nearExpiryToken.expiry);
         expect(scheduler.activeCount).toBe(1);
 
-        // Advance time past the renewal point
-        await vi.advanceTimersByTimeAsync(300 * 1000 + 100);
+        // Wait for the renewal timer to fire with real timers
+        await new Promise((resolve) =>
+          setTimeout(resolve, (leadTimeSec + 1) * 1000 + 500),
+        );
 
         // Verify refresh was called
         expect(refreshCalled).toBe(true);

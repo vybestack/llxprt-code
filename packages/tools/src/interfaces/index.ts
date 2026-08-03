@@ -54,7 +54,12 @@ export type {
   IAsyncTaskService,
   AsyncTaskStatus,
   AsyncTaskInfo,
+  AsyncWorkInfo,
+  SubagentTaskInfo,
+  ShellJobInfo,
   AsyncTaskLookupResult,
+  AsyncOutputTailOptions,
+  AsyncOutputTailResult,
 } from './IAsyncTaskService.js';
 export type {
   ISkillService,
@@ -94,6 +99,10 @@ export type {
   ShellExecutionConfig,
   ShellTimeoutConfig,
   CommandRootsResult,
+  HostShellJobState,
+  HostShellJobInfo,
+  HostShellJobTailResult,
+  BackgroundPromotionResult,
 } from './IShellToolHost.js';
 export type {
   IPromptRegistryService,

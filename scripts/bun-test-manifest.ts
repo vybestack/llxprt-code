@@ -6,6 +6,9 @@
 
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
+import { TOOLS_MANIFEST_ENTRY } from './bun-test-manifest-data-tools.ts';
+import { MCP_MANIFEST_ENTRY } from './bun-test-manifest-data-mcp.ts';
+import { STORAGE_MANIFEST_ENTRY } from './bun-test-manifest-data-storage.ts';
 
 export interface BunTestWorkspaceEntry {
   readonly workspace: string;
@@ -95,6 +98,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'agents',
     files: [
+      'src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
       'test-bun/generatingModelStamp.issue2511.bun.ts',
       'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
     ],
@@ -116,6 +120,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspTransport.test.ts',
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
+      'src/utils/sandbox-containers.test.ts',
       // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
@@ -137,6 +142,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/__tests__/attemptLifecycle.helpers.test.ts',
       'src/__tests__/auth-migration-p16.integration.test.ts',
       'src/__tests__/BaseProvider.guard.test.ts',
+      'src/__tests__/BaseProvider.proxyKeyStorage.test.ts',
       'src/__tests__/baseProvider.stateless.test.ts',
       'src/__tests__/BaseProviderNormalization.ephemeralPropagation.test.ts',
       'src/__tests__/BaseProviderNormalization.invocation.test.ts',
@@ -230,6 +236,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.tools.test.ts',
       'src/anthropic/AnthropicRateLimitHandler.test.ts',
       'test-bun/AnthropicRequestBuilder.issue1738.bun.ts',
+      'test-bun/token-access-coordinator.bun.ts',
       'src/anthropic/AnthropicRequestBuilder.modelParams.test.ts',
       'src/anthropic/AnthropicResponseParser.issue1844.test.ts',
       'src/anthropic/AnthropicStreamProcessor.retryOwnership.test.ts',
@@ -274,7 +281,6 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // 'src/auth/__tests__/proactive-renewal-manager.spec.ts',
       'src/auth/__tests__/provider-registry.spec.ts',
       'src/auth/__tests__/provider-usage-info.spec.ts',
-      'src/auth/__tests__/token-access-coordinator.spec.ts',
       'src/auth/anthropic-oauth-provider.local-flow.spec.ts',
       'src/auth/anthropic-oauth-provider.no-refresh-on-gettoken.spec.ts',
       'src/auth/anthropic-oauth-provider.refresh.spec.ts',
@@ -631,23 +637,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/zai/usageInfo.test.ts',
     ],
   },
-  {
-    workspace: 'storage',
-    preload: 'test-setup-storage-isolation.ts',
-    files: [
-      'test-bun/credential-write-lock.bun.ts',
-      'test-bun/keyring-write-verification.bun.ts',
-      'test-bun/machine-secret.bun.ts',
-      'test-bun/machine-secret.concurrent-write.bun.ts',
-      'test-bun/secure-store.bun.ts',
-      'test-bun/secure-store.concurrent-write.bun.ts',
-      'test-bun/storage.bun.ts',
-    ],
-  },
-  {
-    workspace: 'tools',
-    files: ['test-bun/language-analysis.followup.bun.ts'],
-  },
+  TOOLS_MANIFEST_ENTRY,
+  MCP_MANIFEST_ENTRY,
   {
     workspace: 'telemetry',
     preload: 'test-setup-storage-isolation.ts',
@@ -665,6 +656,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/telemetry/types.test.ts',
     ],
   },
+  STORAGE_MANIFEST_ENTRY,
   {
     workspace: 'test-utils',
     files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
@@ -693,12 +685,42 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
   },
   {
+    // Bun-native tests for the OCR review workflow preview parser and
+    // docs-only classification (issue #2824). Vitest skips `*.bun.test.ts`;
+    // these run under Bun's native runner only.
+    workspace: 'scripts-ocr-review',
+    cwd: '.',
+    files: [
+      'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
+      'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
+      'scripts/tests/ocr-review-workflow.bun.test.ts',
+    ],
+  },
+  {
     // Bun-native regression test for the issue-planner filesystem-confinement
     // step (issue #2960): vitest skips `*.bun.test.ts`; this runs under Bun's
     // native runner only.
     workspace: 'issue-planner-confinement',
     cwd: '.',
     files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
+  },
+  {
+    // Bun-native tests for the issue-planner advisory-enrichment non-fatality
+    // guards (umbrella #2984): vitest skips `*.bun.test.ts`; this runs under
+    // Bun's native runner only.
+    workspace: 'issue-planner-enrichment',
+    cwd: '.',
+    files: ['scripts/tests/issue-planner-enrichment.bun.test.ts'],
+  },
+  {
+    // Bun-native tests for the macOS system-Bun launcher preference (#2962).
+    // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
+    workspace: 'scripts-launcher',
+    cwd: '.',
+    files: [
+      'scripts/tests/issue-2603-launcher.bun.test.ts',
+      'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
+    ],
   },
 ];
 

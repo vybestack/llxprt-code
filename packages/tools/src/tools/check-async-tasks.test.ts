@@ -10,10 +10,18 @@
 
 import { describe, expect, it } from 'vitest';
 import { CheckAsyncTasksTool } from './check-async-tasks.js';
-import type { AsyncTaskInfo, IAsyncTaskService } from '../interfaces/index.js';
+import type {
+  AsyncTaskInfo,
+  IAsyncTaskService,
+  SubagentTaskInfo,
+  ShellJobInfo,
+  AsyncOutputTailResult,
+} from '../interfaces/index.js';
 
 class MockAsyncTaskService implements IAsyncTaskService {
   private readonly tasks = new Map<string, AsyncTaskInfo>();
+  private readonly shellJobs = new Map<string, ShellJobInfo>();
+  private readonly tails = new Map<string, string>();
 
   async checkAsyncTask(taskId: string) {
     const task = this.getTask(taskId) ?? this.getTaskByPrefix(taskId).task;
@@ -24,17 +32,20 @@ class MockAsyncTaskService implements IAsyncTaskService {
   }
 
   getTaskStatus(): AsyncTaskInfo[] {
-    return [...this.tasks.values()];
+    return [...this.tasks.values(), ...this.shellJobs.values()];
   }
 
   getTask(taskId: string): AsyncTaskInfo | undefined {
-    return this.tasks.get(taskId);
+    const task = this.tasks.get(taskId);
+    if (task) {
+      return task;
+    }
+    return this.shellJobs.get(taskId);
   }
 
   getTaskByPrefix(prefix: string) {
-    const matches = [...this.tasks.values()].filter((task) =>
-      task.id.startsWith(prefix),
-    );
+    const all = [...this.tasks.values(), ...this.shellJobs.values()];
+    const matches = all.filter((task) => task.id.startsWith(prefix));
     if (matches.length === 1) {
       return { task: matches[0] };
     }
@@ -44,8 +55,33 @@ class MockAsyncTaskService implements IAsyncTaskService {
     return {};
   }
 
-  registerTask(task: AsyncTaskInfo): void {
+  getOutputTail(taskId: string): AsyncOutputTailResult {
+    const output = this.tails.get(taskId);
+    if (output === undefined) {
+      return { id: taskId, output: '', truncated: false };
+    }
+    return { id: taskId, output, truncated: false };
+  }
+
+  async cancel(taskId: string): Promise<boolean> {
+    const task = this.getTask(taskId);
+    if (!task || task.status !== 'running') {
+      return false;
+    }
+    task.status = 'cancelled';
+    return true;
+  }
+
+  registerTask(task: SubagentTaskInfo): void {
     this.tasks.set(task.id, task);
+  }
+
+  registerShellJob(job: ShellJobInfo): void {
+    this.shellJobs.set(job.id, job);
+  }
+
+  setTail(taskId: string, output: string): void {
+    this.tails.set(taskId, output);
   }
 }
 
@@ -53,12 +89,23 @@ function createTask(
   id: string,
   subagentName: string,
   goalPrompt: string,
-): AsyncTaskInfo {
+): SubagentTaskInfo {
   return {
+    kind: 'subagent',
     id,
-    name: subagentName,
     subagentName,
     goalPrompt,
+    status: 'running',
+    launchedAt: Date.now(),
+  };
+}
+
+function createShellJob(id: string, command: string): ShellJobInfo {
+  return {
+    kind: 'shell',
+    id,
+    command,
+    cwd: '/tmp',
     status: 'running',
     launchedAt: Date.now(),
   };
@@ -237,6 +284,93 @@ describe('CheckAsyncTasksTool', () => {
         "No async task found with ID or prefix 'nonexistent'",
       );
     });
+
+    it('renders shell job detail with command and bounded output tail', async () => {
+      const service = new MockAsyncTaskService();
+      const job = createShellJob('shell_abc123', 'echo hello');
+      job.status = 'running';
+      service.registerShellJob(job);
+      service.setTail('shell_abc123', 'hello\nworld\n');
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(service));
+      const invocation = tool.build({ task_id: 'shell_abc123' });
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      expect(result.llmContent).toContain('"kind": "shell"');
+      expect(result.llmContent).toContain('"command": "echo hello"');
+      expect(result.llmContent).toContain('"outputTail"');
+      expect(result.returnDisplay).toContain('Kind: shell');
+      expect(result.returnDisplay).toContain('Output tail:');
+    });
+  });
+
+  describe('Cancel Mode', () => {
+    it('cancels a running subagent task', async () => {
+      const service = new MockAsyncTaskService();
+      service.registerTask(
+        createTask('task-cancel-1', 'deepthinker', 'Running work'),
+      );
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(service));
+      const invocation = tool.build({
+        task_id: 'task-cancel-1',
+        action: 'cancel',
+      });
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      expect(result.llmContent).toContain('cancelled successfully');
+      expect(service.getTask('task-cancel-1')?.status).toBe('cancelled');
+    });
+
+    it('cancels a running shell job', async () => {
+      const service = new MockAsyncTaskService();
+      service.registerShellJob(createShellJob('shell_cancel', 'sleep 100'));
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(service));
+      const invocation = tool.build({
+        task_id: 'shell_cancel',
+        action: 'cancel',
+      });
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      expect(result.llmContent).toContain('cancelled successfully');
+      expect(service.getTask('shell_cancel')?.status).toBe('cancelled');
+    });
+
+    it('reports already-terminal when task is not running', async () => {
+      const service = new MockAsyncTaskService();
+      const task = createTask('task-done', 'deepthinker', 'Done work');
+      task.status = 'completed';
+      task.completedAt = Date.now();
+      service.registerTask(task);
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(service));
+      const invocation = tool.build({
+        task_id: 'task-done',
+        action: 'cancel',
+      });
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      expect(result.llmContent).toContain('already terminal');
+    });
+
+    it('returns error when cancelling nonexistent task', async () => {
+      const service = new MockAsyncTaskService();
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(service));
+      const invocation = tool.build({
+        task_id: 'nope',
+        action: 'cancel',
+      });
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.message).toBe('Task not found');
+    });
   });
 
   describe('Duration Formatting', () => {
@@ -289,10 +423,10 @@ describe('CheckAsyncTasksTool', () => {
     });
   });
 
-  it('throws when AsyncTaskManager is unavailable', () => {
+  it('throws when async task service is unavailable', () => {
     const tool = new CheckAsyncTasksTool(buildDependencies(undefined));
     expect(() => tool.build({})).toThrow(
-      'AsyncTaskManager service is unavailable. Please configure async tasks before invoking this tool.',
+      'Async task service is unavailable. Please configure async tasks before invoking this tool.',
     );
   });
 });

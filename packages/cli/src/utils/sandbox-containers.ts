@@ -238,26 +238,8 @@ function addSandboxEnvVars(args: string[]): void {
   }
 }
 
-/** Adds gcloud, ADC, and custom SANDBOX_MOUNTS volume flags. */
+/** Adds custom SANDBOX_MOUNTS volume flags. */
 export function addContainerVolumeMounts(args: string[]): void {
-  const gcloudConfigDir = path.join(os.homedir(), '.config', 'gcloud');
-  if (fs.existsSync(gcloudConfigDir)) {
-    args.push(
-      '--volume',
-      `${gcloudConfigDir}:${getContainerPath(gcloudConfigDir)}:ro`,
-    );
-  }
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
-    const adcFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    if (fs.existsSync(adcFile)) {
-      args.push('--volume', `${adcFile}:${getContainerPath(adcFile)}:ro`);
-      args.push(
-        '--env',
-        `GOOGLE_APPLICATION_CREDENTIALS=${getContainerPath(adcFile)}`,
-      );
-    }
-  }
-
   const mountsEnv =
     process.env.LLXPRT_SANDBOX_MOUNTS ?? process.env.SANDBOX_MOUNTS;
   const mountsEnvName =
@@ -269,7 +251,7 @@ export function addContainerVolumeMounts(args: string[]): void {
   }
 }
 
-/** Adds environment variable flags for API keys, term, proxy, etc. */
+/** Adds environment variable flags for non-secret config, term, proxy, etc. */
 export function addContainerEnvVars(
   args: string[],
   config: SandboxConfig,
@@ -278,8 +260,6 @@ export function addContainerEnvVars(
   workdir: string,
 ): void {
   const envMap: Record<string, string | undefined> = {
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
     GOOGLE_GENAI_USE_VERTEXAI: process.env.GOOGLE_GENAI_USE_VERTEXAI,
     GOOGLE_GENAI_USE_GCA: process.env.GOOGLE_GENAI_USE_GCA,
     GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,

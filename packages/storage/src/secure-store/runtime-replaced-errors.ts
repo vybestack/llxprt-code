@@ -33,7 +33,8 @@ export const RUNTIME_REPLACED_MESSAGE =
  * @requirement R3
  */
 export const RUNTIME_REPLACED_REMEDIATION =
-  'Restart LLxprt to recover. Do not click "Always Allow" — it cannot take effect for this process.';
+  'Restart LLxprt to recover. Do not click "Always Allow" — it cannot take effect for this process. ' +
+  'To stop this recurring, install Bun (brew install bun): LLxprt then runs from a Bun that npm upgrades do not delete.';
 
 /**
  * Tracks whether the replaced-runtime warning has been emitted this process.
@@ -68,8 +69,14 @@ export function hasRuntimeReplacedWarningBeenEmitted(): boolean {
  * @requirement R3
  */
 export function runtimeReplacedError(): SecureStoreError {
+  // The remediation is folded into the message as well as kept on the
+  // structured field. Callers that surface this error (issue #2962 opened that
+  // path by rethrowing it out of the OAuth token layer instead of collapsing it
+  // to "no credential") render `error.message` only — nothing in the CLI or
+  // provider layers reads `.remediation`, so a message without it would tell
+  // the user their credentials are unavailable while withholding the fix.
   return new SecureStoreError(
-    RUNTIME_REPLACED_MESSAGE,
+    `${RUNTIME_REPLACED_MESSAGE} ${RUNTIME_REPLACED_REMEDIATION}`,
     'RUNTIME_REPLACED',
     RUNTIME_REPLACED_REMEDIATION,
   );

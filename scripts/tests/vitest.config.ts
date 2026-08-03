@@ -17,6 +17,9 @@ export default defineConfig({
     // scripts shard doesn't fail on the `bun:test` import specifier.
     exclude: [...configDefaults.exclude, '**/*.bun.test.{js,ts}'],
     setupFiles: ['scripts/tests/test-setup.ts'],
+    // Bound process-heavy file concurrency so worker task updates remain
+    // responsive while subprocess and filesystem harnesses run in parallel.
+    maxWorkers: 4,
     // Many script-harness tests spawn subprocesses (bash scripts, python
     // fake-gh, jq pipelines) and do filesystem work under temp directories.
     // Vitest's 5s default is far too tight for that workload — especially
