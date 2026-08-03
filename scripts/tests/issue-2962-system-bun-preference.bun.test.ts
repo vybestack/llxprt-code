@@ -18,7 +18,7 @@
  * removes the trigger.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   mkdtempSync,
@@ -70,6 +70,19 @@ function makeStubBunDir(root: string, version: string): string {
   );
   chmodSync(stub, 0o755);
   return binDir;
+}
+
+/**
+ * Asserts a clean exit, surfacing stderr in the failure message. Bun's `expect`
+ * takes no message argument, so the diagnostic is raised explicitly rather than
+ * losing the launcher's own error output on failure.
+ */
+function expectExitOk(result: { status: number | null; stderr: string }): void {
+  if (result.status !== 0) {
+    throw new Error(
+      `launcher exited with status ${result.status}: ${result.stderr}`,
+    );
+  }
 }
 
 /** Bumps the patch component of a dotted version by one. */
@@ -135,7 +148,7 @@ describeDarwinOnly('POSIX launcher system-Bun preference (issue #2962)', () => {
       `${stubDir}:/usr/bin:/bin`,
     );
     expectNoSpawnError(result);
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout).toContain(STUB_MARKER);
     expect(result.stdout).not.toContain(BUNDLED_MARKER);
   });
@@ -152,7 +165,7 @@ describeDarwinOnly('POSIX launcher system-Bun preference (issue #2962)', () => {
       `${stubDir}:/usr/bin:/bin`,
     );
     expectNoSpawnError(result);
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout).toContain(STUB_MARKER);
   });
 
@@ -168,7 +181,7 @@ describeDarwinOnly('POSIX launcher system-Bun preference (issue #2962)', () => {
       `${stubDir}:/usr/bin:/bin`,
     );
     expectNoSpawnError(result);
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout).toContain(BUNDLED_MARKER);
     expect(result.stdout).not.toContain(STUB_MARKER);
   });
@@ -180,7 +193,7 @@ describeDarwinOnly('POSIX launcher system-Bun preference (issue #2962)', () => {
     );
     const result = runLauncher(launcherTarget, pkgRoot, '/usr/bin:/bin');
     expectNoSpawnError(result);
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout).toContain(BUNDLED_MARKER);
   });
 
@@ -199,7 +212,7 @@ describeDarwinOnly('POSIX launcher system-Bun preference (issue #2962)', () => {
     expectNoSpawnError(result);
     // Assert the fallback actually succeeded, not merely that the stub was
     // skipped: an unreadable pin must still launch via the bundled runtime.
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout).toContain(BUNDLED_MARKER);
     expect(result.stdout).not.toContain(STUB_MARKER);
   });

@@ -663,6 +663,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     cwd: '.',
     files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
   },
+  {
+    // Bun-native tests for the macOS system-Bun launcher preference (#2962).
+    // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
+    workspace: 'scripts-launcher',
+    cwd: '.',
+    files: ['scripts/tests/issue-2962-system-bun-preference.bun.test.ts'],
+  },
 ];
 
 /**
