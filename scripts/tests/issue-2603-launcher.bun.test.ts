@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -22,6 +22,7 @@ import {
   STANDARD_LAUNCH_TIMEOUT_MS,
   ensureBun,
   expectNoSpawnError,
+  expectExitOk,
   realBunVersion,
   makeEntry,
   makeLayout,
@@ -84,7 +85,7 @@ describe('POSIX launcher portability', () => {
         encoding: 'utf8',
         timeout: SHELL_PROBE_TIMEOUT_MS,
       });
-      expect(r.status, r.stderr).toBe(0);
+      expectExitOk(r);
       expect(r.stdout.trim()).toBe(target);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -96,7 +97,7 @@ describe('POSIX launcher portability', () => {
       encoding: 'utf8',
       timeout: SHELL_PROBE_TIMEOUT_MS,
     });
-    expect(r.status, r.stderr).toBe(0);
+    expectExitOk(r);
     expect(r.stdout.trim()).toBe('.');
   });
 
@@ -110,7 +111,7 @@ describe('POSIX launcher portability', () => {
         ['-c', `od -An -tx1 -N4 -- "${elfFile}" | tr -d ' \\n'`],
         { encoding: 'utf8', timeout: SHELL_PROBE_TIMEOUT_MS },
       );
-      expect(r.status, r.stderr).toBe(0);
+      expectExitOk(r);
       expect(r.stdout.trim()).toBe('7f454c46');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -198,7 +199,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout.trim()).toBe('1');
     expect(existsSync(counterFile)).toBe(true);
     expect(readFileSync(counterFile, 'utf8').trim()).toBe('1');
@@ -370,7 +371,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
   });
   it('exits 43 when Bun is a corrupt text file (not a native binary)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
@@ -501,7 +502,7 @@ describe('POSIX launcher execution behavior', () => {
         ['-c', `od -An -tx1 -N4 -- "${peFile}" | tr -d ' \\n'`],
         { encoding: 'utf8', timeout: SHELL_PROBE_TIMEOUT_MS },
       );
-      expect(r.status, r.stderr).toBe(0);
+      expectExitOk(r);
       expect(r.stdout.trim().startsWith('4d5a')).toBe(true);
     } finally {
       rmSync(tempDir2, { recursive: true, force: true });
@@ -544,7 +545,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(readFileSync(counterFile, 'utf8').trim()).toBe('1');
   });
   it('preserves a legitimate non-zero exit code from the entry', () => {
@@ -598,7 +599,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout.trim()).toBe('unset');
   });
 });
@@ -699,7 +700,7 @@ describe('POSIX launcher version-pin and platform validation', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
   });
   it('does not scan beyond the enclosing node_modules for Bun', () => {
     // The package is nested two levels deep inside node_modules. The enclosing

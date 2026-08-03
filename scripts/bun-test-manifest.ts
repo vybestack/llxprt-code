@@ -641,6 +641,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/machine-secret.concurrent-write.bun.ts',
       'test-bun/secure-store.bun.ts',
       'test-bun/secure-store.concurrent-write.bun.ts',
+      'test-bun/secure-store.runtime-replaced.bun.ts',
       'test-bun/storage.bun.ts',
     ],
   },
@@ -705,7 +706,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
     workspace: 'scripts-launcher',
     cwd: '.',
-    files: ['scripts/tests/issue-2962-system-bun-preference.bun.test.ts'],
+    files: [
+      'scripts/tests/issue-2603-launcher.bun.test.ts',
+      'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
+    ],
   },
 ];
 

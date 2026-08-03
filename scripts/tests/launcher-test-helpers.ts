@@ -80,6 +80,22 @@ export function expectNoSpawnError(result: { error?: Error }): void {
 }
 
 /**
+ * Asserts a clean exit, surfacing the launcher's stderr in the failure message.
+ * Bun's `expect` takes no message argument (unlike vitest's two-argument form),
+ * so the diagnostic is raised explicitly rather than lost on failure.
+ */
+export function expectExitOk(result: {
+  status: number | null;
+  stderr: string;
+}): void {
+  if (result.status !== 0) {
+    throw new Error(
+      `launcher exited with status ${result.status}: ${result.stderr}`,
+    );
+  }
+}
+
+/**
  * Returns the real Bun version from the repo's bun package.json so tests can
  * write matching pins. Bun is a declared dependency and test prerequisite; a
  * missing/unreadable version indicates a broken installation, so we throw
