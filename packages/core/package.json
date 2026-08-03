@@ -538,7 +538,6 @@
     "format": "prettier --write .",
     "test": "bun run-bun-tests.ts",
     "test:ci": "bun run-bun-tests.ts",
-    "test:vitest": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },
