@@ -127,6 +127,23 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
+      // Issue #2951: Windows Ctrl+Enter steering. Each file pins
+      // process.platform at the very top before the key-matcher module graph
+      // loads, so win32 and darwin must run in separate processes.
+      'test-bun/steerKey.win32.bun.ts',
+      'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
+    ],
+  },
+  {
+    workspace: 'cli',
+    preload: 'bun-test-setup.ts',
+    files: [
+      'src/ui/hooks/agentStream/__tests__/useAgentEventStream.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useAgentStreamOrchestration.terminal.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.doublecancel.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.terminalError.bun.tsx',
     ],
   },
   {
@@ -691,6 +708,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'scripts-ocr-review',
     cwd: '.',
     files: [
+      'scripts/tests/ocr-review-422-grouping.bun.test.ts',
+      'scripts/tests/ocr-review-422-wiring.bun.test.ts',
       'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
       'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
       'scripts/tests/ocr-review-workflow.bun.test.ts',
@@ -727,11 +746,18 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     // bundle via the exported config, executes it, and asserts --version
     // output, proving externals resolve and the artifact is genuinely
     // launchable. Gated behind LLXPRT_RUN_BUNDLE_BUILD_TEST=1 because the
-    // ~16s build is too slow for the default PR-path shard; the nightly
-    // release CI sets the flag so it always runs somewhere.
+    // ~16s build is too slow for the default PR-path shard. NOTE: nothing
+    // sets that flag in CI yet, so this currently runs only when a developer
+    // opts in locally. Until a nightly job exports it, externals drift will
+    // not be caught automatically.
     workspace: 'cli-bundle',
     cwd: '.',
     files: ['scripts/tests/issue-2999-cli-bundle.bun.test.ts'],
+  },
+  {
+    workspace: 'scripts-manifest',
+    cwd: '.',
+    files: ['scripts/tests/bun-test-manifest.bun.test.ts'],
   },
 ];
 

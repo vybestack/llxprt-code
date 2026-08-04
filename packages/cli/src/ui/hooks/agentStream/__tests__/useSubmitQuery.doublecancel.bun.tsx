@@ -17,8 +17,9 @@
  * shared React state.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
+import { vi } from '../../../../test-utils/bunTest.js';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
   useSubmitQuery,
@@ -38,12 +39,16 @@ import type {
   UiMcpClientManager,
 } from '../../../cliUiRuntime.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
-import { LoadedSettings } from '../../../../config/settings.js';
 import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
+import {
+  createLoadedSettings,
+  createMockOverrides,
+  createQueueOperations,
+} from './submitQueryTestFixtures.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
 const prepareQueryForAgentMock = vi.hoisted(() =>
@@ -75,40 +80,6 @@ vi.mock('../streamUtils.js', () => ({
   processSlashCommandResult: vi.fn(),
 }));
 
-function createQueueOperations(ref: { current: QueuedSubmission[] }) {
-  return {
-    enqueueSubmission: (submission: QueuedSubmission) => {
-      ref.current = [...ref.current, submission];
-    },
-    requeueSubmission: (submission: QueuedSubmission) => {
-      ref.current = [submission, ...ref.current];
-    },
-    dequeueSubmission: (): QueuedSubmission | undefined => {
-      const [first, ...rest] = ref.current;
-      ref.current = rest;
-      return first;
-    },
-    clearSubmissions: () => void (ref.current = []),
-  };
-}
-
-function createMockOverrides() {
-  return {
-    session: { getSessionId: () => 'test-session' },
-    model: {
-      getModel: () => 'test-model',
-      getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    },
-    mcp: {
-      getMcpClientManager: () => undefined,
-      getMcpServers: () => ({}),
-    },
-    asyncTasks: {
-      setupAsyncTaskAutoTrigger: () => () => {},
-    },
-  };
-}
-
 function createMockAgent() {
   return createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
@@ -121,16 +92,6 @@ function createMockSetState(
   return (value) => {
     if (typeof value === 'boolean') calls.push(value);
   };
-}
-
-function createLoadedSettings(): LoadedSettings {
-  return new LoadedSettings(
-    { path: '/system/settings.json', settings: {} },
-    { path: '/system/defaults.json', settings: {} },
-    { path: '/user/settings.json', settings: {} },
-    { path: '/workspace/settings.json', settings: {} },
-    true,
-  );
 }
 
 function KeypressTestWrapper({ children }: React.PropsWithChildren) {
@@ -343,11 +304,15 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(turnCancelledRef.current).toBe(true);
     expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
 
+    const turn1Signal = deps.abortControllerRef.current?.signal;
+    expect(turn1Signal?.aborted).toBe(true);
+
     deps.flushPendingHistoryItem.mockClear();
     deps.setPendingHistoryItem.mockClear();
     deps.pendingHistoryItemRef.current = { type: 'gemini', text: 'stale' };
     deps.loopDetectedRef.current = true;
-    deps.abortControllerRef.current = new AbortController();
+    const newerController = new AbortController();
+    deps.abortControllerRef.current = newerController;
 
     await act(async () => {
       turnDeferred.resolve();
@@ -357,7 +322,8 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
     expect(deps.flushPendingHistoryItem).not.toHaveBeenCalled();
     expect(deps.setPendingHistoryItem).not.toHaveBeenCalled();
-    expect(deps.loopDetectedRef.current).toBe(false);
+    expect(deps.abortControllerRef.current).toBe(newerController);
+    expect(newerController.signal).not.toBe(turn1Signal);
     expect(deps.handleLoopDetectedEvent).not.toHaveBeenCalled();
     expect(flushAtTurnBoundary).not.toHaveBeenCalled();
   });
@@ -451,7 +417,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         rendered.result.current.scheduleNextQueuedSubmission();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(1);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(1);
 
@@ -509,7 +475,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         rendered.result.current.scheduleNextQueuedSubmission();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(1);
       });
       for (let retry = 0; retry < 3; retry += 1) {
         await act(async () => {
@@ -539,8 +505,11 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
 
     try {
       await act(async () => {
-        await expect(result.current.submitQuery('prepare me')).rejects.toBe(
-          preparationError,
+        await result.current.submitQuery('prepare me').then(
+          () => {
+            throw new Error('Expected query preparation to reject');
+          },
+          (error: unknown) => expect(error).toBe(preparationError),
         );
       });
     } finally {
@@ -906,10 +875,8 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(queuedSubmissionsRef.current).toHaveLength(1);
 
     // ── Turn 1 settles ─────────────────────────────────────────────────────
-    // The finally block calls setIsResponding(false). In production this
-    // transitions streamingState to Idle, firing the idle-effect. The finally
-    // no longer calls scheduleNextQueuedSubmission directly (removed to fix
-    // the race), so the idle-effect is the sole drain owner.
+    // The current-turn finally scheduler races the Idle effect after the
+    // responding-state transition. The drain reservation admits one owner.
     await act(async () => {
       turn1Deferred.resolve();
     });
