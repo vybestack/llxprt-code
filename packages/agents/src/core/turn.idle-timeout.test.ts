@@ -286,10 +286,12 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
 
-    // Releasing the stream is enough: the remaining work is promise-driven, so
-    // awaiting the run completes it. `runAllTimersAsync` must not be used here
-    // — it never returns under Bun on Linux for this pipeline.
+    // Hand the completion phase back to real timers and give it genuine
+    // event-loop ticks. `runAllTimersAsync` must not be used here — it never
+    // returns under Bun on Linux for this pipeline.
+    vi.useRealTimers();
     resolveIterator!();
+    await delayRealTime(10);
     await runPromise;
 
     expect(events).toHaveLength(1);
@@ -375,10 +377,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       runSettled = true;
     });
 
+    // Let the pipeline start on real event-loop ticks before waiting on it.
+    await delayRealTime(10);
+
     // The stream stalls after its first chunk, so the env-driven 50ms watchdog
     // fires. Were the 20s config value being used instead, no timeout event
     // would arrive and this wait would fail.
-    expect(await waitForCondition(() => gapReached)).toBe(true);
+    expect(await waitForConditionInRealTime(() => gapReached)).toBe(true);
     expect(
       await waitForConditionInRealTime(() =>
         events.some((e) => e.type === AgentEventType.StreamIdleTimeout),
@@ -386,7 +391,11 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     ).toBe(true);
 
     // Release the stall so the generator can unwind, then let the run finish.
+    // The real-timer delay is load-bearing: unwinding needs genuine event-loop
+    // ticks, and a microtask or setImmediate yield alone was not enough on the
+    // CI runner — the run simply never settled.
     releaseGap!();
+    await delayRealTime(10);
     await runPromise;
     expect(runSettled).toBe(true);
   });
@@ -480,7 +489,11 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     ).toBeUndefined();
     expect(runSettled).toBe(false);
 
+    // The real-timer delay is load-bearing: delivering the chunk and unwinding
+    // need genuine event-loop ticks, and a microtask or setImmediate yield
+    // alone was not enough on the CI runner.
     resolveIterator!();
+    await delayRealTime(10);
     await runPromise;
 
     expect(events).toHaveLength(1);
