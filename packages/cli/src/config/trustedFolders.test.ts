@@ -12,14 +12,14 @@ vi.mock('os', async (importOriginal) => {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
     platform: vi.fn(() => 'linux'),
+  };
+});
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     getIdeTrust: vi.fn(),
-  };
-});
   };
 });
 
@@ -240,7 +240,9 @@ describe('Trusted Folders Loading', () => {
     expect(rules).toStrictEqual([]);
     expect(errors.length).toBe(1);
     expect(errors[0].path).toBe(userPath);
-    expect(errors[0].message).toContain('Unexpected token');
+    // V8 reports "Unexpected token ..." and JavaScriptCore reports
+    // "Unexpected identifier ..."; both describe the same parse failure.
+    expect(errors[0].message).toMatch(/Unexpected (token|identifier)/);
   });
 
   it('should use LLXPRT_CODE_TRUSTED_FOLDERS_PATH env var if set', () => {
