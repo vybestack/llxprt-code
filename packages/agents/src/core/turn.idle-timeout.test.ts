@@ -14,6 +14,7 @@ import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import {
   waitForCondition,
   waitForConditionInRealTime,
+  delayRealTime,
 } from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
@@ -465,7 +466,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // clock is not used for this: draining the pipeline to completion under
     // Bun's fake timers deadlocks.
     vi.useRealTimers();
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await delayRealTime(250);
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),

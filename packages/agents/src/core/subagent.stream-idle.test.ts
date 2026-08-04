@@ -38,6 +38,7 @@ import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/con
 import {
   waitForCondition,
   waitForConditionInRealTime,
+  delayRealTime,
 } from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
@@ -380,7 +381,7 @@ describe('subagent.ts', () => {
       // to rule out. (A timer-count assertion would not work either: the
       // max_time_minutes watchdog is legitimately registered.)
       vi.useRealTimers();
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await delayRealTime(250);
 
       // No timeout yet
       expect(scope.output.terminate_reason).not.toBe(

@@ -69,6 +69,21 @@ export async function waitForCondition(
 const realSetTimeout = globalThis.setTimeout;
 
 /**
+ * Sleeps for `ms` of wall-clock time using the real `setTimeout` captured at
+ * module load.
+ *
+ * Always prefer this to a bare `setTimeout` in a test that has touched fake
+ * timers. The global may still be the fake implementation — `useRealTimers()`
+ * is not guaranteed to have restored it by the time the sleep is scheduled — in
+ * which case a bare `setTimeout` never fires and the test hangs to its budget.
+ */
+export function delayRealTime(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    realSetTimeout(resolve, ms);
+  });
+}
+
+/**
  * Waits in **wall-clock time** for `condition` to hold, up to `timeoutMs`.
  *
  * Distinct from {@link waitForCondition}, which spins event-loop turns: those
