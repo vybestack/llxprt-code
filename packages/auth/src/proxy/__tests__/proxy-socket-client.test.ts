@@ -13,6 +13,8 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 
 import {
   ProxySocketClient,
@@ -61,6 +63,120 @@ function createTempSocketPath(): string {
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proxy-test-'));
   return path.join(tmpDir, 'test.sock');
+}
+
+/**
+ * Absolute path to the ProxySocketClient source, so a spawned subprocess can
+ * import the REAL implementation (no mocks) via a dynamic import. Uses a
+ * file:// URL (not URL.pathname) for Windows portability.
+ */
+const PROXY_SOCKET_CLIENT_URL = new URL(
+  '../proxy-socket-client.js',
+  import.meta.url,
+).href;
+
+/**
+ * Budget for deadline races in tests. Comfortably below Bun's 5s per-test cap
+ * and the 30s request timeout, so a regression fails fast instead of hanging.
+ */
+const TEST_DEADLINE_MS = 2_000;
+
+/**
+ * Races a promise against a deadline and returns the textual outcome plus the
+ * losing timer handle so the caller can clear it in every path. A settled
+ * promise yields its error message (or 'resolved' on success). A pending
+ * promise yields a sentinel string that fails strict assertions.
+ */
+async function deadlineRace<T>(
+  promise: Promise<T>,
+  budgetMs: number,
+): Promise<{ result: string; timer: ReturnType<typeof setTimeout> }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    promise.then(
+      () => 'resolved',
+      (err: unknown) => (err instanceof Error ? err.message : String(err)),
+    ),
+    new Promise<string>((resolve) => {
+      timer = setTimeout(
+        () => resolve('STILL PENDING — transport loss not detected'),
+        budgetMs,
+      );
+    }),
+  ]);
+  return { result, timer: timer! };
+}
+
+/**
+ * Inline script run by a real subprocess to prove an idle proxy client exits
+ * on its own. It imports the real ProxySocketClient via a file:// URL,
+ * connects, completes one request to reach the idle state, then resolves. If
+ * the idle socket is unreferenced the event loop drains and the process exits
+ * 0; if it is referenced the process hangs and the watchdog SIGKILLs it.
+ *
+ * Bun `--eval` strips the `--` separator, so the script reads the socket path
+ * from process.argv[2]. The module URL is passed as process.argv[1].
+ */
+const IDLE_EXIT_SCRIPT = [
+  `const mod = await import(process.argv[1]);`,
+  `const { ProxySocketClient } = mod;`,
+  `const socketPath = process.argv[2];`,
+  `const client = new ProxySocketClient(socketPath);`,
+  `await client.ensureConnected();`,
+  `// Perform one request to transition active -> idle.`,
+  `const res = await client.request('idle-probe', { ok: true });`,
+  `if (res.ok !== true) process.exitCode = 2;`,
+  `// Nothing else is scheduled. An unreferenced idle socket lets the`,
+  `// process exit naturally.`,
+].join('\n');
+
+/**
+ * Spawns a Bun subprocess for the idle-exit liveness test and resolves its
+ * exit status. A watchdog SIGKILLs the child if it does not self-exit within
+ * the budget, so a referenced-socket regression fails fast instead of
+ * hanging the suite.
+ */
+async function runIdleExitSubprocess(
+  clientModuleUrl: string,
+  ipcPath: string,
+  budgetMs = TEST_DEADLINE_MS,
+): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+}> {
+  const child = spawn(
+    process.execPath,
+    ['--eval', IDLE_EXIT_SCRIPT, '--', clientModuleUrl, ipcPath],
+    {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  let stderr = '';
+  child.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  const exit = once(child, 'exit');
+  const watchdog = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+  }, budgetMs);
+  try {
+    const [code, signal] = (await exit) as [
+      number | null,
+      NodeJS.Signals | null,
+    ];
+    return { code, signal, stderr };
+  } finally {
+    clearTimeout(watchdog);
+    // Always terminate and await the child exit in cleanup so no process leaks.
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+      await exit;
+    }
+  }
 }
 
 /**
@@ -250,20 +366,30 @@ describe('ProxySocketClient', () => {
     expect(handshake.op).toBe('handshake');
   });
 
-  it('unrefs the socket after connect so idle proxy clients do not keep Bun alive', async () => {
+  /**
+   * @requirement R24.2
+   * @scenario An idle connected proxy client must NOT keep the process alive.
+   *           Verified through real process liveness: a subprocess that
+   *           connects and goes idle must exit on its own, because the socket
+   *           is unreferenced while no work is outstanding.
+   */
+  it('an idle connected client does not keep the process alive', async () => {
     server = createAutoReplyServer(socketPath);
     trackServerSockets(server);
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
 
-    const unrefSpy = vi.spyOn(net.Socket.prototype, 'unref');
-    try {
-      client = new ProxySocketClient(socketPath);
-      await client.ensureConnected();
+    const { code, signal, stderr } = await runIdleExitSubprocess(
+      PROXY_SOCKET_CLIENT_URL,
+      socketPath,
+    );
 
-      expect(unrefSpy).toHaveBeenCalled();
-    } finally {
-      unrefSpy.mockRestore();
-    }
+    // A clean self-exit (code 0) proves the idle socket did not hold the
+    // event loop open. A SIGKILL from the watchdog means the process hung.
+    expect({ code, signal, stderr }).toStrictEqual({
+      code: 0,
+      signal: null,
+      stderr: '',
+    });
   });
 
   /**
@@ -399,7 +525,9 @@ describe('ProxySocketClient', () => {
 
   /**
    * @requirement R24.2
-   * @scenario Connection error surfaces descriptive error message
+   * @scenario Server destroys the transport while a post-handshake request is
+   *           pending. The request must reject promptly with the
+   *           connection-loss error — not wait for the 30s request timeout.
    */
   it('surfaces "Credential proxy connection lost" on connection error', async () => {
     server = net.createServer((socket) => {
@@ -412,7 +540,6 @@ describe('ProxySocketClient', () => {
           if (msg.op === 'handshake') {
             socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
           } else {
-            // Destroy connection mid-request to simulate error
             socket.destroy();
           }
         }
@@ -424,9 +551,16 @@ describe('ProxySocketClient', () => {
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
 
-    await expect(client.request('will-fail', {})).rejects.toThrow(
-      /credential proxy connection lost/i,
+    const { result, timer } = await deadlineRace(
+      client.request('will-fail', {}),
+      TEST_DEADLINE_MS,
     );
+    try {
+      expect(result).toMatch(/credential proxy connection lost/i);
+      expect(result).not.toMatch(/timed out/i);
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   /**
@@ -650,5 +784,73 @@ describe('ProxySocketClient', () => {
     await expect(client.ensureConnected()).rejects.toThrow(
       /Credential proxy authentication failed/i,
     );
+  });
+
+  /**
+   * @requirement R24.2
+   * @scenario Server destroys the transport while MULTIPLE requests are
+   *           concurrently pending. Every pending request must reject promptly
+   *           with the connection-loss error — not wait for the per-request
+   *           timeout. After cleanup the client must reconnect to a fresh
+   *           server and succeed.
+   */
+  it('rejects all concurrently pending requests promptly on transport loss, then reconnects', async () => {
+    server = net.createServer((socket) => {
+      trackServerSockets(server);
+      const decoder = new FrameDecoder();
+      let requestCount = 0;
+      socket.on('data', (chunk) => {
+        const frames = decoder.feed(chunk);
+        for (const frame of frames) {
+          const msg = frame;
+          if (msg.op === 'handshake') {
+            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+          } else {
+            requestCount++;
+            if (requestCount >= 3) {
+              socket.destroy();
+            }
+          }
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    client = new ProxySocketClient(socketPath);
+    await client.ensureConnected();
+
+    const requests = Array.from({ length: 3 }, (_, i) =>
+      client.request(`concurrent-${i}`, {}),
+    );
+
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    try {
+      const outcomes = await Promise.all(
+        requests.map(async (p) => {
+          const { result, timer } = await deadlineRace(p, TEST_DEADLINE_MS);
+          timers.push(timer);
+          return result;
+        }),
+      );
+
+      for (const outcome of outcomes) {
+        expect(outcome).toMatch(/credential proxy connection lost/i);
+        expect(outcome).not.toMatch(/timed out/i);
+      }
+    } finally {
+      for (const timer of timers) clearTimeout(timer);
+    }
+
+    destroyServerSockets(server);
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    server = createAutoReplyServer(socketPath);
+    trackServerSockets(server);
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    const response = await client.request('after-reconnect', { ok: true });
+    expect(response.ok).toBe(true);
+    expect(response.data).toStrictEqual({ ok: true });
   });
 });
