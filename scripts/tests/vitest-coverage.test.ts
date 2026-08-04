@@ -5,11 +5,24 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 
 // The helper evaluates process.env['LLXPRT_COVERAGE'] exactly once at
-// module-evaluation time, so each test must get a FRESH module instance.
-// vi.resetModules() clears the module registry; combined with vi.stubEnv this
-// forces a re-evaluation of the const on every dynamic import.
+// module-evaluation time. Vitest supports vi.resetModules() to clear the
+// module registry and force a fresh evaluation per test. Bun cannot reset
+// its module graph in-process, so under Bun we bypass the ESM cache via a
+// cache-busted require() to get a fresh module evaluation for each scenario.
+const isBun = typeof Bun !== 'undefined';
+const nodeRequire = createRequire(import.meta.url);
+// Bun resolves .ts via require(); Node/Vitest need the explicit .ts path.
+const helperPath = resolve(
+  import.meta.dirname,
+  '..',
+  '..',
+  'vitest.coverage.ts',
+);
+
 describe('isCoverageEnabled', () => {
   // Snapshot the original env state so the "unset" test (which performs a real
   // deletion to verify genuine unset semantics) cannot leak into sibling test
@@ -21,8 +34,30 @@ describe('isCoverageEnabled', () => {
     'LLXPRT_COVERAGE',
   );
 
+  /**
+   * Loads a fresh module instance so the module-level const (which reads
+   * process.env at evaluation time) is re-evaluated against the current env.
+   *
+   * Under Vitest, vi.resetModules() clears the ESM registry and dynamic
+   * import() re-evaluates the module. Under Bun, vi.resetModules() is
+   * unsupported, so we bust the require() cache and use sync require() which
+   * re-evaluates the module on the spot.
+   */
+  async function loadHelper(): Promise<{ isCoverageEnabled: boolean }> {
+    if (isBun) {
+      delete nodeRequire.cache[helperPath];
+      return nodeRequire(helperPath) as { isCoverageEnabled: boolean };
+    }
+    // Vitest: vi.resetModules() in beforeEach clears the ESM cache.
+    return (await import('../../vitest.coverage.js')) as {
+      isCoverageEnabled: boolean;
+    };
+  }
+
   beforeEach(() => {
-    vi.resetModules();
+    if (!isBun) {
+      vi.resetModules();
+    }
   });
 
   afterEach(() => {
@@ -33,12 +68,6 @@ describe('isCoverageEnabled', () => {
       delete process.env['LLXPRT_COVERAGE'];
     }
   });
-
-  async function loadHelper(): Promise<{ isCoverageEnabled: boolean }> {
-    return (await import('../../vitest.coverage.js')) as {
-      isCoverageEnabled: boolean;
-    };
-  }
 
   it('defaults to enabled (true) when LLXPRT_COVERAGE is unset', async () => {
     delete process.env['LLXPRT_COVERAGE'];

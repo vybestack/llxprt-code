@@ -5,6 +5,16 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
+
+/**
+ * The embedded monitor and metrics scripts are CommonJS files designed for
+ * Node's HTTP implementation. Under Bun, process.execPath points to the Bun
+ * binary, whose HTTP error/abort event ordering differs from Node's, causing
+ * monitor tests to fail or hang. Use Node to run these subprocess scripts so
+ * the monitor's HTTP behavior matches what the test assertions expect.
+ */
+const nodeExecutable: string =
+  typeof Bun !== 'undefined' ? 'node' : process.execPath;
 import type { ChildProcessByStdio } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -186,8 +196,14 @@ export function listen(
 export function closeServer(
   server: http.Server<typeof http.IncomingMessage, typeof http.ServerResponse>,
 ): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
+  return new Promise<void>((resolve) => {
+    const closeAll = server as unknown as {
+      closeAllConnections?: () => void;
+    };
+    if (typeof closeAll.closeAllConnections === 'function') {
+      closeAll.closeAllConnections();
+    }
+    server.close(() => resolve());
   });
 }
 
@@ -520,7 +536,7 @@ export function runEmbeddedMetricsScript(
     );
     let execError = null;
     try {
-      execFileSync(process.execPath, [scriptPath], {
+      execFileSync(nodeExecutable, [scriptPath], {
         cwd: directory,
         env: {
           ...process.env,
@@ -587,7 +603,7 @@ export async function startEmbeddedMonitor(
       .update(source)
       .digest('hex');
     fs.writeFileSync(scriptPath, source);
-    child = spawn(process.execPath, [scriptPath], {
+    child = spawn(nodeExecutable, [scriptPath], {
       env: {
         PATH: process.env.PATH,
         TARGET_URL: targetUrl,

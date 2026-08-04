@@ -654,10 +654,25 @@ describe('collectGlobalSetups', () => {
   it('returns each distinct setup module once, in first-seen order', () => {
     expect(
       collectGlobalSetups([
-        { cwd: '/a', file: '/a/1.test.ts', preloads: [], globalSetup: '/a/s.ts' },
-        { cwd: '/a', file: '/a/2.test.ts', preloads: [], globalSetup: '/a/s.ts' },
+        {
+          cwd: '/a',
+          file: '/a/1.test.ts',
+          preloads: [],
+          globalSetup: '/a/s.ts',
+        },
+        {
+          cwd: '/a',
+          file: '/a/2.test.ts',
+          preloads: [],
+          globalSetup: '/a/s.ts',
+        },
         { cwd: '/b', file: '/b/1.test.ts', preloads: [] },
-        { cwd: '/c', file: '/c/1.test.ts', preloads: [], globalSetup: '/c/s.ts' },
+        {
+          cwd: '/c',
+          file: '/c/1.test.ts',
+          preloads: [],
+          globalSetup: '/c/s.ts',
+        },
       ]),
     ).toEqual(['/a/s.ts', '/c/s.ts']);
   });

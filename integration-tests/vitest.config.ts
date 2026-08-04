@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     testTimeout: 300000, // 5 minutes
     globalSetup: './globalSetup.ts',
-    setupFiles: ['./setup-fast-check.ts', './setup-quota-guard.ts'],
+    setupFiles: ['./setup-quota-guard.ts'],
     reporters: ['default'],
     include: ['**/*.test.ts'],
     retry: 2,

@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { it as itProp, fc } from '@fast-check/vitest';
+import * as fc from 'fast-check';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
 import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
@@ -24,6 +24,78 @@ import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.j
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
+
+/**
+ * Property-based test helper — a runner-portable replacement for the `itProp`
+ * import previously supplied by `@fast-check/vitest`.
+ *
+ * `@fast-check/vitest` builds its API on `vitest/suite`'s
+ * `createTaskCollector` / `getCurrentSuite`, which are Vitest runner internals
+ * with no Bun equivalent, so this file could not load under Bun at all. This
+ * helper registers an ordinary `it(name, …)` and drives the property with
+ * plain `fast-check`, which both runners load natively.
+ *
+ * `fc.assert` receives the arbitraries declared at each call site, so every
+ * predicate is invoked with genuinely generated values. `numRuns` is left at
+ * fast-check's own default; the repository never calls `fc.configureGlobal`.
+ */
+
+type PropertyPredicate<Ts extends readonly unknown[]> = (
+  ...args: Ts
+) => void | boolean | Promise<void | boolean>;
+
+function registerProperty<Ts extends readonly unknown[]>(
+  register: (name: string, run: () => Promise<void>) => void,
+  name: string,
+  arbitraries: { [K in keyof Ts]: fc.Arbitrary<Ts[K]> },
+  predicate: PropertyPredicate<Ts>,
+): void {
+  register(name, async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        ...(arbitraries as unknown as Array<fc.Arbitrary<unknown>>),
+        async (...args: unknown[]) => {
+          const outcome = await predicate(...(args as unknown as Ts));
+          return outcome !== false;
+        },
+      ),
+    );
+  });
+}
+
+const itProp = Object.assign(
+  <Ts extends readonly unknown[]>(
+    name: string,
+    arbitraries: { [K in keyof Ts]: fc.Arbitrary<Ts[K]> },
+    predicate: PropertyPredicate<Ts>,
+  ): void => {
+    registerProperty(
+      (testName, run) => {
+        it(testName, run);
+      },
+      name,
+      arbitraries,
+      predicate,
+    );
+  },
+  {
+    skip: <Ts extends readonly unknown[]>(
+      name: string,
+      arbitraries: { [K in keyof Ts]: fc.Arbitrary<Ts[K]> },
+      predicate: PropertyPredicate<Ts>,
+    ): void => {
+      registerProperty(
+        (testName, run) => {
+          it.skip(testName, run);
+        },
+        name,
+        arbitraries,
+        predicate,
+      );
+    },
+  },
+);
+
 
 // Mock Config class
 class MockConfig {

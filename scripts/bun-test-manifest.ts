@@ -6,6 +6,7 @@
 
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
+import { validateResolvedFiles } from './bun-test-manifest-validation.js';
 
 export interface BunTestWorkspaceEntry {
   readonly workspace: string;
@@ -118,7 +119,7 @@ const defaultManifestDependencies: BunManifestDependencies = {
     Array.from(new Bun.Glob(pattern).scanSync({ cwd, onlyFiles: true })).sort(),
 };
 
-function getErrorCode(error: unknown): string | undefined {
+export function getErrorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return undefined;
   }
@@ -126,28 +127,22 @@ function getErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
-/** Files that have been explicitly verified with Bun's native test runner. */
+/**
+ * The release-install smoke, kept in its own root because it packs and
+ * installs a CLI tarball and therefore needs a much larger time budget than
+ * the rest of the script harness.
+ */
+export const SLOW_SCRIPTS_TEST = 'issue-2603-release-install.test.ts';
+
+/** Every test root executed by Bun's native test runner. */
 export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'a2a-server',
-    preload: 'bun-preload-storage-isolation.ts',
-    files: [
-      'src/storage-isolation.bun.test.ts',
-      'src/agent/task-support.test.ts',
-      'src/agent/task.neutral-continuation.test.ts',
-      'src/agent/task.test.ts',
-      'src/agent/task.factory-migration.integration.test.ts',
-      'src/commands/command-registry.test.ts',
-      'src/commands/extensions.test.ts',
-      'src/commands/init.test.ts',
-      'src/commands/restore.test.ts',
-      'src/config/config.test.ts',
-      'src/config/config.factory-migration.test.ts',
-      'src/http/app.test.ts',
-      'src/http/endpoints.test.ts',
-      'src/persistence/gcs.test.ts',
-      'src/utils/testing_utils.test.ts',
+    preload: [
+      '../../test-setup/augment-bun-vi.ts',
+      'bun-preload-storage-isolation.ts',
     ],
+    include: ['src/**/*.test.ts'],
   },
   {
     workspace: 'agents',
@@ -707,32 +702,51 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   },
   {
     workspace: 'telemetry',
-    preload: 'test-setup-storage-isolation.ts',
-    files: [
-      'src/debug/ConfigurationManager.test.ts',
-      'src/debug/DebugLogger.test.ts',
-      'src/debug/FileOutput.test.ts',
-      'src/telemetry/canonicalConsumer.behavior.test.ts',
-      'src/telemetry/events/api-events.neutral.test.ts',
-      'src/telemetry/loggers.localAggregation.test.ts',
-      'src/telemetry/metrics.test.ts',
-      'src/telemetry/sessionMetricsAggregator.advanced.test.ts',
-      'src/telemetry/sessionMetricsAggregator.test.ts',
-      'src/telemetry/tool-call-decision.test.ts',
-      'src/telemetry/types.test.ts',
+    preload: [
+      '../../test-setup/augment-bun-vi.ts',
+      'test-setup-storage-isolation.ts',
     ],
+    include: ['src/**/*.test.ts'],
   },
   {
     workspace: 'test-utils',
-    files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
+    preload: ['../../test-setup/augment-bun-vi.ts'],
+    include: ['src/**/*.test.ts'],
   },
   {
-    workspace: 'acplint',
-    cwd: '.',
-    files: [
-      'scripts/tests/ci-acplint-workflow.test.ts',
-      'scripts/tests/validate-acplint-report.test.ts',
+    workspace: 'settings',
+    preload: [
+      '../../test-setup/augment-bun-vi.ts',
+      'test-setup-storage-isolation.ts',
     ],
+    include: ['src/**/*.test.ts'],
+  },
+  {
+    workspace: 'ide-integration',
+    preload: [
+      '../../test-setup/augment-bun-vi.ts',
+      'test-setup-storage-isolation.ts',
+      'test-setup.ts',
+    ],
+    include: ['src/**/*.test.ts'],
+  },
+  {
+    // `vscode` is injected by the editor host and cannot be resolved outside
+    // it, so a test-only tsconfig maps the specifier at a stub the per-file
+    // `vi.mock('vscode', …)` factories then replace.
+    workspace: 'vscode-ide-companion',
+    preload: [
+      '../../test-setup/augment-bun-vi.ts',
+      'test-setup-storage-isolation.ts',
+    ],
+    tsconfig: 'tsconfig.bun-test.json',
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+  },
+  {
+    workspace: 'policy',
+    preload: ['../../test-setup/augment-bun-vi.ts'],
+    include: ['src/**/*.test.ts'],
+    exclude: ['src/research/**'],
   },
   {
     workspace: 'test-setup',
@@ -743,39 +757,47 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
-    // Bun-native tests for the PR-review Mermaid sanitizer (issue #2944).
-    // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
-    workspace: 'scripts-pr-review',
+    // The whole script harness. Previously split into several curated roots
+    // (acplint, scripts-pr-review, scripts-ocr-review, issue-planner-*) while
+    // the rest of the directory still belonged to Vitest; now that Vitest no
+    // longer runs this tree, one glob root covers every file — including the
+    // `*.bun.test.ts` files that were always Bun-only.
+    workspace: 'scripts-tests',
     cwd: '.',
-    files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
+    preload: ['test-setup/augment-bun-vi.ts', 'scripts/tests/test-setup.ts'],
+    include: ['scripts/tests/**/*.test.ts', 'scripts/tests/**/*.test.js'],
+    exclude: [`scripts/tests/${SLOW_SCRIPTS_TEST}`],
   },
   {
-    // Bun-native tests for the OCR review workflow preview parser and
-    // docs-only classification (issue #2824). Vitest skips `*.bun.test.ts`;
-    // these run under Bun's native runner only.
-    workspace: 'scripts-ocr-review',
+    // The release-install smoke packs a CLI tarball and runs three npm
+    // installs, so it needs a far larger budget than the rest of the harness.
+    // It is a separate root so the ordinary script tests keep a tight timeout
+    // that still catches genuine hangs.
+    workspace: 'scripts-tests-slow',
     cwd: '.',
-    files: [
-      'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
-      'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
-      'scripts/tests/ocr-review-workflow.bun.test.ts',
-    ],
+    preload: ['test-setup/augment-bun-vi.ts', 'scripts/tests/test-setup.ts'],
+    files: [`scripts/tests/${SLOW_SCRIPTS_TEST}`],
+    timeout: 300_000,
   },
   {
-    // Bun-native regression test for the issue-planner filesystem-confinement
-    // step (issue #2960): vitest skips `*.bun.test.ts`; this runs under Bun's
-    // native runner only.
-    workspace: 'issue-planner-confinement',
-    cwd: '.',
-    files: ['scripts/tests/issue-planner-confinement.bun.test.ts'],
+    workspace: 'evals',
+    cwd: 'evals',
+    preload: ['../test-setup/augment-bun-vi.ts'],
+    include: ['**/*.eval.ts'],
+    globalSetup: 'globalSetup.ts',
+    timeout: 300_000,
   },
   {
-    // Bun-native tests for the issue-planner advisory-enrichment non-fatality
-    // guards (umbrella #2984): vitest skips `*.bun.test.ts`; this runs under
-    // Bun's native runner only.
-    workspace: 'issue-planner-enrichment',
-    cwd: '.',
-    files: ['scripts/tests/issue-planner-enrichment.bun.test.ts'],
+    // End-to-end tests against a real provider: long per-test budget, a
+    // global setup that isolates storage roots for every spawned CLI, and a
+    // retry budget mirroring the Vitest config these replaced.
+    workspace: 'integration-tests',
+    cwd: 'integration-tests',
+    preload: ['../test-setup/augment-bun-vi.ts', 'setup-quota-guard.ts'],
+    include: ['**/*.test.ts'],
+    globalSetup: 'globalSetup.ts',
+    timeout: 300_000,
+    retries: 2,
   },
 ];
 
@@ -831,7 +853,9 @@ export function resolveEntryFileNames(
     );
   }
   const excluded = new Set(
-    (exclude ?? []).flatMap((pattern) => dependencies.glob(pattern, resolvedCwd)),
+    (exclude ?? []).flatMap((pattern) =>
+      dependencies.glob(pattern, resolvedCwd),
+    ),
   );
   const selected = new Set(
     include.flatMap((pattern) => dependencies.glob(pattern, resolvedCwd)),
@@ -861,97 +885,35 @@ export function resolveBunNativeTestFiles(
 ): BunTestFile[] {
   const files = BUN_NATIVE_TEST_MANIFEST.filter(
     ({ workspace }) => !workspaceFilter || workspace === workspaceFilter,
-  ).flatMap((entry) => {
-    const resolvedCwd = resolveWorkspaceCwd(
-      repoRoot,
-      entry.workspace,
-      entry.cwd,
-    );
-    const resolvedPreloads = toPreloadList(entry.preload).map((preload) =>
-      join(resolvedCwd, preload),
-    );
-    return resolveEntryFileNames(entry, resolvedCwd, dependencies).map(
-      (file) => ({
-        cwd: resolvedCwd,
-        file: join(resolvedCwd, file),
-        preloads: resolvedPreloads,
-        tsconfig:
-          entry.tsconfig !== undefined
-            ? join(resolvedCwd, entry.tsconfig)
-            : undefined,
-        timeout: entry.timeout,
-        retries: entry.retries,
-        globalSetup:
-          entry.globalSetup !== undefined
-            ? join(resolvedCwd, entry.globalSetup)
-            : undefined,
-      }),
-    );
-  });
-  const missingFiles: string[] = [];
-  const nonFiles: string[] = [];
-  for (const { file } of files) {
-    try {
-      if (!dependencies.stat(file).isFile()) {
-        nonFiles.push(file);
-      }
-    } catch (error: unknown) {
-      const code = getErrorCode(error);
-      if (code === 'ENOENT') {
-        missingFiles.push(file);
-      } else {
-        throw new BunManifestStatError(file, code, error);
-      }
-    }
-  }
-  // Validate declared support scripts exist (deduplicated across workspaces).
-  const preloadPaths = new Set<string>();
-  for (const { preloads, tsconfig, globalSetup } of files) {
-    for (const preload of preloads) {
-      preloadPaths.add(preload);
-    }
-    if (tsconfig !== undefined) {
-      preloadPaths.add(tsconfig);
-    }
-    if (globalSetup !== undefined) {
-      preloadPaths.add(globalSetup);
-    }
-  }
-  for (const preload of preloadPaths) {
-    try {
-      if (!dependencies.stat(preload).isFile()) {
-        throw new BunManifestStatError(
-          preload,
-          undefined,
-          new Error('not a file'),
-        );
-      }
-    } catch (error: unknown) {
-      if (error instanceof BunManifestStatError) {
-        throw error;
-      }
-      const code = getErrorCode(error);
-      if (code === 'ENOENT') {
-        throw new Error(
-          `Bun native test manifest declares a missing preload: ${preload}`,
-        );
-      }
-      throw new BunManifestStatError(preload, code, error);
-    }
-  }
-  if (missingFiles.length > 0) {
-    throw new Error(
-      `Bun native test manifest contains missing files:\n${missingFiles
-        .map((file) => `  - ${file}`)
-        .join('\n')}`,
-    );
-  }
-  if (nonFiles.length > 0) {
-    throw new Error(
-      `Bun native test manifest contains non-files:\n${nonFiles
-        .map((file) => `  - ${file}`)
-        .join('\n')}`,
-    );
-  }
+  ).flatMap((entry) => resolveManifestEntry(entry, repoRoot, dependencies));
+  validateResolvedFiles(files, dependencies);
   return files.sort((left, right) => left.file.localeCompare(right.file));
+}
+
+function resolveManifestEntry(
+  entry: BunTestWorkspaceEntry,
+  repoRoot: string,
+  dependencies: BunManifestDependencies,
+): BunTestFile[] {
+  const resolvedCwd = resolveWorkspaceCwd(repoRoot, entry.workspace, entry.cwd);
+  const resolvedPreloads = toPreloadList(entry.preload).map((preload) =>
+    join(resolvedCwd, preload),
+  );
+  return resolveEntryFileNames(entry, resolvedCwd, dependencies).map(
+    (file) => ({
+      cwd: resolvedCwd,
+      file: join(resolvedCwd, file),
+      preloads: resolvedPreloads,
+      tsconfig:
+        entry.tsconfig !== undefined
+          ? join(resolvedCwd, entry.tsconfig)
+          : undefined,
+      timeout: entry.timeout,
+      retries: entry.retries,
+      globalSetup:
+        entry.globalSetup !== undefined
+          ? join(resolvedCwd, entry.globalSetup)
+          : undefined,
+    }),
+  );
 }

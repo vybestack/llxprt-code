@@ -26,16 +26,31 @@
  *   --tsconfig <path>     Path to tsconfig override (passed via --tsconfig-override)
  *   --timeout <ms>        Per-test timeout in milliseconds (defaults to 30000)
  *   --junit <path>        Write a JUnit XML report to this path after the run
+ *   --json-report <path>  Write a Vitest-compatible JSON report (per-test results)
  *   --dry-run             List files that would be run without executing them
  */
 
-import { statSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import {
+  statSync,
+  writeFileSync,
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  readdirSync,
+} from 'node:fs';
+import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   resolveBunNativeTestFiles,
   type BunTestFile,
 } from './bun-test-manifest.js';
+import {
+  buildVitestJsonReport,
+  parseJUnitXml,
+  type VitestJsonReport,
+  type JUnitTestSuites,
+  type JUnitTestSuite,
+} from './bun-junit-to-json-report.js';
 
 /**
  * Detects and kills stale orphaned `bun test` processes (PPID=1) before
@@ -263,6 +278,7 @@ interface CliOptions {
   timeout: number;
   dryRun: boolean;
   junit: string | null;
+  jsonReport: string | null;
 }
 
 function readOptionValue(
@@ -299,6 +315,7 @@ function parseArgs(argv: string[]): CliOptions {
     timeout: 30_000,
     dryRun: false,
     junit: null,
+    jsonReport: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -314,6 +331,9 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case '--junit':
         options.junit = readOptionValue(argv, i++, arg);
+        break;
+      case '--json-report':
+        options.jsonReport = readOptionValue(argv, i++, arg);
         break;
       case '--timeout': {
         const value = readOptionValue(argv, i++, arg);
@@ -390,6 +410,7 @@ export function buildSpawnArgs(
   entry: BunTestFile,
   cliTsconfigOverride: string | null,
   cliTimeout: number,
+  junitOutfile?: string,
 ): readonly string[] {
   const args = [executable, 'test'];
   const tsconfig = entry.tsconfig ?? cliTsconfigOverride;
@@ -404,6 +425,9 @@ export function buildSpawnArgs(
   );
   for (const preload of entry.preloads) {
     args.push('--preload', preload);
+  }
+  if (junitOutfile) {
+    args.push('--reporter=junit', `--reporter-outfile=${junitOutfile}`);
   }
   args.push(entry.file);
   return args;
@@ -424,7 +448,8 @@ function spawnTestFileOnce(
   cliTsconfigOverride: string | null,
   cliTimeout: number,
   dependencies: BunTestRunnerDependencies,
-): { passed: boolean; stdout: string; diagnostic: string } {
+  junitOutfile?: string,
+): { passed: boolean; stdout: string; diagnostic: string; junitPath?: string } {
   try {
     const child = dependencies.spawn(
       buildSpawnArgs(
@@ -432,6 +457,7 @@ function spawnTestFileOnce(
         entry,
         cliTsconfigOverride,
         cliTimeout,
+        junitOutfile,
       ),
       {
         cwd: entry.cwd,
@@ -446,6 +472,7 @@ function spawnTestFileOnce(
       passed: isChildSuccess(child),
       stdout: child.stdout ?? '',
       diagnostic: formatFailureDiagnostic(child),
+      junitPath: junitOutfile,
     };
   } catch (error: unknown) {
     const diagnostic =
@@ -461,6 +488,7 @@ function runSingleTestFile(
   cliTsconfigOverride: string | null,
   cliTimeout: number,
   dependencies: BunTestRunnerDependencies,
+  junitOutfile?: string,
 ): FileTestResult {
   const relativeName = entry.file.replace(entry.cwd + '/', '');
   const attempts = (entry.retries ?? 0) + 1;
@@ -471,6 +499,7 @@ function runSingleTestFile(
       cliTsconfigOverride,
       cliTimeout,
       dependencies,
+      junitOutfile,
     );
     if (last.passed) {
       break;
@@ -510,12 +539,7 @@ export async function runBunTests(
   dependencies: BunTestRunnerDependencies,
 ): Promise<number> {
   const options = parseArgs(argv);
-  const tsconfigOverride = options.tsconfig
-    ? dependencies.resolveTsconfig(
-        options.tsconfig,
-        dependencies.invocationDirectory,
-      )
-    : null;
+  const tsconfigOverride = resolveTsconfig(options, dependencies);
   const files = dependencies.resolveFiles(
     dependencies.repoRoot,
     options.workspace ?? undefined,
@@ -544,9 +568,7 @@ export async function runBunTests(
     `Running ${files.length} native Bun test files in isolated processes`,
   );
 
-  // Global setup mutates process.env in this process; every spawned test
-  // process inherits it, which is exactly the contract Vitest's globalSetup
-  // provided for the evals and integration-test roots.
+  const junitTempDir = createJunitTempDir(options, dependencies);
   const setups = collectGlobalSetups(files);
   const started: string[] = [];
   let testResults: FileTestResult[] = [];
@@ -556,39 +578,171 @@ export async function runBunTests(
       started.push(setup);
       await module.setup?.();
     }
-    testResults = files.map((entry) =>
-      runSingleTestFile(entry, tsconfigOverride, options.timeout, dependencies),
+    testResults = runAllFiles(
+      files,
+      tsconfigOverride,
+      options,
+      dependencies,
+      junitTempDir,
     );
   } finally {
-    for (const setup of started.reverse()) {
-      try {
-        const module = await dependencies.loadGlobalSetup(setup);
-        await module.teardown?.();
-      } catch (error: unknown) {
-        dependencies.stderr(
-          `Global teardown failed for ${setup}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
+    await teardownSetups(started, dependencies);
   }
+
+  reportResults(testResults, dependencies);
+
+  writeReports(options, testResults, junitTempDir, dependencies);
 
   const passed = testResults.filter((r) => r.passed).length;
   const failed = testResults.length - passed;
+  return failed > 0 ? 1 : 0;
+}
 
+function resolveTsconfig(
+  options: CliOptions,
+  dependencies: BunTestRunnerDependencies,
+): string | null {
+  return options.tsconfig
+    ? dependencies.resolveTsconfig(
+        options.tsconfig,
+        dependencies.invocationDirectory,
+      )
+    : null;
+}
+
+function createJunitTempDir(
+  options: CliOptions,
+  dependencies: BunTestRunnerDependencies,
+): string | null {
+  if (!options.jsonReport) return null;
+  return mkdtempSync(
+    join(resolve(dependencies.invocationDirectory, '.'), 'bun-junit-'),
+  );
+}
+
+function runAllFiles(
+  files: readonly BunTestFile[],
+  tsconfigOverride: string | null,
+  options: CliOptions,
+  dependencies: BunTestRunnerDependencies,
+  junitTempDir: string | null,
+): FileTestResult[] {
+  const results: FileTestResult[] = [];
+  for (const entry of files) {
+    results.push(
+      runSingleTestFile(
+        entry,
+        tsconfigOverride,
+        options.timeout,
+        dependencies,
+        junitTempDir !== null
+          ? join(junitTempDir, `${results.length}.xml`)
+          : undefined,
+      ),
+    );
+  }
+  return results;
+}
+
+async function teardownSetups(
+  started: string[],
+  dependencies: BunTestRunnerDependencies,
+): Promise<void> {
+  for (const setup of started.reverse()) {
+    try {
+      const module = await dependencies.loadGlobalSetup(setup);
+      await module.teardown?.();
+    } catch (error: unknown) {
+      dependencies.stderr(
+        `Global teardown failed for ${setup}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+}
+
+function reportResults(
+  testResults: readonly FileTestResult[],
+  dependencies: BunTestRunnerDependencies,
+): void {
+  const passed = testResults.filter((r) => r.passed).length;
+  const failed = testResults.length - passed;
   dependencies.stdout(
-    `Passed ${passed}/${files.length} isolated native Bun test files` +
+    `Passed ${passed}/${testResults.length} isolated native Bun test files` +
       (failed > 0 ? ` (${failed} failed)` : ''),
   );
+}
 
+function writeReports(
+  options: CliOptions,
+  testResults: readonly FileTestResult[],
+  junitTempDir: string | null,
+  dependencies: BunTestRunnerDependencies,
+): void {
   if (options.junit) {
     const junitPath = resolve(dependencies.invocationDirectory, options.junit);
     writeJUnitReport(junitPath, testResults);
     dependencies.stdout(`JUnit report written to ${junitPath}`);
   }
 
-  return failed > 0 ? 1 : 0;
+  if (options.jsonReport && junitTempDir !== null) {
+    const jsonReportPath = resolve(
+      dependencies.invocationDirectory,
+      options.jsonReport,
+    );
+    writeVitestJsonReport(jsonReportPath, junitTempDir, dependencies);
+    dependencies.stdout(`JSON report written to ${jsonReportPath}`);
+    rmSync(junitTempDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Reads all JUnit XML files from a temporary directory, merges them into a
+ * single Vitest-compatible JSON report, and writes it to the given path.
+ * Missing or empty JUnit files are skipped (a file that produced no JUnit
+ * output — e.g. due to a crash — contributes no testcases to the report).
+ */
+function writeVitestJsonReport(
+  outputPath: string,
+  junitTempDir: string,
+  dependencies: BunTestRunnerDependencies,
+): void {
+  const allSuites: JUnitTestSuite[] = [];
+  const entries = readdirSync(junitTempDir);
+  for (const entry of entries) {
+    if (!entry.endsWith('.xml')) continue;
+    processJUnitFile(join(junitTempDir, entry), allSuites, dependencies);
+  }
+  const mergedJunit: JUnitTestSuites = {
+    name: 'bun tests',
+    tests: 0,
+    failures: 0,
+    errors: 0,
+    suites: allSuites,
+  };
+  const report: VitestJsonReport = buildVitestJsonReport(mergedJunit);
+  const NL = String.fromCharCode(10);
+  writeFileSync(outputPath, JSON.stringify(report, null, 2) + NL, 'utf-8');
+}
+
+function processJUnitFile(
+  xmlPath: string,
+  allSuites: JUnitTestSuite[],
+  dependencies: BunTestRunnerDependencies,
+): void {
+  try {
+    const xml = readFileSync(xmlPath, 'utf-8');
+    if (xml.trim().length === 0) return;
+    const parsed = parseJUnitXml(xml);
+    allSuites.push(...parsed.suites);
+  } catch (error: unknown) {
+    dependencies.stderr(
+      `Failed to parse JUnit XML ${xmlPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 async function main(): Promise<void> {

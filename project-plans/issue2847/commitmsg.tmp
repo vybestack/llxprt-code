@@ -1,5 +1,9 @@
-test(bun): run the interactive PTY harness on a Bun-compatible backend
+test(bun): migrate small workspaces, script harness, evals and integration roots
 
-@lydell/node-pty never delivers onData/onExit under Bun on POSIX, so the
-interactive test harness selects Bun.spawn's terminal backend there. Also
-preserves the default export when the script harness patches node:fs.
+Declares glob-based Bun-native roots for settings, ide-integration,
+vscode-ide-companion, policy, telemetry, test-utils, a2a-server, the script
+harness, evals and integration-tests, and points those workspaces' test
+scripts at the Bun-native runner. Adds a Vitest-compatible JSON report so the
+evals aggregation keeps working, and replaces the Vitest-internal
+@fast-check/vitest dependency in the token-tracking property suite with plain
+fast-check.

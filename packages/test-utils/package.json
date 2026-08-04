@@ -8,10 +8,10 @@
   "scripts": {
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "vitest run --config ./vitest.config.ts",
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace test-utils --junit junit.xml",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace test-utils",
     "typecheck": "tsc --noEmit",
-    "test:ci": "vitest run --config ./vitest.config.ts"
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace test-utils --junit junit.xml"
   },
   "dependencies": {
     "@vybestack/llxprt-code-storage": "file:../storage"

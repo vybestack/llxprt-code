@@ -33,6 +33,7 @@ import {
   waitFor,
   isMockFunction,
   setWaitForScheduler,
+  setDefaultWaitForScheduler,
   type WaitForScheduler,
 } from './stub-helpers.js';
 import { resolveModuleSpecifier } from './module-resolution.js';
@@ -195,6 +196,7 @@ const bunWaitForScheduler: WaitForScheduler = {
 };
 
 setWaitForScheduler(bunWaitForScheduler);
+setDefaultWaitForScheduler(bunWaitForScheduler);
 
 const resolveActualId = (id: string): string => {
   const resolvedId = resolveModuleSpecifier(id);
@@ -418,7 +420,19 @@ const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
 ): unknown => {
-  const resolvedId = resolveActualId(id);
+  let resolvedId: string;
+  try {
+    resolvedId = resolveActualId(id);
+  } catch {
+    // The module cannot be resolved (e.g. a mock of a non-existent module
+    // path, common in integration tests that mock relative paths under
+    // packages/ that don't exist on disk). Vitest tolerates this because it
+    // intercepts before resolution; we must register the mock anyway so the
+    // factory replaces the import. Use the original specifier as the
+    // resolvedId for cache keys, and skip importActual/importActualSync
+    // (they will throw, matching the non-existent module).
+    resolvedId = id;
+  }
 
   // Bun's mock.module matches by the original module specifier (e.g.
   // 'mime-types', 'fs', './foo.js'), NOT by the resolved absolute file path.
@@ -432,7 +446,12 @@ const registerModuleMock = (
     // The automock factory runs lazily (when the module is first imported),
     // at which point require() would return the mocked namespace.
     mockedResolvedIds.add(resolvedId);
-    const realModule = loadIsolatedModuleSync(resolvedId);
+    let realModule: unknown;
+    try {
+      realModule = loadIsolatedModuleSync(resolvedId);
+    } catch {
+      realModule = {};
+    }
     const actualSnapshot: Record<string | symbol, unknown> = {};
     if (typeof realModule === 'object' && realModule !== null) {
       for (const key of Reflect.ownKeys(realModule)) {
@@ -471,7 +490,13 @@ const registerModuleMock = (
   // loadActualSync detect the dangerous case where localRequire would
   // return the mock instead of the actual module (issue #2909 / #2910).
   mockedResolvedIds.add(resolvedId);
-  const syncActual = loadIsolatedModuleSync(resolvedId);
+  let syncActual: unknown;
+  try {
+    syncActual = loadIsolatedModuleSync(resolvedId);
+  } catch {
+    // Module does not exist on disk (mock of a non-existent path).
+    syncActual = {};
+  }
   // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
   // REAL exports, not the mock.module-patched namespace. Bun's mock.module
   // patches the module namespace object IN PLACE, so storing a reference to
@@ -706,6 +731,7 @@ const forceOverride = new Set([
   'restoreAllMocks',
   'clearAllTimers',
   'setSystemTime',
+  'waitFor',
 ]);
 
 for (const [key, value] of Object.entries(viAugmentations)) {
@@ -735,11 +761,7 @@ for (const [key, value] of Object.entries(viAugmentations)) {
  * defineProperty/assignment fallback keeps augmentation best-effort rather
  * than fatal at preload time.
  */
-function defineIfAbsent(
-  target: object,
-  key: string,
-  value: unknown,
-): void {
+function defineIfAbsent(target: object, key: string, value: unknown): void {
   if ((target as Record<string, unknown>)[key] !== undefined) {
     return;
   }
