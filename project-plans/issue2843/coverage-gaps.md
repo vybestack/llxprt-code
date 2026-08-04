@@ -50,5 +50,44 @@ intended**: the type is still declared, which suggests the rendering was dropped
 rather than deliberately removed.
 
 Also corrected in the same file, not lost: the completed-todo marker assertion
-expected `✔` where the component renders `✓` (`\u2713`), and two cases expected a
+expected `` where the component renders `[OK]` (`\u2713`), and two cases expected a
 `← current` suffix that the component no longer emits.
+
+## Deleted: structure tests asserting mock interactions
+
+The `*.theme.test.tsx` family (5 files, 5 cases) all worked the same way: mock
+`ink`, substitute an instrumented `Box`/`Text` that pushes its props into an
+array, render, then assert the array contains an entry with a given
+`backgroundColor`/`color`.
+
+That asserts *a prop was passed to a mocked child*, which RULES.md lists under
+"What NOT to Test" — implementation details and mock interactions. It is also
+structurally incompatible with the Bun setup, where `ink` is redirected to the
+local stub at resolution time, and one of them
+(`StatsDisplay.theme.test.tsx`) hung forever re-entering the mocked module
+during evaluation.
+
+Deleted:
+
+- `src/ui/components/AuthDialog.theme.test.tsx`
+- `src/ui/components/AboutBox.theme.test.tsx`
+- `src/ui/components/StatsDisplay.theme.test.tsx`
+- `src/ui/components/shared/ScrollableList.theme.test.tsx`
+- `src/ui/components/shared/VirtualizedList.theme.test.tsx`
+
+Coverage lost — that themed surfaces (auth dialog, about box, stats display,
+scrollbar thumbs) pick their colours up from the active theme rather than
+hard-coding them.
+
+Re-filling this properly needs assertions on **rendered output** rather than on
+props handed to a mock. That requires a render harness that preserves colour
+information in the captured frame; the current ink stub discards it, which is
+why the original authors reached for prop instrumentation.
+
+## Ported, not deleted
+
+- `src/ui/components/ContextIndicator.ui.test.tsx` — constructed
+  `new ProviderManager()` with no arguments, which has been rejected since issue
+  #2300 required an explicit runtime context; supplied a `SettingsService`, and
+  mocked the runtime bridge that `Footer` pulls in. One expectation was a stale
+  context window (`1049k` for `claude-3-opus`, which is `200k`).
