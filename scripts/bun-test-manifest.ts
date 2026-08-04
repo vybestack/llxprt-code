@@ -708,8 +708,11 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'scripts-ocr-review',
     cwd: '.',
     files: [
+      'scripts/tests/ocr-canary-embedding.bun.test.ts',
+      'scripts/tests/ocr-canary-metrics.bun.test.ts',
       'scripts/tests/ocr-review-422-grouping.bun.test.ts',
       'scripts/tests/ocr-review-422-wiring.bun.test.ts',
+      'scripts/tests/ocr-review-context.bun.test.ts',
       'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
       'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
       'scripts/tests/ocr-review-workflow.bun.test.ts',

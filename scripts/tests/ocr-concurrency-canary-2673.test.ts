@@ -84,7 +84,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         '${{ vars.OCR_LLM_MODEL }}',
       );
       expect(asOptionalRecord(reviewStep.env)?.['FROM_SHA']).toBe(
-        "${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}",
+        '${{ env.OCR_EFFECTIVE_FROM_SHA }}',
       );
       expect(reviewRun).toContain('--from "$FROM_SHA"');
       expect(reviewRun).toContain('--to "$HEAD_SHA"');
