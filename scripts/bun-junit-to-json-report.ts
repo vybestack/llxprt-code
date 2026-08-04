@@ -309,10 +309,27 @@ export function parseTestSuiteElement(element: ParsedElement): JUnitTestSuite {
   const errors = parseIntOrDefault(extractAttr(openTag, 'errors'), 0);
   const skipped = parseIntOrDefault(extractAttr(openTag, 'skipped'), 0);
 
-  const caseElements = extractDirectChildren(element.innerContent, 'testcase');
+  // Only this suite's OWN test cases. Bun nests a `describe` suite inside the
+  // file-level suite, so scanning the raw inner content would attribute a
+  // nested suite's cases to its parent as well and double-count every test.
+  const ownContent = withoutNestedTestSuites(element.innerContent);
+  const caseElements = extractDirectChildren(ownContent, 'testcase');
   const testCases = caseElements.map(parseTestCaseElement);
 
   return { name, tests, failures, errors, skipped, testCases };
+}
+
+/**
+ * Strips the direct `<testsuite>` subtrees from a suite's inner content so
+ * only that suite's own `<testcase>` elements remain.
+ */
+function withoutNestedTestSuites(innerContent: string): string {
+  const nested = extractDirectChildren(innerContent, 'testsuite');
+  let remaining = innerContent;
+  for (const child of nested) {
+    remaining = remaining.replace(child.fullText, '');
+  }
+  return remaining;
 }
 
 /**

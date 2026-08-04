@@ -33,6 +33,7 @@
 import {
   statSync,
   writeFileSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
   readFileSync,
@@ -723,6 +724,9 @@ function writeVitestJsonReport(
   };
   const report: VitestJsonReport = buildVitestJsonReport(mergedJunit);
   const NL = String.fromCharCode(10);
+  // Vitest creates the reporter's output directory; match that so callers do
+  // not have to pre-create it.
+  mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, JSON.stringify(report, null, 2) + NL, 'utf-8');
 }
 

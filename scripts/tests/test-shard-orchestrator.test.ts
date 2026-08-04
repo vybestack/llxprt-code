@@ -145,7 +145,7 @@ describe('orchestrateTests (--shard)', () => {
     // the runScriptsPhase gate for the cli shard, not a coincidental absence.
     mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
       'export default {};',
     );
 
@@ -153,7 +153,7 @@ describe('orchestrateTests (--shard)', () => {
 
     // No scripts/tests invocation for a workspace shard.
     const scriptsCommand = commands.find((c) =>
-      c.command.includes('scripts/tests/vitest.config.ts'),
+      c.command.includes('--root scripts-tests'),
     );
     expect(scriptsCommand).toBeUndefined();
   });
@@ -172,7 +172,7 @@ describe('orchestrateTests (--shard)', () => {
     // Provide a scripts/tests config so runScriptTests does not early-return.
     mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
       'export default {};',
     );
 
@@ -183,7 +183,7 @@ describe('orchestrateTests (--shard)', () => {
     );
 
     const scriptsCommand = commands.find((c) =>
-      c.command.includes('scripts/tests/vitest.config.ts'),
+      c.command.includes('--root scripts-tests'),
     );
     expect(scriptsCommand).toBeDefined();
     // No workspace test command ran.
@@ -241,7 +241,7 @@ describe('orchestrateTests (--shard)', () => {
     // workspace failed count (there are no workspaces). This guards the
     // main() exit-code fix that checks anyPhaseFailed separately.
     const failingRunner: CommandRunner = (command, _cwd) => {
-      if (command.includes('scripts/tests/vitest.config.ts')) {
+      if (command.includes('--root scripts-tests')) {
         return { success: false, exitCode: 1 };
       }
       return { success: true, exitCode: 0 };
@@ -255,7 +255,7 @@ describe('orchestrateTests (--shard)', () => {
     ]);
     mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
       'export default {};',
     );
 
@@ -294,7 +294,7 @@ describe('orchestrateTests (--shard)', () => {
     ]);
     mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
       'export default {};',
     );
 
@@ -305,40 +305,28 @@ describe('orchestrateTests (--shard)', () => {
     );
 
     const scriptsCommands = commands.filter((c) =>
-      c.command.includes('scripts/tests/vitest.config.ts'),
+      c.command.includes('--root scripts-tests'),
     );
-    // Two invocations: the main scripts suite (excluding the slow smoke) and
-    // a dedicated invocation for the release-install smoke test.
+    // Two invocations: the fast script harness and a dedicated invocation for
+    // the release-install smoke, which needs a far larger time budget.
     expect(scriptsCommands).toHaveLength(2);
-
-    // The main invocation must exclude the slow release-install test so it
-    // never shares a worker pool with the fast tests, and the slow test must
-    // run as a separate invocation without --exclude.
-    const hasExcludedInvocation = scriptsCommands.some(
-      (c) =>
-        c.command.includes('--exclude') &&
-        c.command.includes('issue-2603-release-install.test.ts'),
-    );
-    const hasDirectInvocation = scriptsCommands.some(
-      (c) =>
-        !c.command.includes('--exclude') &&
-        c.command.includes('issue-2603-release-install.test.ts'),
-    );
-    expect(hasExcludedInvocation).toBe(true);
-    expect(hasDirectInvocation).toBe(true);
+    expect(
+      scriptsCommands.some((c) => c.command.endsWith('--root scripts-tests')),
+    ).toBe(true);
+    expect(
+      scriptsCommands.some((c) =>
+        c.command.endsWith('--root scripts-tests-slow'),
+      ),
+    ).toBe(true);
   });
 
   it('skips the release-install smoke invocation when the main scripts suite fails', () => {
     const commands: Array<{ command: string; cwd: string }> = [];
     const runner: CommandRunner = (command, cwd) => {
       commands.push({ command, cwd });
-      // Fail only the main scripts suite (the one with --exclude); pass
-      // everything else so the slow invocation is the only thing that could
-      // run.
-      if (
-        command.includes('scripts/tests/vitest.config.ts') &&
-        command.includes('--exclude')
-      ) {
+      // Fail only the fast script harness; pass everything else so the slow
+      // invocation is the only thing that could still run.
+      if (command.endsWith('--root scripts-tests')) {
         return { success: false, exitCode: 1 };
       }
       return { success: true, exitCode: 0 };
@@ -353,7 +341,7 @@ describe('orchestrateTests (--shard)', () => {
     ]);
     mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
       'export default {};',
     );
 
@@ -365,10 +353,8 @@ describe('orchestrateTests (--shard)', () => {
 
     // The slow smoke invocation must NOT run when the main suite failed
     // (fail-fast semantics).
-    const slowCommand = commands.filter(
-      (c) =>
-        c.command.includes('issue-2603-release-install.test.ts') &&
-        !c.command.includes('--exclude'),
+    const slowCommand = commands.filter((c) =>
+      c.command.endsWith('--root scripts-tests-slow'),
     );
     expect(slowCommand).toHaveLength(0);
   });

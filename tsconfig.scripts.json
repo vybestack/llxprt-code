@@ -314,7 +314,6 @@
     "scripts/tests/virtualized-list-scrolltop.test.ts",
     "scripts/tests/vitest-coverage.test.ts",
     "scripts/tests/bun-junit-to-json-report.test.ts",
-    "scripts/tests/vitest.config.ts",
     "scripts/tests/workflow-quota-selection.test.ts",
     "scripts/tests/workspace-source-helpers.test.ts",
     "scripts/tests/workspace-source-helpers.ts",

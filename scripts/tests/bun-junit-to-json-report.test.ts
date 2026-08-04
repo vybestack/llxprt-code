@@ -375,3 +375,37 @@ describe('serializeReport', () => {
     expect(Array.isArray(parsed['testResults'])).toBe(true);
   });
 });
+
+describe('nested Bun testsuite elements', () => {
+  // Bun nests a `describe` suite inside the file-level suite and puts the
+  // testcases only in the innermost one. Attributing a nested suite's cases to
+  // its parent as well would double every count the evals aggregation reads.
+  const nestedXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<testsuites name="bun test" tests="1" failures="1" skipped="0">',
+    '  <testsuite name="save_memory.eval.ts" file="save_memory.eval.ts" tests="1" failures="1" skipped="0">',
+    '    <testsuite name="save_memory" file="save_memory.eval.ts" tests="1" failures="1" skipped="0">',
+    '      <testcase name="should be able to save to memory" classname="save_memory">',
+    '        <failure type="AssertionError" />',
+    '      </testcase>',
+    '    </testsuite>',
+    '  </testsuite>',
+    '</testsuites>',
+  ].join('\n');
+
+  it('attributes a test case only to the suite that directly contains it', () => {
+    const parsed = parseJUnitXml(nestedXml);
+    const owning = parsed.suites.filter((s) => s.testCases.length > 0);
+    expect(owning).toHaveLength(1);
+    expect(owning[0].name).toBe('save_memory');
+  });
+
+  it('counts each nested test exactly once in the report', () => {
+    const report = junitXmlToVitestJson(nestedXml);
+    expect(report.numTotalTests).toBe(1);
+    expect(report.numFailedTests).toBe(1);
+    expect(report.numTotalTestSuites).toBe(1);
+    expect(report.testResults).toHaveLength(1);
+    expect(report.testResults[0].name).toBe('save_memory');
+  });
+});
