@@ -19,13 +19,11 @@ function createMockConfig(options: {
   approvalMode?: ApprovalMode;
   allowedTools?: string[];
   nonInteractive?: boolean;
-  userPolicyPath?: string;
 }): PolicyConfigSource {
   return {
     getApprovalMode: () => options.approvalMode ?? ApprovalMode.DEFAULT,
     getAllowedTools: () => options.allowedTools,
     getNonInteractive: () => options.nonInteractive ?? false,
-    getUserPolicyPath: () => options.userPolicyPath,
   };
 }
 
@@ -298,28 +296,6 @@ describe('policy config', () => {
       const engineConfig = await createPolicyEngineConfig(config);
 
       expect(engineConfig.nonInteractive).toBe(true);
-    });
-
-    it('handles missing getUserPolicyPath method', async () => {
-      const config = createMockConfig({});
-      // Remove the optional method
-      delete (config as Partial<PolicyConfigSource>).getUserPolicyPath;
-
-      // Should not throw
-      const engineConfig = await createPolicyEngineConfig(config);
-      expect(engineConfig).toBeDefined();
-    });
-
-    it('gracefully handles invalid user policy path', async () => {
-      const config = createMockConfig({
-        userPolicyPath: '/nonexistent/path/to/policy.toml',
-      });
-
-      // Should log warning but not throw
-      const engineConfig = await createPolicyEngineConfig(config);
-      expect(engineConfig).toBeDefined();
-      // Default rules should still be loaded
-      expect(engineConfig.rules.length).toBeGreaterThan(0);
     });
   });
 

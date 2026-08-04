@@ -26,7 +26,6 @@ export interface PolicyConfigSource {
   getApprovalMode: () => ApprovalMode;
   getAllowedTools: () => string[] | undefined;
   getNonInteractive: () => boolean;
-  getUserPolicyPath?: () => string | undefined;
 }
 
 const DEFAULT_POLICY_PATH_RESOLVER: PolicyPathResolver = {

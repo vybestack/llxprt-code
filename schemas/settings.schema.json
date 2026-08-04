@@ -832,12 +832,6 @@
           "default": 1000,
           "type": "number"
         },
-        "policyPath": {
-          "title": "Policy File Path",
-          "description": "Absolute path to a TOML policy file that augments the built-in policy rules.",
-          "markdownDescription": "Absolute path to a TOML policy file that augments the built-in policy rules.\n\n- Category: `Tools`\n- Requires restart: `no`",
-          "type": "string"
-        },
         "enableHooks": {
           "title": "Enable Hooks System (Experimental)",
           "description": "Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.",
