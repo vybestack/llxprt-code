@@ -35,6 +35,11 @@ export const CLAUDE_CONTENT_FEATURE_NAMES = Object.freeze([
 export type ClaudeContentFeatureName =
   (typeof CLAUDE_CONTENT_FEATURE_NAMES)[number];
 
+/** Injection point so callers can observe how often the scan actually runs. */
+export type ClaudeContentFeatureExtractor = (
+  text: string,
+) => ClaudeContentFeatures;
+
 const SPACE = 0x20;
 const TAB = 0x09;
 const LINE_FEED = 0x0a;
@@ -73,9 +78,11 @@ function isWhitespace(codePoint: number): boolean {
  * Number of UTF-16 units consumed by the code point starting at `index`.
  *
  * A high surrogate is only paired with a following low surrogate. An unpaired
- * surrogate is consumed as a single code point, which keeps the counts exactly
- * additive across any split of the input — including a split that lands
- * between the halves of a surrogate pair.
+ * surrogate is consumed as a single code point so malformed input is counted
+ * rather than throwing. Counts are therefore additive across every code-point
+ * boundary, which is every boundary a projection's segments can fall on; a
+ * split through the middle of a surrogate pair would count that pair twice,
+ * and no caller produces such a split.
  */
 function unitsAt(text: string, index: number): number {
   const unit = text.charCodeAt(index);

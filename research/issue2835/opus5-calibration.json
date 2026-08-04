@@ -29,32 +29,32 @@
     {
       "featureSet": "codePoints",
       "heldOutMapePercent": 5.798258,
-      "leaveOneCategoryOutMapePercent": 9.822688
+      "leaveOneCategoryOutMapePercent": 9.734028
     },
     {
       "featureSet": "codePoints + nonAsciiCodePoints",
       "heldOutMapePercent": 1.357521,
-      "leaveOneCategoryOutMapePercent": 11.374196
+      "leaveOneCategoryOutMapePercent": 11.426823
     },
     {
       "featureSet": "codePoints + structuralCodePoints",
       "heldOutMapePercent": 4.468851,
-      "leaveOneCategoryOutMapePercent": 12.947135
+      "leaveOneCategoryOutMapePercent": 12.978362
     },
     {
       "featureSet": "codePoints + whitespaceCodePoints",
       "heldOutMapePercent": 4.766669,
-      "leaveOneCategoryOutMapePercent": 15.091916
+      "leaveOneCategoryOutMapePercent": 15.100888
     },
     {
       "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints",
       "heldOutMapePercent": 1.321908,
-      "leaveOneCategoryOutMapePercent": 31.292388
+      "leaveOneCategoryOutMapePercent": 31.167417
     },
     {
       "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints + whitespaceCodePoints",
       "heldOutMapePercent": 0.026066,
-      "leaveOneCategoryOutMapePercent": 209.026809
+      "leaveOneCategoryOutMapePercent": 230.968717
     }
   ]
 }

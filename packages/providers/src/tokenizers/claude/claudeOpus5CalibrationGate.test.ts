@@ -77,9 +77,16 @@ async function buildHeldOutPredictions(): Promise<readonly Prediction[]> {
     if (control === undefined) {
       throw new Error(`no control for category ${observation.category}`);
     }
+    const actual =
+      observation.providerPromptTokens - control.providerPromptTokens;
+    if (actual <= 0) {
+      throw new Error(
+        `held-out observation ${observation.id} is not larger than its control`,
+      );
+    }
     predictions.push({
       category: observation.category,
-      actual: observation.providerPromptTokens - control.providerPromptTokens,
+      actual,
       calibrated:
         calibratedOf(observation.promptText) - calibratedOf(control.promptText),
       baseline:

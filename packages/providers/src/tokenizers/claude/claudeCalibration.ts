@@ -35,6 +35,10 @@ export interface ClaudeCalibrationProvenance {
   readonly corpusObservations: number;
   readonly endpointHost: string;
   readonly groundTruth: string;
+  /** Projection version the corpus requests were recorded under. */
+  readonly sourceProjectionVersion: string;
+  /** Why that version is equivalent to `projectionRevision` for this corpus. */
+  readonly projectionBridge: string;
   readonly fittedAt: string;
   readonly modelSelection: string;
 }
@@ -89,9 +93,13 @@ function isKnownFeature(name: string): name is ClaudeContentFeatureName {
  * fails immediately rather than silently shipping an unjustified estimate.
  */
 function hasUsableCoefficients(calibration: ClaudeCalibration): boolean {
+  const features = calibration.featureCoefficients.map(
+    (entry) => entry.feature,
+  );
   return (
     Number.isFinite(calibration.intercept) &&
     Number.isFinite(calibration.baseTokenCoefficient) &&
+    new Set(features).size === features.length &&
     calibration.featureCoefficients.every(
       (entry) =>
         isKnownFeature(entry.feature) && Number.isFinite(entry.coefficient),
@@ -99,10 +107,42 @@ function hasUsableCoefficients(calibration: ClaudeCalibration): boolean {
   );
 }
 
+function hasUsableHeldOutMetrics(heldOut: ClaudeCalibrationHeldOut): boolean {
+  const metrics = [
+    heldOut.mapePercent,
+    heldOut.rmse,
+    heldOut.underestimationP95Percent,
+    heldOut.baselineMapePercent,
+    heldOut.baselineRmse,
+    heldOut.baselineUnderestimationP95Percent,
+  ];
+  return (
+    Number.isInteger(heldOut.sampleCount) &&
+    heldOut.sampleCount > 0 &&
+    heldOut.baselineMapePercent > 0 &&
+    metrics.every((metric) => Number.isFinite(metric) && metric >= 0)
+  );
+}
+
+/**
+ * The improvement is recomputed from the two MAPE values rather than trusted
+ * from the asset, so a mis-stated headline number cannot activate a
+ * calibration that the underlying measurements do not support.
+ */
+export function relativeMapeImprovementPercent(
+  heldOut: ClaudeCalibrationHeldOut,
+): number {
+  return (
+    ((heldOut.baselineMapePercent - heldOut.mapePercent) /
+      heldOut.baselineMapePercent) *
+    100
+  );
+}
+
 function clearsActivationGate(heldOut: ClaudeCalibrationHeldOut): boolean {
-  if (heldOut.sampleCount <= 0) return false;
+  if (!hasUsableHeldOutMetrics(heldOut)) return false;
   if (
-    heldOut.relativeMapeImprovementPercent <
+    relativeMapeImprovementPercent(heldOut) <
     CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT
   ) {
     return false;

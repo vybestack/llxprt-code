@@ -16,6 +16,7 @@ import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import { ModelPromptEstimatorRegistry } from '../ModelPromptEstimatorRegistry.js';
 import { applyClaudeCalibration } from './claudeCalibration.js';
 import { extractClaudeContentFeatures } from './claudeContentFeatures.js';
+import { isClaude5CalibratedProvider } from './claudeCalibrationAssets.js';
 import {
   CLAUDE_5_FAMILY_SPECS,
   CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
@@ -179,22 +180,47 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
         promptSegments: ['a', 'b', 'c', 'd'],
       }),
       OPUS_SPEC,
-      load,
+      { loadModule: load },
     );
     expect(encodeCalls()).toEqual([promptText]);
   });
 
+  it.each(Object.entries(CONTENT_SHAPES))(
+    'scans %s content for features exactly once',
+    async (_name, promptText) => {
+      const scanned: string[] = [];
+      const countingExtractor = (text: string) => {
+        scanned.push(text);
+        return extractClaudeContentFeatures(text);
+      };
+      await estimateClaude5Prompt(
+        request({ promptText, promptSegments: [promptText, 'tail'] }),
+        OPUS_SPEC,
+        { extractFeatures: countingExtractor },
+      );
+      expect(scanned).toEqual([promptText]);
+    },
+  );
+
   it('derives the count from one base reading and one feature reading of the same text', async () => {
     const { load, encodeCalls } = countingLoader();
+    const scanned: string[] = [];
     const promptText = CONTENT_SHAPES.unicode;
     const result = await estimateClaude5Prompt(
       request({ promptText }),
       OPUS_SPEC,
-      load,
+      {
+        loadModule: load,
+        extractFeatures: (text: string) => {
+          scanned.push(text);
+          return extractClaudeContentFeatures(text);
+        },
+      },
     );
     const encoder = tiktoken.get_encoding('o200k_base');
     const baseTokens = encoder.encode(promptText, [], []).length;
-    expect(encodeCalls()).toHaveLength(1);
+    expect(encodeCalls()).toEqual([promptText]);
+    expect(scanned).toEqual([promptText]);
     expect(result.count).toBe(expectedCount(promptText, baseTokens));
   });
 
@@ -224,7 +250,7 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
       const result = await estimateClaude5Prompt(
         request({ promptText, promptSegments }),
         OPUS_SPEC,
-        load,
+        { loadModule: load },
       );
       expect(encodeCalls()).toEqual([promptText]);
       results.push(result);
@@ -290,7 +316,7 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
       estimateClaude5Prompt(
         request({ promptText: CONTENT_SHAPES.prose }),
         OPUS_SPEC,
-        () => Promise.reject(new Error('assets missing')),
+        { loadModule: () => Promise.reject(new Error('assets missing')) },
       ),
     );
     expect(error).toBeInstanceOf(ModelPromptEstimatorError);
@@ -321,6 +347,17 @@ describe('Claude 5 registry composition', () => {
   const registry = new ModelPromptEstimatorRegistry([
     ...CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   ]);
+
+  it('restricts the calibrated family to the providers it was measured on', () => {
+    expect(isClaude5CalibratedProvider('anthropic')).toBe(true);
+    expect(isClaude5CalibratedProvider('claudecode')).toBe(true);
+    expect(isClaude5CalibratedProvider('zai')).toBe(false);
+    expect(
+      CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS.every(
+        (registration) => registration.appliesToProvider !== undefined,
+      ),
+    ).toBe(true);
+  });
 
   it('registers Opus 5 only', () => {
     expect(
@@ -408,6 +445,45 @@ describe('Claude 5 registry composition', () => {
       );
     },
   );
+
+  it.each(['anthropic', 'claudecode', 'ANTHROPIC'])(
+    'applies the Anthropic-measured calibration for provider %s',
+    async (activeProvider) => {
+      const result = await registry.estimatePrompt(
+        request({ promptText: CONTENT_SHAPES.prose }, { activeProvider }),
+      );
+      expect(result.family).toBe(CLAUDE_OPUS_5_ESTIMATOR_FAMILY);
+      expect(result.method).toBe('calibrated');
+    },
+  );
+
+  it.each(['zai', 'openrouter', 'litellm', 'openai-compatible-proxy'])(
+    'does not give provider %s a calibration measured on another endpoint',
+    async (activeProvider) => {
+      const result = await registry.estimatePrompt(
+        request({ promptText: CONTENT_SHAPES.prose }, { activeProvider }),
+      );
+      expect(result.family).toBe('legacy-unregistered');
+      expect(result.count).toBe(4242);
+    },
+  );
+
+  it('still rejects an unsanctioned model id on a calibrated provider', async () => {
+    const error = await captureRejection(
+      registry.estimatePrompt(
+        request(
+          { promptText: CONTENT_SHAPES.prose },
+          {
+            activeProvider: 'claudecode',
+            canonicalModel: 'claude-opus-5-mini',
+          },
+        ),
+      ),
+    );
+    expect((error as ModelPromptEstimatorError).code).toBe(
+      'unresolved-model-identity',
+    );
+  });
 
   it('does not claim other Claude models', () => {
     for (const model of [

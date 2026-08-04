@@ -74,9 +74,12 @@ export const CLAUDE_OPUS_5_CALIBRATION: ClaudeCalibration = Object.freeze({
     endpointHost: 'api.anthropic.com',
     groundTruth:
       'complete provider promptTokens including cached prompt tokens',
+    sourceProjectionVersion: 'responses-fields-v1',
+    projectionBridge:
+      'responses-fields-v1 and llxprt-provider-prompt-v3 serialize identical promptText for media-free anthropic-messages bodies; proved by claudeProjectionBridge.test.ts',
     fittedAt: '2026-08-03',
     modelSelection:
-      'leave-one-category-out cross-validation across seven candidate feature sets',
+      'leave-one-category-out cross-validation over training deltas only, across seven candidate feature sets',
   }),
 });
 
@@ -93,12 +96,30 @@ export const CLAUDE_FABLE_5_WITHHELD_REASON =
   'no trustworthy claude-fable-5 provider promptTokens observations exist yet; ' +
   'the activation gate cannot be evaluated and Opus 5 coefficients must not be borrowed';
 
+/**
+ * Providers whose Claude requests this calibration was measured against.
+ *
+ * The corpus was collected against `api.anthropic.com`. Both first-party
+ * Anthropic aliases target that endpoint and therefore share its framing.
+ * An Anthropic-compatible third-party endpoint frames requests differently
+ * and must not silently receive these coefficients.
+ */
+export const CLAUDE_5_CALIBRATED_PROVIDERS: ReadonlySet<string> = new Set([
+  'anthropic',
+  'claudecode',
+]);
+
+export function isClaude5CalibratedProvider(activeProvider: string): boolean {
+  return CLAUDE_5_CALIBRATED_PROVIDERS.has(activeProvider.toLowerCase());
+}
+
 export interface Claude5FamilySpec {
   readonly family: string;
   readonly canonicalModelFamily: string;
   readonly claim: RegExp;
   readonly matches: (model: string) => boolean;
   readonly protocols: ReadonlySet<PromptEnvelopeProtocol>;
+  readonly appliesToProvider: (activeProvider: string) => boolean;
   readonly identityErrorHint: string;
   /** Absent when the model has no activatable calibration. */
   readonly calibration: ClaudeCalibration | undefined;
@@ -114,6 +135,7 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
       claim: CLAUDE_OPUS_5_CLAIM,
       matches: isSanctionedClaudeOpus5Model,
       protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
+      appliesToProvider: isClaude5CalibratedProvider,
       identityErrorHint:
         'use claude-opus-5, claude-opus-5-latest, or a claude-opus-5-YYYYMMDD snapshot with a real calendar date',
       calibration: CLAUDE_OPUS_5_CALIBRATION,
@@ -125,6 +147,7 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
       claim: CLAUDE_FABLE_5_CLAIM,
       matches: isSanctionedClaudeFable5Model,
       protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
+      appliesToProvider: isClaude5CalibratedProvider,
       identityErrorHint:
         'use claude-fable-5, claude-fable-5-latest, or a claude-fable-5-YYYYMMDD snapshot with a real calendar date',
       calibration: undefined,
@@ -134,12 +157,19 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
 
 /**
  * A spec activates only when it carries a calibration that is internally
- * consistent and cleared the held-out gate. Everything else stays on the
- * pre-existing generic path rather than borrowing another model's numbers.
+ * consistent and cleared the held-out gate.
+ *
+ * A spec that declares no calibration is a deliberate withholding and stays on
+ * the pre-existing generic path. A spec that *declares* a calibration which
+ * does not hold up is a corrupt asset, so it throws at module load rather than
+ * quietly degrading to a generic estimate that callers would read as normal.
  */
 export function isActivatedClaude5Spec(spec: Claude5FamilySpec): boolean {
-  return (
-    spec.calibration !== undefined &&
-    isActivatableClaudeCalibration(spec.calibration)
-  );
+  if (spec.calibration === undefined) return false;
+  if (!isActivatableClaudeCalibration(spec.calibration)) {
+    throw new Error(
+      `Claude calibration asset for ${spec.canonicalModelFamily} is inconsistent or does not clear the activation gate`,
+    );
+  }
+  return true;
 }

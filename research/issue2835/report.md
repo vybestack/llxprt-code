@@ -34,7 +34,22 @@ matches #2253: controls 1–5, training deltas 6–20, held-out deltas 21–25.
 Model selection is by leave-one-category-out (LOCO) cross-validation rather
 than by the held-out split alone, because with five synthetic categories a
 richer feature set can memorise the category slopes and still look excellent on
-a held-out split drawn from the same generators.
+a held-out split drawn from the same generators. **LOCO runs over the training
+deltas only.** Letting a held-out observation influence which feature set is
+chosen would make the held-out metrics that justify activation
+self-fulfilling.
+
+### Projection provenance
+
+The corpus was recorded under the `responses-fields-v1` projection, while the
+calibration is declared against finalized projection revision 3. That pairing is
+not assumed: `claudeProjectionBridge.test.ts` proves that both projections
+serialize byte-identical prompt text for every corpus observation and for
+media-free `anthropic-messages` bodies generally, and it also pins the one case
+where they differ (revision 3 replaces base64 media payloads, which the
+media-free corpus never contains). The fitting script rejects any source row
+whose projection version, protocol, endpoint, corpus version or commit does not
+match the rest of the corpus.
 
 ## Why the provider rate varies by content
 
@@ -56,20 +71,23 @@ the gap.
 
 ## Candidate feature sets
 
-| Feature set | Held-out MAPE (%) | LOCO MAPE (%) |
-| --- | --- | --- |
-| base counter only | 9.06 | 10.92 |
-| **base + codePoints (shipped)** | **5.80** | **9.82** |
-| base + codePoints + nonAsciiCodePoints | 1.36 | 11.37 |
-| base + codePoints + structuralCodePoints | 4.47 | 12.95 |
-| base + codePoints + whitespaceCodePoints | 4.77 | 15.09 |
-| base + codePoints + nonAscii + structural | 1.32 | 31.29 |
-| base + all four features | 0.03 | 209.03 |
+LOCO MAPE is the selection criterion and is computed on training deltas only.
+The held-out column is shown for context and did not participate in selection.
 
-The richer sets win on the held-out split and collapse under LOCO — the
-four-feature model is 20× worse than the base counter alone on unseen content.
-That is textbook overfitting to five synthetic categories, so the shipped
-calibration deliberately uses the two-term model with the best LOCO score.
+| Feature set | LOCO MAPE (%) — selection | Held-out MAPE (%) |
+| --- | --- | --- |
+| base counter only | 10.92 | 9.06 |
+| **base + codePoints (shipped)** | **9.73** | 5.80 |
+| base + codePoints + nonAsciiCodePoints | 11.43 | 1.36 |
+| base + codePoints + structuralCodePoints | 12.98 | 4.47 |
+| base + codePoints + whitespaceCodePoints | 15.10 | 4.77 |
+| base + codePoints + nonAscii + structural | 31.17 | 1.32 |
+| base + all four features | 230.97 | 0.03 |
+
+The richer sets look best on the held-out split and collapse under LOCO — the
+four-feature model is more than 20× worse than the base counter alone on unseen
+content. That is textbook overfitting to five synthetic categories, and it is
+exactly why selection must not read the held-out split.
 
 ## Shipped Opus 5 calibration
 
@@ -131,6 +149,15 @@ Activating Fable 5 requires its own provider-ground-truth corpus, collected
 live against `api.anthropic.com`, and a passing gate on that corpus. Until
 then, withholding is the correct outcome, not a gap to be papered over.
 
+### Provider applicability
+
+These coefficients were measured against `api.anthropic.com`. They are applied
+only when the active provider is a first-party Anthropic provider
+(`anthropic` or `claudecode`). An Anthropic-compatible third-party endpoint
+frames requests differently, so `claude-opus-5` served through such an endpoint
+is left unclaimed and keeps its existing estimation path rather than silently
+receiving another endpoint's calibration.
+
 ## Corpus coverage and limitations
 
 The corpus covers prose, code, JSON/tool-like content, CJK, Korean, Cyrillic,
@@ -146,8 +173,12 @@ are recorded honestly:
 - Five categories give five independent directions, which is why the model was
   kept to two terms.
 
-Closing these gaps requires additional live collection and is the natural next
-increment for both models.
+Closing these gaps requires additional live collection against
+`api.anthropic.com` and is the natural next increment for both models. Until
+that collection happens, acceptance criterion 4 is met for prose, code,
+JSON/tool-like content, CJK and other non-Latin scripts, and mixed Markdown,
+and is **not** met for emoji/combining marks or varying system/tool envelope
+sizes.
 
 ## Provenance
 

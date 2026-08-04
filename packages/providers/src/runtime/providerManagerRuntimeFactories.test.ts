@@ -61,4 +61,71 @@ describe('configureProviderRuntimeFactories', () => {
       tokenizerFactory?.getTokenizer('anthropic', 'claude-3-5-sonnet'),
     ).toBeDefined();
   });
+
+  /**
+   * The Claude 5 registrations are only useful if the composition root
+   * actually installs them, so this asserts through the composed factory
+   * rather than through a locally built registry.
+   */
+  it('composes the calibrated Claude Opus 5 estimator and withholds Fable 5', async () => {
+    const runtimeHandle = createIsolatedRuntimeContext({
+      runtimeId: 'provider-runtime-factory-claude5',
+      workspaceDir: process.cwd(),
+      model: 'claude-opus-5',
+      metadata: { source: 'issue2835' },
+      prepare: async () => {},
+    });
+    await activateIsolatedRuntimeContext(runtimeHandle, {
+      runtimeId: runtimeHandle.runtimeId,
+      metadata: { source: 'issue2835' },
+    });
+    const config = runtimeHandle.config as ConfigWithRuntimeFactories;
+    configureProviderRuntimeFactories(config, runtimeHandle.providerManager);
+    const tokenizerFactory = config.getTokenizerFactory();
+    expect(tokenizerFactory).toBeDefined();
+
+    expect(tokenizerFactory?.claimsModel?.('claude-opus-5')).toBe(true);
+    expect(tokenizerFactory?.getEstimatorFamily?.('claude-opus-5')).toBe(
+      'anthropic-claude-opus-5',
+    );
+    expect(tokenizerFactory?.claimsModel?.('claude-fable-5')).toBe(false);
+
+    const estimateRequest = (
+      canonicalModel: string,
+      activeProvider: string,
+    ) => ({
+      activeProvider,
+      canonicalModel,
+      protocol: 'anthropic-messages' as const,
+      wireMethod: 'messages/v1' as const,
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3' as const,
+        protocol: 'anthropic-messages' as const,
+        promptText: JSON.stringify({
+          system: 'You are helpful.',
+          messages: [{ role: 'user', content: 'Explain tokenization.' }],
+        }),
+      },
+      projectionRevision: 3,
+      legacyEstimate: () => Promise.resolve(1234),
+    });
+
+    const opus = await tokenizerFactory!.estimatePrompt(
+      estimateRequest('claude-opus-5', 'anthropic'),
+    );
+    expect(opus.family).toBe('anthropic-claude-opus-5');
+    expect(opus.method).toBe('calibrated');
+    expect(opus.count).toBeGreaterThan(0);
+
+    const fable = await tokenizerFactory!.estimatePrompt(
+      estimateRequest('claude-fable-5', 'anthropic'),
+    );
+    expect(fable.family).toBe('legacy-unregistered');
+    expect(fable.count).toBe(1234);
+
+    const proxied = await tokenizerFactory!.estimatePrompt(
+      estimateRequest('claude-opus-5', 'zai'),
+    );
+    expect(proxied.family).toBe('legacy-unregistered');
+  });
 });

@@ -21,7 +21,7 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { get_encoding } from '@dqbd/tiktoken';
 import { getCorpus, CORPUS_VERSION } from './token-divergence-corpus.js';
@@ -44,6 +44,13 @@ const FIXTURE_PATH =
   'packages/providers/src/tokenizers/claude/fixtures/claude-opus-5-provider-usage-v1.json';
 const CONTROL_MAX_ID = 5;
 const TRAIN_MAX_ID = 20;
+/**
+ * The projection version the corpus was recorded under. It serializes the same
+ * prompt-bearing keys, in the same order, as the current finalized projection
+ * for media-free anthropic-messages bodies; that equivalence is proved by
+ * `claudeProjectionBridge.test.ts` rather than assumed here.
+ */
+const EXPECTED_SOURCE_PROJECTION_VERSION = 'responses-fields-v1';
 
 interface LiveRow {
   readonly model: string;
@@ -58,6 +65,7 @@ interface LiveRow {
   readonly protocol: string;
   readonly commitSha: string;
   readonly corpusVersion: string;
+  readonly projectionVersion: string;
 }
 
 interface Observation {
@@ -84,13 +92,134 @@ interface Delta {
 const encoder = get_encoding('o200k_base');
 const heuristicTokenizer = new AnthropicTokenizer();
 
+function requirePositiveInteger(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `${label} must be a positive integer, got ${String(value)}`,
+    );
+  }
+  return value;
+}
+
+function requireNonNegative(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(
+      `${label} must be a non-negative finite number, got ${String(value)}`,
+    );
+  }
+  return value;
+}
+
+function requireString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value === '') {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  return value;
+}
+
+/**
+ * Validate one recorded observation completely before it can influence a
+ * coefficient. Bad source data must fail here, not silently become a NaN in a
+ * published metric.
+ */
+function validateLiveRow(value: unknown): LiveRow {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('live result row is not an object');
+  }
+  const row = value as Record<string, unknown>;
+  return {
+    model: requireString(row.model, 'model'),
+    corpusId: requirePositiveInteger(row.corpusId, 'corpusId'),
+    split: requireString(row.split, 'split'),
+    category: requireString(row.category, 'category'),
+    genuineTiktoken: requirePositiveInteger(
+      row.genuineTiktoken,
+      'genuineTiktoken',
+    ),
+    actualPromptTokens: requirePositiveInteger(
+      row.actualPromptTokens,
+      'actualPromptTokens',
+    ),
+    cachedTokens: requireNonNegative(row.cachedTokens, 'cachedTokens'),
+    requestChars: requirePositiveInteger(row.requestChars, 'requestChars'),
+    endpointHost: requireString(row.endpointHost, 'endpointHost'),
+    protocol: requireString(row.protocol, 'protocol'),
+    commitSha: requireString(row.commitSha, 'commitSha'),
+    corpusVersion: requireString(row.corpusVersion, 'corpusVersion'),
+    projectionVersion: requireString(
+      row.projectionVersion,
+      'projectionVersion',
+    ),
+  };
+}
+
+/**
+ * Every row must share one model, protocol, endpoint, corpus and projection
+ * version, and every category must have exactly one control. A corpus that
+ * mixes provenance cannot support a single calibration.
+ */
+function validateCorpus(rows: readonly LiveRow[]): void {
+  const first = rows[0]!;
+  for (const key of [
+    'protocol',
+    'endpointHost',
+    'commitSha',
+    'corpusVersion',
+    'projectionVersion',
+  ] as const) {
+    const distinct = new Set(rows.map((row) => row[key]));
+    if (distinct.size !== 1) {
+      throw new Error(
+        `corpus mixes ${key} values: ${[...distinct].join(', ')}`,
+      );
+    }
+  }
+  if (first.projectionVersion !== EXPECTED_SOURCE_PROJECTION_VERSION) {
+    throw new Error(
+      `corpus projection version ${first.projectionVersion} is not the bridged ${EXPECTED_SOURCE_PROJECTION_VERSION}`,
+    );
+  }
+  const ids = rows.map((row) => row.corpusId);
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('corpus contains duplicate corpusId values');
+  }
+  const controlsByCategory = new Map<string, number>();
+  for (const row of rows) {
+    if (row.corpusId > CONTROL_MAX_ID) continue;
+    if (controlsByCategory.has(row.category)) {
+      throw new Error(`category ${row.category} has more than one control`);
+    }
+    controlsByCategory.set(row.category, row.corpusId);
+  }
+  for (const row of rows) {
+    if (!controlsByCategory.has(row.category)) {
+      throw new Error(`category ${row.category} has no control observation`);
+    }
+  }
+}
+
+function parseLine(line: string, lineNumber: number): LiveRow {
+  try {
+    return validateLiveRow(JSON.parse(line));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${SOURCE_RESULTS} line ${lineNumber}: ${detail}`);
+  }
+}
+
 function readLiveRows(): readonly LiveRow[] {
-  return readFileSync(SOURCE_RESULTS, 'utf8')
-    .trim()
+  const text = readFileSync(SOURCE_RESULTS, 'utf8').trim();
+  if (text === '') throw new Error(`${SOURCE_RESULTS} is empty`);
+  const rows = text
     .split('\n')
-    .map((line) => JSON.parse(line) as LiveRow)
+    .map((line, index) => parseLine(line, index + 1))
     .filter((row) => row.model === CANONICAL_MODEL)
     .sort((a, b) => a.corpusId - b.corpusId);
+  if (rows.length === 0) {
+    throw new Error(`no ${CANONICAL_MODEL} observations in ${SOURCE_RESULTS}`);
+  }
+  validateCorpus(rows);
+  return rows;
 }
 
 /**
@@ -225,7 +354,12 @@ function fit(deltas: readonly Delta[], width: number): readonly number[] {
     }
     [normal[col], normal[pivot]] = [normal[pivot]!, normal[col]!];
     const scale = normal[col]![col]!;
-    if (scale === 0) throw new Error('singular normal equations');
+    // A near-singular pivot means the candidate features are collinear on this
+    // data, so its coefficients would be arbitrary. Reject rather than publish
+    // numbers the corpus cannot identify.
+    if (!Number.isFinite(scale) || Math.abs(scale) < 1e-9) {
+      throw new Error('singular or near-singular normal equations');
+    }
     for (let c = col; c <= width; c++) normal[col]![c]! /= scale;
     for (let row = 0; row < width; row++) {
       if (row === col) continue;
@@ -245,7 +379,23 @@ function predict(delta: Delta, coefficients: readonly number[]): number {
   );
 }
 
-function mape(errors: ReadonlyArray<{ actual: number; predicted: number }>) {
+type Error_ = { actual: number; predicted: number };
+
+function requireScorable(errors: readonly Error_[]): readonly Error_[] {
+  if (errors.length === 0) throw new Error('no observations to score');
+  for (const error of errors) {
+    if (!Number.isFinite(error.actual) || error.actual <= 0) {
+      throw new Error(`non-positive actual value: ${error.actual}`);
+    }
+    if (!Number.isFinite(error.predicted)) {
+      throw new Error(`non-finite prediction: ${error.predicted}`);
+    }
+  }
+  return errors;
+}
+
+function mape(errors: readonly Error_[]) {
+  requireScorable(errors);
   return (
     (errors.reduce(
       (sum, e) => sum + Math.abs((e.predicted - e.actual) / e.actual),
@@ -256,7 +406,8 @@ function mape(errors: ReadonlyArray<{ actual: number; predicted: number }>) {
   );
 }
 
-function rmse(errors: ReadonlyArray<{ actual: number; predicted: number }>) {
+function rmse(errors: readonly Error_[]) {
+  requireScorable(errors);
   return Math.sqrt(
     errors.reduce((sum, e) => sum + (e.predicted - e.actual) ** 2, 0) /
       errors.length,
@@ -265,6 +416,7 @@ function rmse(errors: ReadonlyArray<{ actual: number; predicted: number }>) {
 
 /** Linear-interpolated percentile over a sorted copy of `values`. */
 function percentile(values: readonly number[], fraction: number): number {
+  if (values.length === 0) throw new Error('percentile of an empty sample');
   const sorted = [...values].sort((a, b) => a - b);
   if (sorted.length === 1) return sorted[0]!;
   const position = fraction * (sorted.length - 1);
@@ -276,9 +428,8 @@ function percentile(values: readonly number[], fraction: number): number {
   );
 }
 
-function underestimationP95(
-  errors: ReadonlyArray<{ actual: number; predicted: number }>,
-): number {
+function underestimationP95(errors: readonly Error_[]): number {
+  requireScorable(errors);
   return percentile(
     errors.map((e) => Math.max(0, ((e.actual - e.predicted) / e.actual) * 100)),
     0.95,
@@ -336,22 +487,25 @@ function evaluateCandidate(
 ): CandidateResult {
   const deltas = buildDeltas(observations, featureNames);
   const width = featureNames.length + 1;
-  const trained = fit(
-    deltas.filter((d) => d.split === 'train'),
-    width,
-  );
+  const trainDeltas = deltas.filter((d) => d.split === 'train');
+  const trained = fit(trainDeltas, width);
   const heldOut = deltas
     .filter((d) => d.split === 'heldout')
     .map((d) => ({ actual: d.actual, predicted: predict(d, trained) }));
 
-  const categories = [...new Set(deltas.map((d) => d.category))].sort();
+  // Model selection sees training data only. Letting a held-out observation
+  // influence which feature set is chosen would make the held-out metrics
+  // that justify activation self-fulfilling.
+  const categories = [...new Set(trainDeltas.map((d) => d.category))].sort();
   const locoErrors: Array<{ actual: number; predicted: number }> = [];
   for (const category of categories) {
-    const foldCoefficients = fit(
-      deltas.filter((d) => d.category !== category),
-      width,
-    );
-    for (const delta of deltas.filter((d) => d.category === category)) {
+    const foldTrain = trainDeltas.filter((d) => d.category !== category);
+    const foldTest = trainDeltas.filter((d) => d.category === category);
+    if (foldTrain.length === 0 || foldTest.length === 0) {
+      throw new Error(`degenerate leave-one-category-out fold: ${category}`);
+    }
+    const foldCoefficients = fit(foldTrain, width);
+    for (const delta of foldTest) {
       locoErrors.push({
         actual: delta.actual,
         predicted: predict(delta, foldCoefficients),
@@ -408,6 +562,11 @@ function measureHeldOut(
     .map((d) => ({ actual: d.actual, predicted: d.heuristic }));
   const calibratedMape = mape(calibrated);
   const baselineMape = mape(baseline);
+  if (baselineMape <= 0) {
+    throw new Error(
+      'baseline MAPE is zero; a relative improvement over it is undefined',
+    );
+  }
   return {
     sampleCount: calibrated.length,
     mapePercent: round6(calibratedMape),
@@ -441,6 +600,7 @@ function buildFixture(
       endpointHost: rows[0]!.endpointHost,
       groundTruth:
         'complete provider promptTokens including cached prompt tokens',
+      sourceProjectionVersion: rows[0]!.projectionVersion,
       method:
         'within-category incremental; the smallest item in each category is the control',
       promptTextForm:
@@ -459,9 +619,6 @@ function buildFixture(
 
 async function main(): Promise<void> {
   const rows = readLiveRows();
-  if (rows.length === 0) {
-    throw new Error(`no ${CANONICAL_MODEL} observations in ${SOURCE_RESULTS}`);
-  }
   const observations = await buildObservations(rows);
   verifyReconstruction(rows, observations);
 
@@ -487,6 +644,7 @@ async function main(): Promise<void> {
   };
 
   mkdirSync(REPORT_DIR, { recursive: true });
+  mkdirSync(dirname(FIXTURE_PATH), { recursive: true });
   writeFileSync(
     resolve(REPORT_DIR, 'opus5-calibration.json'),
     JSON.stringify(calibration, null, 2) + '\n',

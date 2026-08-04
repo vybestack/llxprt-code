@@ -11,6 +11,7 @@
     "protocol": "anthropic-messages",
     "endpointHost": "api.anthropic.com",
     "groundTruth": "complete provider promptTokens including cached prompt tokens",
+    "sourceProjectionVersion": "responses-fields-v1",
     "method": "within-category incremental; the smallest item in each category is the control",
     "promptTextForm": "JSON-escaped, as the controlled prompt appears inside the finalized projection promptText"
   },

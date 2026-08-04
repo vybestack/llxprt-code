@@ -10,6 +10,7 @@ import { O200K_BASE_ASSET_REVISION } from '../o200kBaseCounter.js';
 import {
   applyClaudeCalibration,
   isActivatableClaudeCalibration,
+  relativeMapeImprovementPercent,
   CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT,
   type ClaudeCalibration,
 } from './claudeCalibration.js';
@@ -109,18 +110,38 @@ describe('Claude calibration activation gate', () => {
     );
   });
 
-  it('rejects a calibration whose relative improvement misses the threshold', () => {
-    expect(
-      isActivatableClaudeCalibration(
-        calibrationWith({
-          heldOut: {
-            ...CLAUDE_OPUS_5_CALIBRATION.heldOut,
-            relativeMapeImprovementPercent:
-              CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT - 0.1,
-          },
-        }),
-      ),
-    ).toBe(false);
+  it('rejects a calibration whose measured improvement misses the threshold', () => {
+    const baselineMapePercent = 40;
+    const justUnder = calibrationWith({
+      heldOut: {
+        ...CLAUDE_OPUS_5_CALIBRATION.heldOut,
+        baselineMapePercent,
+        mapePercent:
+          baselineMapePercent *
+          (1 -
+            (CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT - 0.1) /
+              100),
+      },
+    });
+    expect(relativeMapeImprovementPercent(justUnder.heldOut)).toBeCloseTo(
+      CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT - 0.1,
+      6,
+    );
+    expect(isActivatableClaudeCalibration(justUnder)).toBe(false);
+  });
+
+  it('accepts a calibration that exactly meets the threshold', () => {
+    const baselineMapePercent = 40;
+    const atThreshold = calibrationWith({
+      heldOut: {
+        ...CLAUDE_OPUS_5_CALIBRATION.heldOut,
+        baselineMapePercent,
+        mapePercent:
+          baselineMapePercent *
+          (1 - CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT / 100),
+      },
+    });
+    expect(isActivatableClaudeCalibration(atThreshold)).toBe(true);
   });
 
   it('rejects a calibration that worsens p95 underestimation', () => {
@@ -155,6 +176,73 @@ describe('Claude calibration activation gate', () => {
       ),
     ).toBe(false);
   });
+
+  it('rejects duplicate feature coefficients', () => {
+    expect(
+      isActivatableClaudeCalibration(
+        calibrationWith({
+          featureCoefficients: [
+            { feature: 'codePoints', coefficient: 0.1 },
+            { feature: 'codePoints', coefficient: 0.2 },
+          ],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    'rejects the invalid held-out metric value %p',
+    (value) => {
+      expect(
+        isActivatableClaudeCalibration(
+          calibrationWith({
+            heldOut: {
+              ...CLAUDE_OPUS_5_CALIBRATION.heldOut,
+              underestimationP95Percent: value,
+            },
+          }),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it('rejects a headline improvement that its own MAPE values do not support', () => {
+    const dishonest = calibrationWith({
+      heldOut: {
+        ...CLAUDE_OPUS_5_CALIBRATION.heldOut,
+        mapePercent: 37,
+        baselineMapePercent: 38,
+        relativeMapeImprovementPercent: 99,
+      },
+    });
+    expect(relativeMapeImprovementPercent(dishonest.heldOut)).toBeCloseTo(
+      2.6315,
+      3,
+    );
+    expect(isActivatableClaudeCalibration(dishonest)).toBe(false);
+  });
+
+  it('derives the shipped improvement from the shipped MAPE values', () => {
+    expect(
+      relativeMapeImprovementPercent(CLAUDE_OPUS_5_CALIBRATION.heldOut),
+    ).toBeCloseTo(
+      CLAUDE_OPUS_5_CALIBRATION.heldOut.relativeMapeImprovementPercent,
+      3,
+    );
+  });
+
+  it('rejects a zero baseline that would make improvement undefined', () => {
+    expect(
+      isActivatableClaudeCalibration(
+        calibrationWith({
+          heldOut: {
+            ...CLAUDE_OPUS_5_CALIBRATION.heldOut,
+            baselineMapePercent: 0,
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('Claude 5 calibration assets', () => {
@@ -180,6 +268,15 @@ describe('Claude 5 calibration assets', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('records the source projection version and why it bridges to revision 3', () => {
+    expect(
+      CLAUDE_OPUS_5_CALIBRATION.provenance.sourceProjectionVersion,
+    ).not.toBe('');
+    expect(CLAUDE_OPUS_5_CALIBRATION.provenance.projectionBridge).toContain(
+      'llxprt-provider-prompt-v3',
+    );
+  });
+
   it('freezes the calibration and its coefficient table', () => {
     expect(Object.isFrozen(CLAUDE_OPUS_5_CALIBRATION)).toBe(true);
     expect(Object.isFrozen(CLAUDE_OPUS_5_CALIBRATION.featureCoefficients)).toBe(
@@ -187,6 +284,18 @@ describe('Claude 5 calibration assets', () => {
     );
     expect(Object.isFrozen(CLAUDE_OPUS_5_CALIBRATION.heldOut)).toBe(true);
     expect(Object.isFrozen(CLAUDE_OPUS_5_CALIBRATION.provenance)).toBe(true);
+  });
+
+  it('fails loudly rather than degrading when a declared calibration is corrupt', () => {
+    const opus = CLAUDE_5_FAMILY_SPECS.find(
+      (spec) => spec.canonicalModelFamily === 'claude-opus-5',
+    )!;
+    expect(() =>
+      isActivatedClaude5Spec({
+        ...opus,
+        calibration: calibrationWith({ baseTokenCoefficient: Number.NaN }),
+      }),
+    ).toThrow(/claude-opus-5/);
   });
 
   it('activates Opus 5 and withholds Fable 5 without borrowing coefficients', () => {

@@ -20,7 +20,10 @@ import {
 } from '../o200kBaseCounter.js';
 import { applyClaudeCalibration } from './claudeCalibration.js';
 import type { ClaudeCalibration } from './claudeCalibration.js';
-import { extractClaudeContentFeatures } from './claudeContentFeatures.js';
+import {
+  extractClaudeContentFeatures,
+  type ClaudeContentFeatureExtractor,
+} from './claudeContentFeatures.js';
 import {
   CLAUDE_5_FAMILY_SPECS,
   isActivatedClaude5Spec,
@@ -96,11 +99,18 @@ function assertProjectionRevision(
   }
 }
 
+export interface Claude5EstimatorSeams {
+  readonly loadModule?: TiktokenModuleLoader;
+  readonly extractFeatures?: ClaudeContentFeatureExtractor;
+}
+
 export async function estimateClaude5Prompt(
   request: RuntimePromptEstimateRequest,
   spec: Claude5FamilySpec,
-  loadModule: TiktokenModuleLoader = loadTiktokenModule,
+  seams: Claude5EstimatorSeams = {},
 ): Promise<RuntimePromptEstimateResult> {
+  const loadModule = seams.loadModule ?? loadTiktokenModule;
+  const extractFeatures = seams.extractFeatures ?? extractClaudeContentFeatures;
   const calibration = spec.calibration;
   if (calibration === undefined) {
     throw new ModelPromptEstimatorError(
@@ -127,7 +137,7 @@ export async function estimateClaude5Prompt(
   try {
     const promptText = projection.promptText;
     const baseTokens = countO200kBaseTokens(encoder, promptText);
-    const features = extractClaudeContentFeatures(promptText);
+    const features = extractFeatures(promptText);
     return {
       count: applyClaudeCalibration(baseTokens, features, calibration),
       method: 'calibrated',
@@ -155,6 +165,7 @@ function toRegistration(
     claim: spec.claim,
     matches: spec.matches,
     protocols: spec.protocols,
+    appliesToProvider: spec.appliesToProvider,
     identityErrorHint: spec.identityErrorHint,
     estimate: (request: RuntimePromptEstimateRequest) =>
       estimateClaude5Prompt(request, spec),

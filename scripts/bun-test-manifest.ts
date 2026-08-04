@@ -619,6 +619,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/tokenizers/claude/claudeContentFeatures.test.ts',
       'src/tokenizers/claude/claudeModelIdentity.test.ts',
       'src/tokenizers/claude/claudeOpus5CalibrationGate.test.ts',
+      'src/tokenizers/claude/claudeProjectionBridge.test.ts',
       'src/tokenizers/claude/claudePromptEstimator.test.ts',
       'src/tokenizers/official/assetLoader.test.ts',
       'src/tokenizers/official/officialTokenizers.test.ts',
