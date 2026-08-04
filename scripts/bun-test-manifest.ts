@@ -207,6 +207,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/__tests__/RetryOrchestrator.basic.test.ts',
       'src/__tests__/RetryOrchestrator.failover-budget.test.ts',
       'src/__tests__/RetryOrchestrator.failover.test.ts',
+      'src/__tests__/RetryOrchestrator.forbidden.test.ts',
+      'src/__tests__/RetryOrchestrator.forbidden-composed.test.ts',
       'src/__tests__/RetryOrchestrator.getContextLimit.test.ts',
       'src/__tests__/RetryOrchestrator.integration.test.ts',
       'src/__tests__/RetryOrchestrator.invocation.test.ts',
