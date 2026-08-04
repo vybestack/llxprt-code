@@ -15,7 +15,11 @@ import { describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { discoverTestFiles, isUnitTestFile } from '../run-bun-tests.js';
+import {
+  discoverTestFiles,
+  isUnitTestFile,
+  parseCaseCounts,
+} from '../run-bun-tests.js';
 
 describe('isUnitTestFile', () => {
   it('selects every test and spec extension the workspace uses', () => {
@@ -35,6 +39,41 @@ describe('isUnitTestFile', () => {
     expect(isUnitTestFile('types.d.ts')).toBe(false);
     expect(isUnitTestFile('test-helpers.ts')).toBe(false);
     expect(isUnitTestFile('README.md')).toBe(false);
+  });
+});
+
+describe('parseCaseCounts', () => {
+  it('reads the per-file tallies from a Bun summary', () => {
+    const output = [
+      'bun test v1.3.14',
+      '(pass) something > works [0.1ms]',
+      '',
+      ' 12 pass',
+      ' 2 skip',
+      ' 1 fail',
+      ' 30 expect() calls',
+      'Ran 15 tests across 1 file. [1.2s]',
+    ].join(String.fromCharCode(10));
+
+    expect(parseCaseCounts(output)).toEqual({
+      pass: 12,
+      fail: 1,
+      skip: 2,
+      todo: 0,
+    });
+  });
+
+  it('reports zeroes when a file produced no summary', () => {
+    expect(parseCaseCounts('crashed before reporting')).toEqual({
+      pass: 0,
+      fail: 0,
+      skip: 0,
+      todo: 0,
+    });
+  });
+
+  it('does not mistake the expect() call total for a case count', () => {
+    expect(parseCaseCounts(' 30 expect() calls').pass).toBe(0);
   });
 });
 

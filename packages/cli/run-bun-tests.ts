@@ -150,6 +150,30 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Reads the per-file case tallies out of Bun's summary lines, e.g.
+ * " 12 pass", " 1 fail", " 2 skip". Reported so the migration's test-count
+ * parity with Vitest can be checked mechanically rather than by eye.
+ */
+export function parseCaseCounts(output: string): {
+  pass: number;
+  fail: number;
+  skip: number;
+  todo: number;
+} {
+  const read = (label: string): number => {
+    const pattern = ['^[ \\t]*(\\d+)[ \\t]+', label, '[ \\t]*$'].join('');
+    const match = output.match(new RegExp(pattern, 'm'));
+    return match ? Number.parseInt(match[1], 10) : 0;
+  };
+  return {
+    pass: read('pass'),
+    fail: read('fail'),
+    skip: read('skip'),
+    todo: read('todo'),
+  };
+}
+
 export function generateJUnit(results: readonly TestResult[]): string {
   const failedCount = results.filter((result) => !result.passed).length;
   const testCases = results
@@ -226,9 +250,27 @@ async function main(): Promise<void> {
     console.error(result.output.slice(-6000));
   }
 
+  const cases = results.reduce(
+    (total, result) => {
+      const counts = parseCaseCounts(result.output);
+      return {
+        pass: total.pass + counts.pass,
+        fail: total.fail + counts.fail,
+        skip: total.skip + counts.skip,
+        todo: total.todo + counts.todo,
+      };
+    },
+    { pass: 0, fail: 0, skip: 0, todo: 0 },
+  );
+
   console.log(
     `Passed ${results.length - failed.length}/${results.length} CLI test files` +
       (failed.length > 0 ? ` (${failed.length} failed)` : ''),
+  );
+  console.log(
+    `Test cases: ${cases.pass} passed, ${cases.fail} failed, ` +
+      `${cases.skip} skipped, ${cases.todo} todo ` +
+      `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
   );
 
   writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
