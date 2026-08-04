@@ -17,6 +17,7 @@ import {
 import { tmpdir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isChildSuccess, formatFailureDiagnostic } from '../run_bun_tests.js';
+import { resolveBunNativeTestFiles } from '../bun-test-manifest.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -145,6 +146,14 @@ function resolveBunBinary(): string | null {
  */
 const bunBinary = resolveBunBinary();
 
+/**
+ * How many files the `core` root selects, read from the manifest so these
+ * subprocess assertions track it rather than restating a literal.
+ */
+function coreFileCount(): number {
+  return resolveBunNativeTestFiles(repoRoot, 'core').length;
+}
+
 describe('production Bun native test runner', () => {
   it.skipIf(!bunBinary)(
     'executes the real runner in dry-run mode from a different cwd',
@@ -165,7 +174,11 @@ describe('production Bun native test runner', () => {
       );
 
       expect(child.status, child.stderr).toBe(0);
-      expect(child.stdout).toContain('Dry run: 1 files would be executed:');
+      // Derived from the manifest: hardcoding the count breaks whenever a file
+      // is added to the core root, which says nothing about the runner.
+      expect(child.stdout).toContain(
+        `Dry run: ${coreFileCount()} files would be executed:`,
+      );
       expect(child.stdout).toContain('packages/core/src/utils/errors.test.ts');
     },
   );
@@ -190,8 +203,9 @@ describe('production Bun native test runner', () => {
       );
 
       expect(child.status, child.stderr).toBe(0);
+      const count = coreFileCount();
       expect(child.stdout).toContain(
-        'Passed 1/1 isolated native Bun test files',
+        `Passed ${count}/${count} isolated native Bun test files`,
       );
     },
   );
