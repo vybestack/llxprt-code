@@ -291,7 +291,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -445,12 +444,13 @@ describe('useAgentStream', () => {
       // Setup mock to return a stream with ContextWindowWillOverflow event
       mockSendMessageStream.mockReturnValue(
         (async function* () {
+          // The dispatcher consumes 'context-warning' with the counts on the
+          // event itself. ServerEventType.ContextWindowWillOverflow is
+          // 'context_window_will_overflow', which nothing handles.
           yield {
-            type: ServerEventType.ContextWindowWillOverflow,
-            value: {
-              estimatedRequestTokenCount: 100,
-              remainingTokenCount: 50,
-            },
+            type: 'context-warning',
+            estimatedRequestTokenCount: 100,
+            remainingTokenCount: 50,
           };
         })(),
       );
@@ -468,7 +468,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           onCancelSubmitSpy,
           () => {},
