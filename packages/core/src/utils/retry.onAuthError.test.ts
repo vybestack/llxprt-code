@@ -12,7 +12,7 @@
  * 3. Passes errorStatus to the callback
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { retryWithBackoff, type HttpError } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 

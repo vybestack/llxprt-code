@@ -25,7 +25,7 @@
  * changes, update this mirror accordingly.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   retryWithBackoff,
   isRetryableError,
