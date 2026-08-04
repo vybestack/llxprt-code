@@ -864,6 +864,14 @@ jobs:
           bun install
           git checkout -- bun.lock
 
+      - name: 'Build project'
+        # The script harness is part of the complete suite, and several of its
+        # tests execute the built CLI (start.ts orchestration, the OCR canary's
+        # spawned monitor). Those ran in the built `scripts` shard before this
+        # job covered them, so it needs the same build.
+        run: |-
+          npm run build
+
       - name: 'Run the complete Bun-native suite (manifest-based)'
         run: |-
           bun scripts/run_bun_tests.ts --timeout 30000

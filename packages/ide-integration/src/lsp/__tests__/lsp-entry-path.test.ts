@@ -3,9 +3,28 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const hasImportMetaResolve =
-  typeof (import.meta as unknown as { resolve?: (s: string) => string })
-    .resolve === 'function';
+/**
+ * The case below asserts what `import.meta.resolve` reports *when the package
+ * is installed*. Some environments (e.g. a dependency-only CI install that
+ * never links the workspace) expose the API but cannot resolve the specifier,
+ * so the precondition has to cover both halves rather than just the API.
+ */
+const hasImportMetaResolve = (() => {
+  const resolver = (
+    import.meta as unknown as { resolve?: (specifier: string) => string }
+  ).resolve;
+  if (typeof resolver !== 'function') {
+    return false;
+  }
+  try {
+    (
+      import.meta as unknown as { resolve: (specifier: string) => string }
+    ).resolve('@vybestack/llxprt-code-lsp');
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 describe('LSP entry path resolution', () => {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
