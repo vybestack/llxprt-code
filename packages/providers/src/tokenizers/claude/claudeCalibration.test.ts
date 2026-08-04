@@ -17,7 +17,7 @@ import {
 import { extractClaudeContentFeatures } from './claudeContentFeatures.js';
 import {
   CLAUDE_5_FAMILY_SPECS,
-  CLAUDE_FABLE_5_WITHHELD_REASON,
+  CLAUDE_FABLE_5_CALIBRATION,
   CLAUDE_OPUS_5_CALIBRATION,
   isActivatedClaude5Spec,
 } from './claudeCalibrationAssets.js';
@@ -75,7 +75,7 @@ describe('Claude calibration application', () => {
     const features = extractClaudeContentFeatures('short');
     expect(
       applyClaudeCalibration(
-        1,
+        0,
         features,
         calibrationWith({
           intercept: -1000,
@@ -84,6 +84,39 @@ describe('Claude calibration application', () => {
         }),
       ),
     ).toBe(0);
+  });
+
+  /**
+   * The fitted intercept is negative, which is correct inside the measured
+   * request-size range but extrapolates absurdly below it. Every observation
+   * in both corpora had a provider count above its base-counter reading, so
+   * that reading is the floor.
+   */
+  it('never falls below the base-counter reading', () => {
+    const features = extractClaudeContentFeatures('a short prompt');
+    const tiny = calibrationWith({
+      intercept: -1000,
+      baseTokenCoefficient: 1,
+      featureCoefficients: [],
+    });
+    expect(applyClaudeCalibration(50, features, tiny)).toBe(50);
+    expect(
+      applyClaudeCalibration(50, features, CLAUDE_OPUS_5_CALIBRATION),
+    ).toBe(50);
+  });
+
+  it('leaves the floor inactive for realistic request sizes', () => {
+    // English prose runs about four code points per o200k token, which is the
+    // regime both corpora were measured in.
+    const promptText = 'The quick brown fox jumps over the lazy dog. '.repeat(
+      1500,
+    );
+    const features = extractClaudeContentFeatures(promptText);
+    const baseTokens = Math.round(features.codePoints / 4);
+    expect(baseTokens).toBeGreaterThan(15000);
+    expect(
+      applyClaudeCalibration(baseTokens, features, CLAUDE_OPUS_5_CALIBRATION),
+    ).toBeGreaterThan(baseTokens);
   });
 
   it('grows monotonically with content', () => {
@@ -268,13 +301,15 @@ describe('Claude 5 calibration assets', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('records the source projection version and why it bridges to revision 3', () => {
-    expect(
-      CLAUDE_OPUS_5_CALIBRATION.provenance.sourceProjectionVersion,
-    ).not.toBe('');
-    expect(CLAUDE_OPUS_5_CALIBRATION.provenance.projectionBridge).toContain(
-      'llxprt-provider-prompt-v3',
-    );
+  it('records the base-counter range each calibration was measured over', () => {
+    for (const calibration of [
+      CLAUDE_OPUS_5_CALIBRATION,
+      CLAUDE_FABLE_5_CALIBRATION,
+    ]) {
+      const [low, high] = calibration.provenance.validatedBaseTokenRange;
+      expect(low).toBeGreaterThan(0);
+      expect(high).toBeGreaterThan(low);
+    }
   });
 
   it('freezes the calibration and its coefficient table', () => {
@@ -298,19 +333,43 @@ describe('Claude 5 calibration assets', () => {
     ).toThrow(/claude-opus-5/);
   });
 
-  it('activates Opus 5 and withholds Fable 5 without borrowing coefficients', () => {
+  it('activates each model from its own calibration', () => {
+    for (const family of ['claude-opus-5', 'claude-fable-5']) {
+      const spec = CLAUDE_5_FAMILY_SPECS.find(
+        (candidate) => candidate.canonicalModelFamily === family,
+      );
+      expect(spec).toBeDefined();
+      expect(isActivatedClaude5Spec(spec!)).toBe(true);
+      expect(spec!.calibration?.canonicalModelFamily).toBe(family);
+      expect(spec!.withheldReason).toBeUndefined();
+    }
+  });
+
+  it('withholds a model whose calibration is absent rather than borrowing one', () => {
     const opus = CLAUDE_5_FAMILY_SPECS.find(
       (spec) => spec.canonicalModelFamily === 'claude-opus-5',
+    )!;
+    const withheld = {
+      ...opus,
+      canonicalModelFamily: 'claude-hypothetical-6',
+      calibration: undefined,
+      withheldReason: 'no trustworthy observations for this model yet',
+    };
+    expect(isActivatedClaude5Spec(withheld)).toBe(false);
+  });
+
+  it('keeps the two models coefficients and evidence separate', () => {
+    expect(CLAUDE_OPUS_5_CALIBRATION.canonicalModelFamily).toBe(
+      'claude-opus-5',
     );
-    const fable = CLAUDE_5_FAMILY_SPECS.find(
-      (spec) => spec.canonicalModelFamily === 'claude-fable-5',
+    expect(CLAUDE_FABLE_5_CALIBRATION.canonicalModelFamily).toBe(
+      'claude-fable-5',
     );
-    expect(opus).toBeDefined();
-    expect(fable).toBeDefined();
-    expect(isActivatedClaude5Spec(opus!)).toBe(true);
-    expect(isActivatedClaude5Spec(fable!)).toBe(false);
-    expect(fable!.calibration).toBeUndefined();
-    expect(fable!.withheldReason).toBe(CLAUDE_FABLE_5_WITHHELD_REASON);
-    expect(opus!.withheldReason).toBeUndefined();
+    expect(CLAUDE_OPUS_5_CALIBRATION.provenance.corpusId).not.toBe(
+      CLAUDE_FABLE_5_CALIBRATION.provenance.corpusId,
+    );
+    expect(CLAUDE_OPUS_5_CALIBRATION.baseTokenCoefficient).not.toBe(
+      CLAUDE_FABLE_5_CALIBRATION.baseTokenCoefficient,
+    );
   });
 });

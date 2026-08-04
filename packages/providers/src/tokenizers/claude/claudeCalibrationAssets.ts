@@ -27,15 +27,15 @@ import {
  * presented as, and is not, the Claude tokenizer, and no pre-4.7 Claude
  * vocabulary is used anywhere in this family.
  *
- * Coefficients are produced by `scripts/claude-estimator-calibration.ts` from
- * live provider `promptTokens` and are only valid for the recorded model,
- * protocol, base counter asset and projection revision.
+ * Each model is fitted and gated entirely within its own live corpus by
+ * `scripts/claude-estimator-calibration.ts`. The two models arrive at very
+ * similar coefficients, which is a finding about Anthropic's tokenization —
+ * not a shared asset. Neither model's numbers are derived from, defaulted to,
+ * or validated against the other's.
  */
 
 export const CLAUDE_5_ANTHROPIC_PROTOCOLS: ReadonlySet<PromptEnvelopeProtocol> =
   new Set<PromptEnvelopeProtocol>(['anthropic-messages']);
-
-const OPUS_5_CALIBRATION_ID = 'claude-opus-5-o200k-calibrated-2026-08-03-v1';
 
 export const CLAUDE_OPUS_5_ESTIMATOR_FAMILY = 'anthropic-claude-opus-5';
 export const CLAUDE_FABLE_5_ESTIMATOR_FAMILY = 'anthropic-claude-fable-5';
@@ -43,66 +43,88 @@ export const CLAUDE_FABLE_5_ESTIMATOR_FAMILY = 'anthropic-claude-fable-5';
 export const CLAUDE_OPUS_5_CALIBRATION: ClaudeCalibration = Object.freeze({
   canonicalModelFamily: 'claude-opus-5',
   protocol: 'anthropic-messages',
-  estimatorVersion: OPUS_5_CALIBRATION_ID,
+  estimatorVersion: 'claude-opus-5-o200k-calibrated-2026-08-04-v1',
   baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
   projectionRevision: PROJECTION_REVISION,
-  /**
-   * Zero. The corpus identifies a marginal content rate through
-   * within-category deltas, in which any per-request constant cancels, so no
-   * framing constant is estimable from it. Publishing an unidentifiable
-   * intercept would be a fabricated number.
-   */
-  intercept: 0,
-  baseTokenCoefficient: 0.944299,
+  intercept: -1649.098251,
+  baseTokenCoefficient: 0.657456,
   featureCoefficients: Object.freeze([
-    Object.freeze({ feature: 'codePoints', coefficient: 0.153947 } as const),
+    Object.freeze({ feature: 'codePoints', coefficient: 0.231236 } as const),
+    Object.freeze({
+      feature: 'nonAsciiCodePoints',
+      coefficient: 0.251193,
+    } as const),
   ]),
   heldOut: Object.freeze({
-    sampleCount: 5,
-    mapePercent: 5.820461,
-    rmse: 38.084117,
-    underestimationP95Percent: 17.266247,
+    sampleCount: 13,
+    mapePercent: 0.385796,
+    rmse: 124.892877,
+    underestimationP95Percent: 0.891037,
     baselineEstimator: 'AnthropicTokenizer character heuristic',
-    baselineMapePercent: 38.250059,
-    baselineRmse: 271.463441,
-    baselineUnderestimationP95Percent: 58.196217,
-    relativeMapeImprovementPercent: 84.783132,
+    baselineMapePercent: 33.542347,
+    baselineRmse: 8854.35996,
+    baselineUnderestimationP95Percent: 34.081849,
+    relativeMapeImprovementPercent: 98.849823,
   }),
   provenance: Object.freeze({
     corpusId: 'claude-opus-5-provider-usage-v1',
-    corpusObservations: 25,
+    corpusObservations: 42,
     endpointHost: 'api.anthropic.com',
     groundTruth:
       'complete provider promptTokens including cached prompt tokens',
-    sourceProjectionVersion: 'responses-fields-v1',
-    projectionBridge:
-      'responses-fields-v1 and llxprt-provider-prompt-v3 serialize identical promptText for media-free anthropic-messages bodies; proved by claudeProjectionBridge.test.ts',
-    fittedAt: '2026-08-03',
+    fittedAt: '2026-08-04',
     modelSelection:
-      'leave-one-category-out cross-validation over training deltas only, across seven candidate feature sets',
+      'leave-one-category-out cross-validation over training rows only, across seven candidate feature sets',
+    validatedBaseTokenRange: Object.freeze([15756, 20594] as const),
+  }),
+});
+
+export const CLAUDE_FABLE_5_CALIBRATION: ClaudeCalibration = Object.freeze({
+  canonicalModelFamily: 'claude-fable-5',
+  protocol: 'anthropic-messages',
+  estimatorVersion: 'claude-fable-5-o200k-calibrated-2026-08-04-v1',
+  baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
+  projectionRevision: PROJECTION_REVISION,
+  intercept: -1658.009406,
+  baseTokenCoefficient: 0.655462,
+  featureCoefficients: Object.freeze([
+    Object.freeze({ feature: 'codePoints', coefficient: 0.231865 } as const),
+    Object.freeze({
+      feature: 'nonAsciiCodePoints',
+      coefficient: 0.251442,
+    } as const),
+  ]),
+  heldOut: Object.freeze({
+    sampleCount: 13,
+    mapePercent: 0.389093,
+    rmse: 125.934049,
+    underestimationP95Percent: 0.895654,
+    baselineEstimator: 'AnthropicTokenizer character heuristic',
+    baselineMapePercent: 33.545883,
+    baselineRmse: 8856.10434,
+    baselineUnderestimationP95Percent: 34.088026,
+    relativeMapeImprovementPercent: 98.840118,
+  }),
+  provenance: Object.freeze({
+    corpusId: 'claude-fable-5-provider-usage-v1',
+    corpusObservations: 42,
+    endpointHost: 'api.anthropic.com',
+    groundTruth:
+      'complete provider promptTokens including cached prompt tokens',
+    fittedAt: '2026-08-04',
+    modelSelection:
+      'leave-one-category-out cross-validation over training rows only, across seven candidate feature sets',
+    validatedBaseTokenRange: Object.freeze([15756, 20594] as const),
   }),
 });
 
 /**
- * Why Claude Fable 5 has no calibrated registration.
+ * Providers whose Claude requests these calibrations were measured against.
  *
- * Fable 5 is a separate model with its own framing and tokenization rate.
- * Reusing Opus 5 coefficients for it would present an unmeasured guess as a
- * calibrated result, so Fable 5 stays on the existing generic path until it
- * has its own provider-ground-truth corpus and clears the activation gate on
- * that corpus.
- */
-export const CLAUDE_FABLE_5_WITHHELD_REASON =
-  'no trustworthy claude-fable-5 provider promptTokens observations exist yet; ' +
-  'the activation gate cannot be evaluated and Opus 5 coefficients must not be borrowed';
-
-/**
- * Providers whose Claude requests this calibration was measured against.
- *
- * The corpus was collected against `api.anthropic.com`. Both first-party
- * Anthropic aliases target that endpoint and therefore share its framing.
- * An Anthropic-compatible third-party endpoint frames requests differently
- * and must not silently receive these coefficients.
+ * Both corpora were collected against `api.anthropic.com`. Both first-party
+ * Anthropic aliases target that endpoint and therefore share its framing. An
+ * Anthropic-compatible third-party endpoint frames requests differently and
+ * must not silently receive these coefficients.
  */
 export const CLAUDE_5_CALIBRATED_PROVIDERS: ReadonlySet<string> = new Set([
   'anthropic',
@@ -150,19 +172,20 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
       appliesToProvider: isClaude5CalibratedProvider,
       identityErrorHint:
         'use claude-fable-5, claude-fable-5-latest, or a claude-fable-5-YYYYMMDD snapshot with a real calendar date',
-      calibration: undefined,
-      withheldReason: CLAUDE_FABLE_5_WITHHELD_REASON,
+      calibration: CLAUDE_FABLE_5_CALIBRATION,
+      withheldReason: undefined,
     }),
   ]);
 
 /**
  * A spec activates only when it carries a calibration that is internally
- * consistent and cleared the held-out gate.
+ * consistent and cleared the held-out gate on its own corpus.
  *
  * A spec that declares no calibration is a deliberate withholding and stays on
- * the pre-existing generic path. A spec that *declares* a calibration which
- * does not hold up is a corrupt asset, so it throws at module load rather than
- * quietly degrading to a generic estimate that callers would read as normal.
+ * the pre-existing generic path rather than borrowing another model's numbers.
+ * A spec that *declares* a calibration which does not hold up is a corrupt
+ * asset, so it throws at module load rather than quietly degrading to a
+ * generic estimate that callers would read as normal.
  */
 export function isActivatedClaude5Spec(spec: Claude5FamilySpec): boolean {
   if (spec.calibration === undefined) return false;

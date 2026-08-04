@@ -55,6 +55,8 @@
     "scripts/telemetry.ts",
     "scripts/test.ts",
     "scripts/claude-estimator-calibration.ts",
+    "scripts/claude-estimator-collect.ts",
+    "scripts/claude-estimator-corpus.ts",
     "scripts/token-divergence.ts",
     "scripts/token-divergence-collect.ts",
     "scripts/token-divergence-report.ts",

@@ -67,7 +67,7 @@ describe('configureProviderRuntimeFactories', () => {
    * actually installs them, so this asserts through the composed factory
    * rather than through a locally built registry.
    */
-  it('composes the calibrated Claude Opus 5 estimator and withholds Fable 5', async () => {
+  it('composes a separately calibrated estimator for each Claude 5 model', async () => {
     const runtimeHandle = createIsolatedRuntimeContext({
       runtimeId: 'provider-runtime-factory-claude5',
       workspaceDir: process.cwd(),
@@ -88,7 +88,10 @@ describe('configureProviderRuntimeFactories', () => {
     expect(tokenizerFactory?.getEstimatorFamily?.('claude-opus-5')).toBe(
       'anthropic-claude-opus-5',
     );
-    expect(tokenizerFactory?.claimsModel?.('claude-fable-5')).toBe(false);
+    expect(tokenizerFactory?.claimsModel?.('claude-fable-5')).toBe(true);
+    expect(tokenizerFactory?.getEstimatorFamily?.('claude-fable-5')).toBe(
+      'anthropic-claude-fable-5',
+    );
 
     const estimateRequest = (
       canonicalModel: string,
@@ -120,8 +123,9 @@ describe('configureProviderRuntimeFactories', () => {
     const fable = await tokenizerFactory!.estimatePrompt(
       estimateRequest('claude-fable-5', 'anthropic'),
     );
-    expect(fable.family).toBe('legacy-unregistered');
-    expect(fable.count).toBe(1234);
+    expect(fable.family).toBe('anthropic-claude-fable-5');
+    expect(fable.method).toBe('calibrated');
+    expect(fable.estimatorVersion).not.toBe(opus.estimatorVersion);
 
     const proxied = await tokenizerFactory!.estimatePrompt(
       estimateRequest('claude-opus-5', 'zai'),

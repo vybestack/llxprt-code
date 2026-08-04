@@ -19,6 +19,7 @@ import { extractClaudeContentFeatures } from './claudeContentFeatures.js';
 import { isClaude5CalibratedProvider } from './claudeCalibrationAssets.js';
 import {
   CLAUDE_5_FAMILY_SPECS,
+  CLAUDE_FABLE_5_CALIBRATION,
   CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
   CLAUDE_OPUS_5_CALIBRATION,
   CLAUDE_OPUS_5_ESTIMATOR_FAMILY,
@@ -323,7 +324,39 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
     expect((error as ModelPromptEstimatorError).code).toBe('asset-unavailable');
   });
 
+  it('estimates Fable 5 from its own calibration, not Opus 5 coefficients', async () => {
+    const promptText = CONTENT_SHAPES.prose;
+    const fable = await estimateClaude5Prompt(
+      request({ promptText }, { canonicalModel: 'claude-fable-5' }),
+      FABLE_SPEC,
+    );
+    expect(fable.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+    expect(fable.method).toBe('calibrated');
+    expect(fable.estimatorVersion).toBe(
+      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
+    );
+    const encoder = tiktoken.get_encoding('o200k_base');
+    const baseTokens = encoder.encode(promptText, [], []).length;
+    expect(fable.count).toBe(
+      applyClaudeCalibration(
+        baseTokens,
+        extractClaudeContentFeatures(promptText),
+        CLAUDE_FABLE_5_CALIBRATION,
+      ),
+    );
+  });
+
+  /**
+   * A spec that declares no calibration must not silently fall through to a
+   * neighbouring model's coefficients. Both shipped models cleared their own
+   * gate, so this is exercised through a constructed spec.
+   */
   it('refuses to estimate from a spec with no calibration', async () => {
+    const withheld = {
+      ...FABLE_SPEC,
+      calibration: undefined,
+      withheldReason: 'no trustworthy observations for this model yet',
+    };
     const error = await captureRejection(
       estimateClaude5Prompt(
         request(
@@ -332,13 +365,13 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
             canonicalModel: 'claude-fable-5',
           },
         ),
-        FABLE_SPEC,
+        withheld,
       ),
     );
     expect(error).toBeInstanceOf(ModelPromptEstimatorError);
     expect((error as ModelPromptEstimatorError).code).toBe('asset-unavailable');
     expect((error as ModelPromptEstimatorError).remediation).toBe(
-      FABLE_SPEC.withheldReason!,
+      withheld.withheldReason,
     );
   });
 });
@@ -359,15 +392,21 @@ describe('Claude 5 registry composition', () => {
     ).toBe(true);
   });
 
-  it('registers Opus 5 only', () => {
+  it('registers exactly the models whose calibration cleared its own gate', () => {
     expect(
-      CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS.map((r) => r.family),
-    ).toEqual([CLAUDE_OPUS_5_ESTIMATOR_FAMILY]);
-    expect(
-      CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS.some(
-        (r) => r.family === CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
-      ),
-    ).toBe(false);
+      CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS.map((r) => r.family).sort(),
+    ).toEqual(
+      [CLAUDE_FABLE_5_ESTIMATOR_FAMILY, CLAUDE_OPUS_5_ESTIMATOR_FAMILY].sort(),
+    );
+  });
+
+  it('excludes a model whose calibration is withheld', () => {
+    const registrations = CLAUDE_5_FAMILY_SPECS.filter(
+      (spec) => spec.canonicalModelFamily !== 'claude-fable-5',
+    );
+    expect(registrations.map((spec) => spec.canonicalModelFamily)).toEqual([
+      'claude-opus-5',
+    ]);
   });
 
   it('claims sanctioned Opus 5 aliases and snapshots', () => {
@@ -383,21 +422,20 @@ describe('Claude 5 registry composition', () => {
     }
   });
 
-  it('leaves Fable 5 unclaimed so it keeps its existing path', async () => {
-    expect(registry.claimsModel('claude-fable-5')).toBe(false);
-    const result = await registry.estimatePrompt(
-      request(
-        { promptText: CONTENT_SHAPES.prose },
-        {
-          canonicalModel: 'claude-fable-5',
-        },
-      ),
-    );
-    expect(result.family).toBe('legacy-unregistered');
-    expect(result.count).toBe(4242);
+  it('claims sanctioned Fable 5 aliases and snapshots', () => {
+    for (const model of [
+      'claude-fable-5',
+      'claude-fable-5-latest',
+      'claude-fable-5-20260731',
+    ]) {
+      expect(registry.claimsModel(model)).toBe(true);
+      expect(registry.getEstimatorFamily(model)).toBe(
+        CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
+      );
+    }
   });
 
-  it('does not apply Opus 5 coefficients to Fable 5', async () => {
+  it('routes each model to its own calibration, never the other model', async () => {
     const opus = await registry.estimatePrompt(
       request({ promptText: CONTENT_SHAPES.prose }),
     );
@@ -409,9 +447,28 @@ describe('Claude 5 registry composition', () => {
         },
       ),
     );
-    expect(fable.family).not.toBe(opus.family);
+    expect(opus.family).toBe(CLAUDE_OPUS_5_ESTIMATOR_FAMILY);
+    expect(fable.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
     expect(fable.estimatorVersion).not.toBe(opus.estimatorVersion);
-    expect(fable.count).not.toBe(opus.count);
+    expect(opus.estimatorVersion).toContain('claude-opus-5');
+    expect(fable.estimatorVersion).toContain('claude-fable-5');
+  });
+
+  it('rejects a Fable 5 lookalike with an actionable identity error', async () => {
+    const error = await captureRejection(
+      registry.estimatePrompt(
+        request(
+          { promptText: CONTENT_SHAPES.prose },
+          {
+            canonicalModel: 'claude-fable-5-mini',
+          },
+        ),
+      ),
+    );
+    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
+    expect((error as ModelPromptEstimatorError).code).toBe(
+      'unresolved-model-identity',
+    );
   });
 
   it('rejects an Opus 5 lookalike with an actionable identity error', async () => {

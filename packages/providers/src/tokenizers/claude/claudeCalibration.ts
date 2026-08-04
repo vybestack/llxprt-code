@@ -35,12 +35,10 @@ export interface ClaudeCalibrationProvenance {
   readonly corpusObservations: number;
   readonly endpointHost: string;
   readonly groundTruth: string;
-  /** Projection version the corpus requests were recorded under. */
-  readonly sourceProjectionVersion: string;
-  /** Why that version is equivalent to `projectionRevision` for this corpus. */
-  readonly projectionBridge: string;
   readonly fittedAt: string;
   readonly modelSelection: string;
+  /** Base-counter range the calibration was actually measured over. */
+  readonly validatedBaseTokenRange: readonly [number, number];
 }
 
 export interface ClaudeFeatureCoefficient {
@@ -168,6 +166,13 @@ export function isActivatableClaudeCalibration(
  * Pure, deterministic and allocation-free. An empty prompt yields exactly 0:
  * the intercept models per-request framing that only exists when there is a
  * request, so it is not added to nothing.
+ *
+ * The result is floored at the base-counter reading. The fitted intercept is
+ * negative, which is correct inside the measured request-size range but would
+ * extrapolate to an absurd count for a request far smaller than anything
+ * observed. Every observation in every corpus had a provider count above its
+ * base-counter reading, so that reading is a measured lower bound rather than
+ * an invented guard, and inside the validated range the floor never binds.
  */
 export function applyClaudeCalibration(
   baseTokens: number,
@@ -180,5 +185,6 @@ export function applyClaudeCalibration(
   for (const entry of calibration.featureCoefficients) {
     total += entry.coefficient * features[entry.feature];
   }
-  return total <= 0 ? 0 : Math.round(total);
+  const rounded = total <= 0 ? 0 : Math.round(total);
+  return rounded < baseTokens ? baseTokens : rounded;
 }

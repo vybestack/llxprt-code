@@ -7,15 +7,19 @@
 /**
  * Issue #2835 — offline calibration fit for the Claude 5 prompt estimators.
  *
- * Deterministic and offline: it re-derives the controlled prompts from the
- * committed #2253 corpus generator, re-counts them with the pinned local
- * `o200k_base` base counter, and fits a correction against the recorded live
- * provider `promptTokens`. It performs no network access.
+ * Deterministic and offline. It reads the sanitized live observations produced
+ * by `claude-estimator-collect.ts` and fits one calibration per model against
+ * the complete provider `promptTokens`.
  *
- * Analysis is within-category incremental. Each category's smallest item is
- * the control, and every larger item contributes the delta from that control.
- * Subtracting the control cancels the fixed system/tool envelope, which is the
- * only way this corpus can identify a marginal content rate at all.
+ * Each model is fitted, selected and gated entirely within its own
+ * observations. No coefficient, metric or gate decision crosses between
+ * models, so a model can only activate on evidence collected for that model.
+ *
+ * Because the corpus varies the system/tool envelope, whole requests can be
+ * modelled directly and a per-request framing constant is identifiable. Model
+ * selection uses leave-one-category-out cross-validation over training rows
+ * only, so the held-out rows that justify activation never influence which
+ * feature set is chosen.
  *
  * Usage: bun scripts/claude-estimator-calibration.ts
  */
@@ -23,88 +27,49 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { get_encoding } from '@dqbd/tiktoken';
-import { getCorpus, CORPUS_VERSION } from './token-divergence-corpus.js';
-import { AnthropicTokenizer } from '../packages/providers/src/tokenizers/AnthropicTokenizer.js';
 import {
   applyClaudeCalibration,
   type ClaudeCalibrationCoefficients,
 } from '../packages/providers/src/tokenizers/claude/claudeCalibration.js';
 import {
-  extractClaudeContentFeatures,
   CLAUDE_CONTENT_FEATURE_NAMES,
   type ClaudeContentFeatureName,
   type ClaudeContentFeatures,
 } from '../packages/providers/src/tokenizers/claude/claudeContentFeatures.js';
+import { CLAUDE_CORPUS_VERSION } from './claude-estimator-corpus.js';
 
-const CANONICAL_MODEL = 'claude-opus-5';
-const SOURCE_RESULTS = 'research/issue2253/live-results.jsonl';
+const SOURCE_RESULTS = 'research/issue2835/claude5-live-results.jsonl';
 const REPORT_DIR = 'research/issue2835';
-const FIXTURE_PATH =
-  'packages/providers/src/tokenizers/claude/fixtures/claude-opus-5-provider-usage-v1.json';
-const CONTROL_MAX_ID = 5;
-const TRAIN_MAX_ID = 20;
-/**
- * The projection version the corpus was recorded under. It serializes the same
- * prompt-bearing keys, in the same order, as the current finalized projection
- * for media-free anthropic-messages bodies; that equivalence is proved by
- * `claudeProjectionBridge.test.ts` rather than assumed here.
- */
-const EXPECTED_SOURCE_PROJECTION_VERSION = 'responses-fields-v1';
+const FIXTURE_DIR = 'packages/providers/src/tokenizers/claude/fixtures';
+const EXPECTED_PROJECTION_REVISION = 3;
 
 interface LiveRow {
+  readonly target: string;
   readonly model: string;
-  readonly corpusId: number;
-  readonly split: string;
-  readonly category: string;
-  readonly genuineTiktoken: number;
-  readonly actualPromptTokens: number;
-  readonly cachedTokens: number;
-  readonly requestChars: number;
+  readonly activeProvider: string;
   readonly endpointHost: string;
   readonly protocol: string;
-  readonly commitSha: string;
-  readonly corpusVersion: string;
-  readonly projectionVersion: string;
-}
-
-interface Observation {
-  readonly id: number;
+  readonly corpusId: number;
+  readonly split: 'train' | 'heldout';
   readonly category: string;
-  readonly split: 'control' | 'train' | 'heldout';
-  readonly promptText: string;
-  readonly baseTokens: number;
-  readonly features: ClaudeContentFeatures;
+  readonly envelope: string;
+  readonly projectionRevision: number;
+  readonly projectionBaseTokens: number;
+  readonly codePoints: number;
+  readonly nonAsciiCodePoints: number;
+  readonly structuralCodePoints: number;
+  readonly whitespaceCodePoints: number;
   readonly heuristicTokens: number;
   readonly providerPromptTokens: number;
   readonly cachedPromptTokens: number;
+  readonly corpusVersion: string;
+  readonly commitSha: string;
 }
 
-interface Delta {
-  readonly id: number;
-  readonly category: string;
-  readonly split: 'train' | 'heldout';
-  readonly design: readonly number[];
-  readonly actual: number;
-  readonly heuristic: number;
-}
-
-const encoder = get_encoding('o200k_base');
-const heuristicTokenizer = new AnthropicTokenizer();
-
-function requirePositiveInteger(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+function requireInteger(value: unknown, label: string, min: number): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min) {
     throw new Error(
-      `${label} must be a positive integer, got ${String(value)}`,
-    );
-  }
-  return value;
-}
-
-function requireNonNegative(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new Error(
-      `${label} must be a non-negative finite number, got ${String(value)}`,
+      `${label} must be an integer >= ${min}, got ${String(value)}`,
     );
   }
   return value;
@@ -117,304 +82,252 @@ function requireString(value: unknown, label: string): string {
   return value;
 }
 
-/**
- * Validate one recorded observation completely before it can influence a
- * coefficient. Bad source data must fail here, not silently become a NaN in a
- * published metric.
- */
-function validateLiveRow(value: unknown): LiveRow {
+function requireSplit(value: unknown): 'train' | 'heldout' {
+  if (value !== 'train' && value !== 'heldout') {
+    throw new Error(`split must be train or heldout, got ${String(value)}`);
+  }
+  return value;
+}
+
+function validateRow(value: unknown, label: string): LiveRow {
   if (typeof value !== 'object' || value === null) {
-    throw new Error('live result row is not an object');
+    throw new Error(`${label} is not an object`);
   }
   const row = value as Record<string, unknown>;
   return {
-    model: requireString(row.model, 'model'),
-    corpusId: requirePositiveInteger(row.corpusId, 'corpusId'),
-    split: requireString(row.split, 'split'),
-    category: requireString(row.category, 'category'),
-    genuineTiktoken: requirePositiveInteger(
-      row.genuineTiktoken,
-      'genuineTiktoken',
+    target: requireString(row['target'], 'target'),
+    model: requireString(row['model'], 'model'),
+    activeProvider: requireString(row['activeProvider'], 'activeProvider'),
+    endpointHost: requireString(row['endpointHost'], 'endpointHost'),
+    protocol: requireString(row['protocol'], 'protocol'),
+    corpusId: requireInteger(row['corpusId'], 'corpusId', 1),
+    split: requireSplit(row['split']),
+    category: requireString(row['category'], 'category'),
+    envelope: requireString(row['envelope'], 'envelope'),
+    projectionRevision: requireInteger(
+      row['projectionRevision'],
+      'projectionRevision',
+      0,
     ),
-    actualPromptTokens: requirePositiveInteger(
-      row.actualPromptTokens,
-      'actualPromptTokens',
+    projectionBaseTokens: requireInteger(
+      row['projectionBaseTokens'],
+      'projectionBaseTokens',
+      1,
     ),
-    cachedTokens: requireNonNegative(row.cachedTokens, 'cachedTokens'),
-    requestChars: requirePositiveInteger(row.requestChars, 'requestChars'),
-    endpointHost: requireString(row.endpointHost, 'endpointHost'),
-    protocol: requireString(row.protocol, 'protocol'),
-    commitSha: requireString(row.commitSha, 'commitSha'),
-    corpusVersion: requireString(row.corpusVersion, 'corpusVersion'),
-    projectionVersion: requireString(
-      row.projectionVersion,
-      'projectionVersion',
+    codePoints: requireInteger(row['codePoints'], 'codePoints', 1),
+    nonAsciiCodePoints: requireInteger(
+      row['nonAsciiCodePoints'],
+      'nonAsciiCodePoints',
+      0,
     ),
+    structuralCodePoints: requireInteger(
+      row['structuralCodePoints'],
+      'structuralCodePoints',
+      0,
+    ),
+    whitespaceCodePoints: requireInteger(
+      row['whitespaceCodePoints'],
+      'whitespaceCodePoints',
+      0,
+    ),
+    heuristicTokens: requireInteger(
+      row['heuristicTokens'],
+      'heuristicTokens',
+      1,
+    ),
+    providerPromptTokens: requireInteger(
+      row['providerPromptTokens'],
+      'providerPromptTokens',
+      1,
+    ),
+    cachedPromptTokens: requireInteger(
+      row['cachedPromptTokens'],
+      'cachedPromptTokens',
+      0,
+    ),
+    corpusVersion: requireString(row['corpusVersion'], 'corpusVersion'),
+    commitSha: requireString(row['commitSha'], 'commitSha'),
   };
 }
 
 /**
- * Every row must share one model, protocol, endpoint, corpus and projection
- * version, and every category must have exactly one control. A corpus that
- * mixes provenance cannot support a single calibration.
+ * Every observation for one model must share its identity and provenance, and
+ * the split must be usable. A corpus that mixes models, providers, protocols
+ * or projection revisions cannot support a single calibration.
  */
-function validateCorpus(rows: readonly LiveRow[]): void {
-  const first = rows[0]!;
+function validateGroup(target: string, rows: readonly LiveRow[]): void {
+  if (rows.length === 0) throw new Error(`no observations for ${target}`);
   for (const key of [
-    'protocol',
+    'model',
+    'activeProvider',
     'endpointHost',
-    'commitSha',
+    'protocol',
     'corpusVersion',
-    'projectionVersion',
+    'commitSha',
   ] as const) {
     const distinct = new Set(rows.map((row) => row[key]));
     if (distinct.size !== 1) {
-      throw new Error(
-        `corpus mixes ${key} values: ${[...distinct].join(', ')}`,
-      );
+      throw new Error(`${target} mixes ${key}: ${[...distinct].join(', ')}`);
     }
   }
-  if (first.projectionVersion !== EXPECTED_SOURCE_PROJECTION_VERSION) {
+  const revisions = new Set(rows.map((row) => row.projectionRevision));
+  if (revisions.size !== 1 || !revisions.has(EXPECTED_PROJECTION_REVISION)) {
     throw new Error(
-      `corpus projection version ${first.projectionVersion} is not the bridged ${EXPECTED_SOURCE_PROJECTION_VERSION}`,
+      `${target} projection revisions ${[...revisions].join(', ')} !== ${EXPECTED_PROJECTION_REVISION}`,
+    );
+  }
+  if (rows[0]!.corpusVersion !== CLAUDE_CORPUS_VERSION) {
+    throw new Error(
+      `${target} corpus ${rows[0]!.corpusVersion} !== ${CLAUDE_CORPUS_VERSION}`,
     );
   }
   const ids = rows.map((row) => row.corpusId);
   if (new Set(ids).size !== ids.length) {
-    throw new Error('corpus contains duplicate corpusId values');
+    throw new Error(`${target} has duplicate corpusId values`);
   }
-  const controlsByCategory = new Map<string, number>();
-  for (const row of rows) {
-    if (row.corpusId > CONTROL_MAX_ID) continue;
-    if (controlsByCategory.has(row.category)) {
-      throw new Error(`category ${row.category} has more than one control`);
-    }
-    controlsByCategory.set(row.category, row.corpusId);
+  if (!rows.some((row) => row.split === 'train')) {
+    throw new Error(`${target} has no training observations`);
   }
-  for (const row of rows) {
-    if (!controlsByCategory.has(row.category)) {
-      throw new Error(`category ${row.category} has no control observation`);
-    }
+  if (!rows.some((row) => row.split === 'heldout')) {
+    throw new Error(`${target} has no held-out observations`);
   }
 }
 
-function parseLine(line: string, lineNumber: number): LiveRow {
-  try {
-    return validateLiveRow(JSON.parse(line));
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`${SOURCE_RESULTS} line ${lineNumber}: ${detail}`);
-  }
+function featuresOf(row: LiveRow): ClaudeContentFeatures {
+  return {
+    codePoints: row.codePoints,
+    nonAsciiCodePoints: row.nonAsciiCodePoints,
+    structuralCodePoints: row.structuralCodePoints,
+    whitespaceCodePoints: row.whitespaceCodePoints,
+  };
 }
 
-function readLiveRows(): readonly LiveRow[] {
-  const text = readFileSync(SOURCE_RESULTS, 'utf8').trim();
-  if (text === '') throw new Error(`${SOURCE_RESULTS} is empty`);
-  const rows = text
-    .split('\n')
-    .map((line, index) => parseLine(line, index + 1))
-    .filter((row) => row.model === CANONICAL_MODEL)
-    .sort((a, b) => a.corpusId - b.corpusId);
-  if (rows.length === 0) {
-    throw new Error(`no ${CANONICAL_MODEL} observations in ${SOURCE_RESULTS}`);
-  }
-  validateCorpus(rows);
-  return rows;
-}
-
-/**
- * The controlled prompt as it appears inside the finalized projection: the
- * projection serializes the request body with `JSON.stringify`, so the string
- * the base counter actually sees is the JSON-escaped form, not the raw prompt.
- */
-function embeddedForm(prompt: string): string {
-  return JSON.stringify(prompt);
-}
-
-function splitOf(id: number): 'control' | 'train' | 'heldout' {
-  if (id <= CONTROL_MAX_ID) return 'control';
-  return id <= TRAIN_MAX_ID ? 'train' : 'heldout';
-}
-
-async function buildObservations(
-  rows: readonly LiveRow[],
-): Promise<readonly Observation[]> {
-  const corpus = new Map(getCorpus().map((item) => [item.id, item]));
-  const observations: Observation[] = [];
-  for (const row of rows) {
-    const item = corpus.get(row.corpusId);
-    if (item === undefined) {
-      throw new Error(`corpus item ${row.corpusId} is missing`);
-    }
-    if (item.category !== row.category) {
-      throw new Error(`corpus item ${row.corpusId} category mismatch`);
-    }
-    const promptText = embeddedForm(item.prompt);
-    observations.push({
-      id: row.corpusId,
-      category: row.category,
-      split: splitOf(row.corpusId),
-      promptText,
-      baseTokens: encoder.encode(promptText, [], []).length,
-      features: extractClaudeContentFeatures(promptText),
-      heuristicTokens: await heuristicTokenizer.countTokens(
-        promptText,
-        CANONICAL_MODEL,
-      ),
-      providerPromptTokens: row.actualPromptTokens,
-      cachedPromptTokens: row.cachedTokens,
-    });
-  }
-  return observations;
-}
-
-/**
- * Guard the reconstruction: recomputed base-counter deltas must reproduce the
- * deltas recorded live, otherwise the corpus regenerated here is not the
- * corpus that produced the provider ground truth.
- */
-function verifyReconstruction(
-  rows: readonly LiveRow[],
-  observations: readonly Observation[],
-): void {
-  const byId = new Map(observations.map((o) => [o.id, o]));
-  const controls = new Map<string, LiveRow>();
-  for (const row of rows) {
-    if (row.corpusId <= CONTROL_MAX_ID) controls.set(row.category, row);
-  }
-  for (const row of rows) {
-    if (row.corpusId <= CONTROL_MAX_ID) continue;
-    const control = controls.get(row.category)!;
-    const recorded = row.genuineTiktoken - control.genuineTiktoken;
-    const rebuilt =
-      byId.get(row.corpusId)!.baseTokens -
-      byId.get(control.corpusId)!.baseTokens;
-    if (recorded !== rebuilt) {
-      throw new Error(
-        `reconstruction mismatch for corpus ${row.corpusId}: recorded ${recorded}, rebuilt ${rebuilt}`,
-      );
-    }
-  }
-}
-
-function designVector(
-  observation: Observation,
+/** Design row: intercept, base counter reading, then the selected features. */
+function designOf(
+  row: LiveRow,
   featureNames: readonly ClaudeContentFeatureName[],
 ): readonly number[] {
-  return [
-    observation.baseTokens,
-    ...featureNames.map((name) => observation.features[name]),
-  ];
+  const features = featuresOf(row);
+  return [1, row.projectionBaseTokens, ...featureNames.map((n) => features[n])];
 }
 
-function buildDeltas(
-  observations: readonly Observation[],
+function fit(
+  rows: readonly LiveRow[],
   featureNames: readonly ClaudeContentFeatureName[],
-): readonly Delta[] {
-  const controls = new Map<string, Observation>();
-  for (const o of observations) {
-    if (o.split === 'control') controls.set(o.category, o);
+): readonly number[] {
+  const width = featureNames.length + 2;
+  if (rows.length < width) {
+    throw new Error(`need >= ${width} observations to fit ${width} parameters`);
   }
-  return observations
-    .filter((o) => o.split !== 'control')
-    .map((o) => {
-      const control = controls.get(o.category)!;
-      const target = designVector(o, featureNames);
-      const base = designVector(control, featureNames);
-      return {
-        id: o.id,
-        category: o.category,
-        split: o.split as 'train' | 'heldout',
-        design: target.map((value, index) => value - base[index]!),
-        actual: o.providerPromptTokens - control.providerPromptTokens,
-        heuristic: o.heuristicTokens - control.heuristicTokens,
-      };
-    });
-}
-
-/** Ordinary least squares through the origin. */
-function fit(deltas: readonly Delta[], width: number): readonly number[] {
   const normal = Array.from({ length: width }, () =>
     new Array<number>(width + 1).fill(0),
   );
-  for (const delta of deltas) {
+  for (const row of rows) {
+    const design = designOf(row, featureNames);
     for (let i = 0; i < width; i++) {
-      normal[i]![width] += delta.design[i]! * delta.actual;
+      normal[i]![width] += design[i]! * row.providerPromptTokens;
       for (let j = 0; j < width; j++) {
-        normal[i]![j]! += delta.design[i]! * delta.design[j]!;
+        normal[i]![j]! += design[i]! * design[j]!;
       }
     }
   }
   for (let col = 0; col < width; col++) {
     let pivot = col;
-    for (let row = col + 1; row < width; row++) {
-      if (Math.abs(normal[row]![col]!) > Math.abs(normal[pivot]![col]!)) {
-        pivot = row;
-      }
+    for (let r = col + 1; r < width; r++) {
+      if (Math.abs(normal[r]![col]!) > Math.abs(normal[pivot]![col]!))
+        pivot = r;
     }
     [normal[col], normal[pivot]] = [normal[pivot]!, normal[col]!];
     const scale = normal[col]![col]!;
     // A near-singular pivot means the candidate features are collinear on this
-    // data, so its coefficients would be arbitrary. Reject rather than publish
+    // data, so the coefficients would be arbitrary. Reject rather than publish
     // numbers the corpus cannot identify.
     if (!Number.isFinite(scale) || Math.abs(scale) < 1e-9) {
       throw new Error('singular or near-singular normal equations');
     }
     for (let c = col; c <= width; c++) normal[col]![c]! /= scale;
-    for (let row = 0; row < width; row++) {
-      if (row === col) continue;
-      const factor = normal[row]![col]!;
+    for (let r = 0; r < width; r++) {
+      if (r === col) continue;
+      const factor = normal[r]![col]!;
       for (let c = col; c <= width; c++) {
-        normal[row]![c]! -= factor * normal[col]![c]!;
+        normal[r]![c]! -= factor * normal[col]![c]!;
       }
     }
   }
   return normal.map((row) => row[width]!);
 }
 
-function predict(delta: Delta, coefficients: readonly number[]): number {
-  return delta.design.reduce(
-    (total, value, index) => total + value * coefficients[index]!,
-    0,
-  );
+function toCoefficients(
+  raw: readonly number[],
+  featureNames: readonly ClaudeContentFeatureName[],
+): ClaudeCalibrationCoefficients {
+  return {
+    intercept: round6(raw[0]!),
+    baseTokenCoefficient: round6(raw[1]!),
+    featureCoefficients: featureNames.map((feature, index) => ({
+      feature,
+      coefficient: round6(raw[index + 2]!),
+    })),
+  };
 }
 
-type Error_ = { actual: number; predicted: number };
+function round6(value: number): number {
+  return Number(value.toFixed(6));
+}
 
-function requireScorable(errors: readonly Error_[]): readonly Error_[] {
-  if (errors.length === 0) throw new Error('no observations to score');
-  for (const error of errors) {
-    if (!Number.isFinite(error.actual) || error.actual <= 0) {
-      throw new Error(`non-positive actual value: ${error.actual}`);
+interface Scored {
+  readonly actual: number;
+  readonly predicted: number;
+}
+
+/** Predictions made exactly the way the runtime makes them. */
+function score(
+  rows: readonly LiveRow[],
+  coefficients: ClaudeCalibrationCoefficients,
+): readonly Scored[] {
+  return rows.map((row) => ({
+    actual: row.providerPromptTokens,
+    predicted: applyClaudeCalibration(
+      row.projectionBaseTokens,
+      featuresOf(row),
+      coefficients,
+    ),
+  }));
+}
+
+function requireScorable(scored: readonly Scored[]): readonly Scored[] {
+  if (scored.length === 0) throw new Error('no observations to score');
+  for (const entry of scored) {
+    if (!Number.isFinite(entry.actual) || entry.actual <= 0) {
+      throw new Error(`non-positive actual value ${entry.actual}`);
     }
-    if (!Number.isFinite(error.predicted)) {
-      throw new Error(`non-finite prediction: ${error.predicted}`);
+    if (!Number.isFinite(entry.predicted)) {
+      throw new Error(`non-finite prediction ${entry.predicted}`);
     }
   }
-  return errors;
+  return scored;
 }
 
-function mape(errors: readonly Error_[]) {
-  requireScorable(errors);
+function mape(scored: readonly Scored[]): number {
+  requireScorable(scored);
   return (
-    (errors.reduce(
+    (scored.reduce(
       (sum, e) => sum + Math.abs((e.predicted - e.actual) / e.actual),
       0,
     ) /
-      errors.length) *
+      scored.length) *
     100
   );
 }
 
-function rmse(errors: readonly Error_[]) {
-  requireScorable(errors);
+function rmse(scored: readonly Scored[]): number {
+  requireScorable(scored);
   return Math.sqrt(
-    errors.reduce((sum, e) => sum + (e.predicted - e.actual) ** 2, 0) /
-      errors.length,
+    scored.reduce((sum, e) => sum + (e.predicted - e.actual) ** 2, 0) /
+      scored.length,
   );
 }
 
-/** Linear-interpolated percentile over a sorted copy of `values`. */
 function percentile(values: readonly number[], fraction: number): number {
   if (values.length === 0) throw new Error('percentile of an empty sample');
   const sorted = [...values].sort((a, b) => a - b);
@@ -428,10 +341,10 @@ function percentile(values: readonly number[], fraction: number): number {
   );
 }
 
-function underestimationP95(errors: readonly Error_[]): number {
-  requireScorable(errors);
+function underestimationP95(scored: readonly Scored[]): number {
+  requireScorable(scored);
   return percentile(
-    errors.map((e) => Math.max(0, ((e.actual - e.predicted) / e.actual) * 100)),
+    scored.map((e) => Math.max(0, ((e.actual - e.predicted) / e.actual) * 100)),
     0.95,
   );
 }
@@ -448,214 +361,214 @@ const CANDIDATE_FEATURE_SETS: ReadonlyArray<
   [...CLAUDE_CONTENT_FEATURE_NAMES],
 ]);
 
-/**
- * Held-out predictions produced the way the runtime produces them: apply the
- * shipped calibration to the item and to its control, then difference the two
- * rounded counts.
- */
-function heldOutPredictions(
-  observations: readonly Observation[],
-  shipped: ClaudeCalibrationCoefficients,
-): ReadonlyArray<{ actual: number; predicted: number }> {
-  const controls = new Map<string, Observation>();
-  for (const o of observations) {
-    if (o.split === 'control') controls.set(o.category, o);
-  }
-  const count = (o: Observation): number =>
-    applyClaudeCalibration(o.baseTokens, o.features, shipped);
-  return observations
-    .filter((o) => o.split === 'heldout')
-    .map((o) => {
-      const control = controls.get(o.category)!;
-      return {
-        actual: o.providerPromptTokens - control.providerPromptTokens,
-        predicted: count(o) - count(control),
-      };
-    });
-}
-
-interface CandidateResult {
-  readonly featureNames: readonly ClaudeContentFeatureName[];
-  readonly coefficients: readonly number[];
-  readonly heldOutMape: number;
-  readonly locoMape: number;
-}
-
-function evaluateCandidate(
-  observations: readonly Observation[],
+/** Mean out-of-fold MAPE when each group is held out in turn. */
+function crossValidatedMape(
+  trainRows: readonly LiveRow[],
   featureNames: readonly ClaudeContentFeatureName[],
-): CandidateResult {
-  const deltas = buildDeltas(observations, featureNames);
-  const width = featureNames.length + 1;
-  const trainDeltas = deltas.filter((d) => d.split === 'train');
-  const trained = fit(trainDeltas, width);
-  const heldOut = deltas
-    .filter((d) => d.split === 'heldout')
-    .map((d) => ({ actual: d.actual, predicted: predict(d, trained) }));
-
-  // Model selection sees training data only. Letting a held-out observation
-  // influence which feature set is chosen would make the held-out metrics
-  // that justify activation self-fulfilling.
-  const categories = [...new Set(trainDeltas.map((d) => d.category))].sort();
-  const locoErrors: Array<{ actual: number; predicted: number }> = [];
-  for (const category of categories) {
-    const foldTrain = trainDeltas.filter((d) => d.category !== category);
-    const foldTest = trainDeltas.filter((d) => d.category === category);
-    if (foldTrain.length === 0 || foldTest.length === 0) {
-      throw new Error(`degenerate leave-one-category-out fold: ${category}`);
+  groupOf: (row: LiveRow) => string,
+): number {
+  const groups = [...new Set(trainRows.map(groupOf))].sort();
+  const scored: Scored[] = [];
+  for (const group of groups) {
+    const inner = trainRows.filter((row) => groupOf(row) !== group);
+    const outer = trainRows.filter((row) => groupOf(row) === group);
+    if (inner.length === 0 || outer.length === 0) {
+      throw new Error(`degenerate cross-validation fold: ${group}`);
     }
-    const foldCoefficients = fit(foldTrain, width);
-    for (const delta of foldTest) {
-      locoErrors.push({
-        actual: delta.actual,
-        predicted: predict(delta, foldCoefficients),
-      });
-    }
+    scored.push(
+      ...score(outer, toCoefficients(fit(inner, featureNames), featureNames)),
+    );
   }
+  return mape(scored);
+}
 
-  return {
+interface Candidate {
+  readonly featureNames: readonly ClaudeContentFeatureName[];
+  readonly categoryCvMape: number;
+  readonly envelopeCvMape: number;
+}
+
+function evaluateCandidates(trainRows: readonly LiveRow[]): Candidate[] {
+  return CANDIDATE_FEATURE_SETS.map((featureNames) => ({
     featureNames,
-    coefficients: trained,
-    heldOutMape: mape(heldOut),
-    locoMape: mape(locoErrors),
-  };
+    categoryCvMape: crossValidatedMape(
+      trainRows,
+      featureNames,
+      (row) => row.category,
+    ),
+    envelopeCvMape: crossValidatedMape(
+      trainRows,
+      featureNames,
+      (row) => row.envelope,
+    ),
+  }));
 }
 
-function round6(value: number): number {
-  return Number(value.toFixed(6));
-}
-
-function formatFeatureSet(names: readonly ClaudeContentFeatureName[]): string {
+function describeFeatureSet(
+  names: readonly ClaudeContentFeatureName[],
+): string {
   return names.length === 0 ? 'base counter only' : names.join(' + ');
 }
 
-function toShippedCoefficients(
-  selected: CandidateResult,
-): ClaudeCalibrationCoefficients {
-  // Coefficients are rounded before any metric is computed so the published
-  // numbers describe the coefficients that actually ship.
-  const rounded = selected.coefficients.map(round6);
-  return {
-    intercept: 0,
-    baseTokenCoefficient: rounded[0]!,
-    featureCoefficients: selected.featureNames.map((feature, index) => ({
-      feature,
-      coefficient: rounded[index + 1]!,
-    })),
-  };
+interface ModelResult {
+  readonly target: string;
+  readonly model: string;
+  readonly coefficients: ClaudeCalibrationCoefficients;
+  readonly featureNames: readonly ClaudeContentFeatureName[];
+  readonly heldOut: Record<string, number | string>;
+  readonly candidates: ReadonlyArray<Record<string, number | string>>;
+  readonly rows: readonly LiveRow[];
+  readonly gatePassed: boolean;
 }
 
-/**
- * Held-out evidence for the shipped coefficients, measured through the same
- * runtime application function the estimator uses, including its per-estimate
- * rounding. Reporting full-precision regression output instead would overstate
- * the shipped estimator's accuracy.
- */
-function measureHeldOut(
-  observations: readonly Observation[],
-  selected: CandidateResult,
-  shipped: ClaudeCalibrationCoefficients,
-) {
-  const calibrated = heldOutPredictions(observations, shipped);
-  const baseline = buildDeltas(observations, selected.featureNames)
-    .filter((d) => d.split === 'heldout')
-    .map((d) => ({ actual: d.actual, predicted: d.heuristic }));
+const MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT = 10;
+
+function fitModel(target: string, rows: readonly LiveRow[]): ModelResult {
+  validateGroup(target, rows);
+  const trainRows = rows.filter((row) => row.split === 'train');
+  const heldOutRows = rows.filter((row) => row.split === 'heldout');
+
+  const candidates = evaluateCandidates(trainRows);
+  const selected = candidates.reduce((best, candidate) =>
+    candidate.categoryCvMape < best.categoryCvMape ? candidate : best,
+  );
+  const coefficients = toCoefficients(
+    fit(trainRows, selected.featureNames),
+    selected.featureNames,
+  );
+
+  const calibrated = score(heldOutRows, coefficients);
+  const baseline = heldOutRows.map((row) => ({
+    actual: row.providerPromptTokens,
+    predicted: row.heuristicTokens,
+  }));
   const calibratedMape = mape(calibrated);
   const baselineMape = mape(baseline);
   if (baselineMape <= 0) {
-    throw new Error(
-      'baseline MAPE is zero; a relative improvement over it is undefined',
-    );
+    throw new Error('baseline MAPE is zero; relative improvement undefined');
   }
+  const relativeImprovement =
+    ((baselineMape - calibratedMape) / baselineMape) * 100;
+  const calibratedP95 = underestimationP95(calibrated);
+  const baselineP95 = underestimationP95(baseline);
+
   return {
-    sampleCount: calibrated.length,
-    mapePercent: round6(calibratedMape),
-    rmse: round6(rmse(calibrated)),
-    underestimationP95Percent: round6(underestimationP95(calibrated)),
-    baselineEstimator: 'AnthropicTokenizer character heuristic',
-    baselineMapePercent: round6(baselineMape),
-    baselineRmse: round6(rmse(baseline)),
-    baselineUnderestimationP95Percent: round6(underestimationP95(baseline)),
-    relativeMapeImprovementPercent: round6(
-      ((baselineMape - calibratedMape) / baselineMape) * 100,
-    ),
+    target,
+    model: rows[0]!.model,
+    coefficients,
+    featureNames: selected.featureNames,
+    heldOut: {
+      sampleCount: calibrated.length,
+      mapePercent: round6(calibratedMape),
+      rmse: round6(rmse(calibrated)),
+      underestimationP95Percent: round6(calibratedP95),
+      baselineEstimator: 'AnthropicTokenizer character heuristic',
+      baselineMapePercent: round6(baselineMape),
+      baselineRmse: round6(rmse(baseline)),
+      baselineUnderestimationP95Percent: round6(baselineP95),
+      relativeMapeImprovementPercent: round6(relativeImprovement),
+    },
+    candidates: candidates.map((candidate) => ({
+      featureSet: describeFeatureSet(candidate.featureNames),
+      leaveOneCategoryOutMapePercent: round6(candidate.categoryCvMape),
+      leaveOneEnvelopeOutMapePercent: round6(candidate.envelopeCvMape),
+    })),
+    rows,
+    gatePassed:
+      relativeImprovement >= MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT &&
+      calibratedP95 <= baselineP95,
   };
 }
 
-function buildFixture(
-  rows: readonly LiveRow[],
-  observations: readonly Observation[],
-) {
+function buildFixture(result: ModelResult) {
+  const first = result.rows[0]!;
   return {
     source: {
       issue: 2835,
-      derivedFrom: {
-        issue: 2253,
-        corpusVersion: CORPUS_VERSION,
-        commitSha: rows[0]!.commitSha,
-        results: SOURCE_RESULTS,
-      },
-      canonicalModel: CANONICAL_MODEL,
-      protocol: rows[0]!.protocol,
-      endpointHost: rows[0]!.endpointHost,
+      canonicalModel: first.model,
+      activeProvider: first.activeProvider,
+      endpointHost: first.endpointHost,
+      protocol: first.protocol,
+      projectionRevision: first.projectionRevision,
+      corpusVersion: first.corpusVersion,
+      commitSha: first.commitSha,
       groundTruth:
         'complete provider promptTokens including cached prompt tokens',
-      sourceProjectionVersion: rows[0]!.projectionVersion,
       method:
-        'within-category incremental; the smallest item in each category is the control',
-      promptTextForm:
-        'JSON-escaped, as the controlled prompt appears inside the finalized projection promptText',
+        'whole finalized request; the system/tool envelope is varied so a framing constant is identifiable',
+      contents:
+        'counts only; no prompt text, request body, header or credential is retained',
     },
-    observations: observations.map((o) => ({
-      id: o.id,
-      category: o.category,
-      split: o.split,
-      promptText: o.promptText,
-      providerPromptTokens: o.providerPromptTokens,
-      cachedPromptTokens: o.cachedPromptTokens,
+    observations: result.rows.map((row) => ({
+      id: row.corpusId,
+      split: row.split,
+      category: row.category,
+      envelope: row.envelope,
+      projectionBaseTokens: row.projectionBaseTokens,
+      codePoints: row.codePoints,
+      nonAsciiCodePoints: row.nonAsciiCodePoints,
+      structuralCodePoints: row.structuralCodePoints,
+      whitespaceCodePoints: row.whitespaceCodePoints,
+      heuristicTokens: row.heuristicTokens,
+      providerPromptTokens: row.providerPromptTokens,
+      cachedPromptTokens: row.cachedPromptTokens,
     })),
   };
 }
 
-async function main(): Promise<void> {
-  const rows = readLiveRows();
-  const observations = await buildObservations(rows);
-  verifyReconstruction(rows, observations);
+function main(): void {
+  const text = readFileSync(SOURCE_RESULTS, 'utf8').trim();
+  if (text === '') throw new Error(`${SOURCE_RESULTS} is empty`);
+  const rows = text.split('\n').map((line, index) => {
+    try {
+      return validateRow(JSON.parse(line), 'row');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`${SOURCE_RESULTS} line ${index + 1}: ${detail}`);
+    }
+  });
 
-  const candidates = CANDIDATE_FEATURE_SETS.map((names) =>
-    evaluateCandidate(observations, names),
+  const targets = [...new Set(rows.map((row) => row.target))].sort();
+  const results = targets.map((target) =>
+    fitModel(
+      target,
+      rows
+        .filter((row) => row.target === target)
+        .sort((a, b) => a.corpusId - b.corpusId),
+    ),
   );
-  const selected = candidates.reduce((best, candidate) =>
-    candidate.locoMape < best.locoMape ? candidate : best,
-  );
-  const shipped = toShippedCoefficients(selected);
-
-  const fixture = buildFixture(rows, observations);
-  const calibration = {
-    canonicalModelFamily: CANONICAL_MODEL,
-    protocol: rows[0]!.protocol,
-    ...shipped,
-    heldOut: measureHeldOut(observations, selected, shipped),
-    candidates: candidates.map((candidate) => ({
-      featureSet: formatFeatureSet(candidate.featureNames),
-      heldOutMapePercent: round6(candidate.heldOutMape),
-      leaveOneCategoryOutMapePercent: round6(candidate.locoMape),
-    })),
-  };
 
   mkdirSync(REPORT_DIR, { recursive: true });
-  mkdirSync(dirname(FIXTURE_PATH), { recursive: true });
-  writeFileSync(
-    resolve(REPORT_DIR, 'opus5-calibration.json'),
-    JSON.stringify(calibration, null, 2) + '\n',
-  );
-  writeFileSync(FIXTURE_PATH, JSON.stringify(fixture, null, 2) + '\n');
-  process.stdout.write(JSON.stringify(calibration, null, 2) + '\n');
+  mkdirSync(FIXTURE_DIR, { recursive: true });
+  const summary = results.map((result) => ({
+    target: result.target,
+    canonicalModel: result.model,
+    protocol: result.rows[0]!.protocol,
+    activeProvider: result.rows[0]!.activeProvider,
+    endpointHost: result.rows[0]!.endpointHost,
+    projectionRevision: result.rows[0]!.projectionRevision,
+    corpusObservations: result.rows.length,
+    ...result.coefficients,
+    heldOut: result.heldOut,
+    gatePassed: result.gatePassed,
+    candidates: result.candidates,
+  }));
+
+  for (const result of results) {
+    writeFileSync(
+      resolve(FIXTURE_DIR, `${result.model}-provider-usage-v1.json`),
+      `${JSON.stringify(buildFixture(result), null, 2)}\n`,
+    );
+  }
+  const summaryPath = resolve(REPORT_DIR, 'claude5-calibration.json');
+  mkdirSync(dirname(summaryPath), { recursive: true });
+  writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 }
 
 if (
   process.argv[1] !== undefined &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  await main();
+  main();
 }

@@ -14,155 +14,113 @@ per-model calibration layer.
 
 ### B1 — Anchored model identity
 
-`isSanctionedClaudeOpus5Model` and `isSanctionedClaudeFable5Model` accept only:
-
-- `claude-opus-5` / `claude-fable-5`
-- `claude-opus-5-latest` / `claude-fable-5-latest`
-- `claude-opus-5-YYYYMMDD` / `claude-fable-5-YYYYMMDD` where `YYYYMMDD` is a
-  real calendar date (leap years honoured)
-
-and reject everything else, including: the other family's IDs, `claude-opus-50`,
-`claude-fable-50`, `claude-opus-5-mini`, `claude-opus-4-8`, `claude-opus-4-7`,
-`claude-sonnet-5`, `claude-opus-5-2026-01-01` (hyphenated snapshot form),
-`claude-opus-5-20261345` and `claude-opus-5-20260230` (impossible dates),
-leading/trailing whitespace, and vendor-prefixed forms.
-
-Matching is case-insensitive, consistent with `AnthropicModelData`.
+`isSanctionedClaudeOpus5Model` and `isSanctionedClaudeFable5Model` accept only
+the bare alias, the `-latest` pointer, and `-YYYYMMDD` snapshots whose digits
+form a real calendar date. Everything else is rejected, including the other
+family's IDs, `claude-opus-50`, `claude-opus-5-mini`, `claude-opus-4-8`,
+`claude-sonnet-5`, hyphenated snapshots, `-20261345`, `-20260230`, whitespace
+padding, and vendor-prefixed forms. Matching is case-insensitive.
 
 ### B2 — One-pass content features
 
 `extractClaudeContentFeatures(text)` performs exactly **one** left-to-right scan
-of the text, decoding code points (surrogate pairs consumed as one code point),
-and returns a frozen record:
+and returns a frozen record of `codePoints`, `nonAsciiCodePoints`,
+`structuralCodePoints` and `whitespaceCodePoints`.
 
-- `codePoints`
-- `nonAsciiCodePoints`
-- `structuralCodePoints` (ASCII code/JSON punctuation)
-- `whitespaceCodePoints`
-
-Constraints:
-
-- No regular expressions, no `split`, no intermediate arrays or substrings; one
-  numeric accumulator set and one frozen result object per call.
-- Deterministic and offline.
-- Chunk-boundary invariant: features of `a + b` equal the component-wise sum of
-  features of `a` and `b` at **every code-point boundary**, which is every
-  boundary a projection's segments can actually fall on. An unpaired surrogate
-  is counted as one code point rather than crashing.
+Constraints: no regular expressions, no `split`, no intermediate arrays; one
+numeric accumulator set and one frozen result per call; deterministic and
+offline; counts additive across every code-point boundary, which is every
+boundary a projection's segments can fall on; an unpaired surrogate is counted
+as one code point rather than throwing.
 
 ### B3 — Immutable calibration format
 
-A `ClaudeCalibration` record binds:
+A `ClaudeCalibration` binds canonical model, protocol, estimator version, base
+counter asset revision, projection revision, coefficients, held-out metrics,
+provenance, and the base-counter range the fit was measured over.
 
-- `canonicalModelFamily`, `protocol` (`anthropic-messages`)
-- `estimatorVersion`, `assetRevision`, `projectionRevision` (3)
-- `baseCounter` identifier
-- `baseTokenCoefficient`, `featureCoefficients` (named feature → coefficient),
-  `intercept`
-- `heldOut` metrics and `provenance`
+`applyClaudeCalibration` is pure and deterministic:
+`round(intercept + baseCoef * baseTokens + Σ coef * feature)`, floored at the
+base-counter reading, with empty input yielding exactly `0`.
 
-`applyClaudeCalibration(baseTokens, features, calibration)` is pure and
-deterministic: `round(intercept + baseTokenCoefficient * baseTokens + Σ
-coefficient_f * features[f])`, clamped to a non-negative integer. Empty input
-yields exactly `0`.
+### B4 — Per-model estimator activation
 
-Assets are deep-frozen module constants; mutation attempts throw in strict mode.
+Registered for `anthropic-messages` and only for the providers the corpus was
+measured on (`anthropic`, `claudecode`). Returns `method: 'calibrated'`, the
+model's own family, estimator version, asset revision, and the request's
+projection revision. Exactly one base tokenization and one feature scan of the
+same projection text; tokenizer selection never depends on content.
 
-### B4 — Opus 5 estimator activation
+### B5 — Activation gate, evaluated per model
 
-Registered for `anthropic-messages` only. Returns `method: 'calibrated'`, the
-Claude family name, estimator version, asset revision, and the request's
-projection revision. It performs exactly one base tokenization of
-`projection.promptText` and one feature scan of the same string; tokenizer
-selection never depends on content.
+A model activates only if, on **its own** held-out split, held-out MAPE improves
+by at least 10% relative to the existing `AnthropicTokenizer` heuristic and p95
+underestimation is not worse. The gate derives the relative improvement from the
+two MAPE values rather than trusting a stored headline.
 
-Unsupported protocol and unresolved-identity requests raise the existing typed
-`ModelPromptEstimatorError` codes, matching the GPT-5.6 registration contract.
+### B6 — Withholding
 
-### B5 — Activation gate
+A model with no activatable calibration is not registered, does not resolve to
+another model's coefficients, and keeps its existing path. A model that
+*declares* a calibration which does not hold up throws at module load rather
+than silently degrading.
 
-The Opus 5 calibration ships only because it passes, on the held-out split:
+## Evidence collected for this issue
 
-- held-out MAPE improves by **≥ 10% relative** to the existing Claude heuristic
-  (`AnthropicTokenizer`), and
-- p95 underestimation is **not worse** than that heuristic.
+`scripts/claude-estimator-collect.ts` collects live observations against
+`api.anthropic.com`. `scripts/claude-estimator-corpus.ts` defines the corpus.
 
-Recorded held-out metrics live in the calibration asset and are re-verified by a
-behavioral test that runs the real estimator over the sanitized corpus.
+- 42 observations per model, collected separately for `claude-opus-5` and
+  `claude-fable-5`.
+- 7 content categories including astral-plane emoji and combining marks.
+- 3 system/tool envelope sizes, giving a 15,756–20,594 base-token span so a
+  per-request framing constant is identifiable and whole requests can be
+  modelled directly.
+- 29 train / 13 held-out per model; the largest size in every category is held
+  out, so the held-out split tests extrapolation.
+- Target is the complete provider `promptTokens` including cached prompt tokens.
+- Measured through the production revision-3 projector, so no projection bridge
+  is required.
+- Only the first request of each run is measured: it is the envelope the
+  pre-send estimate must predict, and measuring it avoids biasing acceptance
+  toward the less agentic model.
+- Committed corpora contain counts only — no prompt text, request body, headers
+  or credentials.
 
-### B6 — Fable 5 withheld
+Model selection is by leave-one-category-out cross-validation over training rows
+only, with leave-one-envelope-out reported as a generalization check.
 
-There are zero trustworthy `claude-fable-5` provider observations. Fable 5
-therefore has **no** calibrated registration: it is not registered, does not
-resolve to Opus coefficients, and falls through to the existing legacy path. A
-committed status artifact records the reason. `resolveClaudeCalibration` returns
-an explicit "unavailable" outcome for Fable 5.
+## Test plan
 
-## Inputs and boundary cases
+1. `claudeModelIdentity.test.ts` — B1 accept/reject table.
+2. `claudeContentFeatures.test.ts` — B2 additivity at every code-point
+   boundary; astral, combining, CJK, lone surrogate, empty and long inputs.
+3. `claudeCalibration.test.ts` — B3 purity, rounding, floor behaviour, gate
+   integrity (derived improvement, invalid metrics, duplicate features), and
+   per-model asset separation.
+4. `claudePromptEstimator.test.ts` — B4 provenance, single base tokenization
+   and single feature scan via injected seams, content-independent tokenizer
+   selection, chunk invariance, protocol/identity/provider errors, registry
+   composition, and B6 withholding via a constructed spec.
+5. `claudeCalibrationGate.test.ts` — B5 re-verified per model from that model's
+   own sanitized corpus, plus corpus coverage, held-out integrity, the
+   base-counter floor, and model independence.
+6. `providerManagerRuntimeFactories.test.ts` — composition-root wiring through
+   the real provider-manager tokenizer factory.
 
-| Input | Expected |
-| --- | --- |
-| empty `promptText` | `0` |
-| pure ASCII prose | calibrated count |
-| CJK / Cyrillic / Greek / Arabic | calibrated count; no tokenizer switch |
-| emoji / astral code points | one code point per astral char |
-| lone surrogate | counted as one code point, no crash |
-| JSON / tool-like text | calibrated count; no tokenizer switch |
-| `openai-chat` / `openai-responses` protocol | `unsupported-protocol` error |
-| `claude-opus-5-mini` | `unresolved-model-identity` error |
-| `claude-fable-5` | not claimed; legacy path, `family: 'legacy-unregistered'` |
-| malformed projection | `tokenization-failed` / `projection-unavailable` |
+## Outcome
 
-## Ground truth
+Both models cleared their own gate and are registered:
 
-`research/issue2253/live-results.jsonl` contains 25 live `claude-opus-5`
-observations against `api.anthropic.com` (`anthropic-messages`), each with the
-complete provider `promptTokens` (cached prompt tokens included; the recorded
-cached total is 0 for every row). The controlled prompts are deterministically
-regenerated by `scripts/token-divergence-corpus.ts`; recomputing the `o200k`
-deltas of the JSON-embedded prompts reproduces the recorded deltas exactly for
-all 20 deltas, so the corpus is fully reconstructible and can be re-derived
-rather than trusted blindly.
+| | Opus 5 | Fable 5 |
+| --- | --- | --- |
+| Held-out MAPE | 0.386% | 0.389% |
+| Heuristic baseline | 33.542% | 33.546% |
+| Relative improvement | 98.85% | 98.84% |
+| p95 underestimation | 0.891% vs 34.082% | 0.896% vs 34.088% |
 
-Analysis is within-category incremental (control = smallest item per category),
-which cancels the fixed system/tool envelope. Split: controls 1–5, train deltas
-6–20, held-out deltas 21–25 — the same split used by #2253.
-
-Model selection is by leave-one-category-out cross-validation, which rejects
-richer feature sets that merely memorise the five synthetic categories.
-
-## Test plan (RED first)
-
-1. `claudeModelIdentity.test.ts` — B1 accept/reject table, cross-family
-   rejection, invalid calendar snapshots, case-insensitivity.
-2. `claudeContentFeatures.test.ts` — B2 additivity across every code-point
-   boundary; astral, combining-mark, CJK, lone-surrogate, empty and long
-   inputs; frozen result.
-3. `claudeCalibration.test.ts` — B3 purity, determinism, clamping, empty input,
-   deep-frozen assets, projection-revision binding.
-4. `ClaudePromptEstimator.test.ts` — B4 provenance (`calibrated`, never
-   `exact`), single base tokenization and single feature scan per estimate
-   (observed via an injected counting base counter), identical asset revision
-   for Unicode-heavy versus code-heavy content, protocol and identity errors,
-   registry composition, and Fable 5 falling through to the legacy path with
-   no Opus coefficients (B6).
-5. `ClaudeOpus5CalibrationGate.test.ts` — B5 gate re-verified end-to-end from
-   the sanitized corpus fixture through the real extractor, real base counter
-   and real calibration; asserts the recorded held-out metrics and the ≥10%
-   relative MAPE improvement plus non-worse p95 underestimation versus
-   `AnthropicTokenizer`.
-
-## Deliverables
-
-- `packages/providers/src/tokenizers/claude/` — identity, features,
-  calibration format, calibration assets, estimator, registrations, fixtures.
-- `packages/providers/src/tokenizers/o200kBaseCounter.ts` — the shared pinned
-  base counter, extracted so GPT-5.6 and Claude share one WASM encoder instance
-  (allocation-conscious, AC7).
-- Registry composition updated to include the Claude registration.
-- `scripts/claude-estimator-calibration.ts` — deterministic offline fit,
-  candidate model selection, and report generation.
-- `research/issue2835/` — sanitized report, fitted coefficients, Fable 5 status.
+The two independently fitted calibrations agree closely, which is reported as a
+finding about Anthropic's tokenization rather than used as a shortcut.
 
 ## Non-goals
 
