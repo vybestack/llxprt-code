@@ -414,6 +414,43 @@ const toNamespace = (exports: unknown): object =>
     : { default: exports };
 
 /**
+ * Copies a module's exports into a plain object.
+ *
+ * Bun's `mock.module` patches a module namespace IN PLACE, so a snapshot must
+ * copy the values rather than hold a reference. Node built-ins expose their
+ * exports as accessor properties on the namespace, so an accessor is read
+ * through the getter; a getter that throws is skipped rather than aborting the
+ * whole snapshot.
+ */
+function snapshotExports(module: unknown): Record<string | symbol, unknown> {
+  const snapshot: Record<string | symbol, unknown> = {};
+  if (typeof module !== 'object' || module === null) {
+    return Object.assign(snapshot, { default: module });
+  }
+  for (const key of Reflect.ownKeys(module)) {
+    const descriptor = Object.getOwnPropertyDescriptor(module, key);
+    if (!descriptor) continue;
+    let value: unknown;
+    if ('value' in descriptor) {
+      value = descriptor.value;
+    } else {
+      try {
+        value = Reflect.get(module, key);
+      } catch {
+        continue;
+      }
+    }
+    Object.defineProperty(snapshot, key, {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      writable: true,
+      value,
+    });
+  }
+  return snapshot;
+}
+
+/**
  * Every module namespace currently registered through `vi.mock` / `vi.doMock`,
  * keyed by the specifier the test used.
  *
@@ -470,22 +507,7 @@ const registerModuleMock = (
     // at which point require() would return the mocked namespace.
     mockedResolvedIds.add(resolvedId);
     const realModule = loadIsolatedModuleSync(resolvedId);
-    const actualSnapshot: Record<string | symbol, unknown> = {};
-    if (typeof realModule === 'object' && realModule !== null) {
-      for (const key of Reflect.ownKeys(realModule)) {
-        const descriptor = Object.getOwnPropertyDescriptor(realModule, key);
-        if (descriptor) {
-          Object.defineProperty(actualSnapshot, key, {
-            configurable: true,
-            enumerable: descriptor.enumerable,
-            writable: true,
-            value: descriptor.value,
-          });
-        }
-      }
-    } else {
-      Object.assign(actualSnapshot, { default: realModule });
-    }
+    const actualSnapshot = snapshotExports(realModule);
     actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
     preMockSnapshots.set(resolvedId, actualSnapshot);
     const automocked = toNamespace(automockValue(realModule, new Map()));
@@ -528,22 +550,7 @@ const registerModuleMock = (
   // patches the module namespace object IN PLACE, so storing a reference to
   // the namespace would later reflect the mocked values. A shallow clone
   // preserves the original export values at registration time.
-  const actualSnapshot: Record<string | symbol, unknown> = {};
-  if (typeof syncActual === 'object' && syncActual !== null) {
-    for (const key of Reflect.ownKeys(syncActual)) {
-      const descriptor = Object.getOwnPropertyDescriptor(syncActual, key);
-      if (descriptor) {
-        Object.defineProperty(actualSnapshot, key, {
-          configurable: true,
-          enumerable: descriptor.enumerable,
-          writable: true,
-          value: descriptor.value,
-        });
-      }
-    }
-  } else {
-    Object.assign(actualSnapshot, { default: syncActual });
-  }
+  const actualSnapshot = snapshotExports(syncActual);
   actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
   preMockSnapshots.set(resolvedId, actualSnapshot);
   const importOriginal = (): unknown => syncActual;
