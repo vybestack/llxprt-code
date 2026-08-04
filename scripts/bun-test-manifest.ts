@@ -722,6 +722,17 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
     ],
   },
+  {
+    // Bun-native test for the prebuilt CLI bundle (issue #2999). Builds the
+    // bundle via the exported config, executes it, and asserts --version
+    // output, proving externals resolve and the artifact is genuinely
+    // launchable. Gated behind LLXPRT_RUN_BUNDLE_BUILD_TEST=1 because the
+    // ~16s build is too slow for the default PR-path shard; the nightly
+    // release CI sets the flag so it always runs somewhere.
+    workspace: 'cli-bundle',
+    cwd: '.',
+    files: ['scripts/tests/issue-2999-cli-bundle.bun.test.ts'],
+  },
 ];
 
 /**
