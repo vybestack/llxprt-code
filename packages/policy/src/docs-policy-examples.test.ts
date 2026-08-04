@@ -132,7 +132,14 @@ describe('docs/policy-configuration.md TOML examples', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    if (tempDir) {
+      await fs.rm(tempDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 10,
+      });
+    }
   });
 
   it('publishes enough rule examples for these guards to be meaningful', () => {
