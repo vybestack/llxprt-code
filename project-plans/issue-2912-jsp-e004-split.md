@@ -161,8 +161,22 @@ issue per value and removes that dependency on library-internal ordering.
 Accept/reject behavior is identical; verified empirically across all boundary
 values.
 
+CodeRabbit, 1 review (1 finding):
+
+- **Deferred to #3027.** The endpoint guard tests `URL.search`/`URL.hash`
+  against the empty string, but both return `''` for a *bare* trailing `?` or
+  `#`, so `http://127.0.0.1:9123?` and `http://127.0.0.1:9123#` are accepted
+  today. Because `parseBootstrap` returns the raw endpoint string, appending
+  the route segment yields `http://127.0.0.1:9123?/jsp/1`, which is exactly
+  the malformed request target the guard exists to prevent. The finding is
+  correct and was confirmed empirically. It is deferred because fixing it
+  changes the accept/reject set, which this diagnostics-only PR lists as an
+  explicit non-goal, and because the predicate is unchanged from main (it
+  arrived in #2897 and this PR touched only that branch's message).
+
 ## Review counters
 
 - Independent review/remediation cycles: 1 of 2.
 - Local OCR: 1 of 2.
-- PR OCR: 0 of 2.
+- PR OCR: 1 of 2 (CI OpenCodeReview job, pass).
+- CodeRabbit: 1 review, 1 finding, deferred to #3027 with a recorded reply.
