@@ -96,6 +96,32 @@ format.
 - yargs calls `process.exit` unless `.exitProcess(false)` is set, which under
   Bun terminates the test file mid-run.
 
+## Test-count parity
+
+`run-bun-tests.ts` aggregates each file's Bun summary and prints the totals, so
+parity is checked mechanically rather than by eye:
+
+```
+Passed 607/650 CLI test files
+Test cases: 7920 passed, 263 failed, 6 skipped, 13 todo (8202 total)
+```
+
+Only 6 skips and 13 todos exist across the whole workspace, and none were added
+by this migration.
+
+The Vitest side cannot produce a comparable total locally: `npx vitest run` in
+this workspace dies with
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit
+Allocation failed - JavaScript heap out of memory
+```
+
+leaving a zero-byte `junit.xml`. The Bun runner completes the same workspace
+because each file gets its own short-lived process. Parity therefore has to be
+established per file rather than from a single Vitest total, and every file
+fixed during this migration was checked on both runners individually.
+
 ## Verification
 
 `npm run format`, `npm run build`, `tsc --noEmit`, `eslint`, the CLI smoke test,
