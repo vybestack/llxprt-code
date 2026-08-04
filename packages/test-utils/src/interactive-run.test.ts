@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import * as pty from '@lydell/node-pty';
+import { spawnTestPty } from './pty-backend.js';
 import { createDiagnosticsSink } from './diagnostics.js';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { InteractiveRun } from './interactive-run.js';
@@ -63,12 +63,12 @@ function activateDisabledGuard(): string {
  * Uses the genuine diagnostics sink (infrastructure, not the code under test),
  * so nothing about the quota-detection path is mocked.
  */
-function spawnInteractive(
+async function spawnInteractive(
   cwd: string,
   script: string,
   quotaGuardEnabled: boolean,
-): InteractiveRun {
-  const ptyProcess = pty.spawn(process.execPath, ['-e', script], {
+): Promise<InteractiveRun> {
+  const ptyProcess = await spawnTestPty(process.execPath, ['-e', script], {
     name: 'xterm-color',
     cols: 80,
     rows: 30,
@@ -152,7 +152,7 @@ describe('InteractiveRun quota guard integration', () => {
     'trips the guard and throws a labelled error when expectText times out after a quota signal',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         keepAliveScript('HTTP 429 Too Many Requests'),
         true,
@@ -172,7 +172,7 @@ describe('InteractiveRun quota guard integration', () => {
     'does not trip the guard when expectText times out without a quota signal',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         keepAliveScript('ordinary interactive output, nothing unusual'),
         true,
@@ -192,7 +192,7 @@ describe('InteractiveRun quota guard integration', () => {
     'does not trip the guard on a quota signal when quota detection is disabled (fake responses)',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         keepAliveScript('HTTP 429 Too Many Requests'),
         false,
@@ -218,7 +218,7 @@ describe('InteractiveRun quota guard integration', () => {
       // "rejects with a plain timeout error" case for non-quota output — and
       // must record no trip.
       const dir = activateDisabledGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         keepAliveScript('HTTP 429 Too Many Requests'),
         true,
@@ -240,7 +240,7 @@ describe('InteractiveRun quota guard integration', () => {
       // quota-looking non-zero exit must resolve with the ordinary exit code
       // (not reject with a labelled quota error) and record no trip.
       const dir = activateDisabledGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         printThenExitScript('Rate limit exceeded. Please wait a moment', 1),
         true,
@@ -258,7 +258,7 @@ describe('InteractiveRun quota guard integration', () => {
     'trips the guard and rejects with a labelled error when the PTY exits non-zero after a quota signal',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         printThenExitScript('Rate limit exceeded. Please wait a moment', 1),
         true,
@@ -276,7 +276,7 @@ describe('InteractiveRun quota guard integration', () => {
     'resolves with the exit code (and does not trip) on an ordinary non-zero exit',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         printThenExitScript('ordinary failure, no quota involved', 3),
         true,
@@ -294,7 +294,7 @@ describe('InteractiveRun quota guard integration', () => {
     'resolves with 0 (and does not trip) on a clean exit even when quota detection is enabled',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         printThenExitScript('all good here', 0),
         true,
@@ -312,7 +312,7 @@ describe('InteractiveRun quota guard integration', () => {
     'trips the guard when expectExit is called AFTER the PTY already exited on a quota wall',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         printThenExitScript('quota exceeded for this project', 1),
         true,
@@ -338,7 +338,7 @@ describe('InteractiveRun quota guard integration', () => {
       // The child prints a quota signal then hangs forever (never exits), so the
       // ONLY way expectExit can surface the quota wall is by scanning output on
       // the timeout path — the exit event never fires.
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         keepAliveScript('HTTP 429 Too Many Requests'),
         true,
@@ -359,7 +359,7 @@ describe('InteractiveRun quota guard integration', () => {
     'rejects with a plain timeout error (and does not trip) when expectExit times out without a quota signal',
     async () => {
       const dir = activateGuard();
-      const run = spawnInteractive(
+      const run = await spawnInteractive(
         dir,
         keepAliveScript('ordinary interactive output, nothing unusual'),
         true,

@@ -14,9 +14,9 @@ const skipInCI =
 
 it.skipIf(skipInCI)(
   'should perform web search with provider-based architecture',
-  async ({ task }) => {
+  async () => {
     const rig = new TestRig();
-    rig.setup(task.name);
+    rig.setup('should perform web search with provider-based architecture');
 
     const prompt = `do a web search for 'grok 4 heavy surname incident july 2025' and summarize what happened`;
     const result = await rig.run({ args: prompt });
@@ -54,9 +54,9 @@ it.skipIf(skipInCI)(
 
 it.skipIf(skipInCI)(
   'should perform web search with OpenAI provider',
-  async ({ task }) => {
+  async () => {
     const rig = new TestRig();
-    rig.setup(task.name);
+    rig.setup('should perform web search with OpenAI provider');
 
     // Set OpenAI provider with API key
     const previousKey = process.env.OPENAI_API_KEY;
@@ -107,9 +107,9 @@ it.skipIf(skipInCI)(
 
 it.skipIf(skipInCI)(
   'should perform web search with Anthropic provider',
-  async ({ task }) => {
+  async () => {
     const rig = new TestRig();
-    rig.setup(task.name);
+    rig.setup('should perform web search with Anthropic provider');
 
     // Set Anthropic provider with API key
     const previousKey = process.env.ANTHROPIC_API_KEY;

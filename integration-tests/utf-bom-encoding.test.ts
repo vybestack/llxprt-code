@@ -170,8 +170,13 @@ describe('BOM end-to-end integration', () => {
       ),
       settings: { tools: { core: ['read_file'] } },
     });
+    // Resolved from this module rather than the process cwd: the runner
+    // executes each E2E file with `integration-tests/` as its working
+    // directory, so a cwd-relative path would look for the asset inside
+    // integration-tests/docs instead of the repository's.
     const imagePath = resolve(
-      process.cwd(),
+      import.meta.dirname,
+      '..',
       'docs/assets/llxprt-screenshot.png',
     );
     const imageContent = readFileSync(imagePath);

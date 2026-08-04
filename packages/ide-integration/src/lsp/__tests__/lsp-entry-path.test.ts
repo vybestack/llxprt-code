@@ -3,9 +3,28 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const hasImportMetaResolve =
-  typeof (import.meta as unknown as { resolve?: (s: string) => string })
-    .resolve === 'function';
+/**
+ * The case below asserts what `import.meta.resolve` reports *when the package
+ * is installed*. Some environments (e.g. a dependency-only CI install that
+ * never links the workspace) expose the API but cannot resolve the specifier,
+ * so the precondition has to cover both halves rather than just the API.
+ */
+const hasImportMetaResolve = (() => {
+  const resolver = (
+    import.meta as unknown as { resolve?: (specifier: string) => string }
+  ).resolve;
+  if (typeof resolver !== 'function') {
+    return false;
+  }
+  try {
+    (
+      import.meta as unknown as { resolve: (specifier: string) => string }
+    ).resolve('@vybestack/llxprt-code-lsp');
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 describe('LSP entry path resolution', () => {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -29,13 +48,14 @@ describe('LSP entry path resolution', () => {
   it.runIf(hasImportMetaResolve)(
     'resolves via import.meta.resolve when package is installed',
     () => {
-      const resolveImportMeta = (
+      // Call through `import.meta` rather than detaching `resolve` into a
+      // local: some runtimes require the method stay bound to its
+      // `import.meta` receiver.
+      const packageUrl = (
         import.meta as unknown as {
           resolve: (specifier: string) => string;
         }
-      ).resolve;
-
-      const packageUrl = resolveImportMeta('@vybestack/llxprt-code-lsp');
+      ).resolve('@vybestack/llxprt-code-lsp');
       const packagePath = fileURLToPath(packageUrl);
       expect(packagePath).toBeTruthy();
       expect(existsSync(packagePath)).toBe(true);

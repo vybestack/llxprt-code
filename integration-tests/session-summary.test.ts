@@ -12,11 +12,9 @@ import { readFileSync } from 'node:fs';
 describe('session-summary flag', () => {
   let rig: TestRig;
 
-  beforeEach(function (context) {
+  beforeEach(() => {
     rig = new TestRig();
-    if (context.task.name) {
-      rig.setup(context.task.name);
-    }
+    rig.setup('should write a session summary in non-interactive mode');
   });
 
   afterEach(async () => {

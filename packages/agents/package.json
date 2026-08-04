@@ -37,8 +37,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "pretest": "bun ../../scripts/check-agents-api-surface.ts",
-    "test": "bun run-bun-tests.ts",
-    "test:ci": "bun run-bun-tests.ts",
+    "test": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
+    "test:ci": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
     "typecheck": "tsc --noEmit"
   },
   "files": [
