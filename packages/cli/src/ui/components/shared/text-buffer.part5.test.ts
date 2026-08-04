@@ -23,7 +23,7 @@ import {
 } from './transformations.js';
 
 const getVisualLayout = (buffer: TextBuffer): unknown =>
-  (buffer as TextBuffer & { visualLayout: unknown }).visualLayout;
+  buffer.allVisualLines;
 
 describe('useTextBuffer CJK Navigation', () => {
   const viewport = { width: 80, height: 24 };

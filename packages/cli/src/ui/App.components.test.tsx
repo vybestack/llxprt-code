@@ -323,7 +323,7 @@ vi.mock('./utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(),
 }));
 
-vi.mock('../hooks/useTerminalSize.js', () => ({
+vi.mock('./hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(),
 }));
 
@@ -333,7 +333,7 @@ const { getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames } = vi.mocked(
 
 vi.mock('node:child_process');
 
-vi.mock('../providers/providerManagerInstance.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/composition/providerManagerInstance.js', () => ({
   getProviderManager: vi.fn(() => ({
     getActiveProvider: vi.fn(() => ({
       getCurrentModel: vi.fn(() => 'gemini-pro'),
@@ -580,7 +580,7 @@ describe('App UI', () => {
     expect(frame).toContain('gemini-pro');
   });
 
-  it.runIf(isPowerShell())(
+  it.skipIf(!isPowerShell())(
     'should render PowerShell-specific placeholder',
     () => {
       vi.mocked(useAgentStream).mockReturnValue({
@@ -730,7 +730,7 @@ describe('App UI', () => {
       expect(frame).toContain('/test/dir');
     });
 
-    it.runIf(isPowerShell())(
+    it.skipIf(!isPowerShell())(
       'should render PowerShell-specific placeholder in narrow terminal',
       () => {
         vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({

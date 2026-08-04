@@ -15,12 +15,32 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-// Mock child_process
-vi.mock('child_process');
+// Mock child_process, fs, and fs/promises with explicit factory functions
+// so the mocked exports are proper vi.fn() instances under Bun.
+const mockExecFn = vi.fn();
+const mockWatchFile = vi.fn();
+const mockUnwatchFile = vi.fn();
+const mockAccess = vi.fn();
 
-// Mock fs and fs/promises
-vi.mock('node:fs');
-vi.mock('node:fs/promises');
+vi.mock('node:child_process', () => ({
+  exec: mockExecFn,
+}));
+vi.mock('node:fs', () => ({
+  default: {
+    watchFile: mockWatchFile,
+    unwatchFile: mockUnwatchFile,
+    constants: { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 },
+  },
+  watchFile: mockWatchFile,
+  unwatchFile: mockUnwatchFile,
+  constants: { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 },
+}));
+vi.mock('node:fs/promises', () => ({
+  default: {
+    access: mockAccess,
+  },
+  access: mockAccess,
+}));
 
 const CWD = process.platform === 'win32' ? '\\test\\project' : '/test/project';
 const GIT_LOGS_HEAD_PATH = path.join(CWD, '.git', 'logs', 'HEAD');
@@ -29,7 +49,7 @@ type WatchFileCallback = (curr: fs.Stats, prev: fs.Stats) => void;
 
 function createWatchFileCapture() {
   let callback: WatchFileCallback | null = null;
-  const spy = vi.mocked(fs.watchFile).mockImplementation(((
+  mockWatchFile.mockImplementation(((
     _filename: fs.PathLike,
     optionsOrListener: unknown,
     maybeListener?: WatchFileCallback,
@@ -44,7 +64,7 @@ function createWatchFileCapture() {
     return {} as unknown as fs.StatWatcher;
   }) as typeof fs.watchFile);
   return {
-    spy,
+    spy: mockWatchFile,
     getCallback: (): WatchFileCallback => {
       if (!callback) throw new Error('watchFile callback not captured yet');
       return callback;
@@ -55,11 +75,15 @@ function createWatchFileCapture() {
 
 function mockExecReturn(...values: string[]) {
   let callCount = 0;
-  (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-    (_command, _options, callback) => {
+  mockExecFn.mockImplementation(
+    (_command: string, _options: unknown, callback?: unknown) => {
       const value = values[Math.min(callCount, values.length - 1)];
       callCount++;
-      callback?.(null, value, '');
+      (callback as ((...args: unknown[]) => void) | undefined)?.(
+        null,
+        value,
+        '',
+      );
       return new EventEmitter() as ChildProcess;
     },
   );
@@ -70,7 +94,7 @@ describe('useGitBranchName', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+    mockAccess.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -92,7 +116,7 @@ describe('useGitBranchName', () => {
   });
 
   it('should return undefined if git command fails', async () => {
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
+    mockExecFn.mockImplementation(
       (_command, _options, callback) => {
         callback?.(new Error('Git error'), '', 'error output');
         return new EventEmitter() as ChildProcess;
@@ -110,7 +134,7 @@ describe('useGitBranchName', () => {
   });
 
   it('should return short commit hash if branch is HEAD (detached state)', async () => {
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
+    mockExecFn.mockImplementation(
       (command, _options, callback) => {
         if (command === 'git rev-parse --abbrev-ref HEAD') {
           callback?.(null, 'HEAD\n', '');
@@ -130,7 +154,7 @@ describe('useGitBranchName', () => {
   });
 
   it('should return undefined if branch is HEAD and getting commit hash fails', async () => {
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
+    mockExecFn.mockImplementation(
       (command, _options, callback) => {
         if (command === 'git rev-parse --abbrev-ref HEAD') {
           callback?.(null, 'HEAD\n', '');
@@ -183,7 +207,7 @@ describe('useGitBranchName', () => {
   });
 
   it('should handle watcher setup error silently', async () => {
-    vi.mocked(fsPromises.access).mockRejectedValue(new Error('ENOENT'));
+    mockAccess.mockRejectedValue(new Error('ENOENT'));
     mockExecReturn('main\n');
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
@@ -313,7 +337,7 @@ describe('useGitBranchName', () => {
 
   it('should not register watchFile if unmounted before access resolves', async () => {
     let resolveAccess: () => void = () => {};
-    vi.mocked(fsPromises.access).mockImplementation(
+    mockAccess.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveAccess = resolve;
@@ -360,7 +384,7 @@ describe('useGitBranchName', () => {
     let firstExecCallback:
       | ((error: Error | null, stdout: string, stderr: string) => void)
       | null = null;
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
+    mockExecFn.mockImplementation(
       (_command, _options, callback) => {
         callIndex++;
         if (callIndex === 1) {

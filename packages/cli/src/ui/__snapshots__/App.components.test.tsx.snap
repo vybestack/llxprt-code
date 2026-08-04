@@ -1,0 +1,46 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`App UI should render the initial UI correctly 1`] = `
+"
+  ERROR  undefined is not an object (evaluating 'props.uiRuntime.app')
+
+ src/ui/App.tsx:71:48
+
+ 68:  * - AppContainer: Main UI container with UIState/UIActions contexts
+ 69:  */
+ 70: export const AppWrapper = (props: AppProps) => {
+ 71:   const renderOptions = inkRenderOptions(props.uiRuntime.app, props.settings);
+ 72:   const mouseEventsEnabled = isMouseEventsEnabled(
+ 73:     renderOptions,
+ 74:     props.settings,
+
+ - AppWrapper (src/ui/App.tsx:71:48)
+ -react-stack-bottom-
+  rame               (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-recon
+                     ciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+ -renderRootSy
+  c           (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler/c
+              js/react-reconciler.development.js:12624:11)
+ -performWorkOnR
+  ot            (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12135:44)
+ -performSyncWorkOn
+  oot              (/Users/acoliver/projects/llxprt/branch-6/llxprt-code/node_modules/react-reconci
+                   ler/cjs/react-reconciler.development.js:2446:7)
+"
+`;

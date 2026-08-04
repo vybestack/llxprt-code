@@ -5,6 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  getCliVersion,
+  __resetVersionCacheForTesting,
+} from './version.js';
 import { getPackageJson } from '@vybestack/llxprt-code-core';
 
 const originalCliVersion = process.env.CLI_VERSION;
@@ -22,7 +26,6 @@ const mockGetPackageJson = vi.mocked(getPackageJson);
 
 describe('getCliVersion', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
     delete process.env.CLI_VERSION;
   });
@@ -38,9 +41,9 @@ describe('getCliVersion', () => {
 
   it('should return env version when CLI_VERSION is set', async () => {
     process.env.CLI_VERSION = '1.2.3-env';
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockResolvedValue({ version: '1.0.0-pkg' } as never);
 
-    const { getCliVersion } = await import('./version.js');
     const result = await getCliVersion();
 
     expect(result).toBe('1.2.3-env');
@@ -48,9 +51,8 @@ describe('getCliVersion', () => {
   });
 
   it('should read package version on first call and cache it for subsequent calls', async () => {
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockResolvedValue({ version: '1.0.0-pkg' } as never);
-
-    const { getCliVersion } = await import('./version.js');
 
     const result1 = await getCliVersion();
     expect(result1).toBe('1.0.0-pkg');
@@ -65,9 +67,8 @@ describe('getCliVersion', () => {
   });
 
   it('should cache unknown when no version info available and not re-read', async () => {
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockResolvedValue({} as never);
-
-    const { getCliVersion } = await import('./version.js');
 
     const result1 = await getCliVersion();
     expect(result1).toBe('unknown');
@@ -82,9 +83,8 @@ describe('getCliVersion', () => {
   });
 
   it('should cache unknown when getPackageJson throws', async () => {
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockRejectedValue(new Error('ENOENT'));
-
-    const { getCliVersion } = await import('./version.js');
 
     const result = await getCliVersion();
     expect(result).toBe('unknown');
@@ -92,9 +92,8 @@ describe('getCliVersion', () => {
   });
 
   it('should return same cached value across multiple calls in same process', async () => {
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockResolvedValue({ version: '3.0.0-stable' } as never);
-
-    const { getCliVersion } = await import('./version.js');
 
     const results = await Promise.all([
       getCliVersion(),
@@ -111,20 +110,19 @@ describe('getCliVersion', () => {
   });
 
   it('should reset cache when module is re-imported (deterministic test reset)', async () => {
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockResolvedValue({ version: '1.0.0-first' } as never);
 
-    const { getCliVersion: getCliVersion1 } = await import('./version.js');
-    const result1 = await getCliVersion1();
+    const result1 = await getCliVersion();
     expect(result1).toBe('1.0.0-first');
     expect(mockGetPackageJson).toHaveBeenCalledTimes(1);
 
-    // Simulate fresh test module environment by resetting Vitest's module registry and re-mocking
-    vi.resetModules();
+    // Simulate fresh test module environment by resetting the cache seam and re-mocking
     mockGetPackageJson.mockClear();
     mockGetPackageJson.mockResolvedValue({ version: '2.0.0-second' } as never);
+    __resetVersionCacheForTesting();
 
-    const { getCliVersion: getCliVersion2 } = await import('./version.js');
-    const result2 = await getCliVersion2();
+    const result2 = await getCliVersion();
     expect(result2).toBe('2.0.0-second');
     expect(mockGetPackageJson).toHaveBeenCalledTimes(1);
   });
@@ -132,10 +130,8 @@ describe('getCliVersion', () => {
   it('should not use env version set after module import (startup-stable semantics)', async () => {
     // Ensure env is NOT set at import time
     delete process.env.CLI_VERSION;
+    __resetVersionCacheForTesting();
     mockGetPackageJson.mockResolvedValue({ version: '1.0.0-pkg' } as never);
-
-    // Import module with env absent
-    const { getCliVersion } = await import('./version.js');
 
     // Set env AFTER import but BEFORE first call
     process.env.CLI_VERSION = '99.99.99-env';
@@ -149,9 +145,7 @@ describe('getCliVersion', () => {
   it('should use env value at import time even if env changes before first call', async () => {
     // Set env at import time
     process.env.CLI_VERSION = '1.2.3-initial';
-
-    // Import module with env set
-    const { getCliVersion } = await import('./version.js');
+    __resetVersionCacheForTesting();
 
     // Change env BEFORE first call
     process.env.CLI_VERSION = '99.99.99-later';

@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<SessionSummaryDisplay /> > renders the summary display with a title 1`] = `
+exports[`<SessionSummaryDisplay /> renders the summary display with a title 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Agent powering down. Goodbye!                                                                   │

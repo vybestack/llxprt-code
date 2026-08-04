@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';
 import type { BoxProps } from 'ink';
 
@@ -44,7 +44,7 @@ describe('AuthDialog theming', () => {
       true,
     );
 
-    renderWithProviders(<AuthDialog onSelect={vi.fn()} settings={settings} />);
+    render(<AuthDialog onSelect={vi.fn()} settings={settings} />);
 
     const themedBox = recordedBoxProps.find(
       (entry) => entry.backgroundColor === Colors.Background,

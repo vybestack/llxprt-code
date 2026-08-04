@@ -222,7 +222,6 @@ describe('cli main provider initialization', () => {
     } finally {
       process.stdin.isTTY = originalIsTTY;
       dynamicSettingsRegistry.reset();
-      vi.resetModules();
     }
   });
 

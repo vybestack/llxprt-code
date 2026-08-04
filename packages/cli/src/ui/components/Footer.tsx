@@ -25,8 +25,17 @@ import { truncateMiddle } from '../utils/responsive.js';
 import { ThemedGradient } from './ThemedGradient.js';
 
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
-const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
-const heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
+
+// Lazily compute the heap limit so test mocks for `node:v8` can take effect
+// before the value is first read.
+let _heapSizeLimit: number | undefined;
+function getHeapSizeLimit(): number {
+  if (_heapSizeLimit === undefined) {
+    const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
+    _heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
+  }
+  return _heapSizeLimit;
+}
 
 function areFooterStablePropsEqual(
   prevProps: FooterProps,
@@ -99,7 +108,7 @@ function formatMemoryUsage(
   detailed: boolean,
 ): string {
   const heapUsed = formatGigabytes(usage.heapUsed);
-  const heapLimit = formatGigabytes(heapSizeLimit);
+  const heapLimit = formatGigabytes(getHeapSizeLimit());
   const rssValue = formatGigabytes(usage.rss);
   const heap = `Heap: ${heapUsed}${compact ? 'G' : 'GB'}/${heapLimit}${compact ? 'G' : 'GB'}`;
   const rss = `RSS: ${rssValue}${compact ? 'G' : 'GB'}`;

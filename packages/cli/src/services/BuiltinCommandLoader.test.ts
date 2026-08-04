@@ -73,7 +73,6 @@ vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
 vi.mock('../ui/commands/chatCommand.js', () => ({ chatCommand: {} }));
 vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
 vi.mock('../ui/commands/compressCommand.js', () => ({ compressCommand: {} }));
-vi.mock('../ui/commands/corgiCommand.js', () => ({ corgiCommand: {} }));
 vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
 vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
 vi.mock('../ui/commands/extensionsCommand.js', () => ({
@@ -96,7 +95,6 @@ vi.mock('../ui/commands/quotaCommand.js', async () => {
     },
   };
 });
-vi.mock('../ui/commands/resumeCommand.js', () => ({ resumeCommand: {} }));
 vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
 vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
@@ -110,6 +108,21 @@ vi.mock('../ui/commands/mcpCommand.js', () => ({
     kind: 'BUILT_IN',
   },
 }));
+
+// isDevelopment is a module-level constant captured at first evaluation of
+// installationInfo.js. Under Vitest, vi.resetModules() forced re-evaluation
+// after changing NODE_ENV; Bun does not support resetting modules. The
+// 'profile' describe block only needs isDevelopment=true to exercise the
+// uiprofile branch (profileCommand itself is always loaded), so mock the
+// constant to true. The 'should always include profile command' test does
+// not depend on isDevelopment (profileCommand is unconditionally included).
+vi.mock('../utils/installationInfo.js', async () => {
+  const actual = await vi.importActual('./../utils/installationInfo.js');
+  return {
+    ...actual,
+    isDevelopment: true,
+  };
+});
 
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;
@@ -229,7 +242,6 @@ describe('BuiltinCommandLoader profile', () => {
   let mockConfig: Config;
 
   beforeEach(() => {
-    vi.resetModules();
     mockConfig = {
       getFolderTrust: vi.fn().mockReturnValue(false),
       getCheckpointingEnabled: () => false,
@@ -244,8 +256,6 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should always include profile command', async () => {
-    process.env['NODE_ENV'] = 'production';
-    const { BuiltinCommandLoader } = await import('./BuiltinCommandLoader.js');
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
     const profileCmd = commands.find((c) => c.name === 'profile');
@@ -253,8 +263,6 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should include uiprofile command when isDevelopment is true', async () => {
-    process.env['NODE_ENV'] = 'development';
-    const { BuiltinCommandLoader } = await import('./BuiltinCommandLoader.js');
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
     const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');

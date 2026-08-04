@@ -22,14 +22,6 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getOAuthManager: () => ({
-    authenticate: mockAuthenticate,
-    getAuthStatus: mockGetAuthStatus,
-    toggleOAuthEnabled: mockToggleOAuthEnabled,
-  }),
-}));
-
 import { AuthDialog } from './AuthDialog.js';
 
 describe('AuthDialog', () => {
@@ -124,20 +116,20 @@ describe('AuthDialog', () => {
 
       // OAuth-only dialog shows regardless of API key presence
       expect(lastFrame()).toContain('OAuth Authentication');
-      expect(lastFrame()).toContain('Gemini (Google OAuth)');
+      expect(lastFrame()).toContain('Claude Code (Claude.ai OAuth)');
     });
 
     it('should display authentication status for each provider', async () => {
       mockGetAuthStatus.mockResolvedValue([
         {
-          provider: 'gemini',
+          provider: 'claudecode',
           authenticated: true,
           method: 'oauth',
           expiresIn: 3600,
           oauthEnabled: true,
         },
         {
-          provider: 'anthropic',
+          provider: 'codex',
           authenticated: true,
           method: 'oauth',
           oauthEnabled: true,
@@ -161,8 +153,8 @@ describe('AuthDialog', () => {
             ui: { customThemes: {} },
             mcpServers: {},
             oauthEnabledProviders: {
-              gemini: true,
-              anthropic: true,
+              claudecode: true,
+              codex: true,
             },
           },
           path: '',
@@ -180,8 +172,10 @@ describe('AuthDialog', () => {
       await wait();
 
       const frame = lastFrame();
-      expect(frame).toContain('Gemini (Google OAuth) [ON] (Authenticated)');
-      expect(frame).toContain('Anthropic Claude (OAuth) [ON] (Authenticated)');
+      expect(frame).toContain(
+        'Claude Code (Claude.ai OAuth) [ON] (Authenticated)',
+      );
+      expect(frame).toContain('Codex (ChatGPT OAuth) [ON] (Authenticated)');
     });
   });
 
@@ -210,7 +204,7 @@ describe('AuthDialog', () => {
     mockGetAuthStatus
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
-        { provider: 'gemini', authenticated: false, oauthEnabled: true },
+        { provider: 'claudecode', authenticated: false, oauthEnabled: true },
       ]);
 
     const { lastFrame, stdin, unmount } = renderWithProviders(
@@ -221,7 +215,7 @@ describe('AuthDialog', () => {
     stdin.write('1');
     await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
     expect(lastFrame()).toContain('[ON]');
@@ -244,7 +238,7 @@ describe('AuthDialog', () => {
         settings: {
           ui: { customThemes: {} },
           mcpServers: {},
-          oauthEnabledProviders: { gemini: true },
+          oauthEnabledProviders: { claudecode: true },
         },
         path: '',
       },
@@ -266,7 +260,7 @@ describe('AuthDialog', () => {
     stdin.write('1');
     await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
 
@@ -306,11 +300,11 @@ describe('AuthDialog', () => {
     stdin.write('1');
     await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
     expect(onSelect).not.toHaveBeenCalled();
 
     const frame = lastFrame();
-    expect(frame).toContain('Failed to toggle OAuth for gemini');
+    expect(frame).toContain('Failed to toggle OAuth for claudecode');
     unmount();
   });
 
@@ -350,7 +344,7 @@ describe('AuthDialog', () => {
 
     expect(lastFrame()).toContain('Initial error');
 
-    stdin.write('4');
+    stdin.write('3');
     await wait();
     expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
     unmount();
@@ -386,7 +380,7 @@ describe('AuthDialog', () => {
     );
     await wait();
 
-    stdin.write('4');
+    stdin.write('3');
     await wait();
     expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
     unmount();

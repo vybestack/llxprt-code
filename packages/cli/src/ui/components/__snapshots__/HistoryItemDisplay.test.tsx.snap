@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<HistoryItemDisplay /> > should render a full gemini item when using availableTerminalHeightAi 1`] = `
+exports[`<HistoryItemDisplay /> should render a full gemini item when using availableTerminalHeightAi 1`] = `
 "✦ Example code block:
     1 Line 1
     2 Line 2
@@ -54,7 +54,7 @@ exports[`<HistoryItemDisplay /> > should render a full gemini item when using av
    50 Line 50"
 `;
 
-exports[`<HistoryItemDisplay /> > should render a full gemini_content item when using availableTerminalHeightAi 1`] = `
+exports[`<HistoryItemDisplay /> should render a full gemini_content item when using availableTerminalHeightAi 1`] = `
 "  Example code block:
     1 Line 1
     2 Line 2
@@ -108,7 +108,7 @@ exports[`<HistoryItemDisplay /> > should render a full gemini_content item when 
    50 Line 50"
 `;
 
-exports[`<HistoryItemDisplay /> > should render a truncated gemini item 1`] = `
+exports[`<HistoryItemDisplay /> should render a truncated gemini item 1`] = `
 "✦ Example code block:
    ... first 41 lines hidden ...
    42 Line 42
@@ -122,7 +122,7 @@ exports[`<HistoryItemDisplay /> > should render a truncated gemini item 1`] = `
    50 Line 50"
 `;
 
-exports[`<HistoryItemDisplay /> > should render a truncated gemini_content item 1`] = `
+exports[`<HistoryItemDisplay /> should render a truncated gemini_content item 1`] = `
 "  Example code block:
    ... first 41 lines hidden ...
    42 Line 42

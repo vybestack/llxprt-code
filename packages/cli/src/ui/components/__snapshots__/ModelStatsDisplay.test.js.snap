@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<ModelStatsDisplay /> > should display a single model correctly 1`] = `
+exports[`<ModelStatsDisplay /> should display a single model correctly 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Model Stats For Nerds                                                                           │
@@ -23,7 +23,7 @@ exports[`<ModelStatsDisplay /> > should display a single model correctly 1`] = `
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<ModelStatsDisplay /> > should display conditional rows if at least one model has data 1`] = `
+exports[`<ModelStatsDisplay /> should display conditional rows if at least one model has data 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Model Stats For Nerds                                                                           │
@@ -46,7 +46,7 @@ exports[`<ModelStatsDisplay /> > should display conditional rows if at least one
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<ModelStatsDisplay /> > should display stats for multiple models correctly 1`] = `
+exports[`<ModelStatsDisplay /> should display stats for multiple models correctly 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Model Stats For Nerds                                                                           │
@@ -69,7 +69,7 @@ exports[`<ModelStatsDisplay /> > should display stats for multiple models correc
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<ModelStatsDisplay /> > should handle large values without wrapping or overlapping 1`] = `
+exports[`<ModelStatsDisplay /> should handle large values without wrapping or overlapping 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Model Stats For Nerds                                                                           │
@@ -92,7 +92,7 @@ exports[`<ModelStatsDisplay /> > should handle large values without wrapping or 
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<ModelStatsDisplay /> > should not display conditional rows if no model has data for them 1`] = `
+exports[`<ModelStatsDisplay /> should not display conditional rows if no model has data for them 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Model Stats For Nerds                                                                           │
@@ -112,7 +112,7 @@ exports[`<ModelStatsDisplay /> > should not display conditional rows if no model
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<ModelStatsDisplay /> > should render "no API calls" message when there are no active models 1`] = `
+exports[`<ModelStatsDisplay /> should render "no API calls" message when there are no active models 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  No API calls have been made in this session.                                                    │

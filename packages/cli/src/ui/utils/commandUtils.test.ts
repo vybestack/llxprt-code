@@ -41,19 +41,18 @@ vi.mock('node:fs', () => ({
 }));
 
 // Mock process.platform for platform-specific tests
-const mockProcess = vi.hoisted(() => ({
-  platform: 'darwin',
-}));
+// Use Object.defineProperty directly on process (not vi.stubGlobal) so the
+// getter persists across nested describe beforeEach hooks. vi.stubGlobal
+// restores the original process in afterEach, causing the stub to be lost
+// before nested describe beforeEach runs.
+const mockProcess = vi.hoisted(() => ({ platform: 'darwin' }));
 
-vi.stubGlobal(
-  'process',
-  Object.create(process, {
-    platform: {
-      get: () => mockProcess.platform,
-      configurable: true, // Allows the property to be changed later if needed
-    },
-  }),
-);
+Object.defineProperty(process, 'platform', {
+  get() {
+    return mockProcess.platform;
+  },
+  configurable: true,
+});
 
 const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
   const { isTTY = false, writeReturn = true } = opts ?? {};

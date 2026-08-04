@@ -28,7 +28,6 @@ import {
 import { MessageType, StreamingState } from '../types.js';
 
 // --- MOCKS ---
-const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
   return {
@@ -36,6 +35,7 @@ vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
     useReactToolScheduler: vi.fn(),
   };
 });
+const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 
 vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),

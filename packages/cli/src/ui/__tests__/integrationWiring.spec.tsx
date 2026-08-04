@@ -21,9 +21,9 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Unmock ink to use real Ink with ink-testing-library
-// The global mock in test-setup.ts conflicts with ink-testing-library's reconciler
-vi.unmock('ink');
+// ink is not globally mocked under Bun (each test file runs in its own
+// process), so vi.unmock('ink') from the Vitest era is unnecessary and
+// unsupported by Bun's test runner.
 
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';

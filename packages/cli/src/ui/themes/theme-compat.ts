@@ -19,7 +19,7 @@ export { Colors, ansi } from '../colors.js';
 export { themeManager } from './theme-manager.js';
 
 // Export semantic colors for new code
-export { SemanticColors } from './semantic-tokens.js';
+export type { SemanticColors } from './semantic-tokens.js';
 export { resolveSemanticColors } from './semantic-resolver.js';
 
 // Import for internal use

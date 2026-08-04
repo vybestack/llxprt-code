@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-collapsed-match 1`] = `
+exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots) command-search-render-collapsed-match 1`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
 
@@ -31,7 +31,7 @@ exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match
 "
 `;
 
-exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-collapsed-match 2`] = `
+exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots) command-search-render-collapsed-match 2`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
 
@@ -62,7 +62,7 @@ exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match
 "
 `;
 
-exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-expanded-match 1`] = `
+exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots) command-search-render-expanded-match 1`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
 
@@ -93,7 +93,7 @@ exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match
 "
 `;
 
-exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-expanded-match 2`] = `
+exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots) command-search-render-expanded-match 2`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
 

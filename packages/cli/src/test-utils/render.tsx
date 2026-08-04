@@ -6,6 +6,7 @@
 
 import { render as inkRender } from 'ink-testing-library';
 import React, { act, createContext, useContext } from 'react';
+import { vi } from 'vitest';
 
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
@@ -255,21 +256,37 @@ export function cleanup(): void {
   // This is a no-op for compatibility
 }
 
-// Simple waitFor implementation - polls until callback succeeds or timeout
+// Simple waitFor implementation - polls until callback succeeds or timeout.
+// Handles both real and fake timers: under fake timers, advances the timer
+// clock to flush pending state updates instead of relying on real setTimeout.
+// Also explicitly flushes microtasks on each iteration, which is needed for
+// mocked async operations (e.g. mockResolvedValue) whose continuation runs
+// in a microtask that Bun's act() integration does not always flush.
 export const waitFor = async (
   callback: () => void | Promise<void>,
   options?: { timeout?: number; interval?: number },
 ): Promise<void> => {
   const timeout = options?.timeout ?? 1000;
   const interval = options?.interval ?? 50;
-  const start = Date.now();
+  const maxIterations = Math.ceil(timeout / interval);
 
-  while (Date.now() - start < timeout) {
+  for (let i = 0; i < maxIterations; i++) {
     try {
       await callback();
       return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, interval));
+      // Flush pending microtasks so that mocked async operations (e.g.
+      // mockResolvedValue) continue and update React state.
+      await new Promise((resolve) => queueMicrotask(resolve));
+
+      // Under fake timers, setTimeout never fires on its own. Advance
+      // fake timers to flush pending timer-based state updates.
+      try {
+        vi.advanceTimersByTime(interval);
+      } catch {
+        // Real timers: use real setTimeout for the polling interval.
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
     }
   }
   // Final attempt - let it throw if it fails

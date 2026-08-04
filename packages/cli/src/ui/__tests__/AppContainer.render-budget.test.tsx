@@ -323,7 +323,7 @@ vi.mock('../hooks/slashCommandProcessor.js', () => ({
   })),
 }));
 
-vi.mock('../hooks/useVim.js', () => ({
+vi.mock('../hooks/vim.js', () => ({
   useVim: vi.fn(() => ({ handleInput: vi.fn() })),
 }));
 

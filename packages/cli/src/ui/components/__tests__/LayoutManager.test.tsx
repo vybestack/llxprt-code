@@ -5,8 +5,9 @@
  */
 
 import { render } from '../../../test-utils/render.js';
-import { act } from 'react';
+import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Text } from 'ink';
 import { LayoutManager, useLayout } from '../LayoutManager.js';
 
 // Mock the useTerminalSize hook
@@ -19,11 +20,11 @@ const TestComponent = () => {
   const layout = useLayout();
   return (
     <>
-      <div>terminalHeight: {layout.terminalHeight}</div>
-      <div>terminalWidth: {layout.terminalWidth}</div>
-      <div>footerHeight: {layout.footerHeight}</div>
-      <div>constrainHeight: {String(layout.constrainHeight)}</div>
-      <div>availableTerminalHeight: {layout.availableTerminalHeight}</div>
+      <Text>terminalHeight: {layout.terminalHeight}</Text>
+      <Text>terminalWidth: {layout.terminalWidth}</Text>
+      <Text>footerHeight: {layout.footerHeight}</Text>
+      <Text>constrainHeight: {String(layout.constrainHeight)}</Text>
+      <Text>availableTerminalHeight: {layout.availableTerminalHeight}</Text>
     </>
   );
 };
@@ -141,12 +142,34 @@ describe('LayoutManager', () => {
   });
 
   it('throws error when useLayout is called outside of LayoutManager', () => {
-    // Suppress globalThis.console.error for this test
+    // Ink's error boundary catches render errors, so we use a custom
+    // error boundary to capture the thrown error and re-throw it.
+    class ErrorCatcher extends React.Component<
+      { children: React.ReactNode },
+      { error: Error | null }
+    > {
+      constructor(props: { children: React.ReactNode }) {
+        super(props);
+        this.state = { error: null };
+      }
+      static getDerivedStateFromError(error: Error) {
+        return { error };
+      }
+      render() {
+        if (this.state.error) {
+          return React.createElement(Text, null, this.state.error.message);
+        }
+        return this.props.children;
+      }
+    }
+
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(() => {
-      render(<TestComponent />);
-    }).toThrow('useLayout must be used within LayoutManager');
+    const { lastFrame } = render(
+      React.createElement(ErrorCatcher, null, React.createElement(TestComponent)),
+    );
+
+    expect(lastFrame()).toContain('useLayout must be used within LayoutManager');
 
     consoleSpy.mockRestore();
   });
