@@ -750,7 +750,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'scripts-manifest',
     cwd: '.',
-    files: ['scripts/tests/bun-test-manifest.bun.test.ts'],
+    files: [
+      'scripts/tests/bun-test-manifest.bun.test.ts',
+      'scripts/tests/run_bun_tests.test.ts',
+    ],
   },
 ];
 

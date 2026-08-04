@@ -491,7 +491,9 @@ describe('actual child process signal shape', () => {
   // rather than producing a signal. These tests are POSIX-specific.
   const isPosix = platform() !== 'win32';
 
-  it.runIf(isPosix)(
+  // `skipIf` rather than vitest's `runIf`: this file also runs under Bun's
+  // native runner, which implements `skipIf` but spells the inverse `if`.
+  it.skipIf(!isPosix)(
     'produces exitCode null and a string signalCode when a child is killed by a signal',
     () => {
       // The child kills itself with SIGTERM. spawnSync blocks until the child
@@ -629,7 +631,11 @@ describe('production Bun native test runner', () => {
       expect(child.stdout).toContain(
         `Dry run: ${CORE_MANIFEST_FILE_COUNT} files would be executed:`,
       );
-      expect(child.stdout).toContain('packages/core/src/utils/errors.test.ts');
+      // The runner emits native separators, so normalize before asserting on
+      // path content; otherwise this assertion only holds on POSIX platforms.
+      expect(child.stdout.replaceAll('\\', '/')).toContain(
+        'packages/core/src/utils/errors.test.ts',
+      );
     },
     REAL_RUNNER_TIMEOUT_MS,
   );

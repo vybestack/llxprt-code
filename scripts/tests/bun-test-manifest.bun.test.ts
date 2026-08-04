@@ -135,7 +135,12 @@ describe('Bun native test manifest', () => {
     if (!(thrown instanceof BunManifestStatError)) {
       throw new Error('Expected BunManifestStatError');
     }
-    expect(thrown.path).toBe('/fixture/packages/core/src/utils/errors.test.ts');
+    // Built with `join` so the expectation uses native separators; the
+    // resolver joins the same way, so a literal POSIX path only matches
+    // on POSIX platforms.
+    expect(thrown.path).toBe(
+      join('/fixture', 'packages/core/src/utils/errors.test.ts'),
+    );
     expect(thrown.code).toBe('EACCES');
     expect(thrown.cause).toBe(cause);
   });
