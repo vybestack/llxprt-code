@@ -541,10 +541,10 @@ npm run test:all_evals                  # bun scripts/run_bun_tests.ts --root ev
 
 ### Overview
 
-In addition to the Bun-backed Vitest orchestration (`test:bun`), each workspace
-is being incrementally migrated to run tests natively under Bun's test runner
-(`bun test`). Native Bun tests run faster (no Vitest overhead) and provide
-better integration with Bun's module system.
+Bun's own test runner (`bun test`) is the primary runner for every workspace
+except `agents` and `cli`, which are still on Vitest and tracked by #2578.
+Native Bun tests run faster (no Vitest overhead) and integrate better with
+Bun's module system.
 
 ### Workspace `test:bun` scripts
 
@@ -664,7 +664,12 @@ are credentialed and must be named explicitly.
 
 ### CI parity
 
-The `bun_native_test_parity` CI job runs a representative sample of tests
-from each migrated workspace under Bun's native test runner to verify
-parity with Vitest results. The full Vitest suite remains the primary
-verification path; native Bun runs are additive parity checks.
+The `bun_native_test_parity` CI job runs the **complete** non-credentialed
+manifest under Bun's native test runner — every root, every file — so a root
+that stops being discovered fails the build. It is no longer a sample, and
+Bun's runner is no longer additive: it is the primary verification path for
+every migrated workspace.
+
+Note that this overlaps heavily with `test_shard`, which invokes each
+workspace's own `test` script; for the migrated workspaces that script is the
+same Bun runner. Most files therefore execute twice per PR.
