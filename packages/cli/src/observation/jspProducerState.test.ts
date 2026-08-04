@@ -164,13 +164,19 @@ describe('todos', () => {
       {
         type: 'todos.replaced',
         revision: 1,
-        items: [{ text: 'Do thing', completed: false }],
+        items: [
+          { text: 'Do thing', state: 'in_progress' },
+          { text: 'Do other thing', state: 'pending' },
+        ],
       },
       () => 200,
     );
     expect(state.todos).toStrictEqual({
       revision: 1,
-      items: [{ text: 'Do thing', completed: false }],
+      items: [
+        { text: 'Do thing', state: 'in_progress' },
+        { text: 'Do other thing', state: 'pending' },
+      ],
     });
   });
 
@@ -187,7 +193,7 @@ describe('todos', () => {
       {
         type: 'todos.replaced',
         revision: 1,
-        items: [{ text: 'old', completed: true }],
+        items: [{ text: 'old', state: 'completed' }],
       },
       () => 300,
     );
@@ -358,7 +364,7 @@ describe('buildSnapshot', () => {
       {
         type: 'todos.replaced',
         revision: 1,
-        items: [{ text: 'x', completed: false }],
+        items: [{ text: 'x', state: 'in_progress' }],
       },
       () => 300,
     );
@@ -376,7 +382,7 @@ describe('buildSnapshot', () => {
     });
     expect(snap.todos).toMatchObject({
       availability: 'known',
-      value: { revision: 1 },
+      value: { revision: 1, items: [{ text: 'x', state: 'in_progress' }] },
     });
     expect(snap.current_turn).toMatchObject({
       availability: 'known',
