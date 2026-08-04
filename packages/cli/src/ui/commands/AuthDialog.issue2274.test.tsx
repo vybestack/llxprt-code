@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
@@ -142,9 +142,12 @@ describe('AuthDialog + ProfileCreateWizard claudecode identity (@issue:2274)', (
     await wait();
 
     stdin.write('1');
-    await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    // Polled rather than slept on: a fixed delay after a keystroke is a race,
+    // and how long the render/dispatch takes varies with machine load.
+    await waitFor(() => {
+      expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    });
     expect(mockAuthenticate).not.toHaveBeenCalled();
     unmount();
   });
@@ -157,9 +160,11 @@ describe('AuthDialog + ProfileCreateWizard claudecode identity (@issue:2274)', (
     await wait();
 
     stdin.write('3');
-    await wait();
 
-    expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
+    // Polled rather than slept on, for the same reason as above.
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
+    });
     unmount();
   });
 
