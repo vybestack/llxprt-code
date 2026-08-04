@@ -77,7 +77,13 @@ export function validateParams(
   required?: readonly string[],
 ): ValidationError | null {
   for (const key of Object.keys(params)) {
-    if (!(key in spec)) {
+    // `in` walks the prototype chain, so `{ constructor: 'x' }`,
+    // `{ toString: 'x' }` and an own `__proto__` key would all pass an
+    // unknown-key check here and then never reach the per-kind loop (which
+    // iterates the spec's own entries). `hasOwnProperty` restricts the check
+    // to the spec's own declared parameters, so prototype names are rejected
+    // like any other unknown parameter instead of being silently ignored.
+    if (!Object.prototype.hasOwnProperty.call(spec, key)) {
       return {
         code: 'INVALID_PARAM',
         message: unknownParamMessage(key, spec, required),

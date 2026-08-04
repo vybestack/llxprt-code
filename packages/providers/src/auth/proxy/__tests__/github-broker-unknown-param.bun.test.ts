@@ -58,9 +58,9 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
       thrown = error;
     }
     const message = errorMessage(thrown);
-    expect(message).toContain('Unknown parameter: number');
-    expect(message).toContain('Accepted parameters: threadId, repo');
-    expect(message).toContain('Required: threadId');
+    expect(message).toBe(
+      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.',
+    );
   });
 
   /**
@@ -81,9 +81,9 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
       thrown = error;
     }
     const message = errorMessage(thrown);
-    expect(message).toContain('Unknown parameter: number');
-    expect(message).toContain('Accepted parameters: threadId, repo');
-    expect(message).toContain('Required: threadId');
+    expect(message).toBe(
+      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.',
+    );
   });
 
   // ─── Per-op validators ───────────────────────────────────────────────
@@ -99,9 +99,9 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
       number: 3018,
     });
     expect(result?.code).toBe('INVALID_PARAM');
-    expect(result?.message).toContain('Unknown parameter: number');
-    expect(result?.message).toContain('Accepted parameters: threadId, repo');
-    expect(result?.message).toContain('Required: threadId');
+    expect(result?.message).toBe(
+      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.',
+    );
   });
 
   /**
@@ -115,10 +115,9 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
   it('validateIssueListParams lists accepted params with no Required clause', () => {
     const result = validateIssueListParams({ bogus: true });
     expect(result?.code).toBe('INVALID_PARAM');
-    expect(result?.message).toContain(
-      'Accepted parameters: search, state, label, limit, repo',
+    expect(result?.message).toBe(
+      'Unknown parameter: bogus. Accepted parameters: search, state, label, limit, repo.',
     );
-    expect(result?.message).not.toContain('Required:');
   });
 
   /**
@@ -163,5 +162,72 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
     // The per-kind repo message must survive, not be replaced.
     expect(invalidValue?.message).toContain('must be "owner/name"');
     expect(invalidValue?.message).not.toContain('Accepted parameters');
+  });
+});
+
+describe('issue #3019 (FIX 4): prototype-chain names are rejected, not accepted', () => {
+  // `constructor`, `toString` and `__proto__` are inherited from
+  // Object.prototype, so an `in`-operator unknown-key check would treat them
+  // as known and silently skip them. A valid `threadId` is included so the
+  // required-param check does not fire first — isolating the unknown-key
+  // rejection to the prototype name itself. Each must be rejected with
+  // INVALID_PARAM and the accepted-parameter message.
+
+  /**
+   * @plan issue-3019-github-unknown-parameter
+   * @requirement AB1
+   * @issue 3019
+   */
+  it('rejects `constructor` as an unknown parameter', () => {
+    const result = validateResolveThreadParams({
+      threadId: 'PRRT_x',
+      constructor: 'x',
+    });
+    expect(result?.code).toBe('INVALID_PARAM');
+    expect(result?.message).toContain('Unknown parameter: constructor');
+    expect(result?.message).toContain('Accepted parameters: threadId, repo');
+  });
+
+  /**
+   * @plan issue-3019-github-unknown-parameter
+   * @requirement AB1
+   * @issue 3019
+   */
+  it('rejects `toString` as an unknown parameter', () => {
+    const result = validateResolveThreadParams({
+      threadId: 'PRRT_x',
+      toString: 'x',
+    });
+    expect(result?.code).toBe('INVALID_PARAM');
+    expect(result?.message).toContain('Unknown parameter: toString');
+    expect(result?.message).toContain('Accepted parameters: threadId, repo');
+  });
+
+  /**
+   * `__proto__` must be a real own enumerable key to be observable: an object
+   * literal would mutate the prototype instead of creating an own property.
+   * `Object.defineProperty` creates a genuine own data property without
+   * changing the object's [[Prototype]], so the unknown-key check sees it.
+   *
+   * @plan issue-3019-github-unknown-parameter
+   * @requirement AB1
+   * @issue 3019
+   */
+  it('rejects an own `__proto__` key as an unknown parameter', () => {
+    const params: Record<string, unknown> = { threadId: 'PRRT_x' };
+    Object.defineProperty(params, '__proto__', {
+      value: 'x',
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    // Guard: verify this really is an own key before asserting on it.
+    expect(Object.prototype.hasOwnProperty.call(params, '__proto__')).toBe(
+      true,
+    );
+    const result = validateResolveThreadParams(params);
+    expect(result?.code).toBe('INVALID_PARAM');
+    expect(result?.message).toContain('Unknown parameter: __proto__');
+    expect(result?.message).toContain('Accepted parameters: threadId, repo');
   });
 });

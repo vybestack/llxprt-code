@@ -45,11 +45,24 @@ becomes:
 
     Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.
 
-**AB2 — The tool schema stops implying `number` is universal.**
-The `github` tool's `number` schema description and its prose description state
-that parameters are per-operation, that an operation rejects parameters it does
-not accept and names the ones it does, and that `pr.resolve-thread` identifies
-its target by `threadId` alone.
+**AB2 — The tool schema declares `threadId` and stops implying `number` is universal.**
+`PARAMETER_SCHEMA.properties` declares a `threadId` property (`type: 'string'`)
+whose description states it is the review-thread node id returned by
+`pr.reviews` and that `pr.resolve-thread` identifies its target with it rather
+than a pull request number. The `number` property description explicitly names
+`pr.resolve-thread` as an operation that does not take `number`. The prose
+description states that parameters are per-operation, that an operation rejects
+parameters it does not accept and names the ones it does, and that
+`pr.resolve-thread` identifies its target by `threadId` alone.
+
+**AB3 — Unknown-key detection ignores the prototype chain.**
+`validateParams` rejects an unknown parameter with
+`Object.prototype.hasOwnProperty.call(spec, key)` rather than `key in spec`.
+Because `in` walks the prototype chain, `constructor`, `toString` and an own
+`__proto__` key — all inherited from `Object.prototype` — previously passed the
+unknown-key check and were then never reached by the per-kind loop (which
+iterates the spec's own entries). They are now rejected as unknown, closing the
+gap that silently contradicted the "unknown parameters are REJECTED" invariant.
 
 Behaviour NOT changed (deliberate): `pr.resolve-thread` continues to REJECT
 `number` rather than accepting and ignoring it. Silently ignoring unknown
@@ -93,16 +106,28 @@ registered in `scripts/bun-test-manifest.ts` under the `providers` workspace.
 6. Regression guards: a valid `pr.resolve-thread` param set still validates to
    `null`; an invalid *value* (e.g. `repo: 'not-a-repo'`) still yields its
    existing message and is not rewritten.
-7. The `github` tool's declared schema/description documents the per-operation
-   parameter rule and that `pr.resolve-thread` is addressed by `threadId`
-   rather than `number` (AB2).
+7. The `github` tool's declared schema structurally declares a `threadId`
+   string property whose description references `pr.reviews`, the `number`
+   property description names `pr.resolve-thread`, and the prose Notes state
+   the per-operation rejection rule (AB2). Assertions read the schema via
+   `in`-operator narrowing with no type assertions; a substring-only version
+   is rejected as tautological.
+8. `constructor`, `toString` and an own `__proto__` key (built with
+   `Object.defineProperty` so it is a real own enumerable key) are each
+   rejected by `validateResolveThreadParams` with `INVALID_PARAM` and the
+   accepted-parameter message (AB3).
+9. The exact unknown-parameter message — `Unknown parameter: number.
+   Accepted parameters: threadId, repo. Required: threadId.` — is pinned with
+   `toBe` for the two dispatch cases and the `validateResolveThreadParams`
+   case, and the no-required case pins its full message too (AB1).
 
 ## Files in scope
 
-- `packages/providers/src/auth/proxy/github-broker-validation.ts` (AB1)
+- `packages/providers/src/auth/proxy/github-broker-validation.ts` (AB1, AB3)
 - `packages/tools/src/tools/github.ts` (AB2)
-- `packages/providers/src/auth/proxy/__tests__/github-broker-unknown-param.bun.test.ts` (new)
-- `scripts/bun-test-manifest.ts` (register the new test)
+- `packages/providers/src/auth/proxy/__tests__/github-broker-unknown-param.bun.test.ts` (new; AB1, AB3)
+- `packages/tools/src/tools/github-unknown-param.bun.test.ts` (new; AB2)
+- `scripts/bun-test-manifest.ts` and `scripts/bun-test-manifest-data-tools.ts` (register the new tests)
 
 ## Out of scope
 

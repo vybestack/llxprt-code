@@ -147,6 +147,7 @@ export interface GithubToolParams {
   op: string;
   repo?: string;
   number?: number;
+  threadId?: string;
   [key: string]: unknown;
 }
 
@@ -204,8 +205,15 @@ const PARAMETER_SCHEMA = {
       type: 'number',
       description:
         'Issue or pull request number, but only for operations whose ' +
-        'parameter list includes it. An operation that does not accept ' +
-        'number rejects it and names the parameters it does accept.',
+        'parameter list includes it. pr.resolve-thread does not take number ' +
+        '(use threadId); any operation that does not accept number rejects ' +
+        'it and names the parameters it does accept.',
+    },
+    threadId: {
+      type: 'string',
+      description:
+        'Review-thread node id returned by pr.reviews; pr.resolve-thread ' +
+        'identifies its target with this rather than a pull request number.',
     },
   },
   required: ['op'],
