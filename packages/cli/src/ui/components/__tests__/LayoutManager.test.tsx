@@ -8,6 +8,7 @@ import { render } from '../../../test-utils/render.js';
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Text } from 'ink';
+import { Colors } from '../../colors.js';
 import { LayoutManager, useLayout } from '../LayoutManager.js';
 
 // Mock the useTerminalSize hook
@@ -20,11 +21,19 @@ const TestComponent = () => {
   const layout = useLayout();
   return (
     <>
-      <Text>terminalHeight: {layout.terminalHeight}</Text>
-      <Text>terminalWidth: {layout.terminalWidth}</Text>
-      <Text>footerHeight: {layout.footerHeight}</Text>
-      <Text>constrainHeight: {String(layout.constrainHeight)}</Text>
-      <Text>availableTerminalHeight: {layout.availableTerminalHeight}</Text>
+      <Text color={Colors.Foreground}>
+        terminalHeight: {layout.terminalHeight}
+      </Text>
+      <Text color={Colors.Foreground}>
+        terminalWidth: {layout.terminalWidth}
+      </Text>
+      <Text color={Colors.Foreground}>footerHeight: {layout.footerHeight}</Text>
+      <Text color={Colors.Foreground}>
+        constrainHeight: {String(layout.constrainHeight)}
+      </Text>
+      <Text color={Colors.Foreground}>
+        availableTerminalHeight: {layout.availableTerminalHeight}
+      </Text>
     </>
   );
 };
@@ -155,7 +164,7 @@ describe('LayoutManager', () => {
       static getDerivedStateFromError(error: Error) {
         return { error };
       }
-      render() {
+      override render() {
         if (this.state.error) {
           return React.createElement(Text, null, this.state.error.message);
         }
@@ -166,10 +175,16 @@ describe('LayoutManager', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { lastFrame } = render(
-      React.createElement(ErrorCatcher, null, React.createElement(TestComponent)),
+      React.createElement(
+        ErrorCatcher,
+        null,
+        React.createElement(TestComponent),
+      ),
     );
 
-    expect(lastFrame()).toContain('useLayout must be used within LayoutManager');
+    expect(lastFrame()).toContain(
+      'useLayout must be used within LayoutManager',
+    );
 
     consoleSpy.mockRestore();
   });

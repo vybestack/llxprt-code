@@ -19,7 +19,7 @@
  * NO MOCK THEATER: Tests use real state objects and behavioral assertions.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 // ink is not globally mocked under Bun (each test file runs in its own
 // process), so vi.unmock('ink') from the Vitest era is unnecessary and

@@ -7,6 +7,7 @@
 import type { Mock } from 'vitest';
 import { vi, describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
 import clipboardy from 'clipboardy';
 import {
   isAtCommand,
@@ -67,10 +68,10 @@ const realStderrDescriptor = Object.getOwnPropertyDescriptor(
   'stderr',
 ) as PropertyDescriptor;
 
-afterAll(() => {
+function restoreRealStdio(): void {
   Object.defineProperty(process, 'stdout', realStdoutDescriptor);
   Object.defineProperty(process, 'stderr', realStderrDescriptor);
-});
+}
 
 Object.defineProperty(process, 'platform', {
   get() {
@@ -122,6 +123,8 @@ interface MockChildProcess extends EventEmitter {
 }
 
 describe('commandUtils', () => {
+  afterAll(restoreRealStdio);
+
   let mockSpawn: Mock;
   let mockChild: MockChildProcess;
   let mockClipboardyWrite: Mock;
@@ -149,7 +152,7 @@ describe('commandUtils', () => {
       }),
     }) as MockChildProcess;
 
-    mockSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
+    mockSpawn.mockReturnValue(mockChild as unknown as ChildProcess);
 
     // Setup clipboardy mock
     mockClipboardyWrite = clipboardy.write as Mock;

@@ -4,15 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MockedFunction } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGitBranchName, FETCH_DEBOUNCE_MS } from './useGitBranchName.js';
 import { EventEmitter } from 'node:events';
-import { exec as mockExec, type ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
 // Mock child_process, fs, and fs/promises with explicit factory functions
@@ -116,12 +114,10 @@ describe('useGitBranchName', () => {
   });
 
   it('should return undefined if git command fails', async () => {
-    mockExecFn.mockImplementation(
-      (_command, _options, callback) => {
-        callback?.(new Error('Git error'), '', 'error output');
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    mockExecFn.mockImplementation((_command, _options, callback) => {
+      callback?.(new Error('Git error'), '', 'error output');
+      return new EventEmitter() as ChildProcess;
+    });
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
     expect(result.current).toBeUndefined();
@@ -134,16 +130,14 @@ describe('useGitBranchName', () => {
   });
 
   it('should return short commit hash if branch is HEAD (detached state)', async () => {
-    mockExecFn.mockImplementation(
-      (command, _options, callback) => {
-        if (command === 'git rev-parse --abbrev-ref HEAD') {
-          callback?.(null, 'HEAD\n', '');
-        } else if (command === 'git rev-parse --short HEAD') {
-          callback?.(null, 'a1b2c3d\n', '');
-        }
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    mockExecFn.mockImplementation((command, _options, callback) => {
+      if (command === 'git rev-parse --abbrev-ref HEAD') {
+        callback?.(null, 'HEAD\n', '');
+      } else if (command === 'git rev-parse --short HEAD') {
+        callback?.(null, 'a1b2c3d\n', '');
+      }
+      return new EventEmitter() as ChildProcess;
+    });
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
     await act(async () => {
@@ -154,16 +148,14 @@ describe('useGitBranchName', () => {
   });
 
   it('should return undefined if branch is HEAD and getting commit hash fails', async () => {
-    mockExecFn.mockImplementation(
-      (command, _options, callback) => {
-        if (command === 'git rev-parse --abbrev-ref HEAD') {
-          callback?.(null, 'HEAD\n', '');
-        } else if (command === 'git rev-parse --short HEAD') {
-          callback?.(new Error('Git error'), '', 'error output');
-        }
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    mockExecFn.mockImplementation((command, _options, callback) => {
+      if (command === 'git rev-parse --abbrev-ref HEAD') {
+        callback?.(null, 'HEAD\n', '');
+      } else if (command === 'git rev-parse --short HEAD') {
+        callback?.(new Error('Git error'), '', 'error output');
+      }
+      return new EventEmitter() as ChildProcess;
+    });
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
     await act(async () => {
@@ -384,22 +376,20 @@ describe('useGitBranchName', () => {
     let firstExecCallback:
       | ((error: Error | null, stdout: string, stderr: string) => void)
       | null = null;
-    mockExecFn.mockImplementation(
-      (_command, _options, callback) => {
-        callIndex++;
-        if (callIndex === 1) {
-          // Initial fetch — resolves immediately with 'feature-branch'
-          callback?.(null, 'feature-branch\n', '');
-        } else if (callIndex === 2) {
-          // First watcher fetch — capture callback, do NOT resolve yet (stale)
-          firstExecCallback = callback ?? null;
-        } else {
-          // Second watcher fetch — resolves immediately with 'main'
-          callback?.(null, 'main\n', '');
-        }
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    mockExecFn.mockImplementation((_command, _options, callback) => {
+      callIndex++;
+      if (callIndex === 1) {
+        // Initial fetch — resolves immediately with 'feature-branch'
+        callback?.(null, 'feature-branch\n', '');
+      } else if (callIndex === 2) {
+        // First watcher fetch — capture callback, do NOT resolve yet (stale)
+        firstExecCallback = callback ?? null;
+      } else {
+        // Second watcher fetch — resolves immediately with 'main'
+        callback?.(null, 'main\n', '');
+      }
+      return new EventEmitter() as ChildProcess;
+    });
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 

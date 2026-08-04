@@ -24,10 +24,7 @@ import {
   writeFileSync,
   symlinkSync,
   rmSync,
-  readdirSync,
   mkdtempSync,
-  lstatSync,
-  type SymlinkType,
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,8 +43,15 @@ export function mockSymlink(spec: SymlinkSpec): MockSymlink {
   return { ...spec, __mockFsSymlink: true };
 }
 
-type StructureNode = string | MockSymlink | Record<string, StructureNode>;
+interface StructureDirectory {
+  readonly [entry: string]: StructureNode;
+}
+type StructureNode = string | MockSymlink | StructureDirectory;
 export type FsStructure = Record<string, StructureNode>;
+
+function isMockSymlink(node: StructureNode): node is MockSymlink {
+  return typeof node === 'object' && '__mockFsSymlink' in node;
+}
 
 function writeNode(targetPath: string, node: StructureNode): void {
   if (typeof node === 'string') {
@@ -55,42 +59,18 @@ function writeNode(targetPath: string, node: StructureNode): void {
     writeFileSync(targetPath, node, 'utf8');
     return;
   }
-  if (typeof node === 'object' && node !== null && '__mockFsSymlink' in node) {
+  if (isMockSymlink(node)) {
     mkdirSync(path.dirname(targetPath), { recursive: true });
-    const symlinkType: SymlinkType =
-      process.platform === 'win32' ? 'junction' : 'dir';
+    const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
     if (existsSync(targetPath)) {
       rmSync(targetPath, { recursive: true, force: true });
     }
     symlinkSync(node.path, targetPath, symlinkType);
     return;
   }
-  if (typeof node === 'object' && node !== null) {
+  if (typeof node === 'object') {
     for (const [childKey, childNode] of Object.entries(node)) {
       writeNode(path.join(targetPath, childKey), childNode);
-    }
-  }
-}
-
-function clearDir(dir: string): void {
-  if (!existsSync(dir)) {
-    return;
-  }
-  // If dir is a symlink, remove the symlink itself (not the target).
-  const stat = lstatSync(dir);
-  if (stat.isSymbolicLink()) {
-    rmSync(dir, { recursive: true, force: true });
-    return;
-  }
-  for (const entry of readdirSync(dir)) {
-    const entryPath = path.join(dir, entry);
-    const entryStat = lstatSync(entryPath);
-    if (entryStat.isSymbolicLink()) {
-      // rmSync on a symlinked dir with recursive: true may follow the link
-      // and delete the target. Use rmSync with force on the link itself.
-      rmSync(entryPath, { force: true });
-    } else {
-      rmSync(entryPath, { recursive: true, force: true });
     }
   }
 }
@@ -121,17 +101,26 @@ export class FsMockContext {
    * - `mock(structure, 'project')` -> writes into the project-commands dir.
    * - `mock(structure, '/abs/base')` -> writes into the given absolute base.
    */
+  private resolveBasePath(base: string): string {
+    if (base === 'user') {
+      return this.userCommandsDir;
+    }
+    if (base === 'project') {
+      return this.projectCommandsDir;
+    }
+    return base;
+  }
+
   mock(structure: FsStructure, base: string = 'user'): void {
-    const basePath =
-      base === 'user'
-        ? this.userCommandsDir
-        : base === 'project'
-          ? this.projectCommandsDir
-          : base;
+    const basePath = this.resolveBasePath(base);
     // Force-remove and recreate the target directory to guarantee a clean
     // slate. This handles all cases: real dir, symlink, or missing path.
     rmSync(basePath, { recursive: true, force: true });
-    try { mkdirSync(basePath, { recursive: true }); } catch { /* rmSync already removed it */ }
+    try {
+      mkdirSync(basePath, { recursive: true });
+    } catch {
+      /* rmSync already removed it */
+    }
     for (const [key, node] of Object.entries(structure)) {
       writeNode(path.join(basePath, key), node);
     }
@@ -164,8 +153,16 @@ export class FsMockContext {
     // EEXIST even after rmSync in some edge cases, so wrap in try-catch.
     rmSync(this.userCommandsDir, { recursive: true, force: true });
     rmSync(this.projectCommandsDir, { recursive: true, force: true });
-    try { mkdirSync(this.userCommandsDir, { recursive: true }); } catch { /* already removed above, ignore */ }
-    try { mkdirSync(this.projectCommandsDir, { recursive: true }); } catch { /* already removed above, ignore */ }
+    try {
+      mkdirSync(this.userCommandsDir, { recursive: true });
+    } catch {
+      /* already removed above, ignore */
+    }
+    try {
+      mkdirSync(this.projectCommandsDir, { recursive: true });
+    } catch {
+      /* already removed above, ignore */
+    }
   }
 
   /** Alias mirroring mock-fs restore semantics (per-test cleanup). */
@@ -188,9 +185,7 @@ export class FsMockContext {
    * `new Storage(projectRoot)`.
    */
   settingsMock(): {
-    Storage: new (
-      projectRoot?: string,
-    ) => {
+    Storage: new (projectRoot?: string) => {
       getProjectCommandsDir: () => string;
     } & {
       getUserCommandsDir: () => string;
@@ -198,30 +193,30 @@ export class FsMockContext {
       getGlobalSettingsPath: () => string;
     };
   } {
-    const ctx = this;
+    // Captured as plain values so the class below closes over strings rather
+    // than aliasing `this`, which the lint rules forbid.
+    const { userCommandsDir, projectCommandsDir, root } = this;
     return {
       Storage: class MockStorage {
         constructor(public projectRoot?: string) {}
 
         static getUserCommandsDir(): string {
-          return ctx.userCommandsDir;
+          return userCommandsDir;
         }
 
         static getUserSkillsDir(): string {
-          return path.join(ctx.root, 'skills');
+          return path.join(root, 'skills');
         }
 
         static getGlobalSettingsPath(): string {
-          return path.join(ctx.root, 'settings.json');
+          return path.join(root, 'settings.json');
         }
 
         getProjectCommandsDir(): string {
-          return ctx.projectCommandsDir;
+          return projectCommandsDir;
         }
       } as unknown as {
-        Storage: new (
-          projectRoot?: string,
-        ) => {
+        Storage: new (projectRoot?: string) => {
           getProjectCommandsDir: () => string;
         } & {
           getUserCommandsDir: () => string;

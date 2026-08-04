@@ -775,11 +775,9 @@ describe('cli.tsx deferred initialization', () => {
   // blocks. Under Bun, vi.restoreAllMocks() in the first describe's afterEach
   // restores process.exit. Re-create a spy in beforeEach so main()'s
   // process.exit calls do not terminate the test process.
-  let deferredExitSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    deferredExitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new MockProcessExitError(code);
     });
     process.env = { ...originalEnv };

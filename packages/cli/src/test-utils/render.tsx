@@ -277,7 +277,9 @@ export const waitFor = async (
     } catch {
       // Flush pending microtasks so that mocked async operations (e.g.
       // mockResolvedValue) continue and update React state.
-      await new Promise((resolve) => queueMicrotask(resolve));
+      await new Promise<void>((resolve) => {
+        queueMicrotask(resolve);
+      });
 
       // Under fake timers, setTimeout never fires on its own. Advance
       // fake timers to flush pending timer-based state updates.
