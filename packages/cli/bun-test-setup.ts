@@ -368,6 +368,12 @@ function restoreProcessListeners(eventName: ManagedProcessEvent): void {
 }
 
 afterEach(async () => {
+  // Code under test (for example the extension commands) signals failure with
+  // `process.exitCode = 1`. Under Vitest that happens inside a worker, but a
+  // Bun test file IS the process, so a leftover exit code would fail the file
+  // even when every test passed. Reset it; Bun sets the real exit status from
+  // the test results after the hooks have run.
+  process.exitCode = 0;
   for (const eventName of managedProcessEvents) {
     restoreProcessListeners(eventName);
   }
