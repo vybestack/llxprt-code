@@ -61,25 +61,38 @@ describe('module mocks and restoreAllMocks', () => {
     const imported = await import('./import-actual-fixture.js');
     expect(imported.fixtureValue).toBe('mocked-by-async-factory');
   });
+
+  it('clears recorded calls on a mocked export, so counts do not leak between tests', async () => {
+    const { fixtureValue } = await import(
+      './secondary-import-actual-fixture.js'
+    );
+    expect(vi.isMockFunction(fixtureValue)).toBe(true);
+
+    const mocked = fixtureValue as unknown as ReturnType<typeof vi.fn>;
+    mocked();
+    expect(mocked).toHaveBeenCalledTimes(1);
+
+    vi.restoreAllMocks();
+
+    expect(mocked).toHaveBeenCalledTimes(0);
+  });
 });
 
 describe('vi.unmock', () => {
   it('restores the genuine exports of a mocked module', async () => {
     const actual = await vi.importActual<
-      typeof import('./secondary-import-actual-fixture.js')
-    >('./secondary-import-actual-fixture.js');
+      typeof import('./import-actual-fixture.js')
+    >('./import-actual-fixture.js');
 
-    vi.mock('./secondary-import-actual-fixture.js', () => ({
-      fixtureValue: 'temporarily-mocked',
-    }));
-    const mocked = await import('./secondary-import-actual-fixture.js');
-    expect(mocked.fixtureValue).toBe('temporarily-mocked');
-
-    vi.unmock('./secondary-import-actual-fixture.js');
-    const restored = await import('./secondary-import-actual-fixture.js');
+    vi.unmock('./import-actual-fixture.js');
+    const restored = await import('./import-actual-fixture.js');
     expect(restored.fixtureValue).toBe(actual.fixtureValue);
   });
 });
+
+vi.mock('./secondary-import-actual-fixture.js', () => ({
+  fixtureValue: vi.fn(),
+}));
 
 describe('fake timers', () => {
   afterEach(() => {

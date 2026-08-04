@@ -519,6 +519,30 @@ const reapplyModuleMocks = (): void => {
   }
 };
 
+/**
+ * Clears the call history of the mock functions a test installed through
+ * `vi.mock`.
+ *
+ * Vitest's `restoreAllMocks()` resets every mock it created, so a module mock's
+ * recorded calls do not survive into the next test. Bun's leaves them, which
+ * silently accumulates call counts across a file. Only the exports of
+ * explicitly mocked modules are touched, and only their call history — the
+ * implementations a test configured at module scope are left alone.
+ */
+const clearModuleMockCalls = (): void => {
+  const cleared = new Set<unknown>();
+  for (const namespace of registeredModuleMocks.values()) {
+    for (const key of Reflect.ownKeys(namespace)) {
+      const descriptor = Object.getOwnPropertyDescriptor(namespace, key);
+      if (!descriptor || !('value' in descriptor)) continue;
+      const value: unknown = descriptor.value;
+      if (cleared.has(value) || !isMockFunction(value)) continue;
+      cleared.add(value);
+      (value as { mockClear: () => void }).mockClear();
+    }
+  }
+};
+
 const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
@@ -843,6 +867,7 @@ const viAugmentations = {
       // restoreAllMocks() in one hook cannot un-mock modules for the rest of
       // the file.
       () => reapplyModuleMocks(),
+      () => clearModuleMockCalls(),
       () => envRegistry.restoreAll(),
       () => globalRegistry.restoreAll(),
     ]);
