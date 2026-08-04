@@ -4,19 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
   ShellResult,
 } from '../interfaces/index.js';
-import { buildCommandToExecute } from '../tools/shell-helpers.js';
+import {
+  buildCommandToExecute,
+  singleQuoteForShell,
+} from '../tools/shell-helpers.js';
 
 const { mockPlatform } = vi.hoisted(() => ({
   mockPlatform: vi.fn(() => 'darwin'),
 }));
 
-vi.mock('node:os', async (importOriginal) => {
+void vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     default: { platform: mockPlatform, EOL: actual.EOL },
@@ -145,16 +148,18 @@ describe('buildCommandToExecute foreground wrapping (non-Windows)', () => {
     mockPlatform.mockReturnValue('darwin');
   });
 
-  it('wraps a foreground command in the expected group wrapper', () => {
-    expect(buildCommandToExecute('npm run dev', false, '/tmp/t')).toBe(
-      '{ npm run dev; }; __code=$?; pgrep -g 0 >/tmp/t 2>&1; exit $__code;',
-    );
+  it('wraps a foreground command in an EXIT trap followed by the trimmed body', () => {
+    const built = buildCommandToExecute('npm run dev', false, '/tmp/t');
+    const action = `__code=$?; pgrep -g 0 >${singleQuoteForShell('/tmp/t')} 2>&1; exit $__code`;
+    expect(built).toBe(`trap ${singleQuoteForShell(action)} EXIT
+npm run dev`);
   });
 
-  it('normalises a single trailing ; in the command body', () => {
+  it('keeps a caller-supplied trailing ; in the body verbatim', () => {
     const built = buildCommandToExecute('echo hi;', false, '/tmp/t');
-    expect(built).toContain('{ echo hi; }');
-    expect(built).not.toContain(';;');
+    const newline = String.fromCharCode(10);
+    expect(built.endsWith(`${newline}echo hi;`)).toBe(true);
+    expect(built).not.toContain('{ echo hi');
   });
 });
 

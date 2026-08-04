@@ -39,8 +39,13 @@ export function isShellToolHost(
   return 'executeShellCommand' in host;
 }
 
-const WRAPPED_PREFIX = '{ ';
-const WRAPPED_SUFFIX = ' }; __code=$?; pgrep -g 0 >';
+const TRAP_LINE_PREFIX = 'trap ';
+// Suffix following the canonical action token on the trap line: ` EXIT`. The
+// action token's own closing quote is consumed by matchCanonicalSingleQuoted,
+// so this is the text that must remain after it.
+const TRAP_LINE_SUFFIX = ' EXIT';
+const TRAP_ACTION_PREFIX = '__code=$?; pgrep -g 0 >';
+const TRAP_ACTION_SUFFIX = ' 2>&1; exit $__code';
 
 /**
  * Wraps a value in single quotes using POSIX-safe escaping so it can be
@@ -50,6 +55,70 @@ const WRAPPED_SUFFIX = ' }; __code=$?; pgrep -g 0 >';
  */
 export function singleQuoteForShell(value: string): string {
   return `'${value.split("'").join("'\\''")}'`;
+}
+
+/**
+ * Recognizes a canonical singleQuoteForShell token at the start of `input` and
+ * returns its decoded value plus the unconsumed remainder. Decoding walks the
+ * escaped-quote sequence (`'\''`) exactly as singleQuoteForShell emits it, then
+ * requires that re-encoding the decoded value reproduces the exact token. This
+ * rejects any input that merely resembles a quoted string without being a
+ * canonically generated wrapper argument.
+ */
+function matchCanonicalSingleQuoted(
+  input: string,
+): { decoded: string; rest: string } | null {
+  if (!input.startsWith("'")) {
+    return null;
+  }
+  let i = 1;
+  let decoded = '';
+  let closed = false;
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === "'") {
+      if (input.slice(i, i + 4) === "'\\''") {
+        decoded += "'";
+        i += 4;
+      } else {
+        closed = true;
+        break;
+      }
+    } else {
+      decoded += ch;
+      i += 1;
+    }
+  }
+  if (!closed) {
+    return null;
+  }
+  const token = input.slice(0, i + 1);
+  return singleQuoteForShell(decoded) === token
+    ? { decoded, rest: input.slice(i + 1) }
+    : null;
+}
+
+/**
+ * Confirms a decoded trap action is exactly the generated form:
+ * TRAP_ACTION_PREFIX + one canonical singleQuoteForShell path token +
+ * TRAP_ACTION_SUFFIX. Only such an action is treated as a generated wrapper.
+ */
+function isCanonicalTrapAction(action: string): boolean {
+  if (
+    !action.startsWith(TRAP_ACTION_PREFIX) ||
+    !action.endsWith(TRAP_ACTION_SUFFIX)
+  ) {
+    return false;
+  }
+  const pathToken = action.slice(
+    TRAP_ACTION_PREFIX.length,
+    action.length - TRAP_ACTION_SUFFIX.length,
+  );
+  const matched = matchCanonicalSingleQuoted(pathToken);
+  // The path slot must be EXACTLY one canonical token: no trailing content may
+  // remain after it, so a same-prefix/suffix trap with extra action content is
+  // treated as non-canonical and passed through unchanged.
+  return matched !== null && matched.rest === '';
 }
 
 function buildShellResultError(result: ShellResult): Error | null {
@@ -64,21 +133,30 @@ function buildShellResultError(result: ShellResult): Error | null {
 }
 
 function unwrapCommandForExecutionService(command: string): string {
-  if (!command.startsWith(WRAPPED_PREFIX)) {
+  if (!command.startsWith(TRAP_LINE_PREFIX)) {
     return command;
   }
-  // The wrapped form is `{ <cmd> }; __code=$?; pgrep -g 0 ><tmpfile> ...`.
-  // WRAPPED_SUFFIX marks where the command body ends; it is NOT at the very
-  // end of the string (the temp-file path and trailing shell follow it), so
-  // locate it by position rather than with endsWith.
-  const suffixIndex = command.indexOf(WRAPPED_SUFFIX, WRAPPED_PREFIX.length);
-  if (suffixIndex === -1) {
+  // The wrapped form is `trap '<quotedAction>' EXIT` followed by a newline and
+  // the trimmed body. The action token may itself contain a literal newline
+  // (e.g. a temp path with a line break), so it is decoded from the entire
+  // suffix after `trap ` rather than truncated at the first newline. After the
+  // canonical action is validated, the remainder must begin exactly with
+  // TRAP_LINE_SUFFIX plus a newline; the body is everything after that
+  // delimiter. The action token is validated strictly so only a canonically
+  // generated wrapper is unwrapped; anything else passes through unchanged.
+  const afterPrefix = command.slice(TRAP_LINE_PREFIX.length);
+  const actionToken = matchCanonicalSingleQuoted(afterPrefix);
+  if (actionToken === null) {
     return command;
   }
-  const innerCommand = command.slice(WRAPPED_PREFIX.length, suffixIndex).trim();
-  return innerCommand.endsWith(';')
-    ? innerCommand.slice(0, -1).trimEnd()
-    : innerCommand;
+  const bodyDelimiter = TRAP_LINE_SUFFIX + String.fromCharCode(10);
+  if (!actionToken.rest.startsWith(bodyDelimiter)) {
+    return command;
+  }
+  if (!isCanonicalTrapAction(actionToken.decoded)) {
+    return command;
+  }
+  return actionToken.rest.slice(bodyDelimiter.length);
 }
 
 const STANDALONE_BACKGROUND_ERROR =
@@ -279,20 +357,14 @@ export function buildCommandToExecute(
   if (isWindows) {
     return strippedCommand;
   }
-  const body = buildWrappedBody(strippedCommand.trim());
-  return `{ ${body} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
-}
-
-/**
- * Builds the body that sits between the wrapper's `{ ` prefix and its
- * ` }; __code=$?; ...` suffix. A trailing-`;` is normalised away so the
- * generated `{ cmd; }` is syntactically clean.
- */
-function buildWrappedBody(trimmed: string): string {
-  const normalised = trimmed.endsWith(';')
-    ? trimmed.slice(0, -1).trimEnd()
-    : trimmed;
-  return `${normalised};`;
+  // Emit an EXIT trap on its own line so a body comment, heredoc, or terminal
+  // operator cannot consume the appended pgrep/exit epilogue. The trap action
+  // captures $? before running pgrep and re-exits with it, preserving the
+  // body's exit status. Both the path and the whole action are single-quoted
+  // via singleQuoteForShell so hostile paths stay literal shell data.
+  const trapAction = `${TRAP_ACTION_PREFIX}${singleQuoteForShell(tempFilePath)}${TRAP_ACTION_SUFFIX}`;
+  const newline = String.fromCharCode(10);
+  return `trap ${singleQuoteForShell(trapAction)} EXIT${newline}${strippedCommand.trim()}`;
 }
 
 export function parsePgrepFile(

@@ -13,6 +13,8 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'test-bun/imageDimensions.bun.ts',
     'test-bun/imageTokenEstimation.bun.ts',
     'test-bun/language-analysis.followup.bun.ts',
+    'test-bun/shell-wrapper.bun.ts',
+    'test-bun/shell-tool-signal-format.bun.ts',
     'src/tools/activate-skill.test.ts',
     'src/tools/ast-edit.ide.test.ts',
     'src/tools/edit-utils.test.ts',
