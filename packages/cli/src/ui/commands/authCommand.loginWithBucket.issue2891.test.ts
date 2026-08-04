@@ -67,9 +67,9 @@ import {
 import { AuthCommandExecutor } from './authCommand.js';
 import type { CommandContext } from './types.js';
 
-// ─── File-backed ISecureStore (temp directory, never touches keychain) ──────
+// ─── In-memory ISecureStore (never touches the filesystem or keychain) ──────
 
-class FileSecureStore implements ISecureStore {
+class InMemorySecureStore implements ISecureStore {
   private readonly store = new Map<string, string>();
   async get(key: string): Promise<string | null> {
     return this.store.get(key) ?? null;
@@ -149,7 +149,7 @@ function buildObjectGraph(tempDir: string): ObjectGraph {
   const lockDir = join(tempDir, 'locks');
   mkdirSync(lockDir, { recursive: true });
 
-  const secureStore = new FileSecureStore();
+  const secureStore = new InMemorySecureStore();
   const tokenStore = new KeyringTokenStore({ secureStore, lockDir });
   const settings = new InMemoryOAuthSettings();
   const oauthManager = new OAuthManager(tokenStore, settings);

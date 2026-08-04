@@ -188,6 +188,68 @@ function buildObjectGraph(
   };
 }
 
+/**
+ * A graph plus a controllable stub of the ONLY mocked boundary,
+ * `AnthropicOAuthProvider.initiateAuth` (the browser flow).
+ *
+ * `initiateAuthCalls` is deliberately observed: whether the browser window
+ * opens is itself the user-visible behavior #2891 is about ("never launches
+ * lazy browser OAuth"). It is always asserted alongside an outcome assertion
+ * (token value or token-store contents), never as the sole signal.
+ */
+interface Harness extends ObjectGraph {
+  readonly validToken: OAuthToken;
+  initiateAuthCalls: () => number;
+  setBrowserFlowSucceeds: (succeeds: boolean) => void;
+}
+
+function buildHarness(tempDir: string): Harness {
+  const graph = buildObjectGraph(tempDir);
+  const oauthProvider = requireOAuthProvider(graph.oauthManager, 'claudecode');
+
+  let succeeds = false;
+  let calls = 0;
+  const validToken = makeValidToken();
+
+  oauthProvider.initiateAuth = async (): Promise<OAuthToken> => {
+    calls++;
+    if (!succeeds) {
+      throw new Error('test: browser flow not triggered yet');
+    }
+    return validToken;
+  };
+
+  return {
+    ...graph,
+    validToken,
+    initiateAuthCalls: () => calls,
+    setBrowserFlowSucceeds: (value: boolean) => {
+      succeeds = value;
+    },
+  };
+}
+
+/**
+ * Drive the harness through the pre-login phases the reporter described:
+ * a first prompt with OAuth off, `/auth claudecode enable`, then a second
+ * prompt where the lazy flow is attempted and fails.
+ */
+async function reachEnabledButUnauthenticated(harness: Harness): Promise<void> {
+  const tokenA = await harness.anthropicProvider.testGetAuthTokenForPrompt();
+  expect(tokenA).toBe('');
+
+  await harness.oauthManager.toggleOAuthEnabled('claudecode');
+  expect(harness.oauthManager.isOAuthEnabled('claudecode')).toBe(true);
+}
+
+/** Perform the explicit `/auth claudecode login`, leaving the flow re-armed. */
+async function performExplicitLogin(harness: Harness): Promise<void> {
+  harness.setBrowserFlowSucceeds(true);
+  await harness.oauthManager.authenticate('claudecode');
+  // Re-arm the failure so any LATER browser attempt is unmistakable.
+  harness.setBrowserFlowSucceeds(false);
+}
+
 // ─── Test ───────────────────────────────────────────────────────────────────
 
 describe('Issue #2891 — in-session stale OAuth state', () => {
@@ -202,120 +264,101 @@ describe('Issue #2891 — in-session stale OAuth state', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('resolves the freshly persisted token in the same session AND after a simulated restart', async () => {
-    const graph = buildObjectGraph(tempDir);
-    const { oauthManager, anthropicProvider, tokenStore } = graph;
+  it('yields no token before OAuth is enabled', async () => {
+    const harness = buildHarness(tempDir);
 
-    // --- Stub ONLY the outermost boundary: AnthropicOAuthProvider.initiateAuth
-    const oauthProvider = requireOAuthProvider(oauthManager, 'claudecode');
+    expect(await harness.anthropicProvider.testGetAuthTokenForPrompt()).toBe(
+      '',
+    );
+    expect(
+      await harness.tokenStore.getToken('claudecode', undefined),
+    ).toBeNull();
+  });
 
-    // Phase 0: initially, initiateAuth is NOT available (simulates the lazy
-    // browser flow never opening). We flip the flag to success only when the
-    // user explicitly runs `/auth claudecode login`.
-    let initiateAuthShouldSucceed = false;
-    // Counting invocations lets each phase assert DIRECTLY whether the lazy
-    // browser flow was attempted, instead of inferring it from a thrown error.
-    let initiateAuthCalls = 0;
-    const validToken = makeValidToken();
-    oauthProvider.initiateAuth = async (): Promise<OAuthToken> => {
-      initiateAuthCalls++;
-      if (!initiateAuthShouldSucceed) {
-        throw new Error('test: browser flow not triggered yet');
-      }
-      return validToken;
-    };
+  it('attempts the lazy browser flow — and persists nothing — when enabled but unauthenticated', async () => {
+    const harness = buildHarness(tempDir);
+    await reachEnabledButUnauthenticated(harness);
 
-    // ─── Phase A: First prompt (OAuth NOT enabled) ───────────────────────
-    const tokenA = await anthropicProvider.testGetAuthTokenForPrompt();
-    expect(tokenA).toBe(''); // Expected: no auth available
+    const callsBefore = harness.initiateAuthCalls();
+    const token = await harness.anthropicProvider.testGetAuthTokenForPrompt();
 
-    // ─── Phase B: `/auth claudecode enable` ──────────────────────────────
-    await oauthManager.toggleOAuthEnabled('claudecode');
-    expect(oauthManager.isOAuthEnabled('claudecode')).toBe(true);
+    // Outcome: still no usable credential for the prompt...
+    expect(token).toBe('');
+    // ...and the failed attempt persisted nothing (no negative entry either).
+    expect(
+      await harness.tokenStore.getToken('claudecode', undefined),
+    ).toBeNull();
+    // ...and the browser flow WAS attempted rather than silently skipped,
+    // which is the user-visible symptom #2891 reports as missing.
+    expect(harness.initiateAuthCalls()).toBeGreaterThan(callsBefore);
+  });
 
-    // ─── Phase C: Second prompt (OAuth enabled, no token, lazy flow fails)
-    const callsBeforeC = initiateAuthCalls;
-    const tokenC = await anthropicProvider.testGetAuthTokenForPrompt();
-    expect(tokenC).toBe(''); // Expected: lazy flow fails, no token
-    // The lazy flow WAS attempted here (and threw), rather than being skipped.
-    expect(initiateAuthCalls).toBeGreaterThan(callsBeforeC);
+  it('persists the token to the store on an explicit /auth claudecode login', async () => {
+    const harness = buildHarness(tempDir);
+    await reachEnabledButUnauthenticated(harness);
+    await performExplicitLogin(harness);
 
-    // Verify no token was saved during the failed lazy flow.
-    const storedBefore = await tokenStore.getToken('claudecode', undefined);
-    expect(storedBefore).toBeNull();
+    const stored = await harness.tokenStore.getToken('claudecode', undefined);
+    expect(stored).not.toBeNull();
+    expect(stored?.access_token).toBe(harness.validToken.access_token);
+  });
 
-    // ─── Phase D: `/auth claudecode login` (explicit login) ─────────────
-    initiateAuthShouldSucceed = true;
-    await oauthManager.authenticate('claudecode');
-    initiateAuthShouldSucceed = false; // reset to guard against re-trigger
+  it('serves the freshly persisted token in the SAME session, without a restart and without re-opening the browser', async () => {
+    const harness = buildHarness(tempDir);
+    await reachEnabledButUnauthenticated(harness);
+    await performExplicitLogin(harness);
 
-    // Verify the token REALLY landed in the store.
-    const storedAfter = await tokenStore.getToken('claudecode', undefined);
-    expect(storedAfter).not.toBeNull();
-    expect(storedAfter?.access_token).toBe(validToken.access_token);
+    const callsBefore = harness.initiateAuthCalls();
+    const token = await harness.anthropicProvider.testGetAuthTokenForPrompt();
 
-    // ─── Phase E: Third prompt WITHOUT restart ──────────────────────────
-    // This is the phase the bug report says fails. It does NOT fail here,
-    // and that negative result is the point of this test — see the closing
-    // assertion and the file header.
-    const callsBeforeE = initiateAuthCalls;
-    const tokenE = await anthropicProvider.testGetAuthTokenForPrompt();
-
-    // The persisted token is served directly: no browser flow is re-triggered.
-    expect(initiateAuthCalls).toBe(callsBeforeE);
-
-    // ─── Phase F: Fresh object graph over the SAME persisted credential
-    // storage (simulates a process restart).
+    // The reporter says THIS read still fails. It does not: the persisted
+    // token is served directly, and no new browser flow is triggered.
     //
-    // The restart graph shares the SAME ISecureStore instance as the
-    // original graph, so the token persisted in Phase D is visible to it
-    // without any hand-copying — exactly like a real restart re-reading
-    // the OS keychain.
+    // Scope note: this pins the OBSERVABLE behavior only. It does not inspect
+    // resolver cache internals, so it does not by itself prove the absence of
+    // negative caching — that conclusion comes from reading
+    // `fetchAndCacheOAuthToken` / `storeRuntimeScopedToken` and is recorded in
+    // project-plans/issue2891/findings.md. What this case does establish is
+    // that no "flush the stale empty cache" step is needed for the in-session
+    // read to succeed, so the fix for #2891 is the lazy-OAuth gating in
+    // providerSwitch.ts. This assertion therefore holds both before and after
+    // the fix: it is a lock-in of correct behavior, not a guard on the fix.
+    expect(token).toBe(harness.validToken.access_token);
+    expect(harness.initiateAuthCalls()).toBe(callsBefore);
+  });
+
+  it('serves the persisted token after a simulated process restart', async () => {
+    const harness = buildHarness(tempDir);
+    await reachEnabledButUnauthenticated(harness);
+    await performExplicitLogin(harness);
+
+    // A fresh object graph over the SAME ISecureStore instance — exactly like
+    // a real restart re-reading the OS keychain, with no hand-copying.
     const restartDir = join(tempDir, 'restart');
     mkdirSync(restartDir, { recursive: true });
-    const restartGraph = buildObjectGraph(restartDir, graph.secureStore);
+    const restartGraph = buildObjectGraph(restartDir, harness.secureStore);
 
-    // The persisted settings reflect that the user previously enabled OAuth
-    // for claudecode. Enable it EXACTLY ONCE. Do NOT also call
-    // toggleOAuthEnabled — that would flip the persisted-true back to false
-    // (the original harness bug that made Phase F wrongly resolve to '').
+    // Persisted settings reflect that the user previously enabled OAuth.
+    // Set it EXACTLY ONCE; calling toggleOAuthEnabled here would flip the
+    // persisted true back to false.
     restartGraph.settings.setOAuthEnabled('claudecode', true);
     expect(restartGraph.oauthManager.isOAuthEnabled('claudecode')).toBe(true);
 
-    // Sanity: the token is genuinely visible through the shared store — no
-    // hand-copy happened.
-    const persistedToken = await restartGraph.tokenStore.getToken(
+    // Sanity: the token is genuinely visible through the shared store.
+    const persisted = await restartGraph.tokenStore.getToken(
       'claudecode',
       undefined,
     );
-    expect(persistedToken?.access_token).toBe(validToken.access_token);
+    expect(persisted?.access_token).toBe(harness.validToken.access_token);
 
-    // Re-stub the boundary so a lazy flow is never attempted post-restart.
-    const restartProvider = requireOAuthProvider(
-      restartGraph.oauthManager,
-      'claudecode',
-    );
-    restartProvider.initiateAuth = async () => {
-      throw new Error('test: should not be needed after restart');
-    };
+    // Any browser attempt after a restart would be a defect, so make one loud.
+    requireOAuthProvider(restartGraph.oauthManager, 'claudecode').initiateAuth =
+      async () => {
+        throw new Error('test: should not be needed after restart');
+      };
 
-    const tokenF =
-      await restartGraph.anthropicProvider.testGetAuthTokenForPrompt();
-
-    // The restart should work.
-    expect(tokenF).toBe(validToken.access_token);
-
-    // The decisive characterization result: the same-session read (Phase E)
-    // resolves the persisted token just like the post-restart read (Phase F).
-    //
-    // This is what REFUTES the "stale empty credential cache" hypothesis from
-    // the issue thread. There is no negative caching to flush:
-    // `fetchAndCacheOAuthToken` returns null WITHOUT storing, and
-    // `storeRuntimeScopedToken` only ever stores real tokens. So the fix for
-    // #2891 is the lazy-OAuth gating in providerSwitch.ts, NOT a cache flush.
-    //
-    // Consequently this assertion holds both before and after the fix; it is a
-    // lock-in of correct behavior, not a guard on the fix.
-    expect(tokenE).toBe(validToken.access_token);
+    expect(
+      await restartGraph.anthropicProvider.testGetAuthTokenForPrompt(),
+    ).toBe(harness.validToken.access_token);
   });
 });

@@ -560,8 +560,16 @@ export class AuthCommandExecutor {
       // storing, and `storeRuntimeScopedToken` stores only real tokens), so on a
       // first-ever login these calls are no-ops. They matter when a PREVIOUS
       // real token is cached for this provider and is being replaced.
-      // `invalidateProviderRuntimeCache` is idempotent, so keeping it
-      // unconditional is safe.
+      //
+      // The `profileId` argument is deliberately omitted so invalidation spans
+      // every profile and runtime scope for this provider. A successful login
+      // REPLACES the provider's persisted credential, so any profile still
+      // holding the superseded token in memory would otherwise keep serving it.
+      // Invalidation only drops in-memory cache entries (see
+      // `invalidateEntry` in packages/auth/src/precedence.ts) — it does not
+      // revoke anything on disk, so the worst case for an unrelated profile is
+      // one extra re-read from the token store. This matches the existing
+      // unscoped call in `token-force-refresh-helper.ts`.
       this.clearProviderCache(provider);
       invalidateProviderRuntimeCache(provider);
 
