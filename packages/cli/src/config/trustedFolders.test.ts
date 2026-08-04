@@ -693,6 +693,10 @@ describe('invalid trust levels', () => {
 
   beforeEach(() => {
     resetTrustedFoldersForTesting();
+    // Stated explicitly: these cases exercise the configuration path, which is
+    // only reached when the IDE expresses no opinion. An earlier describe
+    // configures getIdeTrust, and that mock is shared across the whole file.
+    vi.mocked(getIdeTrust).mockReturnValue(undefined);
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
     vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {

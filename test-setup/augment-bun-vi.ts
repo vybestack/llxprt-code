@@ -698,56 +698,6 @@ const originalRestoreAllMocks = (bunVi as BunViBase).restoreAllMocks.bind(
 );
 
 const originalSpyOn = (bunVi as BunViBase).spyOn.bind(bunVi);
-const originalFn = (bunVi as BunViBase).fn.bind(bunVi);
-
-interface TrackedMock {
-  readonly mockFn: {
-    mockReset: () => void;
-    mockImplementation: (implementation: (...args: never[]) => unknown) => void;
-  };
-  readonly implementation?: (...args: never[]) => unknown;
-}
-
-/**
- * Mocks created through `vi.fn()`.
- *
- * Vitest's `vi.restoreAllMocks()` resets every mock it created back to the
- * implementation it was constructed with; Bun's leaves standalone mocks
- * untouched, so a `mockReturnValue` configured by one test silently leaks into
- * later tests in the same file. Tracking the constructor implementation lets
- * `restoreAllMocks` reproduce Vitest's contract.
- */
-const trackedMocks: TrackedMock[] = [];
-
-const fnCompat = ((implementation?: (...args: never[]) => unknown) => {
-  const mockFn = originalFn(implementation as Parameters<typeof originalFn>[0]);
-  const tracked = mockFn as unknown as TrackedMock['mockFn'];
-  trackedMocks.push({ mockFn: tracked, implementation });
-  // Vitest's mockRestore() returns the mock to the implementation it was
-  // created with; Bun's clears the implementation outright, so a
-  // `vi.fn(realImplementation)` would start returning undefined.
-  Object.defineProperty(mockFn, 'mockRestore', {
-    configurable: true,
-    writable: true,
-    value: (): unknown => {
-      tracked.mockReset();
-      if (implementation) {
-        tracked.mockImplementation(implementation);
-      }
-      return mockFn;
-    },
-  });
-  return mockFn;
-}) as typeof originalFn;
-
-const restoreTrackedMocks = (): void => {
-  for (const { mockFn, implementation } of trackedMocks) {
-    mockFn.mockReset();
-    if (implementation) {
-      mockFn.mockImplementation(implementation);
-    }
-  }
-};
 
 interface InstalledSpy {
   readonly target: object;
@@ -802,6 +752,18 @@ const findInstalledSpy = (
  * and return the same spy on repeat calls exactly as Vitest does.
  */
 const spyOnCompat = (target: object, key: PropertyKey): unknown => {
+  // Anything that is not an object cannot carry a replacement spy. Delegate so
+  // Bun reports the same error it would have without this compatibility layer.
+  if (
+    (typeof target !== 'object' && typeof target !== 'function') ||
+    target === null
+  ) {
+    return originalSpyOn(
+      target as Parameters<typeof originalSpyOn>[0],
+      key as Parameters<typeof originalSpyOn>[1],
+    );
+  }
+
   const alreadyInstalled = findInstalledSpy(target, key);
   if (alreadyInstalled) {
     return alreadyInstalled.spy;
@@ -852,7 +814,6 @@ const viAugmentations = {
   mocked: <T>(item: T): T => item,
   hoisted: <T>(factory: () => T): T => factory(),
   spyOn: spyOnCompat,
-  fn: fnCompat,
   stubEnv: (key: string, value: string): void => {
     envRegistry.stub(key, value);
   },
@@ -877,7 +838,6 @@ const viAugmentations = {
     runCleanupSteps([
       () => restoreInstalledSpies(),
       () => originalRestoreAllMocks(),
-      () => restoreTrackedMocks(),
       // Bun's restoreAllMocks also reverts module mocks, but Vitest's only
       // restores spies. Re-apply the registered module mocks so a
       // restoreAllMocks() in one hook cannot un-mock modules for the rest of
@@ -976,7 +936,6 @@ const forceOverride = new Set([
   'unmock',
   'doUnmock',
   'spyOn',
-  'fn',
   'stubEnv',
   'unstubAllEnvs',
   'stubGlobal',

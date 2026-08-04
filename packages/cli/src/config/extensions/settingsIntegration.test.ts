@@ -27,11 +27,20 @@ vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
   };
 });
 
+const actualGitUtils = await vi.importActual<
+  typeof import('../../utils/gitUtils.js')
+>('../../utils/gitUtils.js');
+
 describe('settingsIntegration', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    vi.mocked(getWorkspaceIdentity).mockRestore();
+    // Re-established explicitly rather than relying on mockRestore(): the two
+    // runners disagree on whether that returns a mock to the implementation it
+    // was constructed with.
+    vi.mocked(getWorkspaceIdentity).mockImplementation(
+      actualGitUtils.getWorkspaceIdentity,
+    );
     tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-settings-test-'),
     );
