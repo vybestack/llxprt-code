@@ -28,6 +28,7 @@ import {
   isRuntimeReplacedError,
   resetRuntimeIdentityForTesting,
   resetRuntimeReplacedWarningForTesting,
+  SecureStoreError,
 } from '../storage/secure-store.js';
 
 /**
@@ -474,6 +475,50 @@ describe('ToolKeyStorage', () => {
       await storage.deleteKey('exa');
 
       // File should be gone
+      await expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
+    });
+  });
+
+  // ─── deleteKey keyring-failure cleanup (issue #1985) ────────────────────
+
+  describe('deleteKey keyring-failure cleanup (issue #1985)', () => {
+    /**
+     * @plan PLAN-20260803-ISSUE1985
+     * @requirement AC-3.1
+     */
+    it('still removes its own .key file when SecureStore.delete rejects with LOCKED', async () => {
+      // Seed a real encrypted .key file — ToolKeyStorage's own store, which is
+      // a different file from SecureStore's fallback `.enc` store. Use a
+      // no-keyring writer so the value lands in the .key file.
+      const writer = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+      });
+      await writer.saveKey('exa', 'sk-on-disk');
+      const filePath = path.join(tempDir, 'exa.key');
+      await expect(fs.stat(filePath)).resolves.toBeDefined();
+
+      // A keyring whose deletePassword fails with a LOCKED-classified error.
+      const throwingKeyring: KeyringAdapter = {
+        getPassword: async () => null,
+        setPassword: async () => {},
+        deletePassword: async () => {
+          throw new Error('Keyring locked');
+        },
+      };
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => throwingKeyring,
+      });
+
+      // deleteKey must propagate the LOCKED failure (not swallow it)...
+      const error = await storage.deleteKey('exa').catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('LOCKED');
+
+      // ...but must still remove ToolKeyStorage's own encrypted .key file so
+      // the key material does not survive on disk. Assert real filesystem
+      // state, not call counts.
       await expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
     });
   });
