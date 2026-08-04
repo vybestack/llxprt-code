@@ -414,6 +414,31 @@ const toNamespace = (exports: unknown): object =>
     : { default: exports };
 
 /**
+ * Adds CommonJS default interop to an AUTOMOCKED module namespace.
+ *
+ * Vitest's automocker replaces every export of a module, including the default
+ * export it synthesises for a CommonJS module such as `node:fs/promises`. Bun
+ * keeps the real default, so `import fs from 'fs/promises'` would hand back the
+ * real module even though the named exports are mocked.
+ *
+ * This applies to automocks only. A `vi.mock` factory controls its own exports,
+ * and Vitest does not synthesise a default for it, so adding one there would
+ * mock more than the test asked for.
+ */
+const withDefaultInterop = (namespace: object): object => {
+  if ('default' in namespace) {
+    return namespace;
+  }
+  Object.defineProperty(namespace, 'default', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: { ...namespace },
+  });
+  return namespace;
+};
+
+/**
  * Copies a module's exports into a plain object.
  *
  * Bun's `mock.module` patches a module namespace IN PLACE, so a snapshot must
@@ -510,19 +535,9 @@ const registerModuleMock = (
     const actualSnapshot = snapshotExports(realModule);
     actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
     preMockSnapshots.set(resolvedId, actualSnapshot);
-    const automocked = toNamespace(automockValue(realModule, new Map()));
-    // CommonJS modules such as `node:fs/promises` expose no `default` key, but
-    // `import fs from 'fs/promises'` still binds the whole namespace as the
-    // default export. Mirror that interop so an automocked default import sees
-    // the mocked functions instead of the real module.
-    if (!('default' in automocked)) {
-      Object.defineProperty(automocked, 'default', {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: { ...automocked },
-      });
-    }
+    const automocked = withDefaultInterop(
+      toNamespace(automockValue(realModule, new Map())),
+    );
     return applyModuleMock(mockId, resolvedId, automocked);
   }
 
