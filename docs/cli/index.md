@@ -11,6 +11,7 @@ For a general overview, see the [main documentation page](../index.md).
 | Save and switch between configurations    | [Profiles](./profiles.md)                             |
 | Tailor how LLxprt Code behaves            | [Configuration](./configuration.md)                   |
 | Run LLxprt Code in scripts and automation | [Non-interactive mode](#non-interactive-mode) (below) |
+| Generate or edit an image                 | [Image Generation](../tools/image-generation.md)      |
 | Customise the CLI's appearance            | [Themes](./themes.md)                                 |
 
 ## Get authenticated
@@ -100,3 +101,17 @@ interacting afterward.
 | `llxprt -i "prompt"`         | Interactive     | Yes                |
 | `llxprt --profile-load name` | Interactive     | Yes                |
 | `echo "prompt" \| llxprt`    | Non-interactive | No                 |
+
+### Image generation (`-O` / `-P`)
+
+Generate or edit an image without starting a conversation. `-O` sets the output
+path and `-P` sets the prompt; both are required. Use `-I` to supply input
+images for editing (repeatable up to five times):
+
+```bash
+llxprt -O out.png -P "a photorealistic cat"
+```
+
+Image generation runs on your Codex account and is independent of the provider
+you would chat with. See [Image Generation](../tools/image-generation.md) for
+prerequisites, the full flag reference, and path rules.
