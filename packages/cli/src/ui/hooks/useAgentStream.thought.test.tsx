@@ -561,10 +561,9 @@ describe('useAgentStream', () => {
       // Verify parseAndFormatApiError was called
       expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
         { message: 'Test error' },
-        expect.any(String),
         undefined,
         'gemini-2.5-pro',
-        'gemini-2.5-flash',
+        undefined,
       );
     });
   });

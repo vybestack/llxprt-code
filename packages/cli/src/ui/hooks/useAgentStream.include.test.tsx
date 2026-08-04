@@ -265,11 +265,12 @@ describe('useAgentStream', () => {
       userMessageTimestamp,
     );
 
-    // FIX: The expectation now matches the actual call signature.
+    // The parts are concatenated into a single string before being sent, so
+    // assert the resolved @file content travels with the prompt.
     expect(mockSendMessageStream).toHaveBeenCalledWith(
-      processedQueryParts, // Argument 1: The parts array directly
-      expect.any(AbortSignal), // Argument 2: An AbortSignal
-      expect.any(String), // Argument 3: The prompt_id string
+      processedQueryParts.map((part) => part.text).join(''),
+      expect.any(AbortSignal),
+      expect.any(String),
     );
   });
 });
