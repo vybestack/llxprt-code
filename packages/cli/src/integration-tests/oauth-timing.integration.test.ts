@@ -104,7 +104,12 @@ describe('OAuth Timing Integration Tests', () => {
 
     // Create fresh instances for each test
     settingsService = new SettingsService();
-    profileManager = new ProfileManager();
+    // Point ProfileManager at the same temp tree createTempProfile writes to.
+    // Overriding HOME no longer redirects it: the storage root comes from
+    // LLXPRT_CONFIG_HOME, which the test preload isolates per process.
+    profileManager = new ProfileManager(
+      path.join(tempDir, '.llxprt', 'profiles'),
+    );
 
     // Set up token store backed by in-memory keyring
     const secureStore = new SecureStore('llxprt-code-oauth', {

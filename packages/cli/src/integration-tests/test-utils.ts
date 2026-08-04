@@ -6,7 +6,6 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Storage } from '@vybestack/llxprt-code-storage';
 import * as os from 'os';
 import * as http from 'http';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -92,14 +91,11 @@ export async function initializeTestConfig(
  * @param profile - Profile data to write
  */
 export async function createTempProfile(
-  _dir: string,
+  dir: string,
   name: string,
   profile: Profile,
 ): Promise<void> {
-  // ProfileManager resolves Storage.getGlobalConfigDir(), which the test
-  // preload isolates per process via LLXPRT_CONFIG_HOME. Writing under the
-  // caller's temp directory would put the profile somewhere nothing reads.
-  const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
+  const profilesDir = path.join(dir, '.llxprt', 'profiles');
   await fs.mkdir(profilesDir, { recursive: true });
 
   const profilePath = path.join(profilesDir, `${name}.json`);
