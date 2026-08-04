@@ -1,9 +1,9 @@
-test(bun): migrate small workspaces, script harness, evals and integration roots
+test(bun): make the token-tracking properties actually generate values
 
-Declares glob-based Bun-native roots for settings, ide-integration,
-vscode-ide-companion, policy, telemetry, test-utils, a2a-server, the script
-harness, evals and integration-tests, and points those workspaces' test
-scripts at the Bun-native runner. Adds a Vitest-compatible JSON report so the
-evals aggregation keeps working, and replaces the Vitest-internal
-@fast-check/vitest dependency in the token-tracking property suite with plain
-fast-check.
+The 3-argument itProp form was dropped by @fast-check/vitest v0.2, so the
+arbitraries were swallowed as an options object and every predicate ran once
+with the Vitest context instead of generated values. Driving them through
+plain fast-check exposed three assertions that never held: total deliberately
+excludes cache tokens, formatSessionTokenUsage groups digits via
+toLocaleString, and a freshly recorded entry is inside the 60-second window
+rather than outside it.
