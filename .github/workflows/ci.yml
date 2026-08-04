@@ -823,21 +823,22 @@ jobs:
           bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
 
   #
-  # Bun-native test parity (issues #2475, #2847)
+  # Bun-native manifest discovery gate (issues #2475, #2847)
   #
-  # Executes every root declared in scripts/bun-test-manifest.ts, which after
-  # #2847 is the complete Bun-native suite rather than a sample. Roots marked
-  # `credentialed` (evals, integration-tests) are excluded from an unfiltered
-  # run because they call a real provider; they are exercised by the evals and
-  # e2e workflows, which request them by name.
+  # Resolves every root declared in scripts/bun-test-manifest.ts without
+  # executing anything: globs are expanded, and every selected file, preload,
+  # tsconfig override and global-setup module must exist. That is what proves
+  # no test file was dropped.
   #
-  # This is the single job that proves the whole suite passes under Bun's
-  # native runner in one place; `test_shard` below provides the fast sharded
-  # signal by invoking each workspace's own `test` script.
+  # It deliberately does NOT run the suite. `test_shard` already executes every
+  # root exactly once by invoking each workspace's own `test` script, so a
+  # second full run would double the CI bill for no extra signal. The one-owner
+  # invariant is enforced by scripts/tests/bun-manifest-root-ownership.bun.test.ts,
+  # which fails if a root gains a second executor or loses its only one.
   bun_native_test_parity:
     name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 90
+    timeout-minutes: 10
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -866,17 +867,9 @@ jobs:
           bun install
           git checkout -- bun.lock
 
-      - name: 'Build project'
-        # The script harness is part of the complete suite, and several of its
-        # tests execute the built CLI (start.ts orchestration, the OCR canary's
-        # spawned monitor). Those ran in the built `scripts` shard before this
-        # job covered them, so it needs the same build.
+      - name: 'Resolve every Bun-native root (no execution)'
         run: |-
-          npm run build
-
-      - name: 'Run the complete Bun-native suite (manifest-based)'
-        run: |-
-          bun scripts/run_bun_tests.ts --timeout 30000
+          bun scripts/run_bun_tests.ts --dry-run
 
   #
   # Test: Node (Linux only — issue #2876)
