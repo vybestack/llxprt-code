@@ -22,70 +22,82 @@ test runner instead of Vitest.
   owned by `test:integration`, exactly as under `vitest.config.ts`.
 - **Isolation**: one `bun test` process per file. Bun's `mock.module` registry
   is process-wide, so a shared process would leak module mocks between files.
-- **Discovered count**: 649 unit test files (675 total minus 26 integration).
+- **Discovered count**: 650 unit test files.
 
-## Baseline measurement
+## Runner
 
-`bun run-bun-tests.ts` against unmodified sources: **472 / 649 files passing**.
+`packages/cli/run-bun-tests.ts` walks the test roots, runs each file in its own
+`bun test` process with bounded concurrency, and writes `junit.xml`. It has no
+allow-list: discovery is purely structural, and
+`packages/cli/test/run-bun-tests.test.ts` pins that contract against a real
+temporary directory tree so a filtered subset cannot be reintroduced silently.
 
-The 177 failures fell into a small number of root causes, all confirmed by
-direct probes rather than inspection:
+CI needs no workflow change: `bun scripts/test.ts --shard cli` already expands
+to the workspace's own `test` script, the same mechanism core, auth and
+providers use.
 
-| Root cause | Scope |
+## Shared compatibility shim
+
+`test-setup/augment-bun-vi.ts` is shared with core, auth, providers and the
+script suites, so every change below was verified against all of them.
+
+| Divergence | Resolution |
 | --- | --- |
-| `vi.mock()` with an `async` factory never registered the mock | shared shim |
-| Preload cleanup helpers replaced by a test's `@vybestack/llxprt-code-core` mock | cli preload |
-| `describe`/`it`/`expect` used as globals (Vitest `globals: true`) | cli preload |
-| Automock invoked prototype getters (`node:child_process`) and threw | shared shim |
-| `.js` specifiers that map to `.tsx` sources failed to resolve | shared shim |
-| `vi.resetModules()` / `vi.unmock()` (unsupported by Bun) | per-file refactor |
-| Module-scope capture of a mock before its `vi.mock()` call | per-file refactor |
-| `resolves.not.toThrow()` (broken under Bun) | per-file refactor |
-| `@fast-check/vitest` | per-file refactor |
-| Chai-style `expect(x).equals(y)` | per-file refactor |
+| `vi.mock` async factories never registered | settle synchronously with `drainMicrotasks()` from `bun:jsc` |
+| Deferred re-registration missed relative specifiers | also register the absolute resolved id |
+| `vi.spyOn` reused an existing mock's call history | install a fresh delegating spy, matching Vitest |
+| `restoreAllMocks` reverted `vi.mock` module mocks | re-apply the registered module mocks afterwards |
+| Automock invoked prototype getters and threw | copy accessor properties as accessors |
+| Automocked CommonJS modules had no `default` | synthesise one, matching Vitest's automocker |
+| `vi.unmock` threw | restore the exports snapshotted before the mock was registered |
+| `.js` specifiers resolving to `.tsx` sources failed | add `.tsx` to the resolution fallbacks |
+| Built-in namespaces lost exports when snapshotted | read accessor properties when snapshotting |
+| `advanceTimersByTimeAsync(0)` ran no timers | run the already-due timers |
+| Mocking an async-ESM dependency threw at registration | register without a snapshot; `importOriginal` rethrows only if called |
 
-## Infrastructure changes (shared)
+### Deliberately NOT normalised
 
-`test-setup/augment-bun-vi.ts`
+`vi.fn()` restore semantics. Vitest's `restoreAllMocks` / `mockRestore` return a
+mock to the implementation it was constructed with; Bun's leave it cleared.
+Wrapping `vi.fn` to hide that **broke mock-as-constructor** — `new someMock()`
+stopped producing the object its implementation returns, which failed
+`packages/core/src/code_assist/oauth-credential-storage.test.ts`. The wrapper
+was removed. Tests that need a specific implementation after a restore set it
+explicitly instead.
 
-- Async `vi.mock` factories are now settled synchronously with
-  `drainMicrotasks()` from `bun:jsc` and registered before the test module body
-  continues. Vitest hoists `vi.mock`, so registration must not be deferred to a
-  microtask. A genuinely pending factory still falls back to deferred
-  re-registration, and that fallback now also registers the absolute resolved
-  specifier because Bun resolves a relative `mock.module` specifier against the
-  module executing at call time.
-- Automock copies accessor properties as accessors instead of reading them, so
-  a prototype getter such as `ChildProcess.prototype.stdin` cannot abort the
-  automock.
+## CLI preload
 
-`test-setup/module-resolution.ts`
+`packages/cli/bun-test-setup.ts` additionally:
 
-- A `.js` specifier now falls back to `.ts` **and** `.tsx`.
+- captures `DebugLogger.resetForTesting` and
+  `clearActiveProviderRuntimeContext` before any test can mock the core package;
+- publishes the `bun:test` lifecycle/assertion functions as globals, matching
+  the `globals: true` contract of `vitest.config.ts`;
+- resets `process.exitCode` after each test, because a Bun test file *is* the
+  process and code under test sets it to signal failure.
 
-`packages/cli/bun-test-setup.ts`
+## Snapshots
 
-- Captures `DebugLogger.resetForTesting` and
-  `clearActiveProviderRuntimeContext` at preload time so a test that mocks the
-  core package cannot break the shared `afterEach` cleanup.
-- Publishes the `bun:test` lifecycle/assertion functions as globals, matching
-  the `globals: true` contract of `vitest.config.ts`.
+Vitest stores snapshot keys as `Describe > test 1`; Bun uses `Describe test 1`.
+Left alone, Bun silently *appended* fresh snapshots and every snapshot
+assertion passed vacuously. All 24 `.snap` files were converted to Bun's key
+format.
 
-## Tests that prove it
+## Recurring per-file patterns
 
-Behavioral, no mock theater:
-
-1. `packages/cli/run-bun-tests.test.ts` — discovery contract: unit test files
-   are selected, integration files and non-test files are not.
-2. `test-setup/augment-bun-vi.test.ts` — an async `vi.mock` factory is visible
-   to a module-scope capture taken after the `vi.mock` call, and automocking a
-   module with a throwing prototype getter succeeds.
-3. `scripts/tests/bun-workspaces.test.ts` — the CLI package scripts and CI
-   workflow run the workspace under Bun.
-4. The suite itself: `bun run-bun-tests.ts` exits 0 with every discovered file
-   passing, and the discovered file count matches the file system.
+- Bun does not hoist `vi.mock`. A module-scope capture written before the
+  matching `vi.mock` sees the real export; move the `vi.mock` above it, or load
+  the module under test with a top-level `await import` after the mocks.
+- `vi.fn().mockImplementation(function () { this.x = … })` used with `new` does
+  not apply reliably. Use a real class.
+- Fixed sleeps after a keystroke or a stream event are races. Poll with
+  `waitFor`.
+- Assertions on built-in error text differ between V8 and JavaScriptCore.
+- yargs calls `process.exit` unless `.exitProcess(false)` is set, which under
+  Bun terminates the test file mid-run.
 
 ## Verification
 
-`npm run test`, `npm run lint`, `npm run typecheck`, `npm run format`,
-`npm run build`, and the CLI smoke test.
+`npm run format`, `npm run build`, `tsc --noEmit`, `eslint`, the CLI smoke test,
+and the Bun suites for core (326/326), providers (479/479), auth (33/33) and
+test-setup (3/3).
