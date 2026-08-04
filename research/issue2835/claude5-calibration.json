@@ -1,0 +1,142 @@
+[
+  {
+    "target": "fable5",
+    "canonicalModel": "claude-fable-5",
+    "protocol": "anthropic-messages",
+    "activeProvider": "claudecode",
+    "endpointHost": "api.anthropic.com",
+    "projectionRevision": 3,
+    "corpusObservations": 42,
+    "intercept": -1658.009406,
+    "baseTokenCoefficient": 0.655462,
+    "featureCoefficients": [
+      {
+        "feature": "codePoints",
+        "coefficient": 0.231865
+      },
+      {
+        "feature": "nonAsciiCodePoints",
+        "coefficient": 0.251442
+      }
+    ],
+    "heldOut": {
+      "sampleCount": 13,
+      "mapePercent": 0.389093,
+      "rmse": 125.934049,
+      "underestimationP95Percent": 0.895654,
+      "baselineEstimator": "AnthropicTokenizer character heuristic",
+      "baselineMapePercent": 33.545883,
+      "baselineRmse": 8856.10434,
+      "baselineUnderestimationP95Percent": 34.088026,
+      "relativeMapeImprovementPercent": 98.840118
+    },
+    "gatePassed": true,
+    "candidates": [
+      {
+        "featureSet": "base counter only",
+        "leaveOneCategoryOutMapePercent": 0.388474,
+        "leaveOneEnvelopeOutMapePercent": 1.111939
+      },
+      {
+        "featureSet": "codePoints",
+        "leaveOneCategoryOutMapePercent": 0.312717,
+        "leaveOneEnvelopeOutMapePercent": 1.093485
+      },
+      {
+        "featureSet": "codePoints + nonAsciiCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.289201,
+        "leaveOneEnvelopeOutMapePercent": 1.146323
+      },
+      {
+        "featureSet": "codePoints + structuralCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.435438,
+        "leaveOneEnvelopeOutMapePercent": 1.130664
+      },
+      {
+        "featureSet": "codePoints + whitespaceCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.360037,
+        "leaveOneEnvelopeOutMapePercent": 1.070616
+      },
+      {
+        "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.414832,
+        "leaveOneEnvelopeOutMapePercent": 1.15527
+      },
+      {
+        "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints + whitespaceCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.572195,
+        "leaveOneEnvelopeOutMapePercent": 1.03124
+      }
+    ]
+  },
+  {
+    "target": "opus5",
+    "canonicalModel": "claude-opus-5",
+    "protocol": "anthropic-messages",
+    "activeProvider": "claudecode",
+    "endpointHost": "api.anthropic.com",
+    "projectionRevision": 3,
+    "corpusObservations": 42,
+    "intercept": -1649.098251,
+    "baseTokenCoefficient": 0.657456,
+    "featureCoefficients": [
+      {
+        "feature": "codePoints",
+        "coefficient": 0.231236
+      },
+      {
+        "feature": "nonAsciiCodePoints",
+        "coefficient": 0.251193
+      }
+    ],
+    "heldOut": {
+      "sampleCount": 13,
+      "mapePercent": 0.385796,
+      "rmse": 124.892877,
+      "underestimationP95Percent": 0.891037,
+      "baselineEstimator": "AnthropicTokenizer character heuristic",
+      "baselineMapePercent": 33.542347,
+      "baselineRmse": 8854.35996,
+      "baselineUnderestimationP95Percent": 34.081849,
+      "relativeMapeImprovementPercent": 98.849823
+    },
+    "gatePassed": true,
+    "candidates": [
+      {
+        "featureSet": "base counter only",
+        "leaveOneCategoryOutMapePercent": 0.386882,
+        "leaveOneEnvelopeOutMapePercent": 1.092877
+      },
+      {
+        "featureSet": "codePoints",
+        "leaveOneCategoryOutMapePercent": 0.310017,
+        "leaveOneEnvelopeOutMapePercent": 1.073858
+      },
+      {
+        "featureSet": "codePoints + nonAsciiCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.28685,
+        "leaveOneEnvelopeOutMapePercent": 1.126262
+      },
+      {
+        "featureSet": "codePoints + structuralCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.432011,
+        "leaveOneEnvelopeOutMapePercent": 1.110902
+      },
+      {
+        "featureSet": "codePoints + whitespaceCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.356431,
+        "leaveOneEnvelopeOutMapePercent": 1.051013
+      },
+      {
+        "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.411966,
+        "leaveOneEnvelopeOutMapePercent": 1.135207
+      },
+      {
+        "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints + whitespaceCodePoints",
+        "leaveOneCategoryOutMapePercent": 0.565949,
+        "leaveOneEnvelopeOutMapePercent": 1.013903
+      }
+    ]
+  }
+]

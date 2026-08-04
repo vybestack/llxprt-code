@@ -26,6 +26,7 @@ import {
   realBunVersion,
   makeEntry,
   makeLayout,
+  makeBundle,
 } from './launcher-test-helpers.js';
 
 /**
@@ -772,4 +773,68 @@ describe('POSIX launcher version-pin and platform validation', () => {
     },
     15_000,
   );
+});
+
+describe('POSIX launcher bundle preference (issue #2999)', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bundle-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('execs the prebuilt bundle when present (observable via distinct output)', () => {
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `console.log('SOURCE');`,
+    });
+    makeBundle(pkgRoot, `console.log('BUNDLE');`);
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expectExitOk(result);
+    expect(result.stdout.trim()).toBe('BUNDLE');
+  });
+
+  it('falls back to index.ts when the bundle is absent', () => {
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `console.log('SOURCE');`,
+    });
+    // No bundle created.
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expectExitOk(result);
+    expect(result.stdout.trim()).toBe('SOURCE');
+  });
+
+  it('uses index.ts when LLXPRT_FORCE_SOURCE_ENTRY=1 even if a bundle exists', () => {
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `console.log('SOURCE');`,
+    });
+    makeBundle(pkgRoot, `console.log('BUNDLE');`);
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        PATH: '/usr/bin:/bin',
+        LLXPRT_FORCE_SOURCE_ENTRY: '1',
+      },
+    });
+    expectExitOk(result);
+    expect(result.stdout.trim()).toBe('SOURCE');
+  });
 });

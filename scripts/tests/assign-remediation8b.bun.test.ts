@@ -12,7 +12,7 @@
  * These execute the REAL bash scripts against the fake gh infrastructure.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, setDefaultTimeout } from 'bun:test';
 import { execFileSync } from 'child_process';
 import * as nodePath from 'path';
 import { asRecord, stateIssue, stateOpLog } from './typed-test-helpers.ts';
@@ -27,6 +27,12 @@ import {
   daysAgo,
   failOnNth,
 } from './assign-helpers.ts';
+
+// Preserve the existing effective per-test timeout. Under the scripts vitest
+// config every script test ran with testTimeout=30000; the single { timeout }
+// option below was redundant. Bun's native runner has no per-test timeout
+// option, so the file-level default reproduces the same 30s budget.
+setDefaultTimeout(30000);
 
 function defaultStateWith(overrides: Record<string, unknown>) {
   return { ...defaultState(), ...overrides };
@@ -350,39 +356,35 @@ describe('F14: fake-gh label filter ALL-label subset', () => {
   });
 
   describe('assignment signal lifecycle', () => {
-    it(
-      'rolls back bot-owned mutations when TERM arrives after assignee mutation',
-      { timeout: 30000 },
-      () => {
-        const repo = createFakeRepo(
-          defaultStateWith({
-            issues: { 42: makeIssue({ number: 42, assignees: [] }) },
-            prs: {
-              100: makePR({ number: 100, author: 'alice', merged: true }),
+    it('rolls back bot-owned mutations when TERM arrives after assignee mutation', () => {
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: { 42: makeIssue({ number: 42, assignees: [] }) },
+          prs: {
+            100: makePR({ number: 100, author: 'alice', merged: true }),
+          },
+          side_effects: [
+            {
+              method: 'POST',
+              endpoint: 'repos/test/repo/issues/42/assignees',
+              on_nth: 1,
+              timing: 'post',
+              action: 'signal_parent',
+              signal: 'SIGTERM',
             },
-            side_effects: [
-              {
-                method: 'POST',
-                endpoint: 'repos/test/repo/issues/42/assignees',
-                on_nth: 1,
-                timing: 'post',
-                action: 'signal_parent',
-                signal: 'SIGTERM',
-              },
-            ],
-          }),
-        );
-        const result = repo.runAssign({
-          issueNumber: 42,
-          commenter: 'alice',
-          extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
-        });
+          ],
+        }),
+      );
+      const result = repo.runAssign({
+        issueNumber: 42,
+        commenter: 'alice',
+        extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
+      });
 
-        expect(result.status).toBe(143);
-        const issue42 = asRecord(result.state.issues['42']);
-        expect(issue42._assignees).not.toContain('alice');
-        expect(issue42._label_names).not.toContain('auto-assigned');
-      },
-    );
+      expect(result.status).toBe(143);
+      const issue42 = asRecord(result.state.issues['42']);
+      expect(issue42._assignees).not.toContain('alice');
+      expect(issue42._label_names).not.toContain('auto-assigned');
+    });
   });
 });

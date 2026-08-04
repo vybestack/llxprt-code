@@ -618,8 +618,9 @@ jobs:
       - 'lint_javascript'
       - 'lint_shell'
       - 'lint_yaml'
-      # Gates the expensive test matrix behind a cheap npm build+smoke so a
-      # broken build fails fast on ubuntu instead of on every matrix leg.
+      # node_consumer_smoke provides a cheap package install/invocation gate.
+      # test_shard depends directly on it (issue #2877); lint retains the
+      # dependency here to preserve smoke coverage when the matrix is skipped.
       - 'node_consumer_smoke'
     runs-on: 'ubuntu-latest'
     steps:
@@ -720,8 +721,9 @@ jobs:
   # Guards npm install/invocation compatibility: install with npm, then run the
   # installed bin directly. The bin is a POSIX sh launcher (issue #2603) that
   # execs the package-local Bun against packages/cli/index.ts — no Node process
-  # is started on the installed command path. Wired into the `lint` aggregator
-  # so the expensive test matrix waits for this fast install+smoke check first.
+  # is started on the installed command path. A direct dependency of test_shard
+  # (issue #2877) and of the lint aggregator, so broken package installs or CLI
+  # invocation fail before matrix fanout.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
     runs-on: 'ubuntu-latest'
@@ -729,11 +731,11 @@ jobs:
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
-    # This job runs npm ci (executing third-party install scripts) and only
-    # needs to read the repo, so scope permissions to contents:read and drop
-    # credential persistence (matches bun_native_modules_smoke hardening). It
-    # validates the published npm entry path by running the installed launcher
-    # directly after install; the launcher execs Bun on TypeScript source.
+    # This job installs the packed package with npm (executing third-party
+    # install scripts) and only needs to read the repo, so scope permissions to
+    # contents:read and drop credential persistence. It validates the published
+    # npm entry path by running the installed launcher directly after install;
+    # the launcher execs Bun on TypeScript source.
     permissions:
       contents: 'read'
     steps:
@@ -750,8 +752,8 @@ jobs:
           cache: 'npm'
 
       - name: 'Setup Bun'
-        # Must run before npm ci because lifecycle hooks and npm run build are
-        # Bun-backed after issue 2242, even though dependencies stay npm-based.
+        # The installed launcher executes Bun against the package's TypeScript
+        # sources even though the package itself is installed with npm.
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
@@ -899,7 +901,7 @@ jobs:
     # hung shard fails instead of occupying a runner for the 6h default.
     timeout-minutes: 45
     needs:
-      - 'lint'
+      - 'node_consumer_smoke'
       - 'doc_change_filter'
       - 'shard_selector'
       - 'skip_check'
@@ -1098,10 +1100,10 @@ jobs:
   # name while the real work fans out across the matrix.
   #
   # `if: always()` is essential: when a `test_shard` leg fails or is skipped
-  # (e.g. because an upstream `lint` dependency failed), GitHub would
-  # otherwise **skip** this job, and branch protection treats skipped checks
-  # as passing — a silent bypass. The explicit result check converts any
-  # non-success outcome (failure, skipped, cancelled) into a `failure`
+  # (e.g. because an upstream `node_consumer_smoke` dependency failed), GitHub
+  # would otherwise **skip** this job, and branch protection treats skipped
+  # checks as passing — a silent bypass. The explicit result check converts
+  # any non-success outcome (failure, skipped, cancelled) into a `failure`
   # conclusion on this required check.
   #
   # Issue #2709: the `test` job now also depends on `shard_selector`. When the
@@ -1224,6 +1226,7 @@ jobs:
       - 'test_shard'
       - 'shard_selector'
       - 'skip_check'
+      - 'node_consumer_smoke'
       - 'acp_conformance'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
@@ -1234,6 +1237,7 @@ jobs:
           selector_result='${{ needs.shard_selector.result }}'
           has_tests='${{ needs.shard_selector.outputs.has_tests }}'
           shard_result='${{ needs.test_shard.result }}'
+          node_consumer_smoke_result='${{ needs.node_consumer_smoke.result }}'
           acp_result='${{ needs.acp_conformance.result }}'
 
           # Explicit duplicate-skip: skip_check said this run duplicates a
@@ -1247,6 +1251,11 @@ jobs:
           # Fail closed if the selector itself did not succeed.
           if [ "$selector_result" != "success" ]; then
             echo "::error::Shard selector did not succeed (result: $selector_result); cannot trust test selection."
+            exit 1
+          fi
+
+          if [ "$node_consumer_smoke_result" != "success" ]; then
+            echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
             exit 1
           fi
 

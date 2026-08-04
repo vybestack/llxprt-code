@@ -126,12 +126,36 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
+      'src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
+      // Issue #2951: Windows Ctrl+Enter steering. Each file pins
+      // process.platform at the very top before the key-matcher module graph
+      // loads, so win32 and darwin must run in separate processes.
+      'test-bun/steerKey.win32.bun.ts',
+      'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
+    ],
+  },
+  {
+    workspace: 'cli',
+    preload: 'bun-test-setup.ts',
+    files: [
+      'src/ui/hooks/agentStream/__tests__/useAgentEventStream.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useAgentStreamOrchestration.terminal.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.doublecancel.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.terminalError.bun.tsx',
     ],
   },
   {
     workspace: 'core',
-    files: ['src/utils/errors.test.ts'],
+    files: [
+      'src/utils/errors.test.ts',
+      // Issue #1985: ToolKeyStorage.deleteKey() must still remove its own
+      // encrypted .key file when SecureStore.delete() surfaces a keyring
+      // failure.
+      'src/tools/tool-key-storage.test.ts',
+    ],
   },
   {
     workspace: 'providers',
@@ -189,6 +213,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/__tests__/RetryOrchestrator.basic.test.ts',
       'src/__tests__/RetryOrchestrator.failover-budget.test.ts',
       'src/__tests__/RetryOrchestrator.failover.test.ts',
+      'src/__tests__/RetryOrchestrator.forbidden.test.ts',
+      'src/__tests__/RetryOrchestrator.forbidden-composed.test.ts',
       'src/__tests__/RetryOrchestrator.getContextLimit.test.ts',
       'src/__tests__/RetryOrchestrator.integration.test.ts',
       'src/__tests__/RetryOrchestrator.invocation.test.ts',
@@ -265,6 +291,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/__tests__/forceRefreshToken.bucketResolution.test.ts',
       'src/auth/__tests__/forceRefreshToken.cacheInvalidation.test.ts',
       'src/auth/__tests__/forceRefreshToken.test.ts',
+      'src/auth/__tests__/issue2891-claudecode-stale-oauth.test.ts',
+      'src/auth/__tests__/issue2891-oauth-manager-identity.test.ts',
       'src/auth/__tests__/multi-bucket-auth.spec.ts',
       'src/auth/__tests__/oauth-manager-interface-contract.test.ts',
       'src/auth/__tests__/oauth-manager.getToken-bucket-peek.spec.ts',
@@ -379,6 +407,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/proxy/__tests__/github-broker-p10.test.ts',
       'src/auth/proxy/__tests__/github-broker-p10b.test.ts',
       'src/auth/proxy/__tests__/github-broker-security.test.ts',
+      'src/auth/proxy/__tests__/github-broker-unknown-param.bun.test.ts',
       'src/auth/proxy/__tests__/github-broker-watch.test.ts',
       'src/auth/proxy/__tests__/github-broker-write-ops.test.ts',
       'src/auth/proxy/__tests__/github-broker.test.ts',
@@ -400,6 +429,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/chutes/usageInfo.test.ts',
       'src/composition/credentialPrecedence.test.ts',
       'src/composition/oauth-provider-registration.test.ts',
+      'src/composition/__tests__/issue2891-oauth-provider-registration.test.ts',
       'src/composition/provider-gemini-switching.test.ts',
       'src/composition/provider-switching.integration.test.ts',
       'src/composition/providerAliases.builtin-qwen.test.ts',
@@ -442,6 +472,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/kimi/kimiMediaProcessing.test.ts',
       'src/kimi/usageInfo.test.ts',
       'src/loadBalancing/failoverState.test.ts',
+      'src/loadBalancing/loadBalancerTokenEstimator.imageTokens.test.ts',
       'src/logging/conversationResponseLogger.test.ts',
       'src/logging/ProviderPerformanceTracker.test.ts',
       'src/logging/serverToolLogger.test.ts',
@@ -564,6 +595,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/reasoning/reasoningUtils.test.ts',
       'src/retryAuthTokenResolver.test.ts',
       'src/retryConfigHandlers.test.ts',
+      'src/runtime/__tests__/issue2891-lazy-oauth-gating.test.ts',
       'src/runtime/__tests__/profileApplication.authclear.test.ts',
       'src/runtime/__tests__/profileApplication.authtiming.test.ts',
       'src/runtime/__tests__/profileApplication.basics.test.ts',
@@ -615,6 +647,11 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/tokenizer-behavior.test.ts',
       'src/tokenizers/Gpt56O200kPromptEstimator.test.ts',
       'src/tokenizers/Gpt56ProviderUsageParity.test.ts',
+      'src/tokenizers/claude/claudeCalibration.test.ts',
+      'src/tokenizers/claude/claudeCalibrationGate.test.ts',
+      'src/tokenizers/claude/claudeContentFeatures.test.ts',
+      'src/tokenizers/claude/claudeModelIdentity.test.ts',
+      'src/tokenizers/claude/claudePromptEstimator.test.ts',
       'src/tokenizers/official/assetLoader.test.ts',
       'src/tokenizers/official/officialTokenizers.test.ts',
       'src/tokenizers/official/offlineAssets.test.ts',
@@ -678,6 +715,17 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    // Bun-native assignment lifecycle tests for issue #2833. These execute the
+    // REAL bash assignment scripts against fake-gh; vitest skips
+    // `*.bun.test.ts`, so they run only under Bun's native runner here.
+    workspace: 'scripts-assignment',
+    cwd: '.',
+    files: [
+      'scripts/tests/assign-remediation8b.bun.test.ts',
+      'scripts/tests/assign-remediation11.bun.test.ts',
+    ],
+  },
+  {
     // Bun-native tests for the PR-review Mermaid sanitizer (issue #2944).
     // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
     workspace: 'scripts-pr-review',
@@ -691,7 +739,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'scripts-ocr-review',
     cwd: '.',
     files: [
+      'scripts/tests/ocr-canary-embedding.bun.test.ts',
+      'scripts/tests/ocr-canary-metrics.bun.test.ts',
+      'scripts/tests/ocr-review-422-grouping.bun.test.ts',
+      'scripts/tests/ocr-review-422-wiring.bun.test.ts',
+      'scripts/tests/ocr-review-context.bun.test.ts',
       'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
+      'scripts/tests/ocr-review-github-script-syntax.bun.test.ts',
       'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
       'scripts/tests/ocr-review-workflow.bun.test.ts',
     ],
@@ -720,6 +774,26 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: [
       'scripts/tests/issue-2603-launcher.bun.test.ts',
       'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
+    ],
+  },
+  {
+    // Bun-native test for the prebuilt CLI bundle (issue #2999). Builds the
+    // bundle via the exported config, executes it, and asserts --version
+    // output, proving externals resolve and the artifact is genuinely
+    // launchable. Gated behind LLXPRT_RUN_BUNDLE_BUILD_TEST=1 because the
+    // ~16s build is too slow for the default PR-path shard. The nightly
+    // `cli_bundle_launch` job sets the flag, so externals drift is caught
+    // daily rather than by a user whose CLI stops starting.
+    workspace: 'cli-bundle',
+    cwd: '.',
+    files: ['scripts/tests/issue-2999-cli-bundle.bun.test.ts'],
+  },
+  {
+    workspace: 'scripts-manifest',
+    cwd: '.',
+    files: [
+      'scripts/tests/bun-test-manifest.bun.test.ts',
+      'scripts/tests/run_bun_tests.test.ts',
     ],
   },
 ];

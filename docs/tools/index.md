@@ -47,6 +47,15 @@ The shell tool is the only tool that can reach **outside your workspace**. All f
 | `direct_web_fetch` | Fetch and convert a URL to text/markdown      |
 | `codesearch`       | Search for code snippets, APIs, documentation |
 
+### Images
+
+| Tool             | What It Does                                           |
+| ---------------- | ------------------------------------------------------ |
+| `generate_image` | Generate or edit an image (Codex-backed, any provider) |
+
+Image generation runs on your Codex account and is independent of the provider
+you are chatting with. See [Image Generation](./image-generation.md).
+
 ### GitHub
 
 | Tool     | What It Does                                       |
@@ -143,6 +152,7 @@ The **shell tool is the exception** — it can run any command your user account
 ## Related
 
 - [GitHub](./github.md) — issues, pull requests and checks without a token in the sandbox
+- [Image Generation](./image-generation.md) — generate or edit images (Codex-backed, any provider)
 - [MCP Servers](./mcp-server.md) — adding third-party tools
 - [Memory](./memory.md) — how long-term memory works
 - [Sandboxing](../sandbox.md) — running in a container

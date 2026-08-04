@@ -53,6 +53,12 @@ on:
       - 'package-lock.json'
   workflow_dispatch:
 
+# PR-or-ref grouping safely cancels superseded runs because this workflow has
+# no pull_request_target trigger.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: 'read'
 

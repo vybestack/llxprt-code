@@ -19,6 +19,11 @@
  * truth always matches execution truth (issue #2483).
  */
 
+import {
+  isCompactDateSnapshot,
+  isHyphenatedDateSnapshot,
+} from '../modelIdentity/snapshotDate.js';
+
 /**
  * Transport-selector (control-plane) keys that determine which API
  * endpoint a call uses. These are user-facing settings, NOT model
@@ -195,52 +200,9 @@ export function isSanctionedGpt56Model(model: string): boolean {
  */
 function isValidQualifier(suffix: string): boolean {
   if (suffix === '' || suffix === '-latest') return true;
-  const compact = /^-(\d{4})(\d{2})(\d{2})$/.exec(suffix);
-  if (compact) {
-    return isValidDate(
-      Number(compact[1]),
-      Number(compact[2]),
-      Number(compact[3]),
-    );
-  }
-  const hyphenated = /^-(\d{4})-(\d{2})-(\d{2})$/.exec(suffix);
-  if (hyphenated) {
-    return isValidDate(
-      Number(hyphenated[1]),
-      Number(hyphenated[2]),
-      Number(hyphenated[3]),
-    );
-  }
-  return false;
-}
-
-/**
- * Validate a calendar date with correct month/day ranges (including leap
- * years) so that malformed snapshots like `-20261301` or `-2026-02-30`
- * are rejected rather than silently accepted as model IDs.
- */
-function isValidDate(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12) return false;
-  if (day < 1 || day > 31) return false;
-  const daysInMonth = [
-    31,
-    isLeapYear(year) ? 29 : 28,
-    31,
-    30,
-    31,
-    30,
-    31,
-    31,
-    30,
-    31,
-    30,
-    31,
-  ];
-  return day <= daysInMonth[month - 1];
-}
-
-function isLeapYear(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  if (!suffix.startsWith('-')) return false;
+  const snapshot = suffix.slice(1);
+  return isCompactDateSnapshot(snapshot) || isHyphenatedDateSnapshot(snapshot);
 }
 
 export interface OpenAIModelTransport {

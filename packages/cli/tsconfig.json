@@ -6,7 +6,7 @@
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "composite": false,
-    "types": ["node", "vitest/globals"],
+    "types": ["node", "vitest/globals", "bun-types/test"],
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {

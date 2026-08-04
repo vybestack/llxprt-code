@@ -18,6 +18,11 @@ on:
         type: 'boolean'
         default: true
 
+# Event-type isolation means only same-trigger runs supersede one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   smoke-test:
     runs-on: 'ubuntu-latest'

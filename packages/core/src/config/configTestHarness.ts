@@ -28,7 +28,6 @@ import type { ConfigParameters, SandboxConfig } from './config.js';
 import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type * as SettingsModule from '@vybestack/llxprt-code-settings';
-import type * as ToolsModule from '@vybestack/llxprt-code-tools';
 import type * as IdeIntegrationModule from '@vybestack/llxprt-code-ide-integration';
 
 // NOTE: This module intentionally has NO runtime (value) imports from any
@@ -74,7 +73,7 @@ export function buildFsMockBody(actual: unknown) {
   };
 }
 
-export function buildToolsMockBody(actual: typeof ToolsModule) {
+export function buildToolsMockBody(actual: unknown) {
   const registerToolMock = vi.fn();
   const unregisterToolMock = vi.fn();
   const discoverAllToolsMock = vi.fn();
@@ -97,7 +96,7 @@ export function buildToolsMockBody(actual: typeof ToolsModule) {
     listDeferredMcpServers = listDeferredMcpServersMock;
   }
   return {
-    ...actual,
+    ...(actual as object),
     ToolRegistry: vi.fn().mockImplementation(() => new ToolRegistryMock()),
     MemoryTool: vi.fn(),
     setLlxprtMdFilename: vi.fn(),

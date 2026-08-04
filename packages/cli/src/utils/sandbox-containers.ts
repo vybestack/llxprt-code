@@ -76,6 +76,20 @@ const SANDBOX_PROXY_NAME = 'llxprt-code-sandbox-proxy';
 
 export { LOCAL_DEV_SANDBOX_IMAGE_NAME };
 
+/**
+ * Privilege-hardening flags applied to EVERY Docker/Podman sandbox container
+ * run, including the proxy sidecar: drop every Linux capability and forbid
+ * privilege escalation. Centralized here so no `run` argv can omit it. User
+ * SANDBOX_FLAGS are still applied afterward (in buildContainerRunArgs), so a
+ * user can add a specific capability back. See
+ * project-plans/issue-2902-sandbox-privilege-hardening.md.
+ */
+const BASE_CONTAINER_HARDENING_FLAGS = [
+  '--cap-drop=ALL',
+  '--security-opt',
+  'no-new-privileges',
+] as const;
+
 /** Composes cleanup callbacks and surfaces failures after attempting both. */
 function composeCleanups(
   a: (() => void) | undefined,
@@ -137,6 +151,10 @@ export function buildContainerRunArgs(
   resolvedTmpdir: string,
 ): string[] {
   const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
+  // Privilege hardening defaults: applied before SANDBOX_FLAGS so a user can
+  // still add specific capabilities back via SANDBOX_FLAGS. See
+  // project-plans/issue-2902-sandbox-privilege-hardening.md.
+  args.push(...BASE_CONTAINER_HARDENING_FLAGS);
   if (process.env.SANDBOX_FLAGS) {
     const flags = parse(process.env.SANDBOX_FLAGS, process.env).filter(
       (f): f is string => typeof f === 'string',
@@ -377,6 +395,16 @@ export function assignContainerName(
   return containerName;
 }
 
+/**
+ * Minimum capabilities required on the current-user path, proven by
+ * leave-one-out testing against the sandbox image: groupadd/useradd need CHOWN
+ * to write /etc/gshadow and /etc/shadow, and SETUID/SETGID create the matching
+ * UID/GID and let su drop to them. DAC_OVERRIDE and FOWNER are NOT required.
+ * Removing any one of these three breaks groupadd/useradd or su. See
+ * project-plans/issue-2902-sandbox-privilege-hardening.md. Do not add more.
+ */
+const CURRENT_USER_CAPABILITIES = ['CHOWN', 'SETUID', 'SETGID'] as const;
+
 /** Configures user/UID for the container and modifies entrypoint if needed. */
 export async function setupContainerUser(
   args: string[],
@@ -384,11 +412,16 @@ export async function setupContainerUser(
 ): Promise<string> {
   let userFlag = '';
 
-  if (process.env.LLXPRT_CODE_INTEGRATION_TEST === 'true') {
+  if (await shouldUseCurrentUserInSandbox()) {
+    // Root is required here: this branch runs groupadd/useradd to create the
+    // host user inside the container, then su to drop to that user's uid/gid.
+    // Creating the user and writing /etc/shadow needs the capabilities below;
+    // su is then invoked as root (already uid 0), so no-new-privileges does
+    // not block it.
     args.push('--user', 'root');
-    userFlag = '--user root';
-  } else if (await shouldUseCurrentUserInSandbox()) {
-    args.push('--user', 'root');
+    for (const cap of CURRENT_USER_CAPABILITIES) {
+      args.push(`--cap-add=${cap}`);
+    }
     const uid = execSync('id -u').toString().trim();
     const gid = execSync('id -g').toString().trim();
 
@@ -578,6 +611,7 @@ export async function startProxyContainer(
     'run',
     '--rm',
     '--init',
+    ...BASE_CONTAINER_HARDENING_FLAGS,
     ...userFlag.split(' ').filter((f) => f.length > 0),
     '--name',
     SANDBOX_PROXY_NAME,

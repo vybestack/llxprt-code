@@ -13,6 +13,7 @@ import sharp from 'sharp';
 import { createRealToolHost as createRealHost } from './helpers/create-real-tool-host.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import type { ToolResult } from '../index.js';
+import { DEFAULT_IMAGE_TOKEN_ESTIMATE } from '../utils/imageTokenEstimation.js';
 
 function createTempDir(prefix = 'llxprt-read-many-files-behavior-'): {
   dir: string;
@@ -328,4 +329,66 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
       expect(result.returnDisplay).toContain('Image Resize Error');
     },
   );
+
+  it('skips an image whose estimate exceeds tool-output-max-tokens under the new estimator', async () => {
+    // Any image under the default family costs DEFAULT_IMAGE_TOKEN_ESTIMATE
+    // (1000) regardless of its dimensions — well above the old hardcoded 85.
+    // Set a token budget that the old 85 would have passed but 1000 does not.
+    const filePath = join(tempDir, 'big.png');
+    const original = await sharp({
+      create: {
+        width: 10,
+        height: 10,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+    writeFileSync(filePath, original);
+    const host = createHostWithSettings(tempDir, {
+      'tool-output-max-tokens': 100,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['big.png'],
+    });
+
+    // The image must be skipped — the new estimate (1000) exceeds the 100
+    // budget, whereas the old 85 would have been admitted.
+    expect(result.returnDisplay).toContain('would exceed token limit');
+    expect(result.returnDisplay).toContain('big.png');
+  });
+
+  it('reflects the new image token estimate in the reported total', async () => {
+    // A small image (10x10) under the default family still costs 1000 tokens
+    // (the default flat estimate). With a generous budget the image is
+    // admitted and the reported total reflects the new estimator, not 85.
+    const filePath = join(tempDir, 'small.png');
+    const original = await sharp({
+      create: {
+        width: 10,
+        height: 10,
+        channels: 3,
+        background: { r: 200, g: 200, b: 200 },
+      },
+    })
+      .png()
+      .toBuffer();
+    writeFileSync(filePath, original);
+    const host = createHostWithSettings(tempDir, {
+      'tool-output-max-tokens': 50000,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['small.png'],
+    });
+
+    expect(result.error).toBeUndefined();
+    // The display formats totals with toLocaleString(), so build the expected
+    // string the same way rather than assuming a group separator.
+    expect(result.returnDisplay).toContain(
+      `${DEFAULT_IMAGE_TOKEN_ESTIMATE.toLocaleString()} tokens`,
+    );
+  });
 });

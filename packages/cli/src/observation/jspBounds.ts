@@ -17,6 +17,7 @@ export const JSP_BOUNDS = {
   idBytes: 128,
   todoEntries: 256,
   todoTextBytes: 2 * 1024,
+  todoStateBytes: 64,
   displayedContentBytes: 16 * 1024,
   diagnosticSummaryBytes: 2 * 1024,
   toolLabelBytes: 256,
