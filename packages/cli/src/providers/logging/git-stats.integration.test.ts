@@ -69,7 +69,8 @@ describe('Git Stats Integration', () => {
     );
 
     expect(stats).not.toBeNull();
-    expect(stats!.linesAdded).toBe(4); // blank line + comment + function with 3 lines
+    // blank line + comment + 3 function lines
+    expect(stats!.linesAdded).toBe(5);
     expect(stats!.linesRemoved).toBe(0);
     expect(stats!.filesChanged).toBe(1);
 
