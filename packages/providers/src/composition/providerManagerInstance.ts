@@ -31,6 +31,7 @@ import {
   DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
   ModelPromptEstimatorRegistry,
 } from '../tokenizers/ModelPromptEstimatorRegistry.js';
+import { CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS } from '../tokenizers/claude/claudePromptEstimator.js';
 import { createGpt56RuntimeTokenizer } from '../tokenizers/Gpt56O200kPromptEstimator.js';
 import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
 import {
@@ -135,6 +136,7 @@ function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
   const estimatorRegistry = new ModelPromptEstimatorRegistry([
     ...DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
     ...OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
+    ...CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   ]);
 
   return {

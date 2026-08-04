@@ -1,0 +1,60 @@
+{
+  "canonicalModelFamily": "claude-opus-5",
+  "protocol": "anthropic-messages",
+  "intercept": 0,
+  "baseTokenCoefficient": 0.944299,
+  "featureCoefficients": [
+    {
+      "feature": "codePoints",
+      "coefficient": 0.153947
+    }
+  ],
+  "heldOut": {
+    "sampleCount": 5,
+    "mapePercent": 5.820461,
+    "rmse": 38.084117,
+    "underestimationP95Percent": 17.266247,
+    "baselineEstimator": "AnthropicTokenizer character heuristic",
+    "baselineMapePercent": 38.250059,
+    "baselineRmse": 271.463441,
+    "baselineUnderestimationP95Percent": 58.196217,
+    "relativeMapeImprovementPercent": 84.783132
+  },
+  "candidates": [
+    {
+      "featureSet": "base counter only",
+      "heldOutMapePercent": 9.060662,
+      "leaveOneCategoryOutMapePercent": 10.915907
+    },
+    {
+      "featureSet": "codePoints",
+      "heldOutMapePercent": 5.798258,
+      "leaveOneCategoryOutMapePercent": 9.822688
+    },
+    {
+      "featureSet": "codePoints + nonAsciiCodePoints",
+      "heldOutMapePercent": 1.357521,
+      "leaveOneCategoryOutMapePercent": 11.374196
+    },
+    {
+      "featureSet": "codePoints + structuralCodePoints",
+      "heldOutMapePercent": 4.468851,
+      "leaveOneCategoryOutMapePercent": 12.947135
+    },
+    {
+      "featureSet": "codePoints + whitespaceCodePoints",
+      "heldOutMapePercent": 4.766669,
+      "leaveOneCategoryOutMapePercent": 15.091916
+    },
+    {
+      "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints",
+      "heldOutMapePercent": 1.321908,
+      "leaveOneCategoryOutMapePercent": 31.292388
+    },
+    {
+      "featureSet": "codePoints + nonAsciiCodePoints + structuralCodePoints + whitespaceCodePoints",
+      "heldOutMapePercent": 0.026066,
+      "leaveOneCategoryOutMapePercent": 209.026809
+    }
+  ]
+}

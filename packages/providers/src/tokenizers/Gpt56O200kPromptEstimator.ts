@@ -9,41 +9,27 @@ import type {
   RuntimePromptEstimateResult,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
-import type * as Tiktoken from '@dqbd/tiktoken';
 import {
   PROJECTION_REVISION,
   type ProviderFinalizedPromptProjection,
 } from '../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
+import {
+  countO200kBaseTokens,
+  getO200kBaseEncoder,
+  loadTiktokenModule,
+  O200K_BASE_ASSET_REVISION,
+  type O200kBaseEncoder,
+  type TiktokenModuleLoader,
+} from './o200kBaseCounter.js';
 
 export const GPT_56_ESTIMATOR_FAMILY = 'openai-gpt-5.6';
 export const GPT_56_ESTIMATOR_VERSION = 'gpt-5.6-o200k-v1';
-export const GPT_56_ASSET_REVISION =
-  'o200k_base:446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d:@dqbd/tiktoken@1.0.22';
+export const GPT_56_ASSET_REVISION = O200K_BASE_ASSET_REVISION;
 
-type TiktokenModule = typeof Tiktoken;
-export type TiktokenModuleLoader = () => Promise<TiktokenModule>;
+export type { TiktokenModuleLoader };
 
-const loadTiktokenModule: TiktokenModuleLoader = () => import('@dqbd/tiktoken');
-type TiktokenEncoder = ReturnType<TiktokenModule['get_encoding']>;
-let sharedEncoder: Promise<TiktokenEncoder> | undefined;
-
-async function createEncoder(
-  loadModule: TiktokenModuleLoader,
-): Promise<TiktokenEncoder> {
-  const { get_encoding } = await loadModule();
-  return get_encoding('o200k_base');
-}
-
-function getEncoder(
-  loadModule: TiktokenModuleLoader,
-): Promise<TiktokenEncoder> {
-  if (loadModule !== loadTiktokenModule) {
-    return createEncoder(loadModule);
-  }
-  sharedEncoder ??= createEncoder(loadModule);
-  return sharedEncoder;
-}
+type TiktokenEncoder = O200kBaseEncoder;
 
 function isFinalizedPromptProjection(
   value: unknown,
@@ -87,7 +73,7 @@ function countProjectionTokens(
 ): number {
   const segments = projection.promptSegments ?? [projection.promptText];
   return segments.reduce(
-    (total, segment) => total + encoder.encode(segment, [], []).length,
+    (total, segment) => total + countO200kBaseTokens(encoder, segment),
     0,
   );
 }
@@ -99,7 +85,7 @@ export async function estimateGpt56Prompt(
   const projection = readProjection(request);
   let encoder: TiktokenEncoder;
   try {
-    encoder = await getEncoder(loadModule);
+    encoder = await getO200kBaseEncoder(loadModule);
   } catch (error) {
     throw new ModelPromptEstimatorError(
       'asset-unavailable',

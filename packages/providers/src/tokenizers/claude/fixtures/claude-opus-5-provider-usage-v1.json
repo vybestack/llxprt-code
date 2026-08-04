@@ -1,0 +1,219 @@
+{
+  "source": {
+    "issue": 2835,
+    "derivedFrom": {
+      "issue": 2253,
+      "corpusVersion": "2026-07-28-v1",
+      "commitSha": "2bec7cb6a466",
+      "results": "research/issue2253/live-results.jsonl"
+    },
+    "canonicalModel": "claude-opus-5",
+    "protocol": "anthropic-messages",
+    "endpointHost": "api.anthropic.com",
+    "groundTruth": "complete provider promptTokens including cached prompt tokens",
+    "method": "within-category incremental; the smallest item in each category is the control",
+    "promptTextForm": "JSON-escaped, as the controlled prompt appears inside the finalized projection promptText"
+  },
+  "observations": [
+    {
+      "id": 1,
+      "category": "prose",
+      "split": "control",
+      "promptText": "\"The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21777,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 2,
+      "category": "code",
+      "split": "control",
+      "promptText": "\"function computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21807,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 3,
+      "category": "json",
+      "split": "control",
+      "promptText": "\"[{\\\"id\\\":0,\\\"name\\\":\\\"item_0\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":0.5,\\\"enabled\\\":true}},{\\\"id\\\":1,\\\"name\\\":\\\"item_1\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":1.5,\\\"enabled\\\":true}},{\\\"id\\\":2,\\\"name\\\":\\\"item_2\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":2.5,\\\"enabled\\\":true}},{\\\"id\\\":3,\\\"name\\\":\\\"item_3\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":3.5,\\\"enabled\\\":true}},{\\\"id\\\":4,\\\"name\\\":\\\"item_4\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":4.5,\\\"enabled\\\":true}}] Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21833,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 4,
+      "category": "unicode",
+      "split": "control",
+      "promptText": "\"日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21686,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 5,
+      "category": "mixed",
+      "split": "control",
+      "promptText": "\"Repeat-safe block 1: <tool name=\\\"search\\\"><query>tokenization boundary 1</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 1: <tool name=\\\"search\\\"><query>tokenization boundary 1</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 1: <tool name=\\\"search\\\"><query>tokenization boundary 1</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done. Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21817,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 6,
+      "category": "prose",
+      "split": "train",
+      "promptText": "\"The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21957,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 7,
+      "category": "code",
+      "split": "train",
+      "promptText": "\"function computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22019,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 8,
+      "category": "json",
+      "split": "train",
+      "promptText": "\"[{\\\"id\\\":0,\\\"name\\\":\\\"item_0\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":0.5,\\\"enabled\\\":true}},{\\\"id\\\":1,\\\"name\\\":\\\"item_1\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":1.5,\\\"enabled\\\":true}},{\\\"id\\\":2,\\\"name\\\":\\\"item_2\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":2.5,\\\"enabled\\\":true}},{\\\"id\\\":3,\\\"name\\\":\\\"item_3\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":3.5,\\\"enabled\\\":true}},{\\\"id\\\":4,\\\"name\\\":\\\"item_4\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":4.5,\\\"enabled\\\":true}},{\\\"id\\\":5,\\\"name\\\":\\\"item_5\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":5.5,\\\"enabled\\\":true}},{\\\"id\\\":6,\\\"name\\\":\\\"item_6\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":6.5,\\\"enabled\\\":true}},{\\\"id\\\":7,\\\"name\\\":\\\"item_7\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":7.5,\\\"enabled\\\":true}},{\\\"id\\\":8,\\\"name\\\":\\\"item_8\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":8.5,\\\"enabled\\\":true}},{\\\"id\\\":9,\\\"name\\\":\\\"item_9\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":9.5,\\\"enabled\\\":true}}] Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22068,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 9,
+      "category": "unicode",
+      "split": "train",
+      "promptText": "\"日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21776,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 10,
+      "category": "mixed",
+      "split": "train",
+      "promptText": "\"Repeat-safe block 2: <tool name=\\\"search\\\"><query>tokenization boundary 2</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 2: <tool name=\\\"search\\\"><query>tokenization boundary 2</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 2: <tool name=\\\"search\\\"><query>tokenization boundary 2</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 2: <tool name=\\\"search\\\"><query>tokenization boundary 2</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 2: <tool name=\\\"search\\\"><query>tokenization boundary 2</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 2: <tool name=\\\"search\\\"><query>tokenization boundary 2</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done. Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22039,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 11,
+      "category": "prose",
+      "split": "train",
+      "promptText": "\"The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22137,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 12,
+      "category": "code",
+      "split": "train",
+      "promptText": "\"function computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22231,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 13,
+      "category": "json",
+      "split": "train",
+      "promptText": "\"[{\\\"id\\\":0,\\\"name\\\":\\\"item_0\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":0.5,\\\"enabled\\\":true}},{\\\"id\\\":1,\\\"name\\\":\\\"item_1\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":1.5,\\\"enabled\\\":true}},{\\\"id\\\":2,\\\"name\\\":\\\"item_2\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":2.5,\\\"enabled\\\":true}},{\\\"id\\\":3,\\\"name\\\":\\\"item_3\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":3.5,\\\"enabled\\\":true}},{\\\"id\\\":4,\\\"name\\\":\\\"item_4\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":4.5,\\\"enabled\\\":true}},{\\\"id\\\":5,\\\"name\\\":\\\"item_5\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":5.5,\\\"enabled\\\":true}},{\\\"id\\\":6,\\\"name\\\":\\\"item_6\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":6.5,\\\"enabled\\\":true}},{\\\"id\\\":7,\\\"name\\\":\\\"item_7\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":7.5,\\\"enabled\\\":true}},{\\\"id\\\":8,\\\"name\\\":\\\"item_8\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":8.5,\\\"enabled\\\":true}},{\\\"id\\\":9,\\\"name\\\":\\\"item_9\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":9.5,\\\"enabled\\\":true}},{\\\"id\\\":10,\\\"name\\\":\\\"item_10\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":10.5,\\\"enabled\\\":true}},{\\\"id\\\":11,\\\"name\\\":\\\"item_11\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":11.5,\\\"enabled\\\":true}},{\\\"id\\\":12,\\\"name\\\":\\\"item_12\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":12.5,\\\"enabled\\\":true}},{\\\"id\\\":13,\\\"name\\\":\\\"item_13\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":13.5,\\\"enabled\\\":true}},{\\\"id\\\":14,\\\"name\\\":\\\"item_14\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":14.5,\\\"enabled\\\":true}}] Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22303,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 14,
+      "category": "unicode",
+      "split": "train",
+      "promptText": "\"日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21866,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 15,
+      "category": "mixed",
+      "split": "train",
+      "promptText": "\"Repeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 3: <tool name=\\\"search\\\"><query>tokenization boundary 3</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done. Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22261,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 16,
+      "category": "prose",
+      "split": "train",
+      "promptText": "\"The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22317,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 17,
+      "category": "code",
+      "split": "train",
+      "promptText": "\"function computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22443,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 18,
+      "category": "json",
+      "split": "train",
+      "promptText": "\"[{\\\"id\\\":0,\\\"name\\\":\\\"item_0\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":0.5,\\\"enabled\\\":true}},{\\\"id\\\":1,\\\"name\\\":\\\"item_1\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":1.5,\\\"enabled\\\":true}},{\\\"id\\\":2,\\\"name\\\":\\\"item_2\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":2.5,\\\"enabled\\\":true}},{\\\"id\\\":3,\\\"name\\\":\\\"item_3\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":3.5,\\\"enabled\\\":true}},{\\\"id\\\":4,\\\"name\\\":\\\"item_4\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":4.5,\\\"enabled\\\":true}},{\\\"id\\\":5,\\\"name\\\":\\\"item_5\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":5.5,\\\"enabled\\\":true}},{\\\"id\\\":6,\\\"name\\\":\\\"item_6\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":6.5,\\\"enabled\\\":true}},{\\\"id\\\":7,\\\"name\\\":\\\"item_7\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":7.5,\\\"enabled\\\":true}},{\\\"id\\\":8,\\\"name\\\":\\\"item_8\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":8.5,\\\"enabled\\\":true}},{\\\"id\\\":9,\\\"name\\\":\\\"item_9\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":9.5,\\\"enabled\\\":true}},{\\\"id\\\":10,\\\"name\\\":\\\"item_10\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":10.5,\\\"enabled\\\":true}},{\\\"id\\\":11,\\\"name\\\":\\\"item_11\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":11.5,\\\"enabled\\\":true}},{\\\"id\\\":12,\\\"name\\\":\\\"item_12\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":12.5,\\\"enabled\\\":true}},{\\\"id\\\":13,\\\"name\\\":\\\"item_13\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":13.5,\\\"enabled\\\":true}},{\\\"id\\\":14,\\\"name\\\":\\\"item_14\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":14.5,\\\"enabled\\\":true}},{\\\"id\\\":15,\\\"name\\\":\\\"item_15\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":15.5,\\\"enabled\\\":true}},{\\\"id\\\":16,\\\"name\\\":\\\"item_16\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":16.5,\\\"enabled\\\":true}},{\\\"id\\\":17,\\\"name\\\":\\\"item_17\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":17.5,\\\"enabled\\\":true}},{\\\"id\\\":18,\\\"name\\\":\\\"item_18\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":18.5,\\\"enabled\\\":true}},{\\\"id\\\":19,\\\"name\\\":\\\"item_19\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":19.5,\\\"enabled\\\":true}}] Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22538,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 19,
+      "category": "unicode",
+      "split": "train",
+      "promptText": "\"日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 21956,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 20,
+      "category": "mixed",
+      "split": "train",
+      "promptText": "\"Repeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 4: <tool name=\\\"search\\\"><query>tokenization boundary 4</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done. Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22483,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 21,
+      "category": "prose",
+      "split": "heldout",
+      "promptText": "\"The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service. The quick brown fox jumps over the lazy dog while a merchant inspects each ledger entry for accuracy before sealing the envelope and dispatching it via the afternoon courier service.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22497,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 22,
+      "category": "code",
+      "split": "heldout",
+      "promptText": "\"function computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum\\nfunction computeChecksum(values) { return values.reduce((acc, v) => (acc * 31 + v) >>> 0, 0); } // deterministic checksum Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22655,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 23,
+      "category": "json",
+      "split": "heldout",
+      "promptText": "\"[{\\\"id\\\":0,\\\"name\\\":\\\"item_0\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":0.5,\\\"enabled\\\":true}},{\\\"id\\\":1,\\\"name\\\":\\\"item_1\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":1.5,\\\"enabled\\\":true}},{\\\"id\\\":2,\\\"name\\\":\\\"item_2\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":2.5,\\\"enabled\\\":true}},{\\\"id\\\":3,\\\"name\\\":\\\"item_3\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":3.5,\\\"enabled\\\":true}},{\\\"id\\\":4,\\\"name\\\":\\\"item_4\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":4.5,\\\"enabled\\\":true}},{\\\"id\\\":5,\\\"name\\\":\\\"item_5\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":5.5,\\\"enabled\\\":true}},{\\\"id\\\":6,\\\"name\\\":\\\"item_6\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":6.5,\\\"enabled\\\":true}},{\\\"id\\\":7,\\\"name\\\":\\\"item_7\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":7.5,\\\"enabled\\\":true}},{\\\"id\\\":8,\\\"name\\\":\\\"item_8\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":8.5,\\\"enabled\\\":true}},{\\\"id\\\":9,\\\"name\\\":\\\"item_9\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":9.5,\\\"enabled\\\":true}},{\\\"id\\\":10,\\\"name\\\":\\\"item_10\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":10.5,\\\"enabled\\\":true}},{\\\"id\\\":11,\\\"name\\\":\\\"item_11\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":11.5,\\\"enabled\\\":true}},{\\\"id\\\":12,\\\"name\\\":\\\"item_12\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":12.5,\\\"enabled\\\":true}},{\\\"id\\\":13,\\\"name\\\":\\\"item_13\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":13.5,\\\"enabled\\\":true}},{\\\"id\\\":14,\\\"name\\\":\\\"item_14\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":14.5,\\\"enabled\\\":true}},{\\\"id\\\":15,\\\"name\\\":\\\"item_15\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":15.5,\\\"enabled\\\":true}},{\\\"id\\\":16,\\\"name\\\":\\\"item_16\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":16.5,\\\"enabled\\\":true}},{\\\"id\\\":17,\\\"name\\\":\\\"item_17\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":17.5,\\\"enabled\\\":true}},{\\\"id\\\":18,\\\"name\\\":\\\"item_18\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":18.5,\\\"enabled\\\":true}},{\\\"id\\\":19,\\\"name\\\":\\\"item_19\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":19.5,\\\"enabled\\\":true}},{\\\"id\\\":20,\\\"name\\\":\\\"item_20\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":20.5,\\\"enabled\\\":true}},{\\\"id\\\":21,\\\"name\\\":\\\"item_21\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":21.5,\\\"enabled\\\":true}},{\\\"id\\\":22,\\\"name\\\":\\\"item_22\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":22.5,\\\"enabled\\\":true}},{\\\"id\\\":23,\\\"name\\\":\\\"item_23\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":23.5,\\\"enabled\\\":true}},{\\\"id\\\":24,\\\"name\\\":\\\"item_24\\\",\\\"tags\\\":[\\\"alpha\\\",\\\"beta\\\"],\\\"meta\\\":{\\\"weight\\\":24.5,\\\"enabled\\\":true}}] Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22773,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 24,
+      "category": "unicode",
+      "split": "heldout",
+      "promptText": "\"日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية. 日本語のテキストです。한국어 텍스트입니다. Русский текст. Ελληνικό κείμενο. العربية.  Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22046,
+      "cachedPromptTokens": 0
+    },
+    {
+      "id": 25,
+      "category": "mixed",
+      "split": "heldout",
+      "promptText": "\"Repeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done.\\nRepeat-safe block 5: <tool name=\\\"search\\\"><query>tokenization boundary 5</query></tool> — \\\"punctuation; semicolons; brackets [a] {b} (c)\\\" — unicode 日本語 — done. Reply with exactly the two characters OK and nothing else.\"",
+      "providerPromptTokens": 22705,
+      "cachedPromptTokens": 0
+    }
+  ]
+}
