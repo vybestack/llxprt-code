@@ -10,6 +10,7 @@ import { vi } from 'vitest';
 
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
+import { MouseProvider } from '../ui/contexts/MouseContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { ShellCommandDisplayProvider } from '../ui/contexts/ShellCommandDisplayContext.js';
 import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
@@ -176,13 +177,15 @@ export const renderWithProviders = (
       <UIStateContext.Provider value={uiState as UIState}>
         <MockRuntimeContextProvider>
           <KeypressProvider>
-            <ShellCommandDisplayProvider
-              alwaysDisplayFullShellCommand={
-                settings.merged.ui.alwaysDisplayFullShellCommand ?? true
-              }
-            >
-              {component}
-            </ShellCommandDisplayProvider>
+            <MouseProvider>
+              <ShellCommandDisplayProvider
+                alwaysDisplayFullShellCommand={
+                  settings.merged.ui.alwaysDisplayFullShellCommand ?? true
+                }
+              >
+                {component}
+              </ShellCommandDisplayProvider>
+            </MouseProvider>
           </KeypressProvider>
         </MockRuntimeContextProvider>
       </UIStateContext.Provider>

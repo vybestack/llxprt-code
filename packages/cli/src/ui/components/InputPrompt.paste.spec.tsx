@@ -144,6 +144,8 @@ describe('InputPrompt paste functionality', () => {
     // Create a mock TextBuffer
     mockBuffer = {
       lines: [''],
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       text: '',
       cursor: [0, 0],
       preferredCol: null,

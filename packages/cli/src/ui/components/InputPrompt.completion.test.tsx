@@ -115,9 +115,13 @@ describe('InputPrompt', () => {
       text: '',
       cursor: [0, 0],
       lines: [''],
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       setText: vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
+        mockBuffer.transformationsByLine = [[]];
+        mockBuffer.visualToTransformedMap = [0];
         mockBuffer.cursor = [0, newText.length];
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
