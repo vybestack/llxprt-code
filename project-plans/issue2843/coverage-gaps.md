@@ -200,3 +200,49 @@ Non-responsive confirmation behaviour is still covered by
   #2300 required an explicit runtime context; supplied a `SettingsService`, and
   mocked the runtime bridge that `Footer` pulls in. One expectation was a stale
   context window (`1049k` for `claude-3-opus`, which is `200k`).
+
+## Product defects the revived tests exposed
+
+These are genuine bugs found by tests that had not executed in CI. They are
+recorded here rather than papered over, per dev-docs/RULES.md ("never write a
+passing test that asserts incorrect behavior").
+
+### Fixed in this PR
+
+- **`retries` / `retrywait` lost their validators.** When settings moved to the
+  registry, both entries lost their `validate` functions while the neighbouring
+  `auth-retry-timeout` kept its. `retries -1` and `retrywait 0` were accepted and
+  fed straight into provider retry logic
+  (`AnthropicRateLimitHandler`, `openAIResponsesExecutor`). The revived test even
+  documented the original error wording, which confirmed the regression.
+  Restored both validators in
+  `packages/settings/src/settings/registry/registry-entries-2.ts`.
+
+### Not fixed — needs a product decision
+
+- **Inline load-balancer profiles are rejected.**
+  `parseInlineProfile` in `packages/cli/src/config/profileBootstrap.ts`
+  unconditionally requires `provider` and `model`, with no branch for
+  `type: 'loadbalancer'`. A load-balancer profile has neither: it references
+  other profiles. So
+  `--profile '{"type":"loadbalancer","profiles":[...]}'` always fails with
+  `Failed to parse inline profile: 'provider' is required`, while the same
+  profile loaded from a file via `--profile-load` works correctly.
+
+  This is an inconsistency between the inline and file paths, not an intended
+  contract change. Fixing it means teaching the inline parser about
+  load-balancer profiles, which is a functional change beyond the scope of this
+  test-runner migration.
+
+  Affected cases, currently failing in
+  `src/integration-tests/loadbalancer.integration.test.ts`:
+  - accepts inline LoadBalancer profile JSON
+  - accepts LoadBalancer with roundrobin policy
+  - selects profiles in round-robin fashion
+
+- **`git-stats` summary totals.** One case in
+  `src/providers/logging/git-stats.integration.test.ts` has
+  `totalLinesAdded` satisfy `expect.any(Number)` inside `toMatchObject` and then
+  fail `toBeGreaterThan(0)` with "Expected and actual values must be numbers or
+  bigints". Bun's `toMatchObject` was probed and does reject missing keys, so
+  matcher leniency is not the explanation. Left failing rather than guessed at.

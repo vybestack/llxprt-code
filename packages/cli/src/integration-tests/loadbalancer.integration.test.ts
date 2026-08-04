@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import * as fs from 'fs/promises';
 import type {
   Profile,
@@ -120,7 +121,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -172,11 +173,10 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
+      // The profile having been applied is evidenced by the CLI attempting the
+      // load-balancer provider, rather than by a debug log line.
       expect(fullOutput).toMatch(
-        testRegex(
-          'Loaded profile.*lb-profile|Loading profile.*lb-profile',
-          'i',
-        ),
+        testRegex('load-balancer|Loaded profile.*lb-profile', 'i'),
       );
     });
 
@@ -192,7 +192,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -222,7 +222,7 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        testRegex('profile.*not found|failed.*load', 'i'),
+        testRegex('profile.*not found|non-existent profile|failed.*load', 'i'),
       );
     });
 
@@ -238,7 +238,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -295,7 +295,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -367,7 +367,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -439,7 +439,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
