@@ -38,7 +38,7 @@
  * adapter. Tests assert observable final state.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, setDefaultTimeout } from 'bun:test';
 import { execFileSync } from 'child_process';
 import * as nodePath from 'path';
 import {
@@ -51,6 +51,8 @@ import {
   daysAgo,
 } from './assign-helpers.ts';
 import { stateIssue } from './typed-test-helpers.ts';
+
+setDefaultTimeout(30000);
 
 function defaultStateWith(overrides: Record<string, unknown>) {
   return { ...defaultState(), ...overrides };
@@ -422,49 +424,45 @@ describe('K3: ambiguous marker POST ownership-aware rollback', () => {
     );
   });
 
-  it(
-    'removes label on TERM signal after applied-error label POST',
-    { timeout: 30000 },
-    () => {
-      const repo = createFakeRepo(
-        defaultStateWith({
-          issues: { 42: makeIssue({ number: 42, assignees: [] }) },
-          prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
-          fail_config: {
-            requests: [
-              {
-                method: 'POST',
-                endpoint: 'repos/test/repo/issues/42/labels',
-                on_nth: 1,
-                type: 'applied_error',
-              },
-            ],
-          },
-          side_effects: [
+  it('removes label on TERM signal after applied-error label POST', () => {
+    const repo = createFakeRepo(
+      defaultStateWith({
+        issues: { 42: makeIssue({ number: 42, assignees: [] }) },
+        prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
+        fail_config: {
+          requests: [
             {
               method: 'POST',
-              endpoint: 'repos/test/repo/issues/42/assignees',
+              endpoint: 'repos/test/repo/issues/42/labels',
               on_nth: 1,
-              timing: 'post',
-              action: 'signal_parent',
-              signal: 'SIGTERM',
+              type: 'applied_error',
             },
           ],
-        }),
-      );
-      const result = repo.runAssign({
-        issueNumber: 42,
-        commenter: 'alice',
-        extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
-      });
+        },
+        side_effects: [
+          {
+            method: 'POST',
+            endpoint: 'repos/test/repo/issues/42/assignees',
+            on_nth: 1,
+            timing: 'post',
+            action: 'signal_parent',
+            signal: 'SIGTERM',
+          },
+        ],
+      }),
+    );
+    const result = repo.runAssign({
+      issueNumber: 42,
+      commenter: 'alice',
+      extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
+    });
 
-      expect(result.status).toBe(143);
-      expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
-      expect(stateIssue(result.state, '42')._label_names).not.toContain(
-        'auto-assigned',
-      );
-    },
-  );
+    expect(result.status).toBe(143);
+    expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
+    expect(stateIssue(result.state, '42')._label_names).not.toContain(
+      'auto-assigned',
+    );
+  });
 });
 
 // ===========================================================================

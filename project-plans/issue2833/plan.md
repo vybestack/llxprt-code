@@ -10,15 +10,32 @@ Plan ID: `PLAN-20260804-ISSUE2833`
 
 ## Scope decision
 
-This issue will change only the existing K3 behavioral test in
-`scripts/tests/assign-remediation11.test.ts` and imports made unused by that
-change. The real production script, fake GitHub implementation, shared test
-helpers, dependencies, test runner, and CI workflows remain unchanged.
+This issue changes the existing K3 behavioral test in
+`scripts/tests/assign-remediation11.bun.test.ts`, imports made unused by that
+change, and the manifest/config references required to execute the touched test
+with Bun's native test runner. The real production script, fake GitHub
+implementation, shared test helpers, dependencies, and the PR-path CI workflow
+remain unchanged.
 
-The issue comment requesting migration of all script tests to Bun is **deferred**
-to #2847, which owns `scripts/tests` migration. This file is already TypeScript,
-and changing its runner here would overlap that project and violate the request
-not to make an unplanned workflow change.
+Both touched test modules are converted from Vitest to `bun:test` as required by
+the repository's TypeScript/Bun migration policy:
+
+- `scripts/tests/assign-remediation11.bun.test.ts` — the K3 TERM module (the
+  primary flaky target under repair).
+- `scripts/tests/assign-remediation8b.bun.test.ts` — the sibling F14 TERM
+  module ("rolls back bot-owned mutations when TERM arrives after assignee
+  mutation"). This module shares the same deterministic `signal_parent` TERM
+  harness and the same 30-second macOS boundary failure mode, so it is converted
+  and registered alongside K3 to keep both issue-specific TERM modules on the
+  Bun-native runner. The rename moves it out of the scripts vitest selection
+  (`*.bun.test.ts` is excluded) into the `scripts-assignment` Bun manifest
+  workspace, preserving its existing effective 30-second timeout via
+  `setDefaultTimeout(30000)` (no increase, no per-test option — Bun has none).
+
+Both files are registered together in a single `scripts-assignment` entry of
+`scripts/bun-test-manifest.ts`, and `tsconfig.scripts.json` is updated to
+typecheck the renamed files. Migration of untouched script tests remains owned
+by #2847.
 
 ## Root cause
 
@@ -96,7 +113,16 @@ rollback behavior without the nondeterministic harness.
 ## Verification evidence required
 
 - Run the affected K3 test at least 10 consecutive times; every run must pass.
-- Run the complete `assign-remediation11.test.ts` file.
+- Run the complete `assign-remediation11.bun.test.ts` file with `bun test`.
+- Run the converted sibling F14 module `assign-remediation8b.bun.test.ts` with
+  `bun test`.
+- Run the `scripts-assignment` Bun manifest workspace
+  (`bun scripts/run_bun_tests.ts --workspace scripts-assignment`) so both
+  registered issue-specific TERM modules execute together under the manifest
+  runner.
+- Run the Bun manifest consistency test
+  (`scripts/tests/bun-test-manifest.bun.test.ts`) to confirm both files resolve
+  to verified on-disk paths and the workspace entry stays well-formed.
 - Run the sibling deterministic assignment signal lifecycle test.
 - Run the full project verification suite:
   - `npm run test`
@@ -110,10 +136,33 @@ rollback behavior without the nondeterministic harness.
 - Require green macOS CI on the candidate PR head, conflict-free mergeability,
   and correct ancestry before declaring the PR ready.
 
+## CI evidence — macOS Bun manifest coverage
+
+Both issue-specific TERM modules exercise real bash scripts against fake-gh and
+historically flaked against the macOS 30-second boundary. Because the conversion
+moves `assign-remediation8b` out of the vitest scripts shard (vitest excludes
+`*.bun.test.ts`), macOS coverage for it would otherwise be lost. To preserve
+exact macOS coverage without duplication, the nightly `macos_ci` job runs the
+`scripts-assignment` Bun manifest workspace once:
+
+```
+bun scripts/run_bun_tests.ts --workspace scripts-assignment --timeout 30000
+```
+
+This runs only the two registered `scripts-assignment` files, does not route
+them back through Vitest, and adds the required macOS evidence alongside the
+ubuntu `bun_native_test_parity` job (which runs the full manifest on Linux). The
+smallest bounded workflow change is one new step in `macos_ci`, placed after the
+existing script-harness and shell-script behavioral test steps.
+
 ## Explicit non-goals
 
 - No production rollback changes.
 - No timeout increase, retry, fake timer, or extra defensive fallback.
 - No new abstraction or shared helper.
-- No Bun/Vitest migration, dependency change, or CI workflow change.
+- No migration of untouched Vitest files or dependency change.
+- No PR-path CI workflow change; the only CI change is the single bounded
+  macOS nightly step that runs the `scripts-assignment` Bun manifest workspace.
+  No test is routed back through Vitest or executed twice within either CI
+  topology.
 - No adjacent cleanup outside imports made unused by the K3 rewrite.

@@ -240,6 +240,16 @@ jobs:
           CI: true
         run: 'npm run test:shell'
 
+      - name: 'Run scripts-assignment Bun manifest (#2833)'
+        # The issue #2833 K3 TERM test and its sibling F14 TERM test were
+        # converted from Vitest to bun:test. Vitest excludes `*.bun.test.ts`, so
+        # the macOS leg loses this coverage unless the Bun manifest workspace is
+        # run explicitly here, once. This exercises the real assignment bash
+        # scripts against fake-gh under Bun's native runner on macOS.
+        env:
+          CI: true
+        run: 'bun scripts/run_bun_tests.ts --workspace scripts-assignment --timeout 30000'
+
       - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
         run: './packages/cli/bin/llxprt --version'
 

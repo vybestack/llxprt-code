@@ -701,6 +701,17 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    // Bun-native assignment lifecycle tests for issue #2833. These execute the
+    // REAL bash assignment scripts against fake-gh; vitest skips
+    // `*.bun.test.ts`, so they run only under Bun's native runner here.
+    workspace: 'scripts-assignment',
+    cwd: '.',
+    files: [
+      'scripts/tests/assign-remediation8b.bun.test.ts',
+      'scripts/tests/assign-remediation11.bun.test.ts',
+    ],
+  },
+  {
     // Bun-native tests for the PR-review Mermaid sanitizer (issue #2944).
     // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
     workspace: 'scripts-pr-review',
