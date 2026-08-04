@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   asOptionalRecord,
   asRecord,
@@ -30,14 +30,12 @@ function readCanonicalSnippet(
   const content = readRootFile(modulePath);
   const beginIdx = content.indexOf(beginSentinel);
   const endIdx = content.indexOf(endSentinel);
-  expect(
-    beginIdx,
-    `${beginSentinel} should exist in ${modulePath}`,
-  ).toBeGreaterThanOrEqual(0);
-  expect(
-    endIdx,
-    `${endSentinel} should exist in ${modulePath}`,
-  ).toBeGreaterThan(beginIdx);
+  if (beginIdx < 0) {
+    throw new Error(`${beginSentinel} should exist in ${modulePath}`);
+  }
+  if (!(endIdx > beginIdx)) {
+    throw new Error(`${endSentinel} should exist in ${modulePath}`);
+  }
   return content.slice(beginIdx, endIdx + endSentinel.length);
 }
 
@@ -67,17 +65,18 @@ describe('ocr-canary-metrics.cjs — verbatim embedding in workflow (AM1 pattern
       '// --- BEGIN OCR CANARY METRICS SNIPPET ---',
       '// --- END OCR CANARY METRICS SNIPPET ---',
     );
-    expect(
-      script,
-      'Build OCR canary metrics step must embed the canonical snippet ' +
-        'from .github/scripts/ocr-canary-metrics.cjs verbatim. ' +
-        'Re-embed: copy the text between (and including) the BEGIN/END ' +
-        'sentinels into the step script, indenting every line uniformly to ' +
-        'match the surrounding block (12 spaces at the time of writing). ' +
-        'The comparison runs against the YAML-parsed script, which strips ' +
-        'the block scalar indentation, so only inconsistent indentation ' +
-        'breaks this assertion.',
-    ).toContain(canonical);
+    if (!script.includes(canonical)) {
+      throw new Error(
+        'Build OCR canary metrics step must embed the canonical snippet ' +
+          'from .github/scripts/ocr-canary-metrics.cjs verbatim. ' +
+          'Re-embed: copy the text between (and including) the BEGIN/END ' +
+          'sentinels into the step script, indenting every line uniformly to ' +
+          'match the surrounding block (12 spaces at the time of writing). ' +
+          'The comparison runs against the YAML-parsed script, which strips ' +
+          'the block scalar indentation, so only inconsistent indentation ' +
+          'breaks this assertion.',
+      );
+    }
   });
 });
 
@@ -92,17 +91,18 @@ describe('ocr-review-context.cjs — verbatim embedding in workflow (AM1 pattern
       '// --- BEGIN OCR REVIEW CONTEXT SNIPPET ---',
       '// --- END OCR REVIEW CONTEXT SNIPPET ---',
     );
-    expect(
-      script,
-      'Resolve effective review context step must embed the canonical ' +
-        'snippet from .github/scripts/ocr-review-context.cjs verbatim. ' +
-        'Re-embed: copy the text between (and including) the BEGIN/END ' +
-        'sentinels into the step script, indenting every line uniformly to ' +
-        'match the surrounding block (12 spaces at the time of writing). ' +
-        'The comparison runs against the YAML-parsed script, which strips ' +
-        'the block scalar indentation, so only inconsistent indentation ' +
-        'breaks this assertion.',
-    ).toContain(canonical);
+    if (!script.includes(canonical)) {
+      throw new Error(
+        'Resolve effective review context step must embed the canonical ' +
+          'snippet from .github/scripts/ocr-review-context.cjs verbatim. ' +
+          'Re-embed: copy the text between (and including) the BEGIN/END ' +
+          'sentinels into the step script, indenting every line uniformly to ' +
+          'match the surrounding block (12 spaces at the time of writing). ' +
+          'The comparison runs against the YAML-parsed script, which strips ' +
+          'the block scalar indentation, so only inconsistent indentation ' +
+          'breaks this assertion.',
+      );
+    }
   });
 });
 
@@ -114,14 +114,16 @@ describe('fork-safety — canary and review-context steps never require PR-head 
   it('Build OCR canary metrics step does not require() a repo-relative script path', () => {
     const job = getCodeReviewJob();
     const script = commandText(stepNamed(job, 'Build OCR canary metrics'));
-    expect(
-      script,
-      'Build OCR canary metrics must not require() a repo-relative script',
-    ).not.toMatch(/require\(['"]\.\/|require\(['"]\.\.\//);
-    expect(
-      script,
-      'Build OCR canary metrics must not require() a bare script filename',
-    ).not.toMatch(/require\(['"][a-zA-Z0-9_-]+\.c?js['"]\)/);
+    if (/require\(['"]\.\/|require\(['"]\.\.\//.test(script)) {
+      throw new Error(
+        'Build OCR canary metrics must not require() a repo-relative script',
+      );
+    }
+    if (/require\(['"][a-zA-Z0-9_-]+\.c?js['"]\)/.test(script)) {
+      throw new Error(
+        'Build OCR canary metrics must not require() a bare script filename',
+      );
+    }
   });
 
   it('Resolve effective review context step does not require() a repo-relative script path', () => {
@@ -129,14 +131,16 @@ describe('fork-safety — canary and review-context steps never require PR-head 
     const script = commandText(
       stepNamed(job, 'Resolve effective review context'),
     );
-    expect(
-      script,
-      'Resolve effective review context must not require() a repo-relative script',
-    ).not.toMatch(/require\(['"]\.\/|require\(['"]\.\.\//);
-    expect(
-      script,
-      'Resolve effective review context must not require() a bare script filename',
-    ).not.toMatch(/require\(['"][a-zA-Z0-9_-]+\.c?js['"]\)/);
+    if (/require\(['"]\.\/|require\(['"]\.\.\//.test(script)) {
+      throw new Error(
+        'Resolve effective review context must not require() a repo-relative script',
+      );
+    }
+    if (/require\(['"][a-zA-Z0-9_-]+\.c?js['"]\)/.test(script)) {
+      throw new Error(
+        'Resolve effective review context must not require() a bare script filename',
+      );
+    }
   });
 
   it('code-review job run steps never invoke node/bun against a repo-relative script file', () => {
@@ -165,14 +169,17 @@ describe('fork-safety — canary and review-context steps never require PR-head 
         const args = invocation[2].trim();
         // Flag only if the script path contains shell variable interpolation
         // (could resolve to a PR-head path).
-        expect(
+        const isSafe =
           /^(?:<<|-e\b|ocr-[\w-]+\.c?js|scripts\/\S+\.ts|["'].*["']|'$)/.test(
             args,
-          ),
-          `code-review job step "${stepLabel(step)}" invokes node/bun with an ` +
-            `unrecognized argument pattern: "${invocation[0].trim()}". ` +
-            'If this is a trusted script, add it to the safe-pattern list.',
-        ).toBe(true);
+          );
+        if (!isSafe) {
+          throw new Error(
+            `code-review job step "${stepLabel(step)}" invokes node/bun with an ` +
+              `unrecognized argument pattern: "${invocation[0].trim()}". ` +
+              'If this is a trusted script, add it to the safe-pattern list.',
+          );
+        }
       }
     }
   });
@@ -187,11 +194,12 @@ describe('fork-safety — canary and review-context steps never require PR-head 
       /(?:path\.join|process\.cwd|__dirname)\s*\([^)]*\)\s*[,)]\s*(?:require|import)/;
     for (const step of steps) {
       const run = commandText(step);
-      expect(
-        run,
-        `code-review job step "${stepLabel(step)}" must not dynamically require/import ` +
-          'a module constructed from path.join/process.cwd()/__dirname.',
-      ).not.toMatch(dynamicLoadPattern);
+      if (dynamicLoadPattern.test(run)) {
+        throw new Error(
+          `code-review job step "${stepLabel(step)}" must not dynamically require/import ` +
+            'a module constructed from path.join/process.cwd()/__dirname.',
+        );
+      }
     }
   });
 
@@ -205,12 +213,13 @@ describe('fork-safety — canary and review-context steps never require PR-head 
       .split('\n')
       .filter((line) => gitCheckoutHeadPattern.test(line));
     for (const line of checkoutLines) {
-      expect(
-        line,
-        'workflow must never checkout/switch/worktree from pr-head or ' +
-          'pull/N/head: ' +
-          line.trim(),
-      ).not.toMatch(/(?:pr-head|pull\/\d+\/head)/);
+      if (/(?:pr-head|pull\/\d+\/head)/.test(line)) {
+        throw new Error(
+          'workflow must never checkout/switch/worktree from pr-head or ' +
+            'pull/N/head: ' +
+            line.trim(),
+        );
+      }
     }
 
     // Also catch checkout/switch against a 40-char hex SHA that is NOT the
@@ -219,10 +228,9 @@ describe('fork-safety — canary and review-context steps never require PR-head 
     // (other than the already-checked-out trusted base) is suspicious.
     const shaCheckoutPattern =
       /git\s+(?:checkout|switch)\b.*\$\{[^}]*(?:HEAD_SHA|head_sha)[^}]*\}/;
-    expect(
-      yml,
-      'workflow must never checkout/switch to the PR head SHA',
-    ).not.toMatch(shaCheckoutPattern);
+    if (shaCheckoutPattern.test(yml)) {
+      throw new Error('workflow must never checkout/switch to the PR head SHA');
+    }
   });
 
   it('actions/checkout always uses the trusted base ref, never the PR head', () => {
@@ -230,10 +238,9 @@ describe('fork-safety — canary and review-context steps never require PR-head 
     // The checkout step must use the trusted base, never the PR head SHA.
     const checkoutHeadShaPattern =
       /ref:\s+\$\{\{[^}]*pr-context\.outputs\.head_sha[^}]*\}\}/;
-    expect(
-      yml,
-      'actions/checkout must never use the PR head SHA as ref',
-    ).not.toMatch(checkoutHeadShaPattern);
+    if (checkoutHeadShaPattern.test(yml)) {
+      throw new Error('actions/checkout must never use the PR head SHA as ref');
+    }
 
     // Any actions/checkout with a ref: must use the trusted base SHA.
     const checkoutSteps = yml.split('uses: actions/checkout@');
@@ -242,10 +249,12 @@ describe('fork-safety — canary and review-context steps never require PR-head 
       const refMatch = stepBlock.match(/ref:\s+(.+)/);
       if (refMatch) {
         const refValue = refMatch[1].trim();
-        expect(
-          refValue,
-          'actions/checkout ref must be the trusted base SHA, got: ' + refValue,
-        ).toBe('${{ steps.pr-context.outputs.trusted_base_sha }}');
+        if (refValue !== '${{ steps.pr-context.outputs.trusted_base_sha }}') {
+          throw new Error(
+            'actions/checkout ref must be the trusted base SHA, got: ' +
+              refValue,
+          );
+        }
       }
     }
   });
@@ -298,13 +307,14 @@ function assertEnvWiring(stepName: string): void {
   const missing = [...required].filter(
     (key) => !available.has(key) && !RUNNER_PROVIDED_ENV.has(key),
   );
-  expect(
-    missing,
-    `Step "${stepName}" reads process.env.${missing[0] ?? '<key>'} but ` +
-      'it is not defined in the step env: block or the workflow-level env: ' +
-      'block. Add the missing env entry or the workflow will silently pass ' +
-      'undefined to the embedded script driver.',
-  ).toEqual([]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Step "${stepName}" reads process.env.${missing[0] ?? '<key>'} but ` +
+        'it is not defined in the step env: block or the workflow-level env: ' +
+        'block. Add the missing env entry or the workflow will silently pass ' +
+        'undefined to the embedded script driver.',
+    );
+  }
 }
 
 describe('workflow-wiring — embedded script env vars are satisfied by env blocks', () => {

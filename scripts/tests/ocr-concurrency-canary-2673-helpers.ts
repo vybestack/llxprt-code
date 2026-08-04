@@ -14,7 +14,6 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import type { Readable } from 'node:stream';
-import { expect } from 'vitest';
 import {
   asOptionalRecord,
   asRecord,
@@ -146,11 +145,12 @@ export function extractEmbeddedSource(
   const opening = `cat > ${fileName} <<'${delimiter}'\n`;
   const start = run.indexOf(opening);
   const end = run.indexOf(`\n${delimiter}\n`, start + opening.length);
-  expect(
-    start,
-    `${fileName} should have embedded source`,
-  ).toBeGreaterThanOrEqual(0);
-  expect(end, `${fileName} source should be terminated`).toBeGreaterThan(start);
+  if (start < 0) {
+    throw new Error(`${fileName} should have embedded source`);
+  }
+  if (!(end > start)) {
+    throw new Error(`${fileName} source should be terminated`);
+  }
   return run.slice(start + opening.length, end);
 }
 

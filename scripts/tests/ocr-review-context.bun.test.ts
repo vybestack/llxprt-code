@@ -5,7 +5,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 const requireFromModule = createRequire(import.meta.url);
 const mod = requireFromModule(

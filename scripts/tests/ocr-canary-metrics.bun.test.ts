@@ -5,7 +5,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   REPRESENTATIVE_RESULT,
   REPRESENTATIVE_TELEMETRY,
@@ -598,7 +598,7 @@ describe('ocr-canary-metrics.cjs — elapsed parsing variants', () => {
     ['1h30m', 5400],
     ['1h2m3s', 3723],
     ['90.5s', 90.5],
-  ])('parses elapsed "%s" to %s seconds', (elapsed, expectedSeconds) => {
+  ])('parses elapsed "%s" to %d seconds', (elapsed, expectedSeconds) => {
     const result = runBuild(
       buildInput({
         resultText: JSON.stringify({
