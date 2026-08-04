@@ -35,7 +35,10 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+import {
+  waitForCondition,
+  waitForConditionInRealTime,
+} from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -438,6 +441,10 @@ describe('subagent.ts', () => {
       );
 
       let gapReached = false;
+      let releaseGap: () => void;
+      const gapPromise = new Promise<void>((resolve) => {
+        releaseGap = resolve;
+      });
       vi.mocked(ChatSession).mockImplementationOnce(
         () =>
           ({
@@ -448,11 +455,13 @@ describe('subagent.ts', () => {
                   value: mockChunk({ text: 'Starting...' }),
                 };
                 gapReached = true;
-                // The gap exceeds the env timeout: the stream simply never
-                // produces again, so the env-driven watchdog must fire. It must
-                // not advance the clock itself — re-entering the timer driver
-                // while the test is already advancing it deadlocked on CI.
-                await new Promise<void>(() => undefined);
+                // The gap exceeds the env timeout: the stream produces nothing
+                // until the test releases it, so the env-driven watchdog fires
+                // first. It must be releasable — an async generator suspended
+                // on an await that never resolves cannot be returned, so the
+                // consumer could never unwind and the run would hang even after
+                // the watchdog fired.
+                await gapPromise;
                 yield {
                   type: StreamEventType.CHUNK,
                   value: mockChunk({ text: 'Late response' }),
@@ -484,12 +493,19 @@ describe('subagent.ts', () => {
           resultSettled = true;
         });
 
-      // Reach the gap before moving the clock.
       expect(await waitForCondition(() => gapReached)).toBe(true);
 
       // The stream stalls after its first chunk, so the env-driven 50ms
-      // watchdog aborts the run. If the 20s config value were being used
-      // instead, this would not settle and the test would fail on its budget.
+      // watchdog fires. Were the 20s config value being used instead, the
+      // terminate reason would never become TIMEOUT and this wait would fail.
+      expect(
+        await waitForConditionInRealTime(
+          () => scope.output.terminate_reason === SubagentTerminateMode.TIMEOUT,
+        ),
+      ).toBe(true);
+
+      // Release the stall so the generator can unwind, then let the run finish.
+      releaseGap!();
       const _result = await resultPromise;
       expect(resultSettled).toBe(true);
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);

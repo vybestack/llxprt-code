@@ -64,3 +64,35 @@ export async function waitForCondition(
   }
   return condition();
 }
+
+/** Real `setTimeout`, captured before any test installs fake timers. */
+const realSetTimeout = globalThis.setTimeout;
+
+/**
+ * Waits in **wall-clock time** for `condition` to hold, up to `timeoutMs`.
+ *
+ * Distinct from {@link waitForCondition}, which spins event-loop turns: those
+ * elapse in microseconds, so it cannot wait for something that is scheduled on
+ * a real timer. Use this when the code under test is driven by real timers
+ * (a watchdog firing after N milliseconds); use `waitForCondition` when it is
+ * driven purely by promise resolution.
+ *
+ * Returns whether the condition was met, so callers assert on the result rather
+ * than proceeding from an unknown state.
+ */
+export async function waitForConditionInRealTime(
+  condition: () => boolean,
+  timeoutMs = 5_000,
+  stepMs = 5,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return true;
+    }
+    await new Promise<void>((resolve) => {
+      realSetTimeout(resolve, stepMs);
+    });
+  }
+  return condition();
+}

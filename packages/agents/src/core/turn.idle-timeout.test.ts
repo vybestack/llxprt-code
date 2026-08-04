@@ -11,7 +11,10 @@ import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+import {
+  waitForCondition,
+  waitForConditionInRealTime,
+} from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -333,20 +336,24 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     );
     mockGetHistory.mockReturnValue([]);
 
-    // The inter-chunk gap is modelled as a stall the test controls, not as a
-    // nested timer advance: advancing the fake clock from inside the generator
-    // re-enters the timer driver while the test is already advancing it, which
-    // deadlocked on CI.
+    // The inter-chunk gap is a stall the test releases, not a promise that
+    // never settles. An async generator suspended on an await that never
+    // resolves cannot be returned, so the consuming `for await` could never
+    // unwind and the run would hang even after the watchdog fired.
     let gapReached = false;
+    let releaseGap: () => void;
+    const gapPromise = new Promise<void>((resolve) => {
+      releaseGap = resolve;
+    });
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'First chunk' }),
       };
       gapReached = true;
-      // Inter-chunk gap exceeding the env-driven 15s inter-chunk timeout: the
-      // stream simply never produces again, so the watchdog must fire.
-      await new Promise<void>(() => undefined);
+      // Inter-chunk gap exceeding the env-driven timeout: the stream produces
+      // nothing until the test releases it, so the watchdog must fire first.
+      await gapPromise;
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'Late response' }),
@@ -368,16 +375,19 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     });
 
     // The stream stalls after its first chunk, so the env-driven 50ms watchdog
-    // aborts the run. If the 20s config value were being used instead, this
-    // would not settle and the assertion below would fail.
+    // fires. Were the 20s config value being used instead, no timeout event
+    // would arrive and this wait would fail.
     expect(await waitForCondition(() => gapReached)).toBe(true);
+    expect(
+      await waitForConditionInRealTime(() =>
+        events.some((e) => e.type === AgentEventType.StreamIdleTimeout),
+      ),
+    ).toBe(true);
+
+    // Release the stall so the generator can unwind, then let the run finish.
+    releaseGap!();
     await runPromise;
     expect(runSettled).toBe(true);
-
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
-    expect(timeoutEvent).toBeDefined();
   });
 
   it('default-off: no watchdog timer when no env var and no ephemeral setting', async () => {
