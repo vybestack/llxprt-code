@@ -507,4 +507,31 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
     expect(secIdx).toBeGreaterThanOrEqual(0);
     expect(proxyArgs[secIdx + 1]).toBe('no-new-privileges');
   });
+
+  it('keeps the base hardening flags alongside a non-empty userFlag on the proxy sidecar', async () => {
+    // The proxy sidecar has always forwarded setupContainerUser's userFlag
+    // (unchanged by this PR). Assert that the hardening flags coexist with it
+    // and that the user selection is still passed through intact.
+    vi.mocked(childProcess.spawn).mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
+
+    await expect(
+      startProxyContainer(
+        CONFIG,
+        'echo proxy',
+        '--user 501:20',
+        'test-image',
+        '/workspace',
+      ),
+    ).rejects.toThrow('proxy-argv-captured');
+
+    const proxyArgs = vi.mocked(childProcess.spawn).mock.calls[0][1];
+    expect(proxyArgs).toContain('--cap-drop=ALL');
+    const secIdx = proxyArgs.indexOf('--security-opt');
+    expect(proxyArgs[secIdx + 1]).toBe('no-new-privileges');
+    const userIdx = proxyArgs.indexOf('--user');
+    expect(userIdx).toBeGreaterThanOrEqual(0);
+    expect(proxyArgs[userIdx + 1]).toBe('501:20');
+  });
 });
