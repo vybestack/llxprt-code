@@ -13,7 +13,7 @@
  * disable is needed.
  */
 
-import { vi } from 'vitest';
+import { vi } from '../../testApi.js';
 import {
   EmptySummaryError,
   type CompressionContext,
@@ -183,7 +183,7 @@ export function mockStrategyFactoryWithEmptySummaryFallback(): {
 
   const spy = vi
     .spyOn(compressionFactory, 'getCompressionStrategy')
-    .mockImplementation((name) => {
+    .mockImplementation((name: string) => {
       if (name === 'top-down-truncation') {
         return {
           name: 'top-down-truncation' as const,

@@ -9,7 +9,7 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';

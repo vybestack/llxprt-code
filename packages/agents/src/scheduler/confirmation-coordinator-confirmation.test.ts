@@ -10,7 +10,7 @@
  * max-lines disable is needed.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 // Module-scope mock for modifiable-tool — hoisted by vitest before imports.

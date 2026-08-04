@@ -10,7 +10,7 @@
  * `contractPromotion.types.ts` holds compile-only type assertions.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '../../testApi.js';
 
 import * as root from '@vybestack/llxprt-code-agents';
 import * as internals from '@vybestack/llxprt-code-agents/internals.js';

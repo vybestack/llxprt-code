@@ -8,8 +8,8 @@
  * SubAgentScope create tests: toolConfig preservation, stateless runtime enforcement.
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi, describe, it, expect, beforeEach } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -293,7 +293,8 @@ describe('subagent.ts', () => {
       const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
-      if (!generationConfig) throw new Error('generationConfig is undefined');
+      if (generationConfig === undefined)
+        throw new Error('generationConfig is undefined');
       return generationConfig;
     };
 

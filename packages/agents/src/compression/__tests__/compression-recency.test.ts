@@ -11,7 +11,14 @@
  * ALREADY_COMPRESSED from NOOP (issue #1792).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+} from '../../testApi.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { PerformCompressionResult } from '../../core/turn.js';

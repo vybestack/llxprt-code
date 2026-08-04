@@ -31,7 +31,7 @@
  * theater.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '../../testApi.js';
 import {
   fromConfig,
   type Agent,

@@ -30,7 +30,7 @@ import {
   beforeEach,
   afterEach,
   onTestFinished,
-} from 'vitest';
+} from '../testApi.js';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {

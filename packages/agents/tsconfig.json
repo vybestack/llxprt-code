@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/agents.tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
     "composite": false,
-    "types": ["node", "vitest/globals"],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-agents": ["./index.ts"],
@@ -43,7 +43,8 @@
     "index.ts",
     "src/**/*.ts",
     "src/**/*.json",
-    "../core/src/types/wasm.d.ts"
+    "../core/src/types/wasm.d.ts",
+    "../../node_modules/bun-types/test.d.ts"
   ],
   "exclude": [
     "node_modules",

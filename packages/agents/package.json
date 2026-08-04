@@ -39,7 +39,6 @@
     "pretest": "bun ../../scripts/check-agents-api-surface.ts",
     "test": "bun run-bun-tests.ts",
     "test:ci": "bun run-bun-tests.ts",
-    "test:vitest": "vitest run",
     "test:mutation:api": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },

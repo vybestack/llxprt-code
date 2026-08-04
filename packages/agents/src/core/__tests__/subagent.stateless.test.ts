@@ -21,7 +21,7 @@
  * AgentRuntimeContext yet.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
 import { SubAgentScope } from '../subagent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

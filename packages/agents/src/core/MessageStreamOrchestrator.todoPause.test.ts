@@ -23,7 +23,7 @@
  *    turns via the generic path.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ServerAgentStreamEvent, ToolCallRequestInfo } from './turn.js';
 import { AgentEventType } from './turn.js';

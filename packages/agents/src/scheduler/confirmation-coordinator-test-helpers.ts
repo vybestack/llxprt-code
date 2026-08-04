@@ -14,7 +14,7 @@
  * hoisted by vitest on a per-file basis and cannot be shared.
  */
 
-import { vi } from 'vitest';
+import { vi } from '../testApi.js';
 import {
   ConfirmationCoordinator,
   type StatusMutator,

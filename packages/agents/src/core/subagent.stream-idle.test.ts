@@ -8,7 +8,7 @@
  * SubAgentScope stream idle timeout behavioral tests.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -35,6 +35,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -318,6 +319,7 @@ describe('subagent.ts', () => {
       );
 
       let resolveIterator: () => void;
+      let stallReached = false;
       const iteratorPromise = new Promise<void>((resolve) => {
         resolveIterator = resolve;
       });
@@ -331,6 +333,7 @@ describe('subagent.ts', () => {
                   type: StreamEventType.CHUNK,
                   value: mockChunk({ text: 'Starting...' }),
                 };
+                stallReached = true;
                 // Wait indefinitely until manually resolved
                 await iteratorPromise;
                 yield {
@@ -356,9 +359,13 @@ describe('subagent.ts', () => {
 
       const runPromise = scope.runNonInteractive(new ContextState());
 
+      // Reach the stall before moving the clock. A real event-loop yield is
+      // only reliable while the fake clock is still, so this gate has to come
+      // first; without it the advance races the stream start on slower hosts.
+      expect(await waitForCondition(() => stallReached)).toBe(true);
+
       // Advance 30 minutes - no timeout because watchdog is disabled
       await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
-      await Promise.resolve();
 
       // No timeout yet
       expect(scope.output.terminate_reason).not.toBe(
@@ -422,6 +429,7 @@ describe('subagent.ts', () => {
         overrides,
       );
 
+      let gapReached = false;
       vi.mocked(ChatSession).mockImplementationOnce(
         () =>
           ({
@@ -431,8 +439,12 @@ describe('subagent.ts', () => {
                   type: StreamEventType.CHUNK,
                   value: mockChunk({ text: 'Starting...' }),
                 };
-                // Wait past the env timeout but before config timeout
-                await vi.advanceTimersByTimeAsync(15_000);
+                gapReached = true;
+                // The gap exceeds the env timeout: the stream simply never
+                // produces again, so the env-driven watchdog must fire. It must
+                // not advance the clock itself — re-entering the timer driver
+                // while the test is already advancing it deadlocked on CI.
+                await new Promise<void>(() => undefined);
                 yield {
                   type: StreamEventType.CHUNK,
                   value: mockChunk({ text: 'Late response' }),
@@ -459,12 +471,11 @@ describe('subagent.ts', () => {
       // Attach catch handler before advancing timers to prevent unhandled rejection
       const resultPromise = runPromise.catch((e) => e);
 
+      // Reach the gap before moving the clock.
+      expect(await waitForCondition(() => gapReached)).toBe(true);
+
       // Advance past the env timeout (8s) but before config timeout (45s)
       await vi.advanceTimersByTimeAsync(12_000);
-      await Promise.resolve();
-
-      // Run to completion
-      await vi.runAllTimersAsync();
 
       // Should have timed out due to env value (8s), not config (45s)
       const _result = await resultPromise;

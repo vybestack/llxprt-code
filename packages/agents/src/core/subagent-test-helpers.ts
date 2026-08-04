@@ -14,8 +14,8 @@
  * be imported.
  */
 
-import type { Mock } from 'vitest';
-import { vi } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi } from '../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';

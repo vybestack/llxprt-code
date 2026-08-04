@@ -14,7 +14,7 @@
  * Current behavior: Step 2-4 lose the thinking block somehow.
  * Debug logs show: blockTypes: ["text","tool_call"] (no thinking!)
  */
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from '../testApi.js';
 import type {
   ContentBlock,
   IContent,

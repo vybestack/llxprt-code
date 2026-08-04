@@ -8,8 +8,8 @@
  * SubAgentScope termination, recovery, runInteractive, scheduling timeout, dispose.
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { SubAgentScope } from './subagent.js';
 import {
@@ -105,7 +105,7 @@ import {
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
-import { waitForCondition, flushEventLoop } from '../test-utils/eventLoop.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
@@ -238,9 +238,12 @@ describe('subagent.ts', () => {
           () => mockSendMessageStream.mock.calls.length > 0,
         ),
       ).toBe(true);
-      vi.advanceTimersByTime(6 * 60 * 1000);
-      // Let the termination recheck run after advancing time.
-      await flushEventLoop();
+      // Advance with the async variant so the termination recheck runs as part
+      // of draining the fake timers. A real event-loop yield must not be used
+      // after the fake clock moves: Bun's fake timers leave `setImmediate`
+      // real, but on Linux it does not reliably fire once the clock has been
+      // advanced, which made this test flaky on CI.
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
 
       // Now resolve the stream. The model returns 'stop'.
 

@@ -16,7 +16,7 @@
  * to properly await execution before asserting.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import {
   CoreToolScheduler,
   type CompletedToolCall,

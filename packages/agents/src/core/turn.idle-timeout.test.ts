@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
@@ -241,11 +241,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     mockGetHistory.mockReturnValue([]);
 
     let resolveIterator: () => void;
+    let iteratorEntered = false;
     const iteratorPromise = new Promise<void>((resolve) => {
       resolveIterator = resolve;
     });
 
     const mockResponseStream = (async function* () {
+      iteratorEntered = true;
       await iteratorPromise;
       yield {
         type: StreamEventType.CHUNK,
@@ -264,8 +266,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
+    // The consumer must actually be parked inside the stream before the clock
+    // moves, otherwise the advance races the pipeline start. A real event-loop
+    // yield is only reliable while the fake clock is still, so it has to happen
+    // here rather than after the advance.
+    expect(await waitForCondition(() => iteratorEntered)).toBe(true);
+
     await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
-    await Promise.resolve();
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
@@ -314,13 +321,20 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     );
     mockGetHistory.mockReturnValue([]);
 
+    // The inter-chunk gap is modelled as a stall the test controls, not as a
+    // nested timer advance: advancing the fake clock from inside the generator
+    // re-enters the timer driver while the test is already advancing it, which
+    // deadlocked on CI.
+    let gapReached = false;
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'First chunk' }),
       };
-      // Inter-chunk gap exceeding the env-driven 15s inter-chunk timeout.
-      await vi.advanceTimersByTimeAsync(30_000);
+      gapReached = true;
+      // Inter-chunk gap exceeding the env-driven 15s inter-chunk timeout: the
+      // stream simply never produces again, so the watchdog must fire.
+      await new Promise<void>(() => undefined);
       yield {
         type: StreamEventType.CHUNK,
         value: mockChunk({ text: 'Late response' }),
@@ -338,10 +352,11 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(16_000);
-    await Promise.resolve();
+    // Reach the gap before moving the clock (real yields are only reliable
+    // while the fake clock is still).
+    expect(await waitForCondition(() => gapReached)).toBe(true);
 
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(16_000);
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -384,11 +399,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     mockGetHistory.mockReturnValue([]);
 
     let resolveIterator: () => void;
+    let iteratorEntered = false;
     const iteratorPromise = new Promise<void>((resolve) => {
       resolveIterator = resolve;
     });
 
     const mockResponseStream = (async function* () {
+      iteratorEntered = true;
       await iteratorPromise;
       yield {
         type: StreamEventType.CHUNK,
@@ -407,8 +424,11 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       }
     })();
 
+    // Park inside the stream before the clock moves; a real event-loop yield is
+    // only reliable while the fake clock is still.
+    expect(await waitForCondition(() => iteratorEntered)).toBe(true);
+
     await vi.advanceTimersByTimeAsync(700_000);
-    await Promise.resolve();
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),

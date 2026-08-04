@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from '../testApi.js';
 
 vi.mock(
   '@vybestack/llxprt-code-core/telemetry/loggers.js',

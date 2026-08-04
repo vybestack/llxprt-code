@@ -12,7 +12,14 @@
  * Extracted from the original monolithic compression-retry.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+} from '../../testApi.js';
 import { ChatSession } from '../../core/chatSession.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';

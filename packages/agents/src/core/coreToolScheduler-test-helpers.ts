@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, expect, type Mock } from 'vitest';
+import { expect, vi, type Mock } from '../testApi.js';
 import type {
   ToolCall,
   WaitingToolCall,
@@ -151,7 +151,7 @@ export class AbortDuringConfirmationTool extends BaseDeclarativeTool<
 }
 
 export async function waitForStatus(
-  onToolCallsUpdate: Mock,
+  onToolCallsUpdate: Mock<(calls: ToolCall[]) => void>,
   status: ToolCall['status'],
 ): Promise<ToolCall | undefined> {
   let matchingCall: ToolCall | undefined;

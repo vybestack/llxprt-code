@@ -12,7 +12,7 @@
  * assertions exercise a REAL CLI-style Config wired to the FakeProvider.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import {
   executeProviderActivation,
   fromConfig,

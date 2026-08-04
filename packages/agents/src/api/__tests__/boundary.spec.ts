@@ -18,7 +18,7 @@
  * PASSES; it is never forced to fail artificially.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, dirname, normalize, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -352,6 +352,9 @@ function isAllowed(specifier: string, fromAbs: string): boolean {
     return true;
   }
   if (specifier === 'vitest' || specifier.startsWith('vitest/')) {
+    return true;
+  }
+  if (specifier === 'bun:test' || specifier.startsWith('bun:test/')) {
     return true;
   }
   if (specifier === 'fast-check' || specifier.startsWith('fast-check/')) {

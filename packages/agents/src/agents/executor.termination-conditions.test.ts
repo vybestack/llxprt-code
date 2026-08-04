@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
 import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
@@ -145,7 +145,10 @@ describe('AgentExecutor run (Termination Conditions)', () => {
     let capturedSignal: AbortSignal | undefined;
     mockSendMessageStream.mockImplementationOnce(
       async ({ config: messageConfig }) => {
-        capturedSignal = messageConfig?.abortSignal;
+        const config = messageConfig as
+          | { abortSignal?: AbortSignal }
+          | undefined;
+        capturedSignal = config?.abortSignal;
         return (async function* () {
           yield {
             type: StreamEventType.CHUNK,

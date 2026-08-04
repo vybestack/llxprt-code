@@ -26,7 +26,7 @@
  * mock boundary is the LLM provider (scripted JSONL fixtures).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import {
   buildAgentFromContent,
   drain,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
+import type { Mock } from '../testApi.js';
 import { AgentTerminateMode, type SubagentActivityEvent } from './types.js';
 import type { AgentDefinition, OutputConfig } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
@@ -40,7 +40,14 @@ export const MOCK_TOOL_NOT_ALLOWED = new MockTool({
 // Response / tool-call mock helpers (pure functions taking mock fns as params)
 // ---------------------------------------------------------------------------
 
-export type MockFn = Mock;
+// Default is an async function so Bun's ResolveType<T> (used by
+// mockResolvedValue/mockResolvedValueOnce) resolves to `unknown` rather than
+// `never`.
+export type MockFn<
+  T extends (...args: never[]) => unknown = (
+    ...args: never[]
+  ) => Promise<unknown>,
+> = Mock<T>;
 
 /** Subset of the vitest `vi` API used by setupExecutorFixture. */
 export interface ViTestApi {
@@ -50,7 +57,7 @@ export interface ViTestApi {
   spyOn: <T extends object, K extends string | symbol | number>(
     target: T,
     key: K,
-  ) => Mock;
+  ) => Mock<(...args: never[]) => unknown>;
   advanceTimersByTimeAsync: (ms: number) => Promise<void>;
 }
 
@@ -257,7 +264,7 @@ export const mockWorkResponse = (
 // ---------------------------------------------------------------------------
 
 export interface ExecutorFixtureParams {
-  MockedChatSession: MockFn;
+  MockedChatSession: MockFn<() => Record<string, unknown>>;
   mockSendMessageStream: MockFn;
   mockExecuteToolCall: MockFn;
   mockedGetDirectoryContextString: MockFn;
