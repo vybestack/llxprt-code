@@ -27,6 +27,23 @@ import {
   type BunTestSpawnOptions,
   type ChildExitInfo,
 } from '../run_bun_tests.js';
+import { BUN_NATIVE_TEST_MANIFEST } from '../bun-test-manifest.js';
+
+/**
+ * Number of test files the manifest declares for the 'core' workspace.
+ * Derived rather than hardcoded so adding a core file does not break
+ * the real-runner expectations below.
+ */
+const CORE_MANIFEST_FILE_COUNT = BUN_NATIVE_TEST_MANIFEST.filter(
+  (entry) => entry.workspace === 'core',
+).reduce((total, entry) => total + entry.files.length, 0);
+
+/**
+ * These tests spawn the real runner, which executes every core manifest file
+ * in its own Bun process. That exceeds the default 5s vitest timeout, so give
+ * them room to grow as the manifest does.
+ */
+const REAL_RUNNER_TIMEOUT_MS = 120_000;
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -609,9 +626,12 @@ describe('production Bun native test runner', () => {
       );
 
       expect(child.status, child.stderr).toBe(0);
-      expect(child.stdout).toContain('Dry run: 1 files would be executed:');
+      expect(child.stdout).toContain(
+        `Dry run: ${CORE_MANIFEST_FILE_COUNT} files would be executed:`,
+      );
       expect(child.stdout).toContain('packages/core/src/utils/errors.test.ts');
     },
+    REAL_RUNNER_TIMEOUT_MS,
   );
 
   it.skipIf(!bunBinary)(
@@ -635,9 +655,10 @@ describe('production Bun native test runner', () => {
 
       expect(child.status, child.stderr).toBe(0);
       expect(child.stdout).toContain(
-        'Passed 1/1 isolated native Bun test files',
+        `Passed ${CORE_MANIFEST_FILE_COUNT}/${CORE_MANIFEST_FILE_COUNT} isolated native Bun test files`,
       );
     },
+    REAL_RUNNER_TIMEOUT_MS,
   );
 });
 
