@@ -32,6 +32,11 @@ export async function runCli(
         LLXPRT_CLI_NO_RELAUNCH: 'true',
         // Set HOME to temp directory to isolate profile loading
         HOME: env.HOME ?? process.env.HOME ?? '',
+        // Storage resolves LLXPRT_CONFIG_HOME ahead of HOME. The child
+        // inherits the parent's isolated root so profiles saved here through
+        // ProfileManager are visible to the spawned CLI.
+        LLXPRT_CONFIG_HOME:
+          env.LLXPRT_CONFIG_HOME ?? process.env.LLXPRT_CONFIG_HOME ?? '',
         // Ensure providers are registered in test environment
         NODE_ENV: 'production',
         // Disable browser-based authentication for CI environments
