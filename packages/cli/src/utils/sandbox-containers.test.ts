@@ -13,6 +13,8 @@ import { DebugLogger, FatalSandboxError } from '@vybestack/llxprt-code-core';
 import {
   buildContainerRunArgs,
   setupContainerNetworking,
+  setupContainerUser,
+  startProxyContainer,
   addContainerEnvVars,
   addContainerVolumeMounts,
 } from './sandbox-containers.js';
@@ -389,5 +391,147 @@ describe.sequential('#2946 container credential isolation', () => {
 
     expect(args).toContain('--volume');
     expect(args).toContain(`${tmpDir}:${tmpDir}:ro`);
+  });
+});
+
+const HARDENING_ENV_KEYS = [
+  'SANDBOX_FLAGS',
+  'SANDBOX_SET_UID_GID',
+  'LLXPRT_CODE_INTEGRATION_TEST',
+] as const;
+
+describe.sequential('#2902 sandbox privilege hardening', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let fixturePath = '';
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-2902-'));
+    vi.resetAllMocks();
+    // current-user path calls `id -u` / `id -g` via execSync; stub to empty
+    // so the path completes without a real shell. The cap-add values under
+    // test do not depend on uid/gid.
+    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    for (const key of HARDENING_ENV_KEYS) delete process.env[key];
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    vi.restoreAllMocks();
+    if (fixturePath !== '') {
+      fs.rmSync(fixturePath, { recursive: true, force: true });
+    }
+  });
+
+  it('emits --security-opt no-new-privileges on every container run (AC1)', () => {
+    const args = buildArgs(fixturePath);
+
+    const secIdx = args.indexOf('--security-opt');
+    expect(secIdx).toBeGreaterThanOrEqual(0);
+    expect(args[secIdx + 1]).toBe('no-new-privileges');
+  });
+
+  it('emits --cap-drop=ALL on every container run (AC2)', () => {
+    const args = buildArgs(fixturePath);
+
+    expect(args).toContain('--cap-drop=ALL');
+  });
+
+  it('places --cap-drop=ALL before SANDBOX_FLAGS so a user can add caps back (AC7)', () => {
+    process.env.SANDBOX_FLAGS = '--cap-add=NET_ADMIN';
+
+    const args = buildArgs(fixturePath);
+
+    const capDropIdx = args.indexOf('--cap-drop=ALL');
+    const netAdminIdx = args.indexOf('--cap-add=NET_ADMIN');
+    expect(capDropIdx).toBeGreaterThanOrEqual(0);
+    expect(netAdminIdx).toBeGreaterThan(capDropIdx);
+  });
+
+  it('adds back exactly the three minimal current-user capabilities and nothing more (AC3)', async () => {
+    process.env.SANDBOX_SET_UID_GID = 'true';
+
+    const args = buildArgs(fixturePath);
+    await setupContainerUser(args, ['sh', '-c', 'true']);
+
+    const capAdds = args
+      .filter((a) => a.startsWith('--cap-add='))
+      .map((a) => a.slice('--cap-add='.length));
+    expect(capAdds).toStrictEqual(['CHOWN', 'SETUID', 'SETGID']);
+  });
+
+  it('keeps --user root on the current-user path (AC5)', async () => {
+    process.env.SANDBOX_SET_UID_GID = 'true';
+
+    const args = buildArgs(fixturePath);
+    await setupContainerUser(args, ['sh', '-c', 'true']);
+
+    const userIdx = args.indexOf('--user');
+    expect(userIdx).toBeGreaterThanOrEqual(0);
+    expect(args[userIdx + 1]).toBe('root');
+  });
+
+  it('does not set --user when LLXPRT_CODE_INTEGRATION_TEST is set and the current-user path is not taken (AC4)', async () => {
+    // Force the non-current-user path deterministically: on Debian/Ubuntu
+    // Linux CI, shouldUseCurrentUserInSandbox() returns true by default, which
+    // would take the current-user branch and push --user root. SANDBOX_SET_UID_GID
+    // is authoritative (checked before the distro auto-detect) and host-independent.
+    process.env.SANDBOX_SET_UID_GID = 'false';
+    // The obsolete LLXPRT_CODE_INTEGRATION_TEST must have no effect.
+    process.env.LLXPRT_CODE_INTEGRATION_TEST = 'true';
+
+    const args = buildArgs(fixturePath);
+    const userFlag = await setupContainerUser(args, ['sh', '-c', 'true']);
+
+    expect(userFlag).toBe('');
+    expect(args).not.toContain('--user');
+  });
+
+  it('applies the base hardening flags to the proxy sidecar argv (AC2)', async () => {
+    // startProxyContainer builds a second `run` argv that previously bypassed
+    // the hardening. spawn is stubbed to throw immediately so the function
+    // rejects before performing I/O, while the call args are recorded.
+    vi.mocked(childProcess.spawn).mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
+
+    await expect(
+      startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
+    ).rejects.toThrow('proxy-argv-captured');
+
+    const spawnCalls = vi.mocked(childProcess.spawn).mock.calls;
+    expect(spawnCalls.length).toBeGreaterThan(0);
+    const proxyArgs = spawnCalls[0][1];
+    expect(proxyArgs).toContain('--cap-drop=ALL');
+    const secIdx = proxyArgs.indexOf('--security-opt');
+    expect(secIdx).toBeGreaterThanOrEqual(0);
+    expect(proxyArgs[secIdx + 1]).toBe('no-new-privileges');
+  });
+
+  it('keeps the base hardening flags alongside a non-empty userFlag on the proxy sidecar', async () => {
+    // The proxy sidecar has always forwarded setupContainerUser's userFlag
+    // (unchanged by this PR). Assert that the hardening flags coexist with it
+    // and that the user selection is still passed through intact.
+    vi.mocked(childProcess.spawn).mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
+
+    await expect(
+      startProxyContainer(
+        CONFIG,
+        'echo proxy',
+        '--user 501:20',
+        'test-image',
+        '/workspace',
+      ),
+    ).rejects.toThrow('proxy-argv-captured');
+
+    const proxyArgs = vi.mocked(childProcess.spawn).mock.calls[0][1];
+    expect(proxyArgs).toContain('--cap-drop=ALL');
+    const secIdx = proxyArgs.indexOf('--security-opt');
+    expect(proxyArgs[secIdx + 1]).toBe('no-new-privileges');
+    const userIdx = proxyArgs.indexOf('--user');
+    expect(userIdx).toBeGreaterThanOrEqual(0);
+    expect(proxyArgs[userIdx + 1]).toBe('501:20');
   });
 });
