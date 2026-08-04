@@ -339,7 +339,8 @@ export class ProxySocketClient {
       this.socket!.once('connect', resolve);
       this.socket!.once('error', reject);
     });
-    this.socket.unref();
+    // Socket is referenced while connect/handshake is in flight; resetIdleTimer
+    // releases the reference once the connection is genuinely idle.
   }
 
   /**
@@ -528,7 +529,15 @@ export class ProxySocketClient {
    */
   private resetIdleTimer(): void {
     this.cancelIdleTimer();
-    if (this.pendingRequests.size > 0) return;
+    if (this.pendingRequests.size > 0) {
+      // Active work — keep the transport referenced so transport events are
+      // delivered promptly (fixes the Windows request-loss symptom).
+      this.socket?.ref();
+      return;
+    }
+    // Idle — release the reference so a stale proxy connection does not keep
+    // the process alive.
+    this.socket?.unref();
     this.armIdleTimer();
   }
 
@@ -542,8 +551,11 @@ export class ProxySocketClient {
    * @pseudocode 002-frame-and-cancel.md lines 30-32
    */
   private maybeArmIdleTimer(): void {
-    if (this.pendingRequests.size === 0 && this.idleTimer === null) {
-      this.armIdleTimer();
+    if (this.pendingRequests.size === 0) {
+      this.socket?.unref();
+      if (this.idleTimer === null) {
+        this.armIdleTimer();
+      }
     }
   }
 
