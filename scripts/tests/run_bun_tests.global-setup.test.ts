@@ -13,10 +13,13 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  reconcileSuites,
   resolveTsconfigOverride,
   runBunTests,
   type BunTestRunnerDependencies,
+  type FileTestResult,
 } from '../run_bun_tests.js';
+import type { JUnitTestSuite } from '../bun-junit-to-json-report.js';
 
 describe('runBunTests global setup lifecycle', () => {
   it('runs global setup before any child and teardown after the last one', async () => {
@@ -221,5 +224,68 @@ describe('runBunTests global setup lifecycle', () => {
       '/repo/b/globalSetup.ts',
       '/repo/a/globalSetup.ts',
     ]);
+  });
+});
+
+describe('reconcileSuites', () => {
+  const suite = (name: string): JUnitTestSuite => ({
+    name,
+    tests: 1,
+    failures: 0,
+    errors: 0,
+    skipped: 0,
+    testCases: [],
+  });
+
+  const result = (
+    name: string,
+    passed: boolean,
+    junitOutfile?: string,
+  ): FileTestResult => ({ name, passed, stdout: '', junitOutfile });
+
+  it('keeps the parsed suites for files that produced output', () => {
+    const merged = reconcileSuites(
+      [result('a.test.ts', true, '/tmp/0.xml')],
+      (_path, into) => {
+        into.push(suite('some describe block'));
+        return 1;
+      },
+    );
+
+    expect(merged.map((s) => s.name)).toEqual(['some describe block']);
+  });
+
+  it('represents a failed file that produced no output', () => {
+    const merged = reconcileSuites(
+      [result('crashed.test.ts', false, '/tmp/0.xml')],
+      () => 0,
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].name).toBe('crashed.test.ts');
+    expect(merged[0].failures).toBe(1);
+    expect(merged[0].testCases[0].failureMessage).toContain(
+      'no usable JUnit output',
+    );
+  });
+
+  it('does not synthesize for a failed file whose suites were parsed', () => {
+    const merged = reconcileSuites(
+      [result('failing.test.ts', false, '/tmp/0.xml')],
+      (_path, into) => {
+        // Bun names suites after describe blocks, never after the file, so a
+        // name-based check would wrongly add a synthetic entry here.
+        into.push(suite('a describe block'));
+        return 1;
+      },
+    );
+
+    expect(merged.map((s) => s.name)).toEqual(['a describe block']);
+  });
+
+  it('does not synthesize for a passing file that produced no output', () => {
+    expect(
+      reconcileSuites([result('empty.test.ts', true, '/tmp/0.xml')], () => 0),
+    ).toEqual([]);
   });
 });

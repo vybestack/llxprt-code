@@ -149,10 +149,17 @@ function decodeOutput(
   return typeof output === 'string' ? output : new TextDecoder().decode(output);
 }
 
-interface FileTestResult {
+export interface FileTestResult {
   readonly name: string;
   readonly passed: boolean;
   readonly stdout: string;
+  /**
+   * Where this file's child process was told to write its JUnit XML, when a
+   * JSON report was requested. Retained so the report writer can tell "this
+   * file produced no output" apart from "this file's suites are present under
+   * some other name" — Bun names suites after `describe` blocks, not files.
+   */
+  readonly junitOutfile?: string;
 }
 
 function escapeXml(text: string): string {
@@ -561,7 +568,12 @@ function runSingleTestFile(
       `Native Bun test failed: ${entry.file}${last.diagnostic}`,
     );
   }
-  return { name: relativeName, passed: last.passed, stdout: last.stdout };
+  return {
+    name: relativeName,
+    passed: last.passed,
+    stdout: last.stdout,
+    junitOutfile,
+  };
 }
 
 /**
@@ -795,28 +807,105 @@ function writeReports(
       dependencies.invocationDirectory,
       options.jsonReport,
     );
-    writeVitestJsonReport(jsonReportPath, junitTempDir, dependencies);
+    writeVitestJsonReport(
+      jsonReportPath,
+      junitTempDir,
+      testResults,
+      dependencies,
+    );
     dependencies.stdout(`JSON report written to ${jsonReportPath}`);
     rmSync(junitTempDir, { recursive: true, force: true });
   }
 }
 
 /**
+ * Builds a stand-in suite for a file that failed without leaving usable JUnit
+ * output (a hard crash, an OOM kill, or malformed XML).
+ *
+ * Without this the file would simply be absent from the merged report, and
+ * `success` — computed from the testcases that *are* present — could read
+ * `true` for a run that actually failed. Representing the failure explicitly
+ * keeps the artifact consistent with the runner's exit code.
+ */
+export function syntheticFailureSuite(name: string): JUnitTestSuite {
+  return {
+    name,
+    tests: 1,
+    failures: 1,
+    errors: 0,
+    skipped: 0,
+    testCases: [
+      {
+        classname: name,
+        name: 'bun-test (no JUnit output)',
+        time: null,
+        status: 'failed',
+        failureMessage:
+          'The test file failed and produced no usable JUnit output; it may have crashed or been killed.',
+      },
+    ],
+  };
+}
+
+/**
+ * Merges each executed file's JUnit suites, substituting a synthesized failure
+ * for any failed file that produced no usable output.
+ *
+ * Reconciliation is per file, not per suite name: Bun names suites after
+ * `describe` blocks, so a file's name never appears in the parsed output and a
+ * name-based check would misreport every failure.
+ *
+ * `parseInto` appends a file's suites and returns how many it added.
+ */
+export function reconcileSuites(
+  testResults: readonly FileTestResult[],
+  parseInto: (path: string, into: JUnitTestSuite[]) => number,
+): JUnitTestSuite[] {
+  const allSuites: JUnitTestSuite[] = [];
+  for (const result of testResults) {
+    const added =
+      result.junitOutfile === undefined
+        ? 0
+        : parseInto(result.junitOutfile, allSuites);
+    if (added === 0 && !result.passed) {
+      allSuites.push(syntheticFailureSuite(result.name));
+    }
+  }
+  return allSuites;
+}
+
+/**
  * Reads all JUnit XML files from a temporary directory, merges them into a
  * single Vitest-compatible JSON report, and writes it to the given path.
- * Missing or empty JUnit files are skipped (a file that produced no JUnit
- * output — e.g. due to a crash — contributes no testcases to the report).
+ *
+ * A failed file that left no usable JUnit output is represented by a
+ * synthesized failing suite rather than being dropped, so the report can never
+ * be green while omitting a failure.
  */
 function writeVitestJsonReport(
   outputPath: string,
   junitTempDir: string,
+  testResults: readonly FileTestResult[],
   dependencies: BunTestRunnerDependencies,
 ): void {
-  const allSuites: JUnitTestSuite[] = [];
-  const entries = readdirSync(junitTempDir);
-  for (const entry of entries) {
+  const allSuites = reconcileSuites(testResults, (path, into) =>
+    processJUnitFile(path, into, dependencies),
+  );
+  // Any XML not claimed by a result would otherwise be dropped silently;
+  // surface it rather than shipping a quietly incomplete report.
+  const claimed = new Set(
+    testResults
+      .map((result) => result.junitOutfile)
+      .filter((path): path is string => path !== undefined),
+  );
+  for (const entry of readdirSync(junitTempDir)) {
     if (!entry.endsWith('.xml')) continue;
-    processJUnitFile(join(junitTempDir, entry), allSuites, dependencies);
+    const path = join(junitTempDir, entry);
+    if (!claimed.has(path)) {
+      throw new Error(
+        `JUnit output ${path} does not correspond to any executed test file`,
+      );
+    }
   }
   const mergedJunit: JUnitTestSuites = {
     name: 'bun tests',
@@ -837,18 +926,20 @@ function processJUnitFile(
   xmlPath: string,
   allSuites: JUnitTestSuite[],
   dependencies: BunTestRunnerDependencies,
-): void {
+): number {
   try {
     const xml = readFileSync(xmlPath, 'utf-8');
-    if (xml.trim().length === 0) return;
+    if (xml.trim().length === 0) return 0;
     const parsed = parseJUnitXml(xml);
     allSuites.push(...parsed.suites);
+    return parsed.suites.length;
   } catch (error: unknown) {
     dependencies.stderr(
       `Failed to parse JUnit XML ${xmlPath}: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
+    return 0;
   }
 }
 
