@@ -30,6 +30,8 @@ Follow these steps to create a Pull Request:
     ```
     - **Title**: Ensure the title follows the [Conventional Commits](https://www.conventionalcommits.org/) format if the repository uses it (e.g., `feat(ui): add new button`, `fix(core): resolve crash`).
 
+5. ** DO NOT CHANGE THE PR DESCRIPTION TO THE LAST THING YOU DID WHEN YOU MAKE CHANGES ** You can amend the PR if the changes you make materially change its behavior but do not change the whole description to just match your last commit. the PR description should be holistic. This is an LLM bad habit that makes it hard to review PRs.
+
 ## Principles
 
 - **Compliance**: Never ignore the PR template. It exists for a reason.
