@@ -335,3 +335,30 @@ Paste reaches the component while every focus-gated key does not, which is the
 most specific clue available: paste is the one key that bypasses the focus
 check. The next step is tracing `state.handleInput` inside `inputPromptHooks`
 rather than another guess from outside.
+
+### `sandbox.bashrc` extra-fd IPC does not work under Bun — product impact
+
+`packages/cli/src/utils/sandbox-bashrc.ts` spawns a shell with
+`stdio: ['inherit', 'inherit', 'inherit', 'pipe', 'pipe']` and reads the
+payloads back from `result.output[3]` and `result.output[4]`. Bun's `spawnSync`
+does not support extra piped file descriptors.
+
+Measured directly, same command on both runtimes:
+
+| runtime | `output.length` | `output[3]` | `output[4]` |
+| --- | --- | --- | --- |
+| Node | 5 | `"env-payload\n"` | `"cwd-payload\n"` |
+| Bun | 3 | `""` | `""` |
+
+All 16 cases in `src/utils/sandbox-bashrc.test.ts` fail with "child produced no
+cwd payload on the dedicated protocol pipe". This is not a test defect and
+cannot be fixed in the test: the mechanism the code depends on is absent.
+
+This matters beyond the test suite. The repository is moving to Bun as the
+runtime (`bun scripts/start.ts` is the documented entry point), so the same
+limitation applies to the shipped CLI: sandbox bashrc environment and cwd
+capture would silently return empty under Bun. Carrying the payloads over a
+temporary file, or over stdout with delimiters, would work on both runtimes.
+
+Deciding and implementing that transport is a product change beyond a
+test-runner migration, so it is recorded here rather than attempted.
