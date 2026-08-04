@@ -17,6 +17,7 @@ import {
   runBunTests,
   reapStaleBunTestProcesses,
   processTimeoutFor,
+  applyExclusions,
   collectGlobalSetups,
   type BunGlobalSetupModule,
   type BunTestRunnerDependencies,
@@ -717,6 +718,41 @@ describe('runBunTests', () => {
 
     expect(status).toBe(1);
     expect(order).toEqual(['setup', 'teardown']);
+  });
+});
+
+describe('applyExclusions', () => {
+  const entry = (file: string) => ({ cwd: '/repo/e2e', file, preloads: [] });
+
+  it('returns every file when no pattern is given', () => {
+    const files = [entry('/repo/e2e/a.test.ts'), entry('/repo/e2e/b.test.ts')];
+    expect(applyExclusions(files, [])).toEqual(files);
+  });
+
+  it('drops files matching a leading-wildcard pattern', () => {
+    const files = [
+      entry('/repo/e2e/todo-continuation.e2e.test.ts'),
+      entry('/repo/e2e/write_file.test.ts'),
+    ];
+    expect(
+      applyExclusions(files, ['**/todo-continuation.e2e.test.ts']).map(
+        (f) => f.file,
+      ),
+    ).toEqual(['/repo/e2e/write_file.test.ts']);
+  });
+
+  it('applies every pattern, not just the first', () => {
+    const files = [
+      entry('/repo/e2e/todo-continuation.e2e.test.ts'),
+      entry('/repo/e2e/run_shell_command.test.ts'),
+      entry('/repo/e2e/write_file.test.ts'),
+    ];
+    expect(
+      applyExclusions(files, [
+        '**/todo-continuation.e2e.test.ts',
+        '**/run_shell_command.test.ts',
+      ]).map((f) => f.file),
+    ).toEqual(['/repo/e2e/write_file.test.ts']);
   });
 });
 

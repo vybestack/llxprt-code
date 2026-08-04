@@ -286,6 +286,8 @@ interface CliOptions {
   dryRun: boolean;
   junit: string | null;
   jsonReport: string | null;
+  /** Glob patterns whose matching files are removed from the resolved set. */
+  exclude: string[];
 }
 
 function readOptionValue(
@@ -323,6 +325,7 @@ function parseArgs(argv: string[]): CliOptions {
     dryRun: false,
     junit: null,
     jsonReport: null,
+    exclude: [],
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -342,6 +345,9 @@ function parseArgs(argv: string[]): CliOptions {
       case '--json-report':
         options.jsonReport = readOptionValue(argv, i++, arg);
         break;
+      case '--exclude':
+        options.exclude.push(readOptionValue(argv, i++, arg));
+        break;
       case '--timeout': {
         const value = readOptionValue(argv, i++, arg);
         const timeout = Number(value);
@@ -358,8 +364,16 @@ function parseArgs(argv: string[]): CliOptions {
       case '--dry-run':
         options.dryRun = true;
         break;
-      default:
+      default: {
+        // `--exclude=<glob>` (the form the e2e workflow uses) as well as
+        // `--exclude <glob>`, matching how Vitest accepted it.
+        const inlineExclude = /^--exclude=(.+)$/.exec(arg);
+        if (inlineExclude) {
+          options.exclude.push(inlineExclude[1]);
+          break;
+        }
         throw new Error(`Unknown option: ${arg}`);
+      }
     }
   }
 
@@ -541,15 +555,35 @@ export function collectGlobalSetups(
   return [...seen];
 }
 
+/**
+ * Removes files matching any `--exclude` glob, mirroring the flag the e2e
+ * workflow passes through to skip individual E2E specs per sandbox mode.
+ * Patterns are matched against the absolute path, so the leading `**` the
+ * workflow uses behaves as it did under Vitest.
+ */
+export function applyExclusions(
+  files: readonly BunTestFile[],
+  patterns: readonly string[],
+): readonly BunTestFile[] {
+  if (patterns.length === 0) {
+    return files;
+  }
+  const globs = patterns.map((pattern) => new Bun.Glob(pattern));
+  return files.filter((entry) => !globs.some((glob) => glob.match(entry.file)));
+}
+
 export async function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
 ): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const files = dependencies.resolveFiles(
-    dependencies.repoRoot,
-    options.workspace ?? undefined,
+  const files = applyExclusions(
+    dependencies.resolveFiles(
+      dependencies.repoRoot,
+      options.workspace ?? undefined,
+    ),
+    options.exclude,
   );
 
   if (files.length === 0) {
