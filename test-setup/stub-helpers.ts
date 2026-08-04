@@ -315,6 +315,11 @@ async function waitForWithFakeTimers<T>(
         if (elapsed >= timeout) {
           throw lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE);
         }
+        // Yield to the microtask queue before retrying. Advancing the fake
+        // clock only fires the timer callbacks; the promise chains they
+        // resume (e.g. a retry backoff awaiting its delay) still need a
+        // microtask turn before the next assertion can observe their effect.
+        await Promise.resolve();
         continue;
       }
 

@@ -420,19 +420,7 @@ const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
 ): unknown => {
-  let resolvedId: string;
-  try {
-    resolvedId = resolveActualId(id);
-  } catch {
-    // The module cannot be resolved (e.g. a mock of a non-existent module
-    // path, common in integration tests that mock relative paths under
-    // packages/ that don't exist on disk). Vitest tolerates this because it
-    // intercepts before resolution; we must register the mock anyway so the
-    // factory replaces the import. Use the original specifier as the
-    // resolvedId for cache keys, and skip importActual/importActualSync
-    // (they will throw, matching the non-existent module).
-    resolvedId = id;
-  }
+  const resolvedId = resolveActualId(id);
 
   // Bun's mock.module matches by the original module specifier (e.g.
   // 'mime-types', 'fs', './foo.js'), NOT by the resolved absolute file path.
@@ -446,12 +434,7 @@ const registerModuleMock = (
     // The automock factory runs lazily (when the module is first imported),
     // at which point require() would return the mocked namespace.
     mockedResolvedIds.add(resolvedId);
-    let realModule: unknown;
-    try {
-      realModule = loadIsolatedModuleSync(resolvedId);
-    } catch {
-      realModule = {};
-    }
+    const realModule = loadIsolatedModuleSync(resolvedId);
     const actualSnapshot: Record<string | symbol, unknown> = {};
     if (typeof realModule === 'object' && realModule !== null) {
       for (const key of Reflect.ownKeys(realModule)) {
@@ -490,13 +473,7 @@ const registerModuleMock = (
   // loadActualSync detect the dangerous case where localRequire would
   // return the mock instead of the actual module (issue #2909 / #2910).
   mockedResolvedIds.add(resolvedId);
-  let syncActual: unknown;
-  try {
-    syncActual = loadIsolatedModuleSync(resolvedId);
-  } catch {
-    // Module does not exist on disk (mock of a non-existent path).
-    syncActual = {};
-  }
+  const syncActual = loadIsolatedModuleSync(resolvedId);
   // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
   // REAL exports, not the mock.module-patched namespace. Bun's mock.module
   // patches the module namespace object IN PLACE, so storing a reference to
