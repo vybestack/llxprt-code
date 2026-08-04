@@ -288,6 +288,10 @@ interface CliOptions {
   jsonReport: string | null;
   /** Glob patterns whose matching files are removed from the resolved set. */
   exclude: string[];
+  /** Bare path arguments narrowing the run to matching files. */
+  filters: string[];
+  /** Regex forwarded to Bun as `--test-name-pattern`. */
+  testNamePattern: string | null;
 }
 
 function readOptionValue(
@@ -326,6 +330,8 @@ function parseArgs(argv: string[]): CliOptions {
     junit: null,
     jsonReport: null,
     exclude: [],
+    filters: [],
+    testNamePattern: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -364,15 +370,30 @@ function parseArgs(argv: string[]): CliOptions {
       case '--dry-run':
         options.dryRun = true;
         break;
+      case '--testNamePattern':
+        options.testNamePattern = readOptionValue(argv, i++, arg);
+        break;
       default: {
-        // `--exclude=<glob>` (the form the e2e workflow uses) as well as
-        // `--exclude <glob>`, matching how Vitest accepted it.
+        // `--exclude=<glob>` / `--testNamePattern=<regex>` (the forms the e2e
+        // workflow uses) as well as their space-separated spellings, matching
+        // how Vitest accepted them.
         const inlineExclude = /^--exclude=(.+)$/.exec(arg);
         if (inlineExclude) {
           options.exclude.push(inlineExclude[1]);
           break;
         }
-        throw new Error(`Unknown option: ${arg}`);
+        const inlineNamePattern = /^--testNamePattern=(.+)$/.exec(arg);
+        if (inlineNamePattern) {
+          options.testNamePattern = inlineNamePattern[1];
+          break;
+        }
+        if (arg.startsWith('-')) {
+          throw new Error(`Unknown option: ${arg}`);
+        }
+        // A bare path narrows the run to matching files, as it did under
+        // Vitest.
+        options.filters.push(arg);
+        break;
       }
     }
   }
@@ -432,8 +453,12 @@ export function buildSpawnArgs(
   cliTsconfigOverride: string | null,
   cliTimeout: number,
   junitOutfile?: string,
+  testNamePattern?: string | null,
 ): readonly string[] {
   const args = [executable, 'test'];
+  if (testNamePattern) {
+    args.push('--test-name-pattern', testNamePattern);
+  }
   const tsconfig = entry.tsconfig ?? cliTsconfigOverride;
   if (tsconfig) {
     args.push('--tsconfig-override', tsconfig);
@@ -464,10 +489,16 @@ export function processTimeoutFor(testTimeoutMs: number): number {
   return Math.max(PER_FILE_PROCESS_TIMEOUT_MS, testTimeoutMs * 2);
 }
 
+/** CLI options that apply to every file in a run. */
+export interface RunWideOptions {
+  readonly tsconfig: string | null;
+  readonly timeout: number;
+  readonly testNamePattern: string | null;
+}
+
 function spawnTestFileOnce(
   entry: BunTestFile,
-  cliTsconfigOverride: string | null,
-  cliTimeout: number,
+  run: RunWideOptions,
   dependencies: BunTestRunnerDependencies,
   junitOutfile?: string,
 ): { passed: boolean; stdout: string; diagnostic: string; junitPath?: string } {
@@ -476,9 +507,10 @@ function spawnTestFileOnce(
       buildSpawnArgs(
         dependencies.executable,
         entry,
-        cliTsconfigOverride,
-        cliTimeout,
+        run.tsconfig,
+        run.timeout,
         junitOutfile,
+        run.testNamePattern,
       ),
       {
         cwd: entry.cwd,
@@ -486,7 +518,7 @@ function spawnTestFileOnce(
         stdin: 'inherit',
         stdout: 'pipe',
         stderr: 'pipe',
-        timeout: processTimeoutFor(entry.timeout ?? cliTimeout),
+        timeout: processTimeoutFor(entry.timeout ?? run.timeout),
       },
     );
     return {
@@ -506,8 +538,7 @@ function spawnTestFileOnce(
 
 function runSingleTestFile(
   entry: BunTestFile,
-  cliTsconfigOverride: string | null,
-  cliTimeout: number,
+  run: RunWideOptions,
   dependencies: BunTestRunnerDependencies,
   junitOutfile?: string,
 ): FileTestResult {
@@ -515,13 +546,7 @@ function runSingleTestFile(
   const attempts = (entry.retries ?? 0) + 1;
   let last = { passed: false, stdout: '', diagnostic: '' };
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    last = spawnTestFileOnce(
-      entry,
-      cliTsconfigOverride,
-      cliTimeout,
-      dependencies,
-      junitOutfile,
-    );
+    last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
     if (last.passed) {
       break;
     }
@@ -572,18 +597,37 @@ export function applyExclusions(
   return files.filter((entry) => !globs.some((glob) => glob.match(entry.file)));
 }
 
+/**
+ * Narrows the run to files whose path contains one of the bare path arguments,
+ * the substring semantics Vitest gave positional filters.
+ */
+export function applyFilters(
+  files: readonly BunTestFile[],
+  filters: readonly string[],
+): readonly BunTestFile[] {
+  if (filters.length === 0) {
+    return files;
+  }
+  return files.filter((entry) =>
+    filters.some((filter) => entry.file.includes(filter)),
+  );
+}
+
 export async function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
 ): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const files = applyExclusions(
-    dependencies.resolveFiles(
-      dependencies.repoRoot,
-      options.workspace ?? undefined,
+  const files = applyFilters(
+    applyExclusions(
+      dependencies.resolveFiles(
+        dependencies.repoRoot,
+        options.workspace ?? undefined,
+      ),
+      options.exclude,
     ),
-    options.exclude,
+    options.filters,
   );
 
   if (files.length === 0) {
@@ -668,13 +712,17 @@ function runAllFiles(
   dependencies: BunTestRunnerDependencies,
   junitTempDir: string | null,
 ): FileTestResult[] {
+  const run: RunWideOptions = {
+    tsconfig: tsconfigOverride,
+    timeout: options.timeout,
+    testNamePattern: options.testNamePattern,
+  };
   const results: FileTestResult[] = [];
   for (const entry of files) {
     results.push(
       runSingleTestFile(
         entry,
-        tsconfigOverride,
-        options.timeout,
+        run,
         dependencies,
         junitTempDir !== null
           ? join(junitTempDir, `${results.length}.xml`)

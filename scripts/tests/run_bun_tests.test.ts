@@ -18,6 +18,7 @@ import {
   reapStaleBunTestProcesses,
   processTimeoutFor,
   applyExclusions,
+  applyFilters,
   collectGlobalSetups,
   type BunGlobalSetupModule,
   type BunTestRunnerDependencies,
@@ -753,6 +754,38 @@ describe('applyExclusions', () => {
         '**/run_shell_command.test.ts',
       ]).map((f) => f.file),
     ).toEqual(['/repo/e2e/write_file.test.ts']);
+  });
+});
+
+describe('applyFilters', () => {
+  const entry = (file: string) => ({ cwd: '/repo/e2e', file, preloads: [] });
+
+  it('returns every file when no filter is given', () => {
+    const files = [entry('/repo/e2e/a.test.ts'), entry('/repo/e2e/b.test.ts')];
+    expect(applyFilters(files, [])).toEqual(files);
+  });
+
+  it('keeps only files whose path contains a bare path argument', () => {
+    const files = [
+      entry('/repo/integration-tests/run_shell_command.test.ts'),
+      entry('/repo/integration-tests/write_file.test.ts'),
+    ];
+    expect(
+      applyFilters(files, ['integration-tests/run_shell_command.test.ts']).map(
+        (f) => f.file,
+      ),
+    ).toEqual(['/repo/integration-tests/run_shell_command.test.ts']);
+  });
+
+  it('keeps a file matched by any one of several filters', () => {
+    const files = [
+      entry('/repo/e2e/a.test.ts'),
+      entry('/repo/e2e/b.test.ts'),
+      entry('/repo/e2e/c.test.ts'),
+    ];
+    expect(
+      applyFilters(files, ['a.test.ts', 'c.test.ts']).map((f) => f.file),
+    ).toEqual(['/repo/e2e/a.test.ts', '/repo/e2e/c.test.ts']);
   });
 });
 
