@@ -154,8 +154,13 @@ export function buildLintCommands({
  * Parses the scoped-target input. A JSON array from CI (via env or --targets)
  * selects the scoped run; any parse failure, empty array, or missing input
  * falls back to a full run (null).
+ *
+ * Exported for behavioral tests so env-vs-argv precedence and malformed input
+ * can be asserted without spawning ESLint.
  */
-function resolveTargets(argv: readonly string[]): readonly string[] | null {
+export function resolveTargets(
+  argv: readonly string[],
+): readonly string[] | null {
   // --targets <json> takes precedence.
   const targetsIdx = argv.indexOf('--targets');
   if (targetsIdx !== -1) {
@@ -247,14 +252,54 @@ async function runLint(): Promise<void> {
   }
 }
 
-function signalToExitCode(signal: unknown): number | undefined {
+/** Maps a signal name to its POSIX number, or undefined when unknown. */
+function signalNumber(signal: unknown): number | undefined {
   if (typeof signal !== 'string') {
     return undefined;
   }
-  const signalNumber = (
-    osConstants.signals as Record<string, number | undefined>
-  )[signal];
-  return typeof signalNumber === 'number' ? 128 + signalNumber : undefined;
+  const number = (osConstants.signals as Record<string, number | undefined>)[
+    signal
+  ];
+  return typeof number === 'number' ? number : undefined;
+}
+
+/** A classified runner termination: an exit code and optional diagnostic. */
+export interface RunnerFailure {
+  readonly exitCode: number;
+  readonly message?: string;
+}
+
+function buildSignalDiagnostic(signal: string, signum: number): string {
+  const base = `Lint runner: ESLint was terminated by ${signal} (signal ${signum}). This is an interruption/kill (e.g. harness watchdog or OOM killer), not a lint failure.`;
+  if (signal === 'SIGKILL') {
+    return `${base} An out-of-memory kill is a likely cause given the full-tree run's memory profile.`;
+  }
+  return base;
+}
+
+/**
+ * Classifies a runner termination into an exit code plus an optional
+ * user-facing diagnostic. Exported so the signal-interruption diagnostic
+ * (issue #2994 / AC4) is testable without spawning ESLint.
+ */
+export function classifyRunnerFailure(error: unknown): RunnerFailure {
+  const exitCode = propertyValue(error, 'exitCode');
+  if (typeof exitCode === 'number') {
+    return { exitCode };
+  }
+  const signal =
+    propertyValue(error, 'signalCode') ?? propertyValue(error, 'signal');
+  const signum = signalNumber(signal);
+  if (signum !== undefined) {
+    return {
+      exitCode: 128 + signum,
+      message: buildSignalDiagnostic(String(signal), signum),
+    };
+  }
+  return {
+    exitCode: 1,
+    message: `Lint runner failed unexpectedly: ${messageOf(error)}`,
+  };
 }
 
 const isMain =
@@ -262,22 +307,21 @@ const isMain =
   resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   runLint().catch((error: unknown) => {
-    const exitCode = propertyValue(error, 'exitCode');
-    if (typeof exitCode === 'number') {
-      process.exit(exitCode);
+    const failure = classifyRunnerFailure(error);
+    if (failure.message !== undefined) {
+      console.error(failure.message);
     }
-
-    const signalExitCode = signalToExitCode(
-      propertyValue(error, 'signalCode') ?? propertyValue(error, 'signal'),
-    );
-    if (signalExitCode !== undefined) {
-      process.exit(signalExitCode);
-    }
-
-    console.error(`Lint runner failed unexpectedly: ${messageOf(error)}`);
-    if (error instanceof Error && error.stack !== undefined) {
+    // The unexpected-error path (generic exit 1 with a diagnostic) keeps the
+    // stack trace so a crash is debuggable. Signal and ordinary-lint-failure
+    // terminations already produced output on the inherited stdio.
+    if (
+      failure.exitCode === 1 &&
+      failure.message !== undefined &&
+      error instanceof Error &&
+      error.stack !== undefined
+    ) {
       console.error(error.stack);
     }
-    process.exit(1);
+    process.exit(failure.exitCode);
   });
 }
