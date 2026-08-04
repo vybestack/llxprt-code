@@ -170,4 +170,96 @@ describe('retryWithBackoff onAuthError callback', () => {
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
     expect(mockFn).toHaveBeenCalledTimes(2);
   });
+
+  /**
+   * @fix issue2917
+   * A 403 with only onAuthError (no onPersistent429) must still get the single
+   * auth-refresh retry. This pins the intent explicitly: once 403 is no longer
+   * blindly retryable by status, the refresh allowance must be driven by the
+   * presence of an auth-recovery handler. Without the canRecoverFromAuthError
+   * gate this would regress to a single call with no onAuthError invocation.
+   */
+  it('retries a 403 exactly once when only onAuthError is supplied (issue #2917)', async () => {
+    const mockOnAuthError = vi.fn().mockResolvedValue(undefined);
+
+    const mockFn = vi.fn(async () => {
+      const error: HttpError = new Error('Forbidden');
+      error.status = 403;
+      throw error;
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 6,
+      initialDelayMs: 10,
+      onAuthError: mockOnAuthError,
+    });
+
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Forbidden');
+
+    expect(mockOnAuthError).toHaveBeenCalledTimes(1);
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * @fix issue2917
+   * A 403 with no auth-recovery handler at all must not burn the backoff budget:
+   * it is a terminal configuration/authorization problem, so retrying only
+   * delays the error. Today this retries up to maxAttempts.
+   */
+  it('does not backoff-retry a 403 when no auth-recovery handler is configured (issue #2917)', async () => {
+    const mockFn = vi.fn(async () => {
+      const error: HttpError = new Error('Forbidden');
+      error.status = 403;
+      throw error;
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 6,
+      initialDelayMs: 10,
+    });
+
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Forbidden');
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * @fix issue2917
+   * Budget guard for the onAuthError-driven refresh allowance. When the
+   * attempt budget is already exhausted (maxAttempts reached on the very first
+   * attempt), granting a refresh retry cannot help — there is no attempt left
+   * for it to run — yet it would burn a full backoff cycle. The allowance must
+   * be gated the same way `invokeAuthErrorCallback` already gates the callback
+   * (it skips when `attempt >= maxAttempts`): a 403 at maxAttempts with only
+   * onAuthError must call the function exactly once and never invoke the
+   * callback.
+   *
+   * RED before R1(b): the function is called twice (the unconditional
+   * onAuthError allowance forces a decrement-and-continue).
+   */
+  it('does not grant an onAuthError refresh retry when the attempt budget is exhausted (issue #2917)', async () => {
+    const mockOnAuthError = vi.fn().mockResolvedValue(undefined);
+    const mockFn = vi.fn(async () => {
+      const error: HttpError = new Error('Forbidden');
+      error.status = 403;
+      throw error;
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 1,
+      initialDelayMs: 10,
+      onAuthError: mockOnAuthError,
+    });
+
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Forbidden');
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    expect(mockOnAuthError).not.toHaveBeenCalled();
+  });
 });
