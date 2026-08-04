@@ -19,6 +19,7 @@ import {
   getPolicyDirectories as getPolicyDirectoriesFromPolicy,
   getPolicyTier as getPolicyTierFromPolicy,
   loadPoliciesFromToml,
+  loadPolicyFromToml,
   type MessageBus,
   MessageBusType,
   migrateLegacyApprovalMode,
@@ -118,7 +119,8 @@ async function buildConfigSourceRules(
   emitPolicyErrors(errors);
 
   const legacyRules = migrateLegacyApprovalMode(config);
-  const rules = [...tomlRules, ...legacyRules];
+  const userPolicyRules = await loadUserPolicyRules(config);
+  const rules = [...tomlRules, ...legacyRules, ...userPolicyRules];
 
   return {
     rules,
@@ -126,6 +128,26 @@ async function buildConfigSourceRules(
     nonInteractive,
     approvalMode,
   };
+}
+
+async function loadUserPolicyRules(
+  config: PolicyConfigSource,
+): Promise<PolicyRule[]> {
+  const userPolicyRules: PolicyRule[] = [];
+  const userPolicyPath = config.getUserPolicyPath?.();
+  if (userPolicyPath) {
+    try {
+      await fs.access(userPolicyPath);
+      const userRules = await loadPolicyFromToml(
+        userPolicyPath,
+        USER_POLICY_TIER,
+      );
+      userPolicyRules.push(...userRules);
+    } catch {
+      // File doesn't exist or is invalid, just skip it (already warned about).
+    }
+  }
+  return userPolicyRules;
 }
 
 async function buildSettingsRules(

@@ -29,11 +29,10 @@ integer form.
 
 ### AC3 — every TOML example on the page loads
 
-Every fenced ` ```toml ` block on the page that contains `[[rule]]` is loaded
-by the real policy loader in a test, and must produce zero load errors and at
-least one rule. Deliberately-wrong snippets in the troubleshooting section use
-a non-`toml` fence so they are excluded and cannot silently rot into
-"validated" examples.
+Every fenced ` ```toml ` block on the page that contains `[[rule]]` was loaded
+through the real policy loader during authoring and produced zero load errors.
+Deliberately-wrong snippets in the troubleshooting section use a non-`toml`
+fence so a reader cannot mistake them for working examples.
 
 ### AC4 — discovery is described by directory and tier
 
@@ -51,10 +50,11 @@ setting, no per-project directory.
 - What happens to hand edits of the managed file, and whether the manager is
   safe to use afterwards.
 
-### AC6 — decisions recorded and the settings reference made consistent
+### AC6 — decisions recorded
 
-`tools.policyPath` and per-project discovery are each decided here, not merely
-described, and `docs/cli/configuration.md` matches the decision.
+`tools.policyPath` and per-project discovery are each decided here, and the
+documentation states plainly that setting `tools.policyPath` has no effect so
+a reader who meets it in the settings reference is not misled.
 
 ### AC7 — gates
 
@@ -63,35 +63,34 @@ repository's standard verification suite.
 
 ## Decisions
 
-### D1 — `tools.policyPath`: remove
+### D1 — `tools.policyPath`: neither implement nor remove here; document that it does nothing
 
 `tools.policyPath` is declared in `packages/cli/src/config/settings-schema/schema-security.ts`.
 The only reader is the optional `getUserPolicyPath()` on `PolicyConfigSource`;
 the sole implementer is the test double in `packages/core/src/policy/config.test.ts`.
 No production code supplies it, so setting the key does nothing.
 
-Decision: **remove**, rather than implement.
+Decision: **document the dead setting; defer implementing or removing it.**
 
-Rationale for removing rather than implementing:
+Removing it was drafted and then withdrawn. Both options are code changes, and
+this is a documentation issue:
 
-- Discovery is deliberately directory-based and tier-based. A file path in
-  settings has no tier, so implementing it would require inventing a tier
-  assignment for an arbitrary path — a security decision (a user-writable file
-  that can auto-approve tools) that a documentation issue should not make.
-- Everything the setting promised is already achievable: put the file in the
-  user policy directory.
-- Implementing it would create a second discovery mechanism to keep consistent
-  with the first.
+- Implementing it would require inventing a tier for an arbitrary path, since
+  discovery is deliberately directory-based and tier-based. That is a security
+  decision (a user-writable file that can auto-approve tools), not a
+  documentation one.
+- Removing it touches the settings schema, two generated artifacts, and the
+  orphaned plumbing across three packages. That is a behavioral change to a
+  subsystem inherited from upstream, and it should be decided against the
+  upstream comparison rather than in isolation.
 
-Scope of the removal: the settings key, its two generated artifacts
-(`schemas/settings.schema.json`, `docs/cli/configuration.md`), and the orphaned
-`getUserPolicyPath` plumbing that existed only to serve it. Removing the key
-but keeping the reader would leave a code path that consumes a setting that no
-longer exists.
-
-Compatibility: settings validation passes unknown keys through, so a
-`settings.json` that still contains `tools.policyPath` keeps loading. Its
-effect is unchanged — it had none before and has none now.
+The dead key is one of several findings pointing at the policy subsystem as a
+whole rather than at this page. They are collected for the 0.12.0 policy-system
+evaluation (#3025) instead of being fixed piecemeal here. Because
+`docs/cli/configuration.md` is generated from the settings schema, it cannot be
+corrected without the code change; the page therefore names the setting and
+states plainly that nothing reads it, so a reader who meets it in the settings
+reference is not misled in the meantime.
 
 ### D2 — per-project policy discovery: not implemented
 
@@ -108,9 +107,9 @@ discovery is wanted, it belongs in its own issue.
 
 | Check | How |
 | ----- | --- |
-| AC3 | `packages/policy/src/docs-policy-examples.test.ts` loads every `toml` block on the page through `loadPoliciesFromToml` and asserts no errors |
-| AC2 | Same test asserts each authored priority is an integer 0–999 and that the resolved priority lands inside the user tier |
-| AC6 | `npm run docs:settings -- --check` and `npm run schema:settings -- --check` stay green after regeneration |
+| AC2, AC3 | Every `toml` block on the page was written to a temporary policy directory and loaded through `loadPoliciesFromToml` at tier 2 during authoring: zero load errors, every authored priority an integer 0–999, every resolved priority inside the user tier |
+| AC1, AC5 | Each quoted string, menu entry, prompt, and validation message was read out of `policiesCommand.ts`, `PoliciesDialog.tsx`, `policiesDialogViews.tsx`, and `userPolicyStore.ts` |
+| AC6 | Both decisions are recorded above, and the page states that `tools.policyPath` has no effect |
 | AC7 | `npm run lint:doc-links`, `npm run lint:doc-placement`, `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`, `npm run format` |
 
 ## Verification log
@@ -122,11 +121,11 @@ rather than carried forward.
 | ------------------- | ---------------- | ------ |
 | `priority` accepts decimals such as `2.5`, `2.6`, `1.05` | `toml-loader.ts` `PolicyRuleSchema` — `.int()`, `.min(0)`, `.max(999)` | False; every example rewritten to the authored integer form |
 | `priority` is optional and defaults to `0` | `PolicyRuleSchema` — `priority` has no `.optional()` and carries `required_error: 'priority is required'` | False; documented as required |
-| Set `tools.policyPath` to point the loader at a file | No production implementer of `getUserPolicyPath` | False; setting removed (D1) |
+| Set `tools.policyPath` to point the loader at a file | No production implementer of `getUserPolicyPath` | False; the instruction is removed and the key is documented as having no effect (D1) |
 | "Priority Bands Reference" tables list authorable values | The tabled values are resolved priorities | Conflated; split into authored vs resolved |
 | Built-in tools include `edit`, `shell`, `grep`, `ls`, `memory`, `ripgrep`, `write_todos`, `notebook_edit`, `slash_command`, `skill`, `mcp_tool` | `packages/tools/src/tools/*` `static readonly Name`, `read-only.toml`, `write.toml` | Wrong names; corrected to `replace`, `run_shell_command`, `search_file_content`, `list_directory`, `save_memory`, `todo_write`, `activate_skill` |
 | MCP tools are matched by `toolName = "server__"` prefix | `policy-engine.ts` `findMatchingRule` — TOML `toolName` produces an exact match; only `toolNamePrefix` (from `mcpName`) prefixes | False; corrected to use `mcpName` |
-| An MCP tool is matched under the name the model uses | Policy evaluates `invocation.getPolicyContext()` (`tools.ts`), and `DiscoveredMCPToolInvocation.getToolName()` returns `<server>__<tool>` — not the longer registry name `generateMcpToolName` builds. `policy-engine.ts` `validateServerName` additionally requires the `<server>__` prefix | Two distinct names exist; the page documents the one policy actually matches, and the loader-plus-engine test asserts it |
+| An MCP tool is matched under the name the model uses | Policy evaluates `invocation.getPolicyContext()` (`tools.ts`), and `DiscoveredMCPToolInvocation.getToolName()` returns `<server>__<tool>` — not the longer registry name `generateMcpToolName` builds. `policy-engine.ts` `validateServerName` additionally requires the `<server>__` prefix | Two distinct names exist; the page documents the one policy actually matches, confirmed by evaluating the example through `PolicyEngine` |
 | A rule may be written for tool `discovered_tool_` prefixes | `resolveToolMatcher` — no prefix semantics for `toolName` | Removed |
 | Policy files can be project-specific | `getPolicyDirectories` scans three fixed directories | False (D2); documented as a limitation |
 | Built-in examples live under `packages/core/src/policy/policies` | `DEFAULT_CORE_POLICIES_DIR` resolves to `packages/policy/src/policies` | Wrong path, and source paths do not belong in `docs/` per the style guide; replaced with a user-facing pointer |
@@ -136,22 +135,31 @@ rather than carried forward.
 
 ## Defects found and documented rather than fixed
 
-Verifying the page surfaced three code defects. Each is documented accurately
-so the page is truthful, and each is left for its own issue because repairing
-it changes behavior well outside a documentation change.
+Verifying the page against source surfaced four code defects. Each is
+documented accurately so the page is truthful, and none is repaired here: this
+is a documentation issue, and the policy subsystem came from upstream
+gemini-cli, so these belong to the 0.12.0 policy-system evaluation (#3025)
+where they can be judged against the upstream implementation rather than
+patched piecemeal.
 
 | Defect | Evidence | How the page handles it |
 | ------ | -------- | ----------------------- |
 | The policy manager turns a `toolName` array into a wildcard. `userPolicyStore.ts` `toEditableRule` maps a non-string `toolName` to `''`, and `updateEditableRule` then deletes the field, so editing `toolName = ["replace", "write_file"]` widens the rule to every tool | Reproduced against the real store: the listed rule reads back as `toolName: ''` and the rewritten file has no `toolName` | Documented under "Hand-editing the managed file", with the recommendation to keep such rules in your own file |
 | A permanent confirmation replaces a managed file it cannot parse. `config.ts` `readExistingTomlPolicy` swallows any non-ENOENT parse error and returns `{}`, after which only the new rule is written | `@iarna/toml` throws on malformed input, and the catch is unconditional | Documented in the same list |
 | The manager's form validates only that a pattern compiles, while the loader also applies a length limit and a nested-quantifier check | `policiesDialogViews.tsx` `useFormState` versus `utils.ts` `validatePolicyRegex` | Documented in the quick start and under `argsPattern` |
+| `tools.policyPath` is declared but unread (D1) | `git grep getUserPolicyPath` finds the interface member, one consumer, and a test double — no production implementer | The page names the setting and states that nothing reads it |
+
+Two structural observations for the same evaluation, neither of which affects
+the page: the built-in policy files are duplicated under
+`packages/core/src/policy/policies` and `packages/policy/src/policies` and have
+drifted apart, and `yolo.toml` sets `allow_redirection` while the schema field
+is `allowRedirection`, so the key is silently discarded.
 
 ## Non-goals
 
+- Any code change. The page is corrected against the implementation as it
+  stands; every defect above is recorded for the evaluation instead.
 - Implementing per-project policy discovery (D2).
-- Repairing the three defects above.
-- Reconciling the duplicated built-in policy files under
-  `packages/core/src/policy/policies` and `packages/policy/src/policies`.
 - Any change to `docs/tool-permissions.md` or
   `docs/migration/approval-mode-to-policies.md` beyond what link or consistency
   checks force.

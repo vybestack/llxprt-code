@@ -622,6 +622,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `1000`
   - **Requires restart:** Yes
 
+- **`tools.policyPath`** (string):
+  - **Description:** Absolute path to a TOML policy file that augments the built-in policy rules.
+  - **Default:** `undefined`
+  - **Requires restart:** No
+
 - **`tools.enableHooks`** (boolean):
   - **Description:** Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.
   - **Default:** `true`

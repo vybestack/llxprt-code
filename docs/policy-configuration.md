@@ -118,10 +118,14 @@ meaning beyond appearing in `/policies` output as the rule's source.
 
 > **Limitations.** There is no per-project policy directory: policy files are
 > not discovered from your working directory or from a project-local `.llxprt`
-> directory. There is also no setting that points the loader at a specific
-> file — the directory is the whole discovery mechanism. If you need different
-> rules per project, start LLxprt Code with `--allowed-tools` in that project,
-> or swap the contents of your user policy directory.
+> directory. If you need different rules per project, start LLxprt Code with
+> `--allowed-tools` in that project, or swap the contents of your user policy
+> directory.
+>
+> No setting points the loader at a specific file either — the directory is the
+> whole discovery mechanism. The settings reference lists a
+> [`tools.policyPath`](cli/configuration.md#tools) key, but nothing reads it;
+> setting it has no effect. Put the file in your user policy directory instead.
 
 ### Three things write files to that directory
 

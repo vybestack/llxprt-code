@@ -270,6 +270,16 @@ export const SECURITY_SETTINGS_SCHEMA = {
         description: 'The number of lines to keep when truncating tool output.',
         showInDialog: true,
       },
+      policyPath: {
+        type: 'string',
+        label: 'Policy File Path',
+        category: 'Tools',
+        requiresRestart: false,
+        default: undefined as string | undefined,
+        description:
+          'Absolute path to a TOML policy file that augments the built-in policy rules.',
+        showInDialog: false,
+      },
       enableHooks: {
         type: 'boolean',
         label: 'Enable Hooks System (Experimental)',
