@@ -6,6 +6,7 @@
 
 import { EventEmitter } from 'node:events';
 import inkRender from '../../../node_modules/ink/build/render.js';
+import { setActiveStdin } from './ink-stub.js';
 
 class Stdout extends EventEmitter {
   get columns() {
@@ -101,6 +102,9 @@ export const render = (
   const stdout = new Stdout();
   const stderr = new Stderr();
   const stdin = new Stdin();
+  // Publish this render's stdin so the `useStdin` the components resolve to
+  // (test-utils/ink-stub.ts) hands back the same stream the test writes to.
+  setActiveStdin(stdin as unknown as NodeJS.ReadStream);
   const instance = inkRender(tree, {
     stdout,
     stderr,
@@ -117,6 +121,7 @@ export const render = (
 
   const removeActiveInstance = () => {
     activeInstances.delete(instance);
+    setActiveStdin(null);
   };
 
   return {
