@@ -219,7 +219,7 @@ describe('Token Tracking Property-Based Tests', () => {
     );
 
     itProp(
-      'should count entries inside the 60-second window in tokensPerMinute calculation (REQ-001.PBT)',
+      'should derive tokensPerMinute from recorded tokens and durations (REQ-001.PBT)',
       [fc.integer({ min: 1000, max: 5000 })],
       (tokenCount) => {
         // Reset tracker to start fresh
@@ -228,10 +228,12 @@ describe('Token Tracking Property-Based Tests', () => {
         // Add an entry with token count and chunk count
         tracker.recordCompletion(1000, null, tokenCount, 5);
 
-        // The entry was just recorded, so it is inside the 60-second window
-        // and must contribute to the rate.
+        // `tokensPerMinute` is a rate over summed request durations
+        // (60000 * Σtokens / Σduration), not a sliding wall-clock window, so a
+        // single recorded completion of 1000ms yields exactly one minute's
+        // worth of that completion's tokens.
         const tpm = tracker.getLatestMetrics().tokensPerMinute;
-        expect(tpm).toBeGreaterThan(0);
+        expect(tpm).toBe(60 * tokenCount);
       },
     );
   });
