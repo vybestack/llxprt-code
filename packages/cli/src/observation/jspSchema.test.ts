@@ -23,6 +23,12 @@ function errorCode(
   return result.ok ? undefined : result.error.code;
 }
 
+function errorMessage(
+  result: ReturnType<typeof parseBootstrap>,
+): string | undefined {
+  return result.ok ? undefined : result.error.message;
+}
+
 describe('parseBootstrap', () => {
   it('accepts a closed valid bootstrap', () => {
     const result = parseBootstrap(validBootstrap);
@@ -37,12 +43,14 @@ describe('parseBootstrap', () => {
   });
 
   it('rejects a non-loopback endpoint', () => {
-    const result = parseBootstrap({
-      ...validBootstrap,
-      endpoint: 'http://192.168.1.5:9123/jsp/1',
-    });
-    expect(result.ok).toBe(false);
-    expect(errorCode(result)).toBe('JSP-E004');
+    for (const endpoint of [
+      'http://192.168.1.5:9123/jsp/1',
+      'http://example.com/jsp/1',
+    ]) {
+      const result = parseBootstrap({ ...validBootstrap, endpoint });
+      expect(result.ok).toBe(false);
+      expect(errorCode(result)).toBe('JSP-E004');
+    }
   });
 
   it('rejects an endpoint carrying a query string', () => {
@@ -63,6 +71,49 @@ describe('parseBootstrap', () => {
     expect(errorCode(result)).toBe('JSP-E001');
   });
 
+  it('reports a distinct, accurate message for each endpoint rejection branch', () => {
+    const unparseable = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'not a url',
+    });
+    expect(errorMessage(unparseable)).toBe('endpoint is not a valid URL');
+
+    const badScheme = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'ws://127.0.0.1:9123/jsp/1',
+    });
+    expect(errorMessage(badScheme)).toBe(
+      'endpoint scheme must be http or https',
+    );
+
+    const nonLoopback = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'http://192.168.1.5:9123/jsp/1',
+    });
+    expect(errorMessage(nonLoopback)).toBe(
+      'endpoint host must be a loopback address',
+    );
+
+    const query = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'http://127.0.0.1:9123?token=abc',
+    });
+    expect(errorMessage(query)).toBe(
+      'endpoint must not include a query or fragment',
+    );
+  });
+
+  it('never echoes rejected endpoint input in its diagnostic', () => {
+    const endpoint = 'ws://user:s3cr3t-do-not-leak@127.0.0.1:9123/jsp/1';
+    const result = parseBootstrap({ ...validBootstrap, endpoint });
+    expect(result.ok).toBe(false);
+    const message = errorMessage(result);
+    expect(message).not.toContain('s3cr3t-do-not-leak');
+    expect(message).not.toContain('127.0.0.1');
+    expect(message).not.toContain('ws');
+    expect(message).not.toContain(endpoint);
+  });
+
   it('rejects a wrong protocol version', () => {
     const result = parseBootstrap({
       ...validBootstrap,
@@ -72,7 +123,7 @@ describe('parseBootstrap', () => {
     expect(errorCode(result)).toBe('JSP-E003');
   });
 
-  it('rejects a non-positive lifecycle generation', () => {
+  it('rejects a zero lifecycle generation with JSP-E004', () => {
     const result = parseBootstrap({
       ...validBootstrap,
       lifecycle_generation: 0,
@@ -81,13 +132,40 @@ describe('parseBootstrap', () => {
     expect(errorCode(result)).toBe('JSP-E004');
   });
 
-  it('rejects a negative lifecycle generation', () => {
+  it('rejects a negative lifecycle generation with JSP-E001', () => {
+    for (const lifecycle_generation of [-1, -2, -999]) {
+      const result = parseBootstrap({
+        ...validBootstrap,
+        lifecycle_generation,
+      });
+      expect(result.ok).toBe(false);
+      expect(errorCode(result)).toBe('JSP-E001');
+    }
+  });
+
+  it('rejects a non-integer lifecycle generation with JSP-E001', () => {
     const result = parseBootstrap({
       ...validBootstrap,
-      lifecycle_generation: -1,
+      lifecycle_generation: 1.5,
     });
     expect(result.ok).toBe(false);
-    expect(errorCode(result)).toBe('JSP-E004');
+    expect(errorCode(result)).toBe('JSP-E001');
+  });
+
+  it('accepts a positive lifecycle generation', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      lifecycle_generation: 1,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts a large positive lifecycle generation', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      lifecycle_generation: Number.MAX_SAFE_INTEGER,
+    });
+    expect(result.ok).toBe(true);
   });
 
   it('accepts https on loopback', () => {
@@ -106,13 +184,39 @@ describe('parseBootstrap', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('rejects a non-http(s) scheme', () => {
-    const result = parseBootstrap({
-      ...validBootstrap,
-      endpoint: 'ws://127.0.0.1:9123/jsp/1',
-    });
-    expect(result.ok).toBe(false);
-    expect(errorCode(result)).toBe('JSP-E004');
+  it('rejects a non-http(s) scheme as a shape violation', () => {
+    for (const endpoint of [
+      'ws://127.0.0.1:9123/jsp/1',
+      'ftp://127.0.0.1:9123/jsp/1',
+      'file:///jsp/1',
+      'urn:example:test',
+      'javascript://127.0.0.1:9123/jsp/1',
+    ]) {
+      const result = parseBootstrap({ ...validBootstrap, endpoint });
+      expect(result.ok).toBe(false);
+      expect(errorCode(result)).toBe('JSP-E001');
+      expect(errorMessage(result)).toBe(
+        'endpoint scheme must be http or https',
+      );
+    }
+  });
+
+  // A scheme-prefixed endpoint that is itself unparsable must reach the
+  // malformed-URL branch, not the scheme branch, even though both report
+  // JSP-E001. Pinned by message so the two branches cannot be confused.
+  // Two independent causes of a parse failure are covered so this does not
+  // rest on a single WHATWG rule: a file URL may not carry a port, and the
+  // IPv6 literal is unterminated. Both throw in Node and in Bun.
+  it('rejects a scheme-prefixed but unparsable endpoint as a malformed URL', () => {
+    for (const endpoint of [
+      'file://127.0.0.1:9123/jsp/1',
+      'http://[::1:9123/jsp/1',
+    ]) {
+      const result = parseBootstrap({ ...validBootstrap, endpoint });
+      expect(result.ok).toBe(false);
+      expect(errorCode(result)).toBe('JSP-E001');
+      expect(errorMessage(result)).toBe('endpoint is not a valid URL');
+    }
   });
 
   // URL parsing rejects an out-of-range IPv4 literal before the loopback test
@@ -163,6 +267,7 @@ describe('parseBootstrap', () => {
         endpoint: `http://${host}:9123/jsp/1`,
       });
       expect(result.ok).toBe(false);
+      expect(errorCode(result)).toBe('JSP-E004');
     }
   });
 
