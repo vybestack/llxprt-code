@@ -664,12 +664,18 @@ are credentialed and must be named explicitly.
 
 ### CI parity
 
-The `bun_native_test_parity` CI job runs the **complete** non-credentialed
-manifest under Bun's native test runner — every root, every file — so a root
-that stops being discovered fails the build. It is no longer a sample, and
 Bun's runner is no longer additive: it is the primary verification path for
-every migrated workspace.
+every migrated workspace, and `test_shard` executes it by invoking each
+workspace's own `test` script.
 
-Note that this overlaps heavily with `test_shard`, which invokes each
-workspace's own `test` script; for the migrated workspaces that script is the
-same Bun runner. Most files therefore execute twice per PR.
+Every root therefore runs **exactly once**. `test_shard` covers each workspace
+root; the scripts shard covers the roots that belong to no workspace, listed in
+`SCRIPTS_SHARD_ROOTS` in `scripts/test.ts`. A root with a second executor, or
+none at all, fails
+`scripts/tests/bun-manifest-root-ownership.bun.test.ts`.
+
+The `bun_native_test_parity` job does **not** execute tests. It resolves the
+manifest (`--dry-run`): globs expand and every selected file, preload, tsconfig
+override and global-setup module must exist. That is what proves no test file
+was dropped — re-running the whole suite a second time would double the CI bill
+for no extra signal.
