@@ -148,16 +148,11 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   },
   {
     workspace: 'core',
-    files: ['src/utils/errors.test.ts'],
-  },
-  {
-    workspace: 'core',
-    preload: 'bun-preload.ts',
     files: [
+      'src/utils/errors.test.ts',
       // Issue #1985: ToolKeyStorage.deleteKey() must still remove its own
       // encrypted .key file when SecureStore.delete() surfaces a keyring
-      // failure. Needs the core preload so Storage roots are isolated before
-      // the singleton is imported.
+      // failure.
       'src/tools/tool-key-storage.test.ts',
     ],
   },
