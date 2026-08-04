@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { WorkflowDocument, WorkflowJob } from './typed-test-helpers.ts';
 import { parseWorkflowYaml, asOptionalRecord } from './typed-test-helpers.ts';
@@ -60,6 +61,34 @@ function transitiveNeeds(
     if (expanded.size === closure.size) return expanded;
     closure = expanded;
   }
+}
+
+interface TestAggregateResults {
+  shouldSkip: string;
+  selector: string;
+  hasTests: string;
+  shards: string;
+  nodeConsumerSmoke: string;
+  acp: string;
+}
+
+function runTestAggregate(
+  runText: string,
+  results: TestAggregateResults,
+): SpawnSyncReturns<string> {
+  const expressions = new Map([
+    ['${{ needs.skip_check.outputs.should_skip }}', results.shouldSkip],
+    ['${{ needs.shard_selector.result }}', results.selector],
+    ['${{ needs.shard_selector.outputs.has_tests }}', results.hasTests],
+    ['${{ needs.test_shard.result }}', results.shards],
+    ['${{ needs.node_consumer_smoke.result }}', results.nodeConsumerSmoke],
+    ['${{ needs.acp_conformance.result }}', results.acp],
+  ]);
+  let script = runText;
+  for (const [expression, value] of expressions) {
+    script = script.replaceAll(expression, value);
+  }
+  return spawnSync('bash', ['-c', script], { encoding: 'utf8' });
 }
 
 describe('Issue #2564: acp_conformance CI job', () => {
@@ -402,6 +431,7 @@ describe('Issue #2877: test matrix scheduling', () => {
       'test_shard',
       'shard_selector',
       'skip_check',
+      'node_consumer_smoke',
       'acp_conformance',
     ]);
     expect(runText).toContain("shard_result='${{ needs.test_shard.result }}'");
@@ -409,6 +439,22 @@ describe('Issue #2877: test matrix scheduling', () => {
     echo "::error::Test shards did not all succeed (result: $shard_result)"
     exit 1
   fi`);
+  });
+
+  it('fails the no-tests path when node_consumer_smoke fails', () => {
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const result = runTestAggregate(checkStep.run ?? '', {
+      shouldSkip: 'false',
+      selector: 'success',
+      hasTests: 'false',
+      shards: 'skipped',
+      nodeConsumerSmoke: 'failure',
+      acp: 'success',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Node Consumer Smoke did not succeed (result: failure)',
+    );
   });
 
   it('preserves the exact test_shard condition', () => {

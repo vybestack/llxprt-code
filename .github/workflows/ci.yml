@@ -1226,6 +1226,7 @@ jobs:
       - 'test_shard'
       - 'shard_selector'
       - 'skip_check'
+      - 'node_consumer_smoke'
       - 'acp_conformance'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
@@ -1236,6 +1237,7 @@ jobs:
           selector_result='${{ needs.shard_selector.result }}'
           has_tests='${{ needs.shard_selector.outputs.has_tests }}'
           shard_result='${{ needs.test_shard.result }}'
+          node_consumer_smoke_result='${{ needs.node_consumer_smoke.result }}'
           acp_result='${{ needs.acp_conformance.result }}'
 
           # Explicit duplicate-skip: skip_check said this run duplicates a
@@ -1249,6 +1251,11 @@ jobs:
           # Fail closed if the selector itself did not succeed.
           if [ "$selector_result" != "success" ]; then
             echo "::error::Shard selector did not succeed (result: $selector_result); cannot trust test selection."
+            exit 1
+          fi
+
+          if [ "$node_consumer_smoke_result" != "success" ]; then
+            echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
             exit 1
           fi
 
