@@ -19,6 +19,9 @@ export async function runCli(
   env: Partial<Record<string, string>> = {},
   input?: string,
 ): Promise<CliRunResult> {
+  const configHome =
+    env.LLXPRT_CONFIG_HOME ?? process.env.LLXPRT_CONFIG_HOME ?? '';
+
   return new Promise((resolve) => {
     // Use the compiled CLI entry point
     const cliPath = path.join(process.cwd(), 'dist', 'index.js');
@@ -34,9 +37,10 @@ export async function runCli(
         HOME: env.HOME ?? process.env.HOME ?? '',
         // Storage resolves LLXPRT_CONFIG_HOME ahead of HOME. The child
         // inherits the parent's isolated root so profiles saved here through
-        // ProfileManager are visible to the spawned CLI.
-        LLXPRT_CONFIG_HOME:
-          env.LLXPRT_CONFIG_HOME ?? process.env.LLXPRT_CONFIG_HOME ?? '',
+        // ProfileManager are visible to the spawned CLI. Passing an empty
+        // string would resolve to a bogus root and the CLI would die before
+        // printing anything, so the variable is omitted when there is none.
+        ...(configHome ? { LLXPRT_CONFIG_HOME: configHome } : {}),
         // Ensure providers are registered in test environment
         NODE_ENV: 'production',
         // Disable browser-based authentication for CI environments
