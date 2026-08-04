@@ -249,7 +249,7 @@ export class AnthropicProvider extends BaseProvider {
       // API-key-only `anthropic` identity is directed to /key or /keyfile.
       if (this.baseProviderConfig.oauthProvider === 'claudecode') {
         throw new Error(
-          'No authentication available for Anthropic API calls. Use /auth claudecode to re-authenticate or /auth claudecode logout to clear any expired session.',
+          'No authentication available for Anthropic API calls. Run /auth claudecode login to authenticate (or /auth claudecode logout to clear any expired session).',
         );
       }
       throw new Error(

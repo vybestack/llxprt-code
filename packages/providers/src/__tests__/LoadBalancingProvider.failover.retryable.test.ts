@@ -13,7 +13,7 @@
  * delegate providers (the unit under test is never mocked).
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -458,20 +458,24 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   });
 
   /**
-   * Coverage for the 401/403 override in isTransientBackendFailure. These
-   * statuses ARE classified retryable by core's isRetryableError, but the
-   * load balancer intentionally treats them as non-transient (auth/config
-   * problems, not transient load). An all-401 or all-403 aggregate must
-   * therefore be NON-retryable — this guards against accidentally removing
-   * the override, which the mixed tests can no longer catch because the 429
-   * siblings alone satisfy some().
+   * Coverage for the 401/403 override in isTransientBackendFailure. The load
+   * balancer intentionally treats 401/403 as non-transient (auth/config
+   * problems, not transient load) regardless of core's classification. An
+   * all-401 or all-403 aggregate must therefore be NON-retryable — this guards
+   * against accidentally removing the override, which the mixed tests can no
+   * longer catch because the 429 siblings alone satisfy some().
+   *
+   * The `coreRetryable` column documents core's individual-status classification:
+   * 401 remains retryable (genuine token-refresh case), but 403 is no longer
+   * retryable in isolation (issue #2917: forbidden ≠ throttled). The LB override
+   * must still classify the aggregate as non-retryable in both cases.
    */
   it.each([
-    ['401', 401, 'unauthorized'],
-    ['403', 403, 'forbidden'],
+    ['401', 401, 'unauthorized', true],
+    ['403', 403, 'forbidden', false],
   ])(
     'classifies an all-%s aggregate as NON-retryable (auth/config override)',
-    async (_label, status, message) => {
+    async (_label, status, message, coreRetryable) => {
       const { error, counter } = await captureFailoverError(
         function* (): AsyncGenerator<IContent> {
           throw statusError(message, status);
@@ -480,9 +484,12 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
         'glm-all-auth',
       );
 
-      // Sanity: core considers 401/403 retryable in isolation, but the load
-      // balancer override must mark them non-transient for aggregation.
-      expect(isRetryableError(statusError(message, status))).toBe(true);
+      // Sanity: core's retryability of the individual status.
+      expect(isRetryableError(statusError(message, status))).toBe(
+        coreRetryable,
+      );
+      // The load balancer override marks them non-transient for aggregation
+      // regardless of core's individual classification.
       expect(error.isRetryable).toBe(false);
       expect(isRetryableError(error)).toBe(false);
       expect(counter.value).toBe(3);

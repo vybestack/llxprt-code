@@ -472,14 +472,20 @@ export class JspProducer {
     if (scopedAgent !== this.agentId) {
       return;
     }
+    // Project the list before claiming a revision. buildTodoItems rejects a
+    // list it cannot publish faithfully, and consuming a revision number for a
+    // replacement that never reaches the wire would leave a hole in the
+    // sequence an observer uses to detect loss.
+    const items = buildTodoItems(todos, {
+      todoTextBytes: JSP_BOUNDS.todoTextBytes,
+      todoEntries: JSP_BOUNDS.todoEntries,
+      todoStateBytes: JSP_BOUNDS.todoStateBytes,
+    });
     this.todoRevision += 1;
     this.applyAndPublish({
       type: 'todos.replaced',
       revision: this.todoRevision,
-      items: buildTodoItems(todos, {
-        todoTextBytes: JSP_BOUNDS.todoTextBytes,
-        todoEntries: JSP_BOUNDS.todoEntries,
-      }),
+      items,
     });
   }
 

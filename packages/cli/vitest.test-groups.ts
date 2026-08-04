@@ -75,6 +75,9 @@ const baseExclude: readonly string[] = [
   // Sandbox container credential-isolation tests are Bun-native for the same
   // reason (issue #2946).
   '**/src/utils/sandbox-containers.test.ts',
+  // Claude Code login-bucket characterization is Bun-native for the same
+  // reason (issue #2891).
+  '**/src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
