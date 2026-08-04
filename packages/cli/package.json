@@ -20,13 +20,8 @@
     "postinstall": "node scripts/install-native-launchers.cjs",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace cli",
-    "test:integration": "vitest run -c vitest.integration.config.ts",
-    "test:ci:covered": "vitest run -c vitest.ci.covered.config.ts",
-    "test:ci:fast": "vitest run -c vitest.ci.fast.config.ts",
-    "test:ci": "vitest run",
-    "test:legacy": "OPENAI_RESPONSES_DISABLE=true vitest run -t \"legacy|gpt-3.5-turbo\"",
+    "test": "bun run-bun-tests.ts",
+    "test:ci": "bun run-bun-tests.ts",
     "typecheck": "tsc --noEmit"
   },
   "files": [

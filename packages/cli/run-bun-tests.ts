@@ -7,13 +7,16 @@
 /**
  * Bun test runner for the CLI workspace.
  *
- * Discovers every unit test file in the workspace and runs each one in its own
+ * Discovers every test file in the workspace and runs each one in its own
  * `bun test` process with bounded parallelism. A process per file is required
- * because Bun's `mock.module` registry is process-wide (unlike Vitest's
- * per-file module graph), so sharing a process would leak mocks between files.
+ * because Bun's `mock.module` registry is process-wide, so sharing a process
+ * would leak mocks between files.
  *
- * Integration tests (`*.integration.test.ts`) are excluded here; they are
- * selected by `test:integration`, exactly as under the Vitest configuration.
+ * Discovery is purely structural: there is no manifest, allow-list or exclude
+ * list. The Vitest setup this replaced carried both a large `baseExclude` glob
+ * list and a separate integration-only command, and files matching either were
+ * silently never run — they drifted out of sync with the product without any
+ * signal. Every test file in the workspace runs here.
  *
  * Exit code is 0 when every file passes and 1 when any file fails.
  */
@@ -33,7 +36,6 @@ const SKIPPED_DIRECTORIES = new Set([
 ]);
 const TEST_ROOTS = ['src', 'test', 'test-bun', 'test-utils'];
 const TEST_FILE_PATTERN = /\.(test|spec)\.(ts|tsx)$/;
-const INTEGRATION_FILE_PATTERN = /\.integration\.(test|spec)\.(ts|tsx)$/;
 
 function parseConcurrency(): number {
   const flagIndex = process.argv.indexOf('--concurrency');
@@ -46,10 +48,8 @@ function parseConcurrency(): number {
   return Math.max(1, Math.min(8, availableParallelism()));
 }
 
-export function isUnitTestFile(fileName: string): boolean {
-  return (
-    TEST_FILE_PATTERN.test(fileName) && !INTEGRATION_FILE_PATTERN.test(fileName)
-  );
+export function isTestFile(fileName: string): boolean {
+  return TEST_FILE_PATTERN.test(fileName);
 }
 
 function collectTestFiles(dir: string, results: string[]): void {
@@ -66,7 +66,7 @@ function collectTestFiles(dir: string, results: string[]): void {
     const fullPath = join(dir, entry);
     if (statSync(fullPath).isDirectory()) {
       collectTestFiles(fullPath, results);
-    } else if (isUnitTestFile(entry)) {
+    } else if (isTestFile(entry)) {
       results.push(fullPath);
     }
   }

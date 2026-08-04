@@ -17,28 +17,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   discoverTestFiles,
-  isUnitTestFile,
+  isTestFile,
   parseCaseCounts,
 } from '../run-bun-tests.js';
 
-describe('isUnitTestFile', () => {
+describe('isTestFile', () => {
   it('selects every test and spec extension the workspace uses', () => {
-    expect(isUnitTestFile('config.test.ts')).toBe(true);
-    expect(isUnitTestFile('App.test.tsx')).toBe(true);
-    expect(isUnitTestFile('useThing.spec.ts')).toBe(true);
-    expect(isUnitTestFile('Dialog.spec.tsx')).toBe(true);
+    expect(isTestFile('config.test.ts')).toBe(true);
+    expect(isTestFile('App.test.tsx')).toBe(true);
+    expect(isTestFile('useThing.spec.ts')).toBe(true);
+    expect(isTestFile('Dialog.spec.tsx')).toBe(true);
   });
 
-  it('rejects integration tests, which test:integration owns', () => {
-    expect(isUnitTestFile('security.integration.test.ts')).toBe(false);
-    expect(isUnitTestFile('wiring.integration.spec.tsx')).toBe(false);
+  it('selects integration tests too, so no file is left unrun', () => {
+    expect(isTestFile('security.integration.test.ts')).toBe(true);
+    expect(isTestFile('wiring.integration.spec.tsx')).toBe(true);
   });
 
   it('rejects files that are not tests', () => {
-    expect(isUnitTestFile('config.ts')).toBe(false);
-    expect(isUnitTestFile('types.d.ts')).toBe(false);
-    expect(isUnitTestFile('test-helpers.ts')).toBe(false);
-    expect(isUnitTestFile('README.md')).toBe(false);
+    expect(isTestFile('config.ts')).toBe(false);
+    expect(isTestFile('types.d.ts')).toBe(false);
+    expect(isTestFile('test-helpers.ts')).toBe(false);
+    expect(isTestFile('README.md')).toBe(false);
   });
 });
 
@@ -92,7 +92,6 @@ describe('discoverTestFiles', () => {
       write('test/c.test.tsx');
       write('test-bun/d.test.ts');
       write('test-utils/e.spec.ts');
-      write('src/f.integration.test.ts');
       write('src/g.ts');
       write('src/node_modules/h.test.ts');
       write('src/dist/i.test.ts');
