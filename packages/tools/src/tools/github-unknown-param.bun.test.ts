@@ -33,19 +33,17 @@ function stubClient(): GitHubBrokerClient {
 /**
  * True when `container` declares `name` as its OWN property.
  *
- * `in` alone is what this PR removes from the broker's unknown-key check,
- * because it walks the prototype chain — a schema that inherited
- * `properties` or a property that inherited `description` would read as
- * declared here. The `in` check is kept alongside it purely for type
- * narrowing, which `hasOwnProperty` cannot provide.
+ * `in` is what this PR removes from the broker's unknown-key check, because
+ * it walks the prototype chain — a schema that inherited `properties`, or a
+ * property that inherited `description`, would read as declared here. The
+ * type predicate supplies the narrowing that `in` would otherwise be needed
+ * for, so the schema reads stay free of type assertions.
  */
 function declaresOwn<K extends string>(
   container: object,
   name: K,
 ): container is Record<K, unknown> {
-  return (
-    Object.prototype.hasOwnProperty.call(container, name) && name in container
-  );
+  return Object.prototype.hasOwnProperty.call(container, name);
 }
 
 /**
