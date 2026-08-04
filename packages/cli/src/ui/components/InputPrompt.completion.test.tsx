@@ -458,16 +458,35 @@ describe('InputPrompt', () => {
       await act(async () => {
         stdin.write(`\x1b[200~${pastedText}\x1b[201~`);
       });
+      // Each of these pastes is five lines, which is at or above
+      // LARGE_PASTE_LINE_THRESHOLD, so the prompt collapses it to a placeholder
+      // instead of inserting the raw text.
       await waitFor(() => {
-        // Verify that the buffer's handleInput was called once with the full text
-        expect(props.buffer.handleInput).toHaveBeenCalledTimes(1);
-        expect(props.buffer.handleInput).toHaveBeenCalledWith(
-          expect.objectContaining({
-            name: 'paste',
-            sequence: pastedText,
-          }),
-        );
+        expect(props.buffer.setText).toHaveBeenCalledTimes(1);
       });
+      expect(props.buffer.setText).toHaveBeenCalledWith(
+        expect.stringContaining('lines pasted'),
+      );
+      expect(props.buffer.handleInput).not.toHaveBeenCalled();
+
+      unmount();
+    });
+
+    it('inserts a paste below the large-paste threshold as a single input with normalised newlines', async () => {
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+
+      await act(async () => {
+        stdin.write('\x1b[200~one\r\ntwo\x1b[201~');
+      });
+
+      await waitFor(() => {
+        expect(props.buffer.handleInput).toHaveBeenCalledTimes(1);
+      });
+      expect(props.buffer.handleInput).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'paste', sequence: 'one\ntwo' }),
+      );
 
       unmount();
     });
@@ -652,7 +671,12 @@ describe('InputPrompt', () => {
     it('should clear buffer on second ESC press', async () => {
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
+      // The first ESC is a no-op on an empty buffer, and the mocked setText
+      // does not update `text`, so the state has to be set directly. Clearing
+      // the spy afterwards keeps the later assertion about the clear itself.
+      props.buffer.text = 'text to clear';
       props.buffer.setText('text to clear');
+      (props.buffer.setText as unknown as Mock).mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
