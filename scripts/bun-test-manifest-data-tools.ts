@@ -19,6 +19,7 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/tools/exa-web-search.test.ts',
     'src/tools/direct-web-fetch.test.ts',
     'src/tools/github.test.ts',
+    'src/tools/github-unknown-param.bun.test.ts',
     'src/tools/check-async-tasks.test.ts',
     'src/tools/list-subagents.test.ts',
     'src/tools/codesearch.test.ts',

@@ -174,6 +174,9 @@ Examples:
   { "op": "pr.checks", "number": 2317, "watch": true }
 
 Notes:
+- Parameters are per-operation: an operation rejects any parameter it does
+  not accept and names the accepted ones in the error. pr.resolve-thread
+  identifies its target by threadId alone (no number).
 - pr.reviews with actionable:true omits resolved and outdated threads, leaving
   only review comments that still need action. The returned thread id is what
   pr.resolve-thread takes, so the two compose.
@@ -200,7 +203,9 @@ const PARAMETER_SCHEMA = {
     number: {
       type: 'number',
       description:
-        'Issue or pull request number, for operations that take one.',
+        'Issue or pull request number, but only for operations whose ' +
+        'parameter list includes it. An operation that does not accept ' +
+        'number rejects it and names the parameters it does accept.',
     },
   },
   required: ['op'],
