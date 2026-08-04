@@ -71,9 +71,10 @@ describe('Test Utilities', () => {
     });
 
     it('should not throw if directory does not exist', async () => {
-      await expect(
-        cleanupTempDirectory('/non/existent/path'),
-      ).resolves.not.toThrow();
+      // A direct await asserts the same thing as resolves.not.toThrow() and
+      // works on both test runners.
+      await cleanupTempDirectory('/non/existent/path');
+      expect.assertions(0);
     });
   });
 
