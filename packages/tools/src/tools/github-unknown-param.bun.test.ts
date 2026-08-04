@@ -31,9 +31,27 @@ function stubClient(): GitHubBrokerClient {
 }
 
 /**
- * Reads a single declared property's `type` and `description` via
- * `in`-operator narrowing — no type assertions, no `any`. Returns null when
- * the property is absent or the schema shape is unexpected.
+ * True when `container` declares `name` as its OWN property.
+ *
+ * `in` alone is what this PR removes from the broker's unknown-key check,
+ * because it walks the prototype chain — a schema that inherited
+ * `properties` or a property that inherited `description` would read as
+ * declared here. The `in` check is kept alongside it purely for type
+ * narrowing, which `hasOwnProperty` cannot provide.
+ */
+function declaresOwn<K extends string>(
+  container: object,
+  name: K,
+): container is Record<K, unknown> {
+  return (
+    Object.prototype.hasOwnProperty.call(container, name) && name in container
+  );
+}
+
+/**
+ * Reads a single declared property's `type` and `description` — own
+ * properties only, no type assertions, no `any`. Returns null when the
+ * property is absent or the schema shape is unexpected.
  */
 function propertyTypeAndDescription(
   tool: GithubTool,
@@ -41,15 +59,15 @@ function propertyTypeAndDescription(
 ): { type: unknown; description: string } | null {
   const schema: unknown = tool.parameterSchema;
   if (typeof schema !== 'object' || schema === null) return null;
-  if (!('properties' in schema)) return null;
+  if (!declaresOwn(schema, 'properties')) return null;
   const properties = schema.properties;
   if (typeof properties !== 'object' || properties === null) return null;
-  if (!(name in properties)) return null;
+  if (!declaresOwn(properties, name)) return null;
   const prop = properties[name];
   if (typeof prop !== 'object' || prop === null) return null;
-  const type = 'type' in prop ? prop.type : undefined;
+  const type = declaresOwn(prop, 'type') ? prop.type : undefined;
   const description =
-    'description' in prop && typeof prop.description === 'string'
+    declaresOwn(prop, 'description') && typeof prop.description === 'string'
       ? prop.description
       : '';
   return { type, description };
