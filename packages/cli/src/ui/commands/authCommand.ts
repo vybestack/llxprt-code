@@ -17,6 +17,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
@@ -544,6 +545,33 @@ export class AuthCommandExecutor {
           };
         }
       }
+
+      // Re-sync in-process auth state after a successful login. This closes a
+      // real structural gap: the NAMED-bucket branch above invalidates via
+      // `activateNamedLoginBucket`, but the DEFAULT-bucket path (no `bucket`
+      // arg) previously invalidated nothing at all. (Note that `logoutWithBucket`
+      // clears the provider cache but does NOT call
+      // `invalidateProviderRuntimeCache`, so this is not a mirror of logout.)
+      //
+      // Note (issue #2891): this is defensive hardening, NOT the mechanism
+      // behind the reported "login succeeds but the next prompt still fails".
+      // There is no negative caching to flush — a failed lookup is never cached
+      // (auth-precedence-resolver `fetchAndCacheOAuthToken` returns null without
+      // storing, and `storeRuntimeScopedToken` stores only real tokens), so on a
+      // first-ever login these calls are no-ops. They matter when a PREVIOUS
+      // real token is cached for this provider and is being replaced.
+      //
+      // The `profileId` argument is deliberately omitted so invalidation spans
+      // every profile and runtime scope for this provider. A successful login
+      // REPLACES the provider's persisted credential, so any profile still
+      // holding the superseded token in memory would otherwise keep serving it.
+      // Invalidation only drops in-memory cache entries (see
+      // `invalidateEntry` in packages/auth/src/precedence.ts) — it does not
+      // revoke anything on disk, so the worst case for an unrelated profile is
+      // one extra re-read from the token store. This matches the existing
+      // unscoped call in `token-force-refresh-helper.ts`.
+      this.clearProviderCache(provider);
+      invalidateProviderRuntimeCache(provider);
 
       const bucketInfo = bucket ? ` (bucket: ${bucket})` : '';
       return {

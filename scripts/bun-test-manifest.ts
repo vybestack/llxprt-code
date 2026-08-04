@@ -126,6 +126,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
+      'src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
       // Issue #2951: Windows Ctrl+Enter steering. Each file pins
       // process.platform at the very top before the key-matcher module graph
@@ -282,6 +283,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/__tests__/forceRefreshToken.bucketResolution.test.ts',
       'src/auth/__tests__/forceRefreshToken.cacheInvalidation.test.ts',
       'src/auth/__tests__/forceRefreshToken.test.ts',
+      'src/auth/__tests__/issue2891-claudecode-stale-oauth.test.ts',
+      'src/auth/__tests__/issue2891-oauth-manager-identity.test.ts',
       'src/auth/__tests__/multi-bucket-auth.spec.ts',
       'src/auth/__tests__/oauth-manager-interface-contract.test.ts',
       'src/auth/__tests__/oauth-manager.getToken-bucket-peek.spec.ts',
@@ -417,6 +420,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/chutes/usageInfo.test.ts',
       'src/composition/credentialPrecedence.test.ts',
       'src/composition/oauth-provider-registration.test.ts',
+      'src/composition/__tests__/issue2891-oauth-provider-registration.test.ts',
       'src/composition/provider-gemini-switching.test.ts',
       'src/composition/provider-switching.integration.test.ts',
       'src/composition/providerAliases.builtin-qwen.test.ts',
@@ -582,6 +586,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/reasoning/reasoningUtils.test.ts',
       'src/retryAuthTokenResolver.test.ts',
       'src/retryConfigHandlers.test.ts',
+      'src/runtime/__tests__/issue2891-lazy-oauth-gating.test.ts',
       'src/runtime/__tests__/profileApplication.authclear.test.ts',
       'src/runtime/__tests__/profileApplication.authtiming.test.ts',
       'src/runtime/__tests__/profileApplication.basics.test.ts',
