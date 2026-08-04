@@ -14,7 +14,7 @@ Follow these steps to create a Pull Request:
 1.  **Locate Template**: Search for a pull request template in the repository.
     - Check `.github/pull_request_template.md`
     - Check `.github/PULL_REQUEST_TEMPLATE.md`
-    - If multiple templates exist (e.g., in `.github/PULL_REQUEST_TEMPLATE/`), ask the user which one to use or select the most appropriate one based on the context (e.g., `bug_fix.md` vs `feature.md`).
+    - If multiple templates exist (e.g., in `.github/PULL_REQUEST_TEMPLATE/`), select the most appropriate one based on the context (e.g., `bug_fix.md` vs `feature.md`).
 
 2.  **Read Template**: Read the content of the identified template file.
 
