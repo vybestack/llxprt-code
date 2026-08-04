@@ -125,19 +125,33 @@ async function runCliUntilFirstTurn(
   env: NodeJS.ProcessEnv,
   cacheHome: string,
 ): Promise<void> {
-  const child = spawn('bun', args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // stdout is discarded rather than piped: the run is observed through its
+  // artifacts, and an unread pipe would eventually block the child.
+  const child = spawn('bun', args, {
+    env,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
   const stderr: Buffer[] = [];
-  child.stdout.on('data', () => {});
   child.stderr.on('data', (data: Buffer) => stderr.push(data));
   let exited: number | null = null;
+  let spawnError: Error | undefined;
   child.on('close', (code) => {
     exited = code ?? -1;
+  });
+  // Without this the loop below would wait out the full timeout when the
+  // child cannot start at all.
+  child.on('error', (error) => {
+    spawnError = error instanceof Error ? error : new Error(String(error));
+    exited = -1;
   });
 
   const deadline = Date.now() + CHILD_TIMEOUT_MS;
   try {
     for (;;) {
       if (await firstTurnArtifactsReady(cacheHome)) return;
+      if (spawnError !== undefined) {
+        throw new Error(`could not start the CLI: ${spawnError.message}`);
+      }
       if (exited !== null) {
         throw new Error(
           `CLI exited ${exited} before the first turn was recorded: ${Buffer.concat(
@@ -461,19 +475,29 @@ async function collectWithRetries(
   );
 }
 
+/**
+ * Keys of observations already collected, so a run can resume.
+ *
+ * A line that does not parse is skipped rather than fatal: a crash can leave a
+ * partially written final line, and refusing to resume because of it would
+ * force re-spending provider quota on rows that were already collected.
+ */
 async function readExisting(resultsPath: string): Promise<Set<string>> {
   if (!fs.existsSync(resultsPath)) return new Set();
   const raw = await fsp.readFile(resultsPath, 'utf-8');
   if (raw.trim() === '') return new Set();
-  return new Set(
-    raw
-      .trim()
-      .split('\n')
-      .map((line) => {
-        const row = readRecord(JSON.parse(line), 'existing row');
-        return `${String(row['target'])}:${String(row['corpusId'])}`;
-      }),
-  );
+  const keys = new Set<string>();
+  for (const [index, line] of raw.trim().split('\n').entries()) {
+    try {
+      const row = readRecord(JSON.parse(line), 'existing row');
+      keys.add(`${String(row['target'])}:${String(row['corpusId'])}`);
+    } catch {
+      process.stdout.write(
+        `skipping unreadable results line ${index + 1}; it will be recollected\n`,
+      );
+    }
+  }
+  return keys;
 }
 
 export interface CollectOptions {

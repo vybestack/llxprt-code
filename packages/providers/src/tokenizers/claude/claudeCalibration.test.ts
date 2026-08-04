@@ -119,20 +119,59 @@ describe('Claude calibration application', () => {
     ).toBeGreaterThan(baseTokens);
   });
 
-  it('grows monotonically with content', () => {
-    const small = 'alpha';
-    const large = small.repeat(50);
-    const smallCount = applyClaudeCalibration(
-      2,
-      extractClaudeContentFeatures(small),
+  /**
+   * Holds the base-counter reading fixed inside the validated range and varies
+   * only the content features, so the growth cannot come from the base term or
+   * from the base-counter floor.
+   */
+  it('grows with content features at a fixed base-counter reading', () => {
+    const baseTokens = 16000;
+    const smaller = applyClaudeCalibration(
+      baseTokens,
+      extractClaudeContentFeatures('alpha '.repeat(8000)),
       CLAUDE_OPUS_5_CALIBRATION,
     );
-    const largeCount = applyClaudeCalibration(
-      100,
-      extractClaudeContentFeatures(large),
+    const larger = applyClaudeCalibration(
+      baseTokens,
+      extractClaudeContentFeatures('alpha '.repeat(9000)),
       CLAUDE_OPUS_5_CALIBRATION,
     );
-    expect(largeCount).toBeGreaterThan(smallCount);
+    expect(smaller).toBeGreaterThan(baseTokens);
+    expect(larger).toBeGreaterThan(smaller);
+  });
+
+  it('charges non-ASCII content more than ASCII content of the same length', () => {
+    const baseTokens = 16000;
+    const length = 40000;
+    const ascii = applyClaudeCalibration(
+      baseTokens,
+      extractClaudeContentFeatures('a'.repeat(length)),
+      CLAUDE_OPUS_5_CALIBRATION,
+    );
+    const cjk = applyClaudeCalibration(
+      baseTokens,
+      extractClaudeContentFeatures('日'.repeat(length)),
+      CLAUDE_OPUS_5_CALIBRATION,
+    );
+    expect(cjk).toBeGreaterThan(ascii);
+  });
+
+  it('grows monotonically with request size', () => {
+    const small = 'alpha '.repeat(4000);
+    const large = 'alpha '.repeat(8000);
+    expect(
+      applyClaudeCalibration(
+        16000,
+        extractClaudeContentFeatures(large),
+        CLAUDE_OPUS_5_CALIBRATION,
+      ),
+    ).toBeGreaterThan(
+      applyClaudeCalibration(
+        8000,
+        extractClaudeContentFeatures(small),
+        CLAUDE_OPUS_5_CALIBRATION,
+      ),
+    );
   });
 });
 
