@@ -534,8 +534,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
     });
 
     it('uses the selected range for OCR and changed-test preview scope', () => {
-      const effectiveFromSha =
-        "${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}";
+      const effectiveFromSha = '${{ env.OCR_EFFECTIVE_FROM_SHA }}';
       const reviewEnv = getEnv(reviewStep);
       expect(reviewEnv?.FROM_SHA).toBe(effectiveFromSha);
       expect(reviewRun).toContain('--from "$FROM_SHA"');
@@ -546,9 +545,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
 
     it('skips the expensive OCR command for observable same-head no-op mode', () => {
       const reviewEnv = getEnv(reviewStep);
-      expect(reviewEnv?.RANGE_MODE).toBe(
-        "${{ github.event_name == 'workflow_dispatch' && 'full' || steps.resolve-range.outputs.RANGE_MODE }}",
-      );
+      expect(reviewEnv?.RANGE_MODE).toBe('${{ env.OCR_EFFECTIVE_RANGE_MODE }}');
       expect(reviewRun).toContain('if [ "$RANGE_MODE" = "noop" ]; then');
       expect(
         reviewRun.indexOf('if [ "$RANGE_MODE" = "noop" ]; then'),
@@ -612,7 +609,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       );
       const postEnv = getEnv(postStep);
       expect(postEnv?.API_BASE_SHA).toBe(
-        '${{ steps.pr-context.outputs.trusted_base_sha }}',
+        '${{ env.OCR_EFFECTIVE_TRUSTED_BASE_SHA }}',
       );
       expect(postEnv?.OCR_RULES_HASH).toBe('${{ vars.OCR_RULES_HASH }}');
       expect(postEnv?.OCR_POLICY_HASH).toBe('${{ vars.OCR_POLICY_HASH }}');

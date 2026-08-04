@@ -1361,6 +1361,69 @@ jobs:
             echo "SAME_HEAD=${SAME_HEAD}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve effective review context
+        id: review-context
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
+          RANGE_FROM_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          TRUSTED_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            // --- BEGIN OCR REVIEW CONTEXT SNIPPET ---
+            function resolveEffectiveReviewContext(input) {
+              const eventName =
+                input && typeof input.eventName === 'string' ? input.eventName : '';
+              const mergeBaseSha =
+                input && typeof input.mergeBaseSha === 'string' ? input.mergeBaseSha : '';
+              const rangeFromSha =
+                input && typeof input.rangeFromSha === 'string' ? input.rangeFromSha : '';
+              const rangeMode =
+                input && typeof input.rangeMode === 'string' ? input.rangeMode : '';
+              const prNumber =
+                input && typeof input.prNumber === 'string' ? input.prNumber : '';
+              const trustedBaseSha =
+                input && typeof input.trustedBaseSha === 'string'
+                  ? input.trustedBaseSha
+                  : '';
+              if (eventName === 'workflow_dispatch') {
+                return {
+                  fromSha: mergeBaseSha,
+                  rangeMode: 'full',
+                  prNumber,
+                  trustedBaseSha,
+                };
+              }
+              return {
+                fromSha: rangeFromSha,
+                rangeMode,
+                prNumber,
+                trustedBaseSha,
+              };
+            }
+            // --- END OCR REVIEW CONTEXT SNIPPET ---
+
+            const result = resolveEffectiveReviewContext({
+              eventName: process.env.EVENT_NAME || '',
+              mergeBaseSha: process.env.MERGE_BASE_SHA || '',
+              rangeFromSha: process.env.RANGE_FROM_SHA || '',
+              rangeMode: process.env.RANGE_MODE || '',
+              prNumber: process.env.PR_NUMBER || '',
+              trustedBaseSha: process.env.TRUSTED_BASE_SHA || '',
+            });
+            const lines = [
+              `OCR_EFFECTIVE_FROM_SHA=${result.fromSha}`,
+              `OCR_EFFECTIVE_RANGE_MODE=${result.rangeMode}`,
+              `OCR_EFFECTIVE_PR_NUMBER=${result.prNumber}`,
+              `OCR_EFFECTIVE_TRUSTED_BASE_SHA=${result.trustedBaseSha}`,
+            ];
+            fs.appendFileSync(process.env.GITHUB_ENV, lines.join('\n') + '\n');
       - name: Initialize OCR artifact files
         shell: bash
         run: |
@@ -1671,9 +1734,9 @@ jobs:
       - name: Verify review scope includes changed tests
         shell: bash
         env:
-          FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
+          FROM_SHA: ${{ env.OCR_EFFECTIVE_FROM_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
@@ -2169,8 +2232,8 @@ jobs:
         # Parse failures are handled distinctly in the posting step
         # (OCR failed vs. no findings).
         env:
-          FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
-          RANGE_MODE: ${{ github.event_name == 'workflow_dispatch' && 'full' || steps.resolve-range.outputs.RANGE_MODE }}
+          FROM_SHA: ${{ env.OCR_EFFECTIVE_FROM_SHA }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ github.event_name == 'workflow_dispatch' && steps.ocr-transport-monitor.outputs.proxy_url || vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -2178,7 +2241,7 @@ jobs:
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
           EVENT_NAME: ${{ github.event_name }}
           # Feature 1 (issue #2670): business context for the LLM.
-          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           PR_TITLE: ${{ steps.pr-context.outputs.pr_title }}
           PR_BODY: ${{ steps.pr-context.outputs.pr_body }}
           OCR_BACKGROUND: ${{ vars.OCR_BACKGROUND }}
@@ -2535,10 +2598,10 @@ jobs:
           BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          API_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
+          API_BASE_SHA: ${{ env.OCR_EFFECTIVE_TRUSTED_BASE_SHA }}
           API_HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
-          FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
-          RANGE_MODE: ${{ github.event_name == 'workflow_dispatch' && 'full' || steps.resolve-range.outputs.RANGE_MODE }}
+          FROM_SHA: ${{ env.OCR_EFFECTIVE_FROM_SHA }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
           FALLBACK_REASON: ${{ steps.resolve-range.outputs.FALLBACK_REASON }}
           CHECKPOINT_BEFORE: ${{ steps.read-checkpoint.outputs.CHECKPOINT_ENCODED }}
           EVENT_NAME: ${{ github.event_name }}
@@ -2551,7 +2614,7 @@ jobs:
           OCR_POLICY_HASH: ${{ vars.OCR_POLICY_HASH }}
           OCR_WORKFLOW_SCHEMA_HASH: ${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}
           OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
-          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           # Whether this run is an automatic (pull_request_target) trigger.
           # Automatic runs increment the auto-review counter; manual runs do not.
           IS_AUTOMATIC: ${{ needs.auto-review-gate.outputs.is-manual == 'false' }}
@@ -4778,7 +4841,7 @@ jobs:
             if (outOfDiffRouted.length > 0) {
               body.push('', '### Findings outside the PR diff', '');
               for (const f of outOfDiffRouted) {
-                const where = f && f.path ? ``${f.path}`: ` : '';
+                const where = f && f.path ? `\`${f.path}\`: ` : '';
                 const label = categorySeverityLabel(f);
                 const rawText = f.content || f.comment || f.message || f.body;
                 const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
@@ -5272,7 +5335,7 @@ jobs:
           TRUSTED_BASE_SHA: ${{ env.TRUSTED_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
           EXPECTED_OCR_VERSION: ${{ env.OCR_VERSION }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
@@ -5284,16 +5347,37 @@ jobs:
             const crypto = require('crypto');
             const fs = require('fs');
 
+            // --- BEGIN OCR CANARY METRICS SNIPPET ---
             function buildCanaryMetrics(input) {
               const errors = [];
-              const meta = input && input.metadata && typeof input.metadata === 'object' &&
-                !Array.isArray(input.metadata) ? input.metadata : {};
+              const meta =
+                input &&
+                input.metadata &&
+                typeof input.metadata === 'object' &&
+                !Array.isArray(input.metadata)
+                  ? input.metadata
+                  : {};
               const requiredStrings = [
-                'runUrl', 'runId', 'prNumber', 'trustedBaseSha', 'mergeBaseSha',
-                'headSha', 'expectedOcrVersion', 'actualOcrVersion', 'workflowSha',
-                'endpointResolutionSource', 'normalizedModel', 'protocol', 'language',
-                'ruleJsonSha256', 'providerUrlSha256', 'configuredOcrSettingsSha256',
-                'ocrConfigFileSha256', 'monitorSha256', 'audience', 'format',
+                'runUrl',
+                'runId',
+                'prNumber',
+                'trustedBaseSha',
+                'mergeBaseSha',
+                'headSha',
+                'expectedOcrVersion',
+                'actualOcrVersion',
+                'workflowSha',
+                'endpointResolutionSource',
+                'normalizedModel',
+                'protocol',
+                'language',
+                'ruleJsonSha256',
+                'providerUrlSha256',
+                'configuredOcrSettingsSha256',
+                'ocrConfigFileSha256',
+                'monitorSha256',
+                'audience',
+                'format',
                 'canonicalConfigFingerprint',
               ];
               for (const key of requiredStrings) {
@@ -5301,17 +5385,28 @@ jobs:
                   errors.push(`metadata ${key} is required`);
                 }
               }
-              for (const key of ['trustedBaseSha', 'mergeBaseSha', 'headSha', 'workflowSha']) {
+              for (const key of [
+                'trustedBaseSha',
+                'mergeBaseSha',
+                'headSha',
+                'workflowSha',
+              ]) {
                 if (typeof meta[key] === 'string' && !/^[a-fA-F0-9]{40}$/.test(meta[key])) {
                   errors.push(`metadata ${key} must be an exact 40-character Git SHA`);
                 }
               }
               if (meta.trustedBaseSha !== meta.mergeBaseSha) {
-                errors.push('trusted checkout base SHA must equal merge-base SHA for comparable canaries');
+                errors.push(
+                  'trusted checkout base SHA must equal merge-base SHA for comparable canaries',
+                );
               }
               for (const key of [
-                'ruleJsonSha256', 'providerUrlSha256', 'configuredOcrSettingsSha256',
-                'ocrConfigFileSha256', 'monitorSha256', 'canonicalConfigFingerprint',
+                'ruleJsonSha256',
+                'providerUrlSha256',
+                'configuredOcrSettingsSha256',
+                'ocrConfigFileSha256',
+                'monitorSha256',
+                'canonicalConfigFingerprint',
               ]) {
                 if (typeof meta[key] === 'string' && !/^[a-f0-9]{64}$/.test(meta[key])) {
                   errors.push(`metadata ${key} must be a SHA-256 value`);
@@ -5347,10 +5442,11 @@ jobs:
                 errors.push('disabled background context hash must be null');
               }
 
-              const exitCodeText = input && typeof input.exitCodeText === 'string'
-                ? input.exitCodeText : '';
+              const exitCodeText =
+                input && typeof input.exitCodeText === 'string' ? input.exitCodeText : '';
               const parsedExitCode = /^-?[0-9]+$/.test(exitCodeText.trim())
-                ? Number(exitCodeText.trim()) : null;
+                ? Number(exitCodeText.trim())
+                : null;
               const exactZeroExit = /^0\n?$/.test(exitCodeText);
               if (!exactZeroExit) {
                 errors.push('OCR exit code must be exactly zero');
@@ -5358,15 +5454,27 @@ jobs:
 
               const timingInput = input && input.commandTiming;
               let commandWallSeconds = null;
-              if (timingInput && typeof timingInput === 'object' && !Array.isArray(timingInput)) {
+              if (
+                timingInput &&
+                typeof timingInput === 'object' &&
+                !Array.isArray(timingInput)
+              ) {
                 commandWallSeconds = timingInput.command_wall_seconds;
-                if (timingInput.schema_version !== 1 ||
-                    typeof commandWallSeconds !== 'number' ||
-                    !Number.isFinite(commandWallSeconds) || commandWallSeconds < 0) {
+                if (
+                  timingInput.schema_version !== 1 ||
+                  typeof commandWallSeconds !== 'number' ||
+                  !Number.isFinite(commandWallSeconds) ||
+                  commandWallSeconds < 0
+                ) {
                   errors.push('OCR command wall timing is invalid');
                 }
-                if (!Number.isInteger(timingInput.exit_code) || timingInput.exit_code !== parsedExitCode) {
-                  errors.push('OCR command timing exit code disagrees with review exit code');
+                if (
+                  !Number.isInteger(timingInput.exit_code) ||
+                  timingInput.exit_code !== parsedExitCode
+                ) {
+                  errors.push(
+                    'OCR command timing exit code disagrees with review exit code',
+                  );
                 }
               } else {
                 errors.push('OCR command timing is missing');
@@ -5374,13 +5482,25 @@ jobs:
 
               const transportInput = input && input.transportTelemetry;
               let transport = null;
-              if (transportInput && typeof transportInput === 'object' && !Array.isArray(transportInput)) {
+              if (
+                transportInput &&
+                typeof transportInput === 'object' &&
+                !Array.isArray(transportInput)
+              ) {
                 const distribution = {};
-                if (transportInput.responses_by_status &&
-                    typeof transportInput.responses_by_status === 'object' &&
-                    !Array.isArray(transportInput.responses_by_status)) {
-                  for (const [status, count] of Object.entries(transportInput.responses_by_status)) {
-                    if (/^[1-5][0-9]{2}$/.test(status) && Number.isInteger(count) && count >= 0) {
+                if (
+                  transportInput.responses_by_status &&
+                  typeof transportInput.responses_by_status === 'object' &&
+                  !Array.isArray(transportInput.responses_by_status)
+                ) {
+                  for (const [status, count] of Object.entries(
+                    transportInput.responses_by_status,
+                  )) {
+                    if (
+                      /^[1-5][0-9]{2}$/.test(status) &&
+                      Number.isInteger(count) &&
+                      count >= 0
+                    ) {
                       distribution[status] = count;
                     } else {
                       errors.push('transport status distribution is invalid');
@@ -5405,27 +5525,36 @@ jobs:
                   retry_count_header_malformed: transportInput.retry_count_header_malformed,
                 };
                 const counters = [
-                  transport.total_requests, transport.upstream_errors,
-                  transport.http_429_responses, transport.retry_events,
+                  transport.total_requests,
+                  transport.upstream_errors,
+                  transport.http_429_responses,
+                  transport.retry_events,
                   transport.retry_count_header_missing,
                   transport.retry_count_header_malformed,
                 ];
                 if (counters.some((value) => !Number.isInteger(value) || value < 0)) {
                   errors.push('transport counters are invalid');
                 }
-                if (transport.schema_version !== 1 ||
-                    transport.bind_address !== '127.0.0.1' ||
-                    (transport.target_protocol !== 'http:' && transport.target_protocol !== 'https:') ||
-                    transport.shutdown_signal !== 'SIGTERM' ||
-                    transport.shutdown_complete !== true ||
-                    transport.monitor_sha256 !== meta.monitorSha256) {
-                  errors.push('transport monitor startup, shutdown, or provenance is invalid');
+                if (
+                  transport.schema_version !== 1 ||
+                  transport.bind_address !== '127.0.0.1' ||
+                  (transport.target_protocol !== 'http:' &&
+                    transport.target_protocol !== 'https:') ||
+                  transport.shutdown_signal !== 'SIGTERM' ||
+                  transport.shutdown_complete !== true ||
+                  transport.monitor_sha256 !== meta.monitorSha256
+                ) {
+                  errors.push(
+                    'transport monitor startup, shutdown, or provenance is invalid',
+                  );
                 }
                 if (transport.total_requests === 0) {
                   errors.push('transport must observe positive monitored traffic');
                 }
-                if (transport.retry_count_header_missing !== 0 ||
-                    transport.retry_count_header_malformed !== 0) {
+                if (
+                  transport.retry_count_header_missing !== 0 ||
+                  transport.retry_count_header_malformed !== 0
+                ) {
                   errors.push('transport retry-count headers are missing or malformed');
                 }
                 if ((distribution['429'] || 0) !== transport.http_429_responses) {
@@ -5435,34 +5564,44 @@ jobs:
                   (total, count) => total + count,
                   0,
                 );
-                if (Number.isInteger(transport.total_requests) &&
-                    Number.isInteger(transport.upstream_errors) &&
-                    responseCount + transport.upstream_errors !== transport.total_requests) {
-                  errors.push('transport request count disagrees with response and error aggregates');
+                if (
+                  Number.isInteger(transport.total_requests) &&
+                  Number.isInteger(transport.upstream_errors) &&
+                  responseCount + transport.upstream_errors !== transport.total_requests
+                ) {
+                  errors.push(
+                    'transport request count disagrees with response and error aggregates',
+                  );
                 }
               } else {
                 errors.push('transport telemetry is missing');
               }
 
-              const trimmedResult = input && typeof input.resultText === 'string'
-                ? input.resultText.trim() : '';
+              const trimmedResult =
+                input && typeof input.resultText === 'string'
+                  ? input.resultText.trim()
+                  : '';
               let parsed = null;
               if (trimmedResult.length === 0) {
                 errors.push('OCR result is empty');
               } else {
                 try {
                   parsed = JSON.parse(trimmedResult);
-                } catch (_) {
+                } catch {
                   errors.push('OCR result is not valid JSON');
                 }
               }
               if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                if (trimmedResult.length > 0 && errors.every((error) => error !== 'OCR result is not valid JSON')) {
+                if (
+                  trimmedResult.length > 0 &&
+                  errors.every((error) => error !== 'OCR result is not valid JSON')
+                ) {
                   errors.push('OCR result must be an object');
                 }
                 parsed = null;
               }
-              const status = parsed && typeof parsed.status === 'string' ? parsed.status : null;
+              const status =
+                parsed && typeof parsed.status === 'string' ? parsed.status : null;
               if (status !== 'success') {
                 errors.push('OCR result status must be success');
               }
@@ -5494,28 +5633,46 @@ jobs:
                   errors.push('OCR result comments array is missing');
                 }
                 if (summary && typeof summary === 'object' && Array.isArray(comments)) {
-                  if (!Number.isInteger(summary.comments) || summary.comments !== comments.length) {
+                  if (
+                    !Number.isInteger(summary.comments) ||
+                    summary.comments !== comments.length
+                  ) {
                     errors.push('OCR summary comment count does not match comments length');
                   }
                   const numericValues = [
-                    summary.files_reviewed, summary.total_tokens,
-                    summary.input_tokens, summary.output_tokens,
-                    summary.cache_read_tokens ?? 0, summary.cache_write_tokens ?? 0,
+                    summary.files_reviewed,
+                    summary.total_tokens,
+                    summary.input_tokens,
+                    summary.output_tokens,
+                    summary.cache_read_tokens ?? 0,
+                    summary.cache_write_tokens ?? 0,
                   ];
-                  if (numericValues.some((value) => !Number.isInteger(value) || value < 0)) {
+                  if (
+                    numericValues.some((value) => !Number.isInteger(value) || value < 0)
+                  ) {
                     errors.push('OCR summary counters are invalid');
                   }
-                  const elapsedMatch = typeof summary.elapsed === 'string'
-                    ? /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i.exec(summary.elapsed)
-                    : null;
-                  if (!elapsedMatch || !elapsedMatch.slice(1).some((part) => part !== undefined)) {
+                  const elapsedMatch =
+                    typeof summary.elapsed === 'string'
+                      ? /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i.exec(
+                          summary.elapsed,
+                        )
+                      : null;
+                  if (
+                    !elapsedMatch ||
+                    !elapsedMatch.slice(1).some((part) => part !== undefined)
+                  ) {
                     errors.push('OCR summary elapsed is invalid');
                   } else {
                     internalElapsed = summary.elapsed;
-                    internalElapsedSeconds = Number(elapsedMatch[1] || 0) * 3600 +
-                      Number(elapsedMatch[2] || 0) * 60 + Number(elapsedMatch[3] || 0);
+                    internalElapsedSeconds =
+                      Number(elapsedMatch[1] || 0) * 3600 +
+                      Number(elapsedMatch[2] || 0) * 60 +
+                      Number(elapsedMatch[3] || 0);
                   }
-                  if (numericValues.every((value) => Number.isInteger(value) && value >= 0)) {
+                  if (
+                    numericValues.every((value) => Number.isInteger(value) && value >= 0)
+                  ) {
                     summaryOutput = {
                       files_reviewed: summary.files_reviewed,
                       tokens: {
@@ -5527,12 +5684,18 @@ jobs:
                       },
                     };
                   }
-                  if (comments.every((comment) => comment && typeof comment === 'object' && !Array.isArray(comment))) {
+                  if (
+                    comments.every(
+                      (comment) =>
+                        comment && typeof comment === 'object' && !Array.isArray(comment),
+                    )
+                  ) {
                     const tally = (field) => {
                       const counts = new Map();
                       for (const comment of comments) {
                         const raw = comment[field];
-                        const bucket = typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
+                        const bucket =
+                          typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
                         counts.set(bucket, (counts.get(bucket) || 0) + 1);
                       }
                       return Object.fromEntries(counts);
@@ -5581,10 +5744,16 @@ jobs:
                   },
                   configured_ocr_settings_sha256: meta.configuredOcrSettingsSha256 || null,
                   ocr_config_file_sha256: meta.ocrConfigFileSha256 || null,
-                  use_anthropic: typeof meta.useAnthropic === 'boolean' ? meta.useAnthropic : null,
-                  review_timeout_minutes: Number.isInteger(reviewTimeoutMinutes) ? reviewTimeoutMinutes : null,
+                  use_anthropic:
+                    typeof meta.useAnthropic === 'boolean' ? meta.useAnthropic : null,
+                  review_timeout_minutes: Number.isInteger(reviewTimeoutMinutes)
+                    ? reviewTimeoutMinutes
+                    : null,
                   rule_json_sha256: meta.ruleJsonSha256 || null,
-                  background_enabled: typeof meta.backgroundEnabled === 'boolean' ? meta.backgroundEnabled : null,
+                  background_enabled:
+                    typeof meta.backgroundEnabled === 'boolean'
+                      ? meta.backgroundEnabled
+                      : null,
                   background_context_sha256: meta.backgroundContextSha256 ?? null,
                   monitor_sha256: meta.monitorSha256 || null,
                   audience: meta.audience || null,
@@ -5596,6 +5765,24 @@ jobs:
                 transport,
               };
             }
+            function parseOcrVersionOutput(output) {
+              const lines = output.split('\n');
+              const firstLine = lines[0].endsWith('\r') ? lines[0].slice(0, -1) : lines[0];
+              const match =
+                /^open-code-review v([0-9]+[.][0-9]+[.][0-9]+)(?: [(][a-fA-F0-9]+[)] [A-Za-z0-9._-]+[/][A-Za-z0-9._-]+)?$/.exec(
+                  firstLine,
+                );
+              const hasAdditionalVersionHeader = lines
+                .slice(1)
+                .some((line) => line.startsWith('open-code-review v'));
+              if (!match || hasAdditionalVersionHeader) {
+                throw new Error(
+                  'OCR version output must begin with exactly one valid open-code-review vX.Y.Z first line',
+                );
+              }
+              return match[1];
+            }
+            // --- END OCR CANARY METRICS SNIPPET ---
 
             const safeRead = (fileName) => {
               try {
@@ -5610,20 +5797,6 @@ jobs:
               } catch (_) {
                 return null;
               }
-            };
-            const parseOcrVersionOutput = (output) => {
-              const lines = output.split('\n');
-              const firstLine = lines[0].endsWith('\r') ? lines[0].slice(0, -1) : lines[0];
-              const match = /^open-code-review v([0-9]+[.][0-9]+[.][0-9]+)(?: [(][a-fA-F0-9]+[)] [A-Za-z0-9._-]+[/][A-Za-z0-9._-]+)?$/.exec(firstLine);
-              const hasAdditionalVersionHeader = lines.slice(1).some((line) =>
-                line.startsWith('open-code-review v')
-              );
-              if (!match || hasAdditionalVersionHeader) {
-                throw new Error(
-                  'OCR version output must begin with exactly one valid open-code-review vX.Y.Z first line'
-                );
-              }
-              return match[1];
             };
             const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
             let versionParseError = null;
@@ -5842,7 +6015,7 @@ jobs:
         shell: bash
         if: always()
         env:
-          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
         run: |
           set -euo pipefail
           preview_attempted="false"
@@ -5997,7 +6170,7 @@ jobs:
         env:
           OCR_RUN_ID: ${{ github.run_id }}
           OCR_RUN_ATTEMPT: ${{ github.run_attempt }}
-          OCR_PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           OCR_SHA: ${{ env.HEAD_SHA }}
           OCR_GENERATED_AT: ${{ steps.ocr-generated-at.outputs.generated_at }}
           OCR_WALL_CLOCK_SECONDS: ${{ steps.ocr-wall-clock.outputs.wall_clock_seconds }}
@@ -6088,7 +6261,7 @@ jobs:
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_RUN_ID: ${{ github.run_id }}
           OCR_RUN_ATTEMPT: ${{ github.run_attempt }}
-          OCR_PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           OCR_SHA: ${{ env.HEAD_SHA }}
           OCR_GENERATED_AT: ${{ steps.ocr-generated-at.outputs.generated_at }}
           OCR_WALL_CLOCK_SECONDS: ${{ steps.ocr-wall-clock.outputs.wall_clock_seconds }}

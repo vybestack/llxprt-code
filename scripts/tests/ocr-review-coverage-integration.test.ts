@@ -94,9 +94,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         ctx.codeReviewJob,
         'Verify review scope includes changed tests',
       );
-      expect(previewStep.env?.RANGE_MODE).toContain(
-        'steps.resolve-range.outputs.RANGE_MODE',
-      );
+      expect(previewStep.env?.RANGE_MODE).toContain('OCR_EFFECTIVE_RANGE_MODE');
     });
 
     it('wires OCR_COVERAGE_THRESHOLD into the Post OCR results env', () => {

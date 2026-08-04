@@ -45,6 +45,8 @@ export interface LoadBalancerEstimatorDeps {
 }
 
 class GenericTokenizerProvider implements TokenizerProvider {
+  constructor(readonly activeProvider: string | undefined) {}
+
   getTokenizerForModel(_modelName: string): ITokenizer {
     return {
       countTokens: (text: unknown) =>
@@ -53,13 +55,13 @@ class GenericTokenizerProvider implements TokenizerProvider {
   }
 }
 
-const genericTokenizerProvider = new GenericTokenizerProvider();
-
 function createTokenizerAdapter(
   runtimeTokenizer: ITokenizer,
+  activeProvider: string,
 ): TokenizerProvider {
   return {
     getTokenizerForModel: () => runtimeTokenizer,
+    activeProvider,
   };
 }
 
@@ -87,7 +89,12 @@ export async function estimateRequestTokens(
 
   if (tokenizer) {
     try {
-      return await estimateWithTokenizer(contents, modelName, tokenizer);
+      return await estimateWithTokenizer(
+        contents,
+        modelName,
+        tokenizer,
+        providerName,
+      );
     } catch (error) {
       if (tokenizer.fallbackPolicy === 'deny') {
         throw error;
@@ -106,7 +113,7 @@ export async function estimateRequestTokens(
     );
   }
 
-  const result = await estimateWithGeneric(contents);
+  const result = await estimateWithGeneric(contents, providerName);
   return {
     ...result,
     source: `${result.source} (tokenizer unavailable: ${tokenizerFailureModel})`,
@@ -117,8 +124,9 @@ async function estimateWithTokenizer(
   contents: IContent[],
   modelName: string,
   tokenizer: ITokenizer,
+  providerName: string,
 ): Promise<EstimationResult> {
-  const tokenizerProvider = createTokenizerAdapter(tokenizer);
+  const tokenizerProvider = createTokenizerAdapter(tokenizer, providerName);
   const tokens = await estimateTokensForContents(
     contents,
     modelName,
@@ -323,12 +331,13 @@ function estimateRawContentTokens(contents: IContent[]): number {
 
 async function estimateWithGeneric(
   contents: IContent[],
+  providerName?: string,
 ): Promise<EstimationResult> {
   try {
     const tokens = await estimateTokensForContents(
       contents,
       undefined,
-      genericTokenizerProvider,
+      new GenericTokenizerProvider(providerName),
       logger,
     );
     return {

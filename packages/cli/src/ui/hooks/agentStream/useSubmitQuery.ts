@@ -43,7 +43,6 @@ import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import {
   observeAgentEvent,
-  observeAssistantMessageCommitted,
   observeTurnFailed,
   observeTurnStarted,
 } from '../../../observation/jspWiring.js';
@@ -216,7 +215,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     subagentManager: deps.subagentManager,
   });
 
-  const processAgentEvent = useProcessAgentEvent(deps, handlers);
+  const processAgentEvent = useProcessAgentEvent(deps, handlers, activeTurnRef);
 
   const scheduleNextQueuedSubmission = useScheduleNext(deps, activeTurnRef);
 
@@ -264,6 +263,7 @@ function useProcessAgentEvent(
     | 'handleContextWindowWillOverflowEvent'
     | 'handleCitationEvent'
   >,
+  activeTurnRef: React.MutableRefObject<boolean>,
 ) {
   const agentBufferRef = useRef('');
   // Latest-ref pattern: store deps+handlers in a ref so the useCallback
@@ -272,31 +272,51 @@ function useProcessAgentEvent(
   latestDeps.current = deps;
   const latestHandlers = useRef(handlers);
   latestHandlers.current = handlers;
-  return useCallback<AgentEventRouter>((event, userMessageTimestamp) => {
-    observeAgentEvent(event);
-    const result = dispatchAgentEvent(
-      event,
-      {
-        addItem: latestDeps.current.addItem,
-        sanitizeContent: latestDeps.current.sanitizeContent,
-        flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
-        pendingHistoryItemRef: latestDeps.current.pendingHistoryItemRef,
-        thinkingBlocksRef: latestDeps.current.thinkingBlocksRef,
-        turnCancelledRef: latestDeps.current.turnCancelledRef,
-        loopDetectedRef: latestDeps.current.loopDetectedRef,
-        lastModelInfoRef: latestDeps.current.lastModelInfoRef,
-        lastModelIdentityRef: latestDeps.current.lastModelIdentityRef,
-        setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
-        setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
-        setThought: latestDeps.current.setThought,
-        getContentPrefixIdentity: defaultGetContentPrefixIdentity,
-        ...latestHandlers.current,
-      },
-      agentBufferRef.current,
-      userMessageTimestamp,
-    );
-    agentBufferRef.current = result.agentMessageBuffer;
-  }, []);
+  return useCallback<AgentEventRouter>(
+    (event, userMessageTimestamp, signal) => {
+      if (!isCurrentTurn(latestDeps.current, signal)) {
+        return;
+      }
+      // Release the interactive active-turn gate and responding state BEFORE
+      // dispatching fallible event rendering for terminal public Agent
+      // error/idle-timeout events. If rendering throws, the gate must already
+      // be released so follow-up submissions are not queued while the
+      // iterator/promise settles (issue #2954). The dispatcher preserves the
+      // existing error-queue-clearing / idle-timeout-queue-preservation
+      // semantics via handleErrorEvent's clearQueue option.
+      const isTerminal =
+        event.type === 'error' || event.type === 'idle-timeout';
+      if (isTerminal) {
+        activeTurnRef.current = false;
+        latestDeps.current.setIsResponding(false);
+        agentBufferRef.current = '';
+      }
+      observeAgentEvent(event);
+      const result = dispatchAgentEvent(
+        event,
+        {
+          addItem: latestDeps.current.addItem,
+          sanitizeContent: latestDeps.current.sanitizeContent,
+          flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
+          pendingHistoryItemRef: latestDeps.current.pendingHistoryItemRef,
+          thinkingBlocksRef: latestDeps.current.thinkingBlocksRef,
+          turnCancelledRef: latestDeps.current.turnCancelledRef,
+          loopDetectedRef: latestDeps.current.loopDetectedRef,
+          lastModelInfoRef: latestDeps.current.lastModelInfoRef,
+          lastModelIdentityRef: latestDeps.current.lastModelIdentityRef,
+          setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
+          setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
+          setThought: latestDeps.current.setThought,
+          getContentPrefixIdentity: defaultGetContentPrefixIdentity,
+          ...latestHandlers.current,
+        },
+        agentBufferRef.current,
+        userMessageTimestamp,
+      );
+      agentBufferRef.current = result.agentMessageBuffer;
+    },
+    [activeTurnRef],
+  );
 }
 
 function useSubmitQueryEffects(
@@ -599,8 +619,21 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
       // drawer; the user explicitly submitting a new message signals intent
       // to resume automatic processing.
       current.drainSuppressedRef.current = false;
+      // Install the turn's AbortController BEFORE any potentially throwing
+      // initialization so the outer finally can verify ownership even when
+      // initTurn rejects. The signal is captured immediately so a throw
+      // inside initTurn cannot leave the gate locked (issue #2954).
+      const turnController = new AbortController();
+      current.abortControllerRef.current = turnController;
+      const turnSignal = turnController.signal;
       try {
-        const turn = initTurn(current, query, promptId, current.getPromptCount);
+        const turn = initTurn(
+          current,
+          query,
+          promptId,
+          current.getPromptCount,
+          turnSignal,
+        );
         if (shouldDisplayUserMessage(turn.trimmedStr)) {
           current.displayUserMessage(
             turn.trimmedStr,
@@ -611,10 +644,15 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
         await runSubmitQueryCore(current, query, turn);
         return 'consumed';
       } finally {
-        current.activeTurnRef.current = false;
-        // The active-turn owner schedules only after the turn settles. The
-        // scheduler's Idle check and reservation then prevent overlapping work.
-        current.scheduleNextQueuedSubmission();
+        // Guard against stale cleanup: a terminal error/idle-timeout event
+        // may have already released interactive ownership, allowing a newer
+        // turn to start and replace abortControllerRef.current. If this turn
+        // no longer owns the current AbortController, clearing ownership or
+        // scheduling a drain would clobber the newer turn (issue #2954).
+        if (isCurrentTurn(current, turnSignal)) {
+          current.activeTurnRef.current = false;
+          current.scheduleNextQueuedSubmission();
+        }
       }
     },
     [],
@@ -653,12 +691,7 @@ async function runSubmitQueryCore(
     // Only surface errors for the active turn. A superseded turn's stale
     // errors (e.g. AbortError or auth failures from a cancelled request)
     // must not leak into the newer turn (issue #2259).
-    if (isCurrentTurn(cbd, turn)) {
-      // executeStream threw before the agent emitted 'done', so the tap never
-      // saw a turn end. Close the observed turn here or the producer reports
-      // an active turn for the rest of the session. Scoped to the current
-      // turn for the same reason the error handling below is: a superseded
-      // turn must not end the turn that replaced it.
+    if (isCurrentTurn(cbd, turn.abortSignal)) {
       observeTurnFailed();
       handleSubmissionError(
         error,
@@ -670,11 +703,14 @@ async function runSubmitQueryCore(
     }
   } finally {
     // A superseded turn no longer owns responding state; stale cleanup here
-    // would clear the newer turn's active indicator.
-    if (isCurrentTurn(cbd, turn)) {
+    // would clear the newer turn's active indicator. Note: a terminal
+    // error/idle-timeout event may have already set isResponding(false);
+    // re-setting it is harmless here because this branch only runs when this
+    // turn still owns the controller (issue #2954).
+    if (isCurrentTurn(cbd, turn.abortSignal)) {
       cbd.setIsResponding(false);
     }
-    if (isCurrentTurn(cbd, turn)) {
+    if (isCurrentTurn(cbd, turn.abortSignal)) {
       try {
         await cbd.recordingIntegration?.flushAtTurnBoundary();
       } catch {
@@ -707,11 +743,11 @@ function initTurn(
   query: AgentRequestInput,
   promptId: string | undefined,
   getPromptCount: () => number,
+  abortSignal: AbortSignal,
 ): TurnInit {
   const userMessageTimestamp = Date.now();
-  deps.abortControllerRef.current = new AbortController();
-  const abortSignal = deps.abortControllerRef.current.signal;
   deps.setTurnCancelled(false);
+  deps.loopDetectedRef.current = false;
 
   const resolvedPromptId =
     promptId ??
@@ -745,22 +781,12 @@ async function executeStream(
   // A newer turn may have started while runStream was settling (e.g. the user
   // cancelled this turn and submitted a new prompt). If the current
   // AbortController no longer belongs to this turn, skip post-stream cleanup
-  // so it does not clobber the newer turn's state. Clear loopDetectedRef
-  // silently to prevent a stale detection from leaking into the new turn
-  // (issue #2259).
-  if (!isCurrentTurn(deps, turn)) {
-    deps.loopDetectedRef.current = false;
+  // so it does not clobber the newer turn's state (issue #2259).
+  if (!isCurrentTurn(deps, turn.abortSignal)) {
     return;
   }
 
-  const pending = deps.pendingHistoryItemRef.current;
-  if (pending) {
-    if (pending.type === 'gemini' || pending.type === 'gemini_content') {
-      const sanitized = deps.sanitizeContent(pending.text);
-      if (!sanitized.blocked) {
-        observeAssistantMessageCommitted(sanitized.text, Date.now());
-      }
-    }
+  if (deps.pendingHistoryItemRef.current) {
     deps.flushPendingHistoryItem(turn.userMessageTimestamp);
     deps.setPendingHistoryItem(null);
   }
@@ -771,11 +797,11 @@ async function executeStream(
 }
 
 /**
- * Returns true when `turn` is still the active turn. When a newer turn starts
- * (via initTurn) it replaces abortControllerRef.current with a fresh
- * AbortController; comparing signals proves this turn owns the current
- * AbortController (issue #2259).
+ * Returns true when the given signal still belongs to the active turn. When a
+ * newer turn starts (via initTurn) it replaces abortControllerRef.current with
+ * a fresh AbortController; comparing signals proves the caller still owns the
+ * current AbortController (issue #2259, #2954).
  */
-function isCurrentTurn(deps: UseSubmitQueryDeps, turn: TurnInit): boolean {
-  return deps.abortControllerRef.current?.signal === turn.abortSignal;
+function isCurrentTurn(deps: UseSubmitQueryDeps, signal: AbortSignal): boolean {
+  return deps.abortControllerRef.current?.signal === signal;
 }

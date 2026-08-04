@@ -668,16 +668,41 @@ describe('proxy integration (phase 31)', () => {
 
   it('surfaces hard error to client when proxy connection is lost', async () => {
     // @requirement R24.2
-    // @scenario After server stop, further client requests should raise transport error.
+    // @scenario After a successful request and server stop, an immediate
+    // follow-up request must reject promptly with a transport/connect error —
+    // not hang on a stale connection until the 30s request timeout fires.
+    // The deadline is well below the request timeout and the Bun per-test cap;
+    // the losing timer is cleared and the store is closed in cleanup so no
+    // pending promise or referenced socket survives.
+    const TEST_DEADLINE_MS = 2_000;
     const started = await startServer();
+    const proxyStore = new ProxyTokenStore(started.socketPath);
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const proxyStore = new ProxyTokenStore(started.socketPath);
       await proxyStore.listProviders();
       await started.server.stop();
-      await expect(proxyStore.listProviders()).rejects.toThrow(
+
+      const result = await Promise.race([
+        proxyStore
+          .listProviders()
+          .then(() => 'resolved')
+          .catch((err: Error) => err.message),
+        new Promise<string>((resolve) => {
+          deadlineTimer = setTimeout(
+            () => resolve('STILL PENDING — stale connection not detected'),
+            TEST_DEADLINE_MS,
+          );
+        }),
+      ]);
+
+      expect(result).toMatch(
         /Credential proxy connection lost|connect|ECONNREFUSED|ENOENT/i,
       );
+      expect(result).not.toMatch(/timed out/i);
     } finally {
+      clearTimeout(deadlineTimer);
+      // Close the client so no referenced socket or pending operation survives.
+      proxyStore.getClient().close();
       await started.server.stop();
     }
   });

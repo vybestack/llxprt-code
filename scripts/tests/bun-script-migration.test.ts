@@ -335,9 +335,20 @@ describe('Issue #2242: workspace package.json build scripts use Bun', () => {
     expect(allScripts).not.toContain('bind_package_version.js');
     expect(allScripts).not.toContain('bind_package_dependencies.js');
   });
-  it('packages/cli has no prepack (no-compile publish contract ships TS source)', () => {
+  it('packages/cli prepack bundles without compiling (no-compile publish contract)', () => {
+    // Issue #2999 reintroduced a prepack to build the prebuilt CLI bundle, so
+    // "prepack is undefined" no longer expresses the contract this test exists
+    // to protect. The contract is that publishing performs no TypeScript
+    // compilation and the TS source still ships -- see publish-integrity's S6,
+    // which pins the install-time half (no preinstall/install/prepare).
+    // Asserted present, not merely "safe if present": `files` ships a bundle
+    // entry, so dropping prepack would publish a manifest pointing at an
+    // artifact nobody built, silently returning every user to source launches.
     const scripts = readWorkspaceScripts('cli');
-    expect(scripts['prepack']).toBeUndefined();
+    const prepack = expectScriptDefined(scripts, 'prepack');
+    expect(prepack).toContain('bun-build.config.ts');
+    expect(prepack).toContain('--cli-only');
+    expect(prepack).not.toContain('tsc');
   });
 
   it('workspace build scripts reference build_package.ts via the bun-shared ../../ path', () => {

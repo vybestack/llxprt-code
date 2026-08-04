@@ -128,6 +128,23 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
+      // Issue #2951: Windows Ctrl+Enter steering. Each file pins
+      // process.platform at the very top before the key-matcher module graph
+      // loads, so win32 and darwin must run in separate processes.
+      'test-bun/steerKey.win32.bun.ts',
+      'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
+    ],
+  },
+  {
+    workspace: 'cli',
+    preload: 'bun-test-setup.ts',
+    files: [
+      'src/ui/hooks/agentStream/__tests__/useAgentEventStream.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useAgentStreamOrchestration.terminal.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.doublecancel.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.terminalError.bun.tsx',
     ],
   },
   {
@@ -446,6 +463,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/kimi/kimiMediaProcessing.test.ts',
       'src/kimi/usageInfo.test.ts',
       'src/loadBalancing/failoverState.test.ts',
+      'src/loadBalancing/loadBalancerTokenEstimator.imageTokens.test.ts',
       'src/logging/conversationResponseLogger.test.ts',
       'src/logging/ProviderPerformanceTracker.test.ts',
       'src/logging/serverToolLogger.test.ts',
@@ -696,9 +714,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'scripts-ocr-review',
     cwd: '.',
     files: [
+      'scripts/tests/ocr-canary-embedding.bun.test.ts',
+      'scripts/tests/ocr-canary-metrics.bun.test.ts',
       'scripts/tests/ocr-review-422-grouping.bun.test.ts',
       'scripts/tests/ocr-review-422-wiring.bun.test.ts',
+      'scripts/tests/ocr-review-context.bun.test.ts',
       'scripts/tests/ocr-review-coverage-preview.bun.test.ts',
+      'scripts/tests/ocr-review-github-script-syntax.bun.test.ts',
       'scripts/tests/ocr-review-incremental-checkpoint-b.bun.test.ts',
       'scripts/tests/ocr-review-workflow.bun.test.ts',
     ],
@@ -728,6 +750,23 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'scripts/tests/issue-2603-launcher.bun.test.ts',
       'scripts/tests/issue-2962-system-bun-preference.bun.test.ts',
     ],
+  },
+  {
+    // Bun-native test for the prebuilt CLI bundle (issue #2999). Builds the
+    // bundle via the exported config, executes it, and asserts --version
+    // output, proving externals resolve and the artifact is genuinely
+    // launchable. Gated behind LLXPRT_RUN_BUNDLE_BUILD_TEST=1 because the
+    // ~16s build is too slow for the default PR-path shard. The nightly
+    // `cli_bundle_launch` job sets the flag, so externals drift is caught
+    // daily rather than by a user whose CLI stops starting.
+    workspace: 'cli-bundle',
+    cwd: '.',
+    files: ['scripts/tests/issue-2999-cli-bundle.bun.test.ts'],
+  },
+  {
+    workspace: 'scripts-manifest',
+    cwd: '.',
+    files: ['scripts/tests/bun-test-manifest.bun.test.ts'],
   },
 ];
 

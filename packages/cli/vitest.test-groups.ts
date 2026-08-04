@@ -75,6 +75,9 @@ const baseExclude: readonly string[] = [
   // Sandbox container credential-isolation tests are Bun-native for the same
   // reason (issue #2946).
   '**/src/utils/sandbox-containers.test.ts',
+  // Claude Code login-bucket characterization is Bun-native for the same
+  // reason (issue #2891).
+  '**/src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
@@ -489,4 +492,4 @@ export function buildTestGroups(
  * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 534;
+export const SELECTED_FILE_COUNT: number = 531;
