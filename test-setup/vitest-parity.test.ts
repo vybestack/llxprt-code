@@ -47,29 +47,12 @@ describe('vi.spyOn over an existing mock', () => {
   });
 });
 
-describe('vi.fn lifecycle', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('mockRestore returns the mock to its constructor implementation', () => {
-    const mockFn = vi.fn(() => 'original');
-    mockFn.mockReturnValue('configured');
-    expect(mockFn()).toBe('configured');
-
-    mockFn.mockRestore();
-    expect(mockFn()).toBe('original');
-  });
-
-  it('restoreAllMocks resets a configured return value', () => {
-    const mockFn = vi.fn(() => 'original');
-    mockFn.mockReturnValue('configured');
-
-    vi.restoreAllMocks();
-
-    expect(mockFn()).toBe('original');
-  });
-});
+// NOTE: `vi.fn()` restore semantics are deliberately NOT normalised. Vitest's
+// restoreAllMocks/mockRestore return a mock to the implementation it was
+// constructed with; Bun's leave it cleared. Wrapping `vi.fn` to hide that
+// difference broke mock-as-constructor (`new someMock()` stopped producing the
+// object its implementation returns), so tests that need a specific
+// implementation after a restore must set it explicitly.
 
 describe('module mocks and restoreAllMocks', () => {
   it('keeps a vi.mock module mocked after restoreAllMocks', async () => {
