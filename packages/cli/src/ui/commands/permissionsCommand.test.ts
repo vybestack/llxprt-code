@@ -395,9 +395,7 @@ describe('permissionsCommand', () => {
         type: 'message',
         messageType: 'error',
       });
-      const content = (
-        result as { content?: string }
-      ).content;
+      const content = (result as { content?: string }).content;
       expect(content).toContain('disconnect failed');
       expect(content).toContain('refresh failed');
       expect(content).toContain('saved rollback failed');

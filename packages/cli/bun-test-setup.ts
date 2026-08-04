@@ -324,7 +324,8 @@ const { __resetCleanupStateForTesting } = await import(
 // this preload, so a test that mocks '@vybestack/llxprt-code-core' would
 // otherwise replace the cleanup helpers this file relies on. Capture the real
 // implementations now, before any test file can register a module mock.
-const resetDebugLoggerForTesting = DebugLogger.resetForTesting.bind(DebugLogger);
+const resetDebugLoggerForTesting =
+  DebugLogger.resetForTesting.bind(DebugLogger);
 const clearProviderRuntimeContext = clearActiveProviderRuntimeContext;
 
 const managedProcessEvents = [

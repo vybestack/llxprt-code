@@ -11,14 +11,7 @@ import {
   FILE_COMMANDS_UNTRUSTED_MESSAGE,
   type FileCommandRuntime,
 } from './FileCommandLoader.js';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
@@ -74,9 +67,12 @@ vi.mock('glob', () => ({
 // to create the FsMockContext and settingsMock first, then reference them in
 // the mock factory.
 const settingsMockHoisted = vi.hoisted(() => {
-  const { createRequire } = require('node:module') as typeof import('node:module');
+  const { createRequire } =
+    require('node:module') as typeof import('node:module');
   const req = createRequire(import.meta.url);
-  const { FsMockContext } = req('./__testhelpers__/mockFs.ts') as typeof import('./__testhelpers__/mockFs.js');
+  const { FsMockContext } = req(
+    './__testhelpers__/mockFs.ts',
+  ) as typeof import('./__testhelpers__/mockFs.js');
   const ctx = new FsMockContext();
   return { ctx, mock: ctx.settingsMock() };
 });
@@ -90,9 +86,8 @@ describe('FileCommandLoader', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     fsMock.clear();
-    const actualGlob = (
-      await vi.importActual<typeof import('glob')>('glob')
-    ).glob;
+    const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
+      .glob;
     vi.mocked(glob.glob).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {

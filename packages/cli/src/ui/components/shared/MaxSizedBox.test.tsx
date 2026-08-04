@@ -246,7 +246,9 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={5} maxHeight={5}>
           <Box>
-            <Text color={Colors.Foreground} wrap="wrap">🐶🐶🐶🐶🐶</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              🐶🐶🐶🐶🐶
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,

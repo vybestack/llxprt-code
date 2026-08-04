@@ -5,10 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  getCliVersion,
-  __resetVersionCacheForTesting,
-} from './version.js';
+import { getCliVersion, __resetVersionCacheForTesting } from './version.js';
 import { getPackageJson } from '@vybestack/llxprt-code-core';
 
 const originalCliVersion = process.env.CLI_VERSION;

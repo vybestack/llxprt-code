@@ -335,13 +335,16 @@ const {
 
 vi.mock('node:child_process');
 
-vi.mock('@vybestack/llxprt-code-providers/composition/providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(() => ({
-    getActiveProvider: vi.fn(() => ({
-      getCurrentModel: vi.fn(() => 'gemini-pro'),
+vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
+  () => ({
+    getProviderManager: vi.fn(() => ({
+      getActiveProvider: vi.fn(() => ({
+        getCurrentModel: vi.fn(() => 'gemini-pro'),
+      })),
     })),
-  })),
-}));
+  }),
+);
 
 describe('App UI', () => {
   let mockConfig: MockServerConfig;

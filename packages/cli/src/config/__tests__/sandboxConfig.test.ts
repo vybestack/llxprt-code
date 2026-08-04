@@ -21,7 +21,9 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actual,
     getPackageJson: vi.fn(async () => ({
-      config: { sandboxImageUri: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0' },
+      config: {
+        sandboxImageUri: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0',
+      },
     })),
   };
 });

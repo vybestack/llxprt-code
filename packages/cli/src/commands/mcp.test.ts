@@ -23,10 +23,7 @@ describe('mcp command', () => {
 
     // exitProcess(false) keeps yargs from calling process.exit when it prints
     // help, which would terminate the Bun test process mid-file.
-    const parser = yargsInstance
-      .command(mcpCommand)
-      .help()
-      .exitProcess(false);
+    const parser = yargsInstance.command(mcpCommand).help().exitProcess(false);
 
     // Mock globalThis.console.log and globalThis.console.error to catch help output
     const consoleLogMock = vi

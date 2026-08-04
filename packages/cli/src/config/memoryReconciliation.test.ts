@@ -60,9 +60,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
     );
     await expect(fs.promises.access(dataFile)).rejects.toThrow('ENOENT');
     // Marker written
-    await fs.promises.access(
-      path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
-    );
+    await fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE));
   });
 
   it('appends data content to existing config content when both present, preserves config', async () => {
@@ -181,9 +179,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       await fs.promises.readFile(path.join(configDir, 'LLXPRT.md'), 'utf8'),
     ).toBe('later content');
     // The marker is now stamped because a file was reconciled.
-    await fs.promises.access(
-      path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
-    );
+    await fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE));
   });
 
   it('crash-after-archive evidence repairs the marker (durable config + matching archive + no source)', async () => {
@@ -206,9 +202,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
     expect(result.migrated).toBe(false);
     expect(result.error).not.toBe(true);
     // The marker is stamped because durable crash evidence exists.
-    await fs.promises.access(
-      path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
-    );
+    await fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE));
     // The archive is left intact.
     expect(await fs.promises.readFile(archive, 'utf8')).toBe(
       'published then archived',
