@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
@@ -213,9 +213,12 @@ describe('AuthDialog', () => {
     await wait();
 
     stdin.write('1');
-    await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    // Polled rather than slept on: a fixed delay after a keystroke is a race
+    // whose outcome depends on machine load.
+    await waitFor(() => {
+      expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    });
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
     expect(lastFrame()).toContain('[ON]');
@@ -258,9 +261,11 @@ describe('AuthDialog', () => {
     expect(beforeFrame).toContain('[ON]');
 
     stdin.write('1');
-    await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    // Polled rather than slept on, for the same reason as above.
+    await waitFor(() => {
+      expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    });
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
 
@@ -298,13 +303,15 @@ describe('AuthDialog', () => {
     await wait();
 
     stdin.write('1');
-    await wait();
 
+    // Polled on the rendered error, not on the mock call: the rejection has to
+    // propagate through a state update and a re-render, which happens after
+    // toggleOAuthEnabled is invoked.
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Failed to toggle OAuth for claudecode');
+    });
     expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
     expect(onSelect).not.toHaveBeenCalled();
-
-    const frame = lastFrame();
-    expect(frame).toContain('Failed to toggle OAuth for claudecode');
     unmount();
   });
 
@@ -345,8 +352,10 @@ describe('AuthDialog', () => {
     expect(lastFrame()).toContain('Initial error');
 
     stdin.write('3');
-    await wait();
-    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
+    // Polled rather than slept on, for the same reason as above.
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
+    });
     unmount();
   });
 
