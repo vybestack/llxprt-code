@@ -270,7 +270,9 @@ describe('useAgentStream subagent isolation', () => {
   });
 
   it('subagent completions should not reach Gemini submission pipeline', async () => {
-    const client = new MockedAgentClientClass(mockConfig);
+    const client = new MockedAgentClientClass(
+      mockConfig,
+    ) as unknown as Parameters<typeof useAgentStream>[0];
 
     let capturedOnComplete:
       | ((
@@ -362,7 +364,9 @@ describe('useAgentStream subagent isolation', () => {
   });
 
   it('marks a terminal subagent tool as outstanding until displayCleared transitions it out of Responding', () => {
-    const client = new MockedAgentClientClass(mockConfig);
+    const client = new MockedAgentClientClass(
+      mockConfig,
+    ) as unknown as Parameters<typeof useAgentStream>[0];
 
     const unclearedSubagentTool: TrackedCompletedToolCall = {
       request: {
@@ -431,7 +435,9 @@ describe('useAgentStream subagent isolation', () => {
   });
 
   it('transitions a terminal subagent tool out of Responding once displayCleared is true', () => {
-    const client = new MockedAgentClientClass(mockConfig);
+    const client = new MockedAgentClientClass(
+      mockConfig,
+    ) as unknown as Parameters<typeof useAgentStream>[0];
 
     const clearedSubagentTool: TrackedCompletedToolCall = {
       request: {
@@ -501,7 +507,9 @@ describe('useAgentStream subagent isolation', () => {
   });
 
   it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
-    const client = new MockedAgentClientClass(mockConfig);
+    const client = new MockedAgentClientClass(
+      mockConfig,
+    ) as unknown as Parameters<typeof useAgentStream>[0];
 
     let capturedOnComplete:
       | ((
