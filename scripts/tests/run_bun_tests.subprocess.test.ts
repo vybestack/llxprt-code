@@ -27,7 +27,10 @@ describe('actual child process signal shape', () => {
   // rather than producing a signal. These tests are POSIX-specific.
   const isPosix = platform() !== 'win32';
 
-  it.runIf(isPosix)(
+  // `skipIf` rather than vitest's `runIf`: this file also runs under Bun's
+  // native runner, and `skipIf` is native there rather than supplied by the
+  // compatibility shim. Matches the sibling cases below.
+  it.skipIf(!isPosix)(
     'produces exitCode null and a string signalCode when a child is killed by a signal',
     () => {
       // The child kills itself with SIGTERM. spawnSync blocks until the child

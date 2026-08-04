@@ -209,7 +209,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   },
   {
     workspace: 'core',
-    files: ['src/utils/errors.test.ts'],
+    files: [
+      'src/utils/errors.test.ts',
+      // Issue #1985: ToolKeyStorage.deleteKey() must still remove its own
+      // encrypted .key file when SecureStore.delete() surfaces a keyring
+      // failure.
+      'src/tools/tool-key-storage.test.ts',
+    ],
   },
   PROVIDERS_MANIFEST_ENTRY,
   TOOLS_MANIFEST_ENTRY,

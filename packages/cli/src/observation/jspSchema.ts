@@ -54,7 +54,34 @@ const BootstrapSchema = z
     }),
     publisher_credential: z.string().min(1),
     agent_id: z.string().min(1).max(128).regex(opaqueIdRegex),
-    lifecycle_generation: z.number().int().positive(),
+    // The domain violation (negative) and the identity violation (zero) carry
+    // distinct diagnostic codes, so each is raised as its own issue. Exactly
+    // one issue is emitted per value, which keeps the mapping independent of
+    // the order in which Zod would otherwise report overlapping checks.
+    lifecycle_generation: z
+      .number()
+      .int()
+      .superRefine((value, ctx) => {
+        // minimum 0 inclusive is the unsigned domain bound, which is a
+        // different rule from the positivity requirement checked below: the
+        // domain admits zero, and the identity rule is what rejects it.
+        if (value < 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.too_small,
+            minimum: 0,
+            type: 'number',
+            inclusive: true,
+            message: 'lifecycle_generation must not be negative',
+          });
+          return;
+        }
+        if (value === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'lifecycle_generation must be greater than 0',
+          });
+        }
+      }),
   })
   .strict();
 
@@ -96,34 +123,79 @@ function isLoopbackHost(hostname: string): boolean {
 
 function classifyEndpoint(
   endpoint: string,
-): { ok: true; url: URL } | { ok: false; code: JspErrorCode } {
+): { ok: true; url: URL } | { ok: false; error: JspError } {
   let parsed: URL;
   try {
     parsed = new URL(endpoint);
   } catch {
-    return { ok: false, code: 'JSP-E001' };
+    return {
+      ok: false,
+      error: { code: 'JSP-E001', message: 'endpoint is not a valid URL' },
+    };
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { ok: false, code: 'JSP-E004' };
+    return {
+      ok: false,
+      error: {
+        code: 'JSP-E001',
+        message: 'endpoint scheme must be http or https',
+      },
+    };
   }
   if (!isLoopbackHost(parsed.hostname)) {
-    return { ok: false, code: 'JSP-E004' };
+    return {
+      ok: false,
+      error: {
+        code: 'JSP-E004',
+        message: 'endpoint host must be a loopback address',
+      },
+    };
   }
   // The publisher appends the "/jsp/1" route segment to this endpoint. A query
   // or fragment would end up before that segment and produce a malformed URL,
   // so reject it here rather than silently building a broken request target.
-  if (parsed.search !== '' || parsed.hash !== '') {
-    return { ok: false, code: 'JSP-E001' };
+  // A bare trailing "?" or "#" reports an empty search/hash while still
+  // carrying the delimiter, so the serialisations are compared instead: an
+  // endpoint of "http://127.0.0.1:9123?" would otherwise be accepted and
+  // then build the request target "http://127.0.0.1:9123?/jsp/1".
+  const withoutQueryOrFragment = new URL(parsed.href);
+  withoutQueryOrFragment.search = '';
+  withoutQueryOrFragment.hash = '';
+  if (withoutQueryOrFragment.href !== parsed.href) {
+    return {
+      ok: false,
+      error: {
+        code: 'JSP-E001',
+        message: 'endpoint must not include a query or fragment',
+      },
+    };
   }
   return { ok: true, url: parsed };
 }
 
+// The Jefe JSP/1 specification (§2) mandates JSP-E004 for a
+// lifecycle_generation of exactly zero: it is a well-formed number that
+// violates the positive-identity rule. A negative value is outside the
+// reference unsigned domain, so it is a JSP-E001 shape violation instead. A
+// non-integer fails the .int() check (invalid_type) and falls through to the
+// general invalid_type handler in zodToJspError, which is also JSP-E001.
+function lifecycleGenerationErrorCode(
+  issue: z.ZodIssue,
+): JspErrorCode | undefined {
+  if (issue.path[issue.path.length - 1] !== 'lifecycle_generation') {
+    return undefined;
+  }
+  if (issue.code === z.ZodIssueCode.too_small) return 'JSP-E001';
+  if (issue.code === z.ZodIssueCode.custom) return 'JSP-E004';
+  return undefined;
+}
+
 function zodToJspError(issue: z.ZodIssue): JspErrorCode {
+  const generationCode = lifecycleGenerationErrorCode(issue);
+  if (generationCode !== undefined) return generationCode;
   const code = issue.code;
   const lastPath = issue.path[issue.path.length - 1];
-  if (code === z.ZodIssueCode.too_big) return 'JSP-E002';
-  if (code === z.ZodIssueCode.too_small) {
-    if (lastPath === 'lifecycle_generation') return 'JSP-E004';
+  if (code === z.ZodIssueCode.too_big || code === z.ZodIssueCode.too_small) {
     return 'JSP-E002';
   }
   if (
@@ -147,7 +219,7 @@ export function parseBootstrap(input: unknown): JspResult<JspBootstrap> {
   }
   const endpointCheck = classifyEndpoint(parsed.data.endpoint);
   if (!endpointCheck.ok) {
-    return err(endpointCheck.code, 'endpoint not loopback');
+    return err(endpointCheck.error.code, endpointCheck.error.message);
   }
   return ok({
     schema: parsed.data.schema,
