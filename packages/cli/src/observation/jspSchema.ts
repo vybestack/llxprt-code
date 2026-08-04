@@ -154,7 +154,14 @@ function classifyEndpoint(
   // The publisher appends the "/jsp/1" route segment to this endpoint. A query
   // or fragment would end up before that segment and produce a malformed URL,
   // so reject it here rather than silently building a broken request target.
-  if (parsed.search !== '' || parsed.hash !== '') {
+  // A bare trailing "?" or "#" reports an empty search/hash while still
+  // carrying the delimiter, so the serialisations are compared instead: an
+  // endpoint of "http://127.0.0.1:9123?" would otherwise be accepted and
+  // then build the request target "http://127.0.0.1:9123?/jsp/1".
+  const withoutQueryOrFragment = new URL(parsed.href);
+  withoutQueryOrFragment.search = '';
+  withoutQueryOrFragment.hash = '';
+  if (withoutQueryOrFragment.href !== parsed.href) {
     return {
       ok: false,
       error: {

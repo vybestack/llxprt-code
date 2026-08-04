@@ -62,6 +62,26 @@ describe('parseBootstrap', () => {
     expect(errorCode(result)).toBe('JSP-E001');
   });
 
+  // A bare delimiter reports an empty search/hash but still travels in the
+  // endpoint string, so appending the route segment would yield a target such
+  // as "http://127.0.0.1:9123?/jsp/1" with the route folded into the query.
+  it('rejects an endpoint carrying a bare query or fragment delimiter', () => {
+    for (const endpoint of [
+      'http://127.0.0.1:9123?',
+      'http://127.0.0.1:9123#',
+      'http://127.0.0.1:9123?#',
+      'http://127.0.0.1:9123/jsp/1?',
+      'http://127.0.0.1:9123/jsp/1#',
+    ]) {
+      const result = parseBootstrap({ ...validBootstrap, endpoint });
+      expect(result.ok).toBe(false);
+      expect(errorCode(result)).toBe('JSP-E001');
+      expect(errorMessage(result)).toBe(
+        'endpoint must not include a query or fragment',
+      );
+    }
+  });
+
   it('rejects an endpoint carrying a fragment', () => {
     const result = parseBootstrap({
       ...validBootstrap,

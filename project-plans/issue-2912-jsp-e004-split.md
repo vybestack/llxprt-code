@@ -3,8 +3,12 @@
 ## Scope decision
 
 One issue-linked pull request against `packages/cli/src/observation/jspSchema.ts`
-and its test file. Diagnostics only: no bootstrap input that is accepted today
-becomes rejected, and no input that is rejected today becomes accepted.
+and its test file. Primarily a diagnostics change. One deliberate exception to
+that, accepted during review and recorded under A7: an endpoint carrying a bare
+trailing `?` or `#` is now rejected, because the existing guard's own stated
+purpose was already to reject it and it only escaped on a technicality. Apart
+from A7, no input accepted today becomes rejected and no input rejected today
+becomes accepted.
 
 ## Cross-repository determination (done before implementation)
 
@@ -60,7 +64,8 @@ binding boundary and the generation identity rule — and nothing else.
 | A3 | Generation domain vs identity split | `0` → `JSP-E004`; `-1`, `-2`, `-999` → `JSP-E001`; `1.5` → `JSP-E001` | Zero rejected with `JSP-E004`; every negative and non-integer rejected with `JSP-E001` | Collapsing a negative (outside the reference `u64` domain) onto the identity code, or weakening the accept set | Schema tests |
 | A4 | Every endpoint rejection carries a message describing its own branch | All four `classifyEndpoint` branches | Each branch yields a distinct, accurate message; the invalid-scheme branch no longer claims "endpoint not loopback" | One hardcoded message for semantically different failures | Schema tests asserting messages |
 | A5 | Diagnostics never echo the rejected input | Endpoint containing a credential-like value, e.g. `ws://user:secret@127.0.0.1/` | Message is a fixed string; the rejected endpoint, its host, its scheme, and any userinfo never appear in it | Leaking bootstrap material into a diagnostic, contrary to Jefe specification decision 12 | Schema tests |
-| A6 | Accepted inputs are unchanged | Existing valid corpus: `http`/`https`, `localhost`, `app.localhost`, `[::1]`, `[0:0:0:0:0:0:0:1]`, `127.x` including zero-padded octets | All still accepted | A diagnostics-only change altering the accept set | Existing schema tests, unmodified |
+| A6 | Accepted inputs are otherwise unchanged | Existing valid corpus: `http`/`https`, `localhost`, `app.localhost`, `[::1]`, `[0:0:0:0:0:0:0:1]`, `127.x` including zero-padded octets | All still accepted | Altering the accept set anywhere other than A7 | Existing schema tests, unmodified |
+| A7 | A bare query or fragment delimiter is rejected | `http://127.0.0.1:9123?`, `...#`, `...?#`, and the same with a `/jsp/1` path | Rejected with `JSP-E001` and the query/fragment message | Accepting an endpoint that then builds the request target `http://127.0.0.1:9123?/jsp/1`, folding the route into the query | Schema tests |
 
 ## Test-first sequence
 
@@ -89,7 +94,8 @@ of a bare code, give each branch its own fixed message, and have
 ## Explicit non-goals
 
 - Adding `JSP-E007` or any change to the closed `JSP-E001..JSP-E006` set.
-- Changing which bootstraps are accepted or rejected.
+- Changing which bootstraps are accepted or rejected, other than the bare
+  trailing `?`/`#` case in A7.
 - Changing which generation values are accepted: only integers strictly
   greater than zero remain accepted. The codes change (`JSP-E004` for zero,
   `JSP-E001` for a negative, `JSP-E001` for a non-integer), but the
@@ -163,20 +169,24 @@ values.
 
 CodeRabbit, 1 review (1 finding):
 
-- **Deferred to #3027.** The endpoint guard tests `URL.search`/`URL.hash`
-  against the empty string, but both return `''` for a *bare* trailing `?` or
-  `#`, so `http://127.0.0.1:9123?` and `http://127.0.0.1:9123#` are accepted
-  today. Because `parseBootstrap` returns the raw endpoint string, appending
-  the route segment yields `http://127.0.0.1:9123?/jsp/1`, which is exactly
-  the malformed request target the guard exists to prevent. The finding is
-  correct and was confirmed empirically. It is deferred because fixing it
-  changes the accept/reject set, which this diagnostics-only PR lists as an
-  explicit non-goal, and because the predicate is unchanged from main (it
-  arrived in #2897 and this PR touched only that branch's message).
+- **Adopted (A7).** The endpoint guard tested `URL.search`/`URL.hash` against
+  the empty string, but both return `''` for a *bare* trailing `?` or `#`, so
+  `http://127.0.0.1:9123?` and `http://127.0.0.1:9123#` were accepted. Because
+  `parseBootstrap` returns the raw endpoint string, appending the route segment
+  yields `http://127.0.0.1:9123?/jsp/1`, which is exactly the malformed request
+  target the guard exists to prevent. The guard now compares the serialisation
+  against a copy with `search` and `hash` cleared.
+
+  This was initially deferred as #3027 on the grounds that it moves the
+  accept/reject set. That call was overruled by the maintainer: the guard's own
+  stated purpose already covered this input, so closing the hole completes the
+  existing intent rather than expanding scope, and splitting it into a separate
+  pull request would not have been worth the overhead. #3027 is closed as
+  delivered here.
 
 ## Review counters
 
 - Independent review/remediation cycles: 1 of 2.
 - Local OCR: 1 of 2.
 - PR OCR: 1 of 2 (CI OpenCodeReview job, pass).
-- CodeRabbit: 1 review, 1 finding, deferred to #3027 with a recorded reply.
+- CodeRabbit: 1 review, 1 finding, adopted as A7 with a recorded reply.
