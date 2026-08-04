@@ -73,6 +73,10 @@ const baseMockUiState: Partial<UIState> = {
   mainAreaWidth: 100,
   terminalWidth: 120,
   terminalBackgroundColor: undefined,
+  // Matches the shipped default. Without it, message components fall back to
+  // plain-text rendering and code blocks lose their syntax highlighting and
+  // line numbers, which silently changes what every snapshot captures.
+  renderMarkdown: true,
 };
 
 // Mock RuntimeApi for tests - provides stub implementations of runtime functions
