@@ -300,12 +300,19 @@ async function waitForWithFakeTimers<T>(
   let pendingResolved = false;
   let pendingValue: T | undefined;
   let pendingRejected = false;
+  let attempted = false;
 
   let elapsed = 0;
   for (;;) {
     if (!hasPending) {
-      scheduler!.advanceTimersByTime(interval);
-      elapsed += interval;
+      // The real-timer path checks the callback once before the first
+      // interval fires, so a condition that already holds resolves at t=0.
+      // Advance only from the second attempt onwards to match that.
+      if (elapsed > 0 || attempted) {
+        scheduler!.advanceTimersByTime(interval);
+        elapsed += interval;
+      }
+      attempted = true;
 
       let result: T | Promise<T>;
       try {
@@ -364,6 +371,13 @@ async function waitForWithFakeTimers<T>(
       }
       if (pendingRejected) {
         hasPending = false;
+        if (elapsed >= timeout) {
+          throw lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE);
+        }
+        // The clock already advanced for this cycle; going back to the top
+        // without this guard would advance a second time before the callback
+        // is retried, doubling the effective interval.
+        continue;
       }
     }
 

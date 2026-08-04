@@ -23,7 +23,10 @@
  * exact message so assertions are runner-independent.
  */
 function interceptedExit(code?: number): never {
-  throw new Error(`process.exit unexpectedly called with "${code ?? 0}"`);
+  // The value is interpolated raw, exactly as Vitest does: a no-argument
+  // process.exit() must produce "undefined" under both runners so assertions
+  // on the message stay runner-independent.
+  throw new Error(`process.exit unexpectedly called with "${code}"`);
 }
 
 if (typeof Bun !== 'undefined') {

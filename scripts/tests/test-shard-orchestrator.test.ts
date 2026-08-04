@@ -277,12 +277,10 @@ describe('orchestrateTests (--shard)', () => {
   });
 
   // Issue #2780: the long-running release-install smoke test
-  // (issue-2603-release-install.test.ts) must run as a SEPARATE vitest
-  // invocation so it does not share a worker pool with the ~169 fast script
-  // tests. When it did, the vitest worker RPC (onTaskUpdate) timed out under
-  // main-process congestion on macOS runners (3 vCPUs), causing a spurious
-  // exit code 1 even though every test passed.
-  it('runs the release-install smoke test as a separate vitest invocation', () => {
+  // (issue-2603-release-install.test.ts) must run as a SEPARATE Bun-native
+  // root, so the far larger timeout it needs does not weaken the budget that
+  // catches genuine hangs in the rest of the script harness.
+  it('runs the release-install smoke test as a separate root invocation', () => {
     const { runner, commands } = createRecordingRunner();
 
     const fixtureRoot = createFixtureRepo([

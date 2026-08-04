@@ -25,6 +25,7 @@ import {
   reapStaleBunTestProcesses,
   processTimeoutFor,
   collectGlobalSetups,
+  type BunGlobalSetupModule,
   type BunTestRunnerDependencies,
   type BunTestSpawnOptions,
   type ChildExitInfo,
@@ -263,7 +264,7 @@ describe('resolveTsconfigOverride', () => {
 });
 
 /** Global setup loader stub for runs whose entries declare none. */
-const noGlobalSetup = async (): Promise<Record<string, never>> => ({});
+const noGlobalSetup = async (): Promise<BunGlobalSetupModule> => ({});
 
 describe('runBunTests', () => {
   it('executes every entry with exact argv, cwd, and env and reports all failure modes', async () => {
@@ -602,6 +603,58 @@ describe('runBunTests', () => {
     await runBunTests([], dependencies);
 
     expect(order).toEqual(['setup', 'spawn', 'teardown']);
+  });
+
+  it('tears down already-started setups when a later setup throws', async () => {
+    const order: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/a.test.ts',
+          preloads: [],
+          globalSetup: '/repo/e2e/s1.ts',
+        },
+        {
+          cwd: '/repo/evals',
+          file: '/repo/evals/b.eval.ts',
+          preloads: [],
+          globalSetup: '/repo/evals/s2.ts',
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        order.push('spawn');
+        return { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: async (path) =>
+        path === '/repo/e2e/s1.ts'
+          ? {
+              setup: () => {
+                order.push('setup1');
+              },
+              teardown: () => {
+                order.push('teardown1');
+              },
+            }
+          : {
+              setup: () => {
+                order.push('setup2');
+                throw new Error('setup boom');
+              },
+            },
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    await expect(runBunTests([], dependencies)).rejects.toThrow('setup boom');
+    // No file may run once setup failed, and the setup that did succeed must
+    // still be torn down or its resources leak.
+    expect(order).toEqual(['setup1', 'setup2', 'teardown1']);
   });
 
   it('runs global teardown even when a test file fails', async () => {
