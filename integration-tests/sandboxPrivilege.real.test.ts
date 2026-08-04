@@ -423,7 +423,12 @@ describe.skipIf(skipTests)(
      * (engages the production gate when non-empty; an empty value disengages it
      * so the prctl call is never made). The repo is mounted read-only.
      */
-    function runMemoryProbe(sandboxEnv: string): string {
+    /**
+     * Runs the driver fixture in a real container using the exact security
+     * flags the production argv builder emits. `sandboxEnv` drives the
+     * production gate; `extraArgs` selects the driver mode.
+     */
+    function runDriver(sandboxEnv: string, ...extraArgs: string[]): string {
       return execFileSync(
         runtime!,
         [
@@ -439,9 +444,14 @@ describe.skipIf(skipTests)(
           image,
           'bun',
           driverContainerPath,
+          ...extraArgs,
         ],
         { timeout: RUN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 },
       ).toString();
+    }
+
+    function runMemoryProbe(sandboxEnv: string): string {
+      return runDriver(sandboxEnv);
     }
 
     /**
@@ -451,25 +461,7 @@ describe.skipIf(skipTests)(
      * to verify the real production function hardened the process.
      */
     function runE2EProbe(): string {
-      return execFileSync(
-        runtime!,
-        [
-          'run',
-          '--rm',
-          ...productionSecurityFlags(),
-          '--volume',
-          `${repoRoot}:/repo:ro`,
-          '--env',
-          'SANDBOX=e2e-probe',
-          '--env',
-          'BUN_INSTALL_CACHE_DIR=/tmp/.bun',
-          image,
-          'bun',
-          driverContainerPath,
-          '__e2e__',
-        ],
-        { timeout: RUN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 },
-      ).toString();
+      return runDriver('e2e-probe', '__e2e__');
     }
 
     it('a parent process is DENIED the hardened child process maps (AC1, AC5)', () => {

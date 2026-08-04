@@ -254,9 +254,11 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
     const { sink } = warningSink();
 
     await expect(
-      // No injected prctl => resolves from libc; force null by injecting null.
+      // Injecting null models "prctl could not be resolved from libc" and
+      // short-circuits resolveLibcPrctl(), so this stays deterministic under
+      // both Node and Bun rather than depending on bun:ffi availability.
       applyProcessMemoryHardening({
-        prctl: null as unknown as PrctlCallable,
+        prctl: null,
         platform: 'linux',
         writeWarning: sink,
       }),

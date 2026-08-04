@@ -40,7 +40,7 @@ export interface ProcessMemoryHardeningOptions {
    * Injectable prctl callable. When omitted, the real libc symbol is resolved
    * lazily via `bun:ffi` (Linux only).
    */
-  readonly prctl?: PrctlCallable;
+  readonly prctl?: PrctlCallable | null;
   /** Injectable platform read; defaults to `process.platform`. */
   readonly platform?: NodeJS.Platform;
   /** Injectable warning sink; defaults to the project's stderr writer. */
@@ -117,6 +117,10 @@ async function resolveLibcPrctl(): Promise<PrctlCallable | null> {
       },
     });
     const prctl = lib.symbols.prctl;
+    // The dlopen handle is deliberately left open. Calling lib.close() would
+    // dlclose libc while we still hold and invoke the captured native function
+    // pointer. libc.so.6 stays mapped for the process lifetime regardless, and
+    // this resolves once per process, so there is nothing to reclaim.
     return (option, arg2, arg3, arg4, arg5) =>
       prctl(option, arg2, arg3, arg4, arg5);
   } catch {
@@ -187,7 +191,12 @@ export async function applyProcessMemoryHardening(
     ((message: string): void => {
       process.stderr.write(message);
     });
-  const prctl = options.prctl ?? (await resolveLibcPrctl());
+  // Explicit `undefined` check rather than `??` so an injected `null` really
+  // short-circuits to the "could not resolve prctl" path. With `??`, injecting
+  // null would fall through to resolveLibcPrctl(), making the failure path
+  // environment-dependent (it would resolve a real prctl under Bun on Linux).
+  const prctl =
+    options.prctl !== undefined ? options.prctl : await resolveLibcPrctl();
 
   if (prctl === null) {
     reportHardeningFailure(
