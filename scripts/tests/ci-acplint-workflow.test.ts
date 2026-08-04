@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { WorkflowDocument, WorkflowJob } from './typed-test-helpers.ts';
-import { parseWorkflowYaml } from './typed-test-helpers.ts';
+import { parseWorkflowYaml, asOptionalRecord } from './typed-test-helpers.ts';
 import { readRootFile, stepNamed } from './ocr-review-workflow-helpers.ts';
 
 const ACPLINT_PIN =
@@ -26,6 +27,82 @@ const UPLOAD_ARTIFACT_SHA =
 function loadCiWorkflow(): WorkflowDocument {
   const source = readRootFile('.github/workflows/ci.yml');
   return parseWorkflowYaml(source);
+}
+
+function jobNeeds(job: WorkflowJob | undefined): string[] {
+  const needs = job?.needs;
+  if (needs === undefined) return [];
+  return Array.isArray(needs) ? [...needs] : [needs];
+}
+
+function workflowJob(
+  jobs: Record<string, WorkflowJob>,
+  jobName: string,
+): WorkflowJob {
+  const job = jobs[jobName];
+  if (job === undefined) {
+    throw new Error(`Unknown workflow job referenced by needs: ${jobName}`);
+  }
+  return job;
+}
+
+function transitiveNeeds(
+  jobs: Record<string, WorkflowJob>,
+  jobName: string,
+): Set<string> {
+  let closure = new Set(jobNeeds(workflowJob(jobs, jobName)));
+  while (true) {
+    const expanded = new Set([
+      ...closure,
+      ...[...closure].flatMap((dependency) =>
+        jobNeeds(workflowJob(jobs, dependency)),
+      ),
+    ]);
+    if (expanded.size === closure.size) return expanded;
+    closure = expanded;
+  }
+}
+
+interface TestAggregateResults {
+  shouldSkip: string;
+  selector: string;
+  hasTests: string;
+  shards: string;
+  nodeConsumerSmoke: string;
+  acp: string;
+}
+
+function runTestAggregate(
+  runText: string,
+  results: TestAggregateResults,
+): SpawnSyncReturns<string> {
+  const substitutions = [
+    ["'${{ needs.skip_check.outputs.should_skip }}'", '"$1"'],
+    ["'${{ needs.shard_selector.result }}'", '"$2"'],
+    ["'${{ needs.shard_selector.outputs.has_tests }}'", '"$3"'],
+    ["'${{ needs.test_shard.result }}'", '"$4"'],
+    ["'${{ needs.node_consumer_smoke.result }}'", '"$5"'],
+    ["'${{ needs.acp_conformance.result }}'", '"$6"'],
+  ] as const;
+  let script = runText;
+  for (const [expression, parameter] of substitutions) {
+    script = script.replaceAll(expression, parameter);
+  }
+  return spawnSync(
+    'bash',
+    [
+      '-c',
+      script,
+      '--',
+      results.shouldSkip,
+      results.selector,
+      results.hasTests,
+      results.shards,
+      results.nodeConsumerSmoke,
+      results.acp,
+    ],
+    { encoding: 'utf8' },
+  );
 }
 
 describe('Issue #2564: acp_conformance CI job', () => {
@@ -281,5 +358,154 @@ describe('Issue #2564: acp_conformance CI job', () => {
       const uses = step.uses ?? '';
       expect(uses).not.toContain('8207627863c7cc4c66a329aec7e433d2d1c52a9');
     }
+  });
+});
+
+describe('Issue #2877: test matrix scheduling', () => {
+  let workflow: WorkflowDocument;
+  let jobs: Record<string, WorkflowJob>;
+  let testShardJob: WorkflowJob | undefined;
+  let lintJob: WorkflowJob | undefined;
+  let testJob: WorkflowJob | undefined;
+  let nodeConsumerSmokeJob: WorkflowJob | undefined;
+  let secureStoreJob: WorkflowJob | undefined;
+
+  beforeAll(() => {
+    workflow = loadCiWorkflow();
+    jobs = workflow['jobs']!;
+    testShardJob = jobs['test_shard'];
+    lintJob = jobs['lint'];
+    testJob = jobs['test'];
+    nodeConsumerSmokeJob = jobs['node_consumer_smoke'];
+    secureStoreJob = jobs['secure_store_backend'];
+  });
+
+  it('test_shard depends directly on exactly node_consumer_smoke, doc_change_filter, shard_selector, and skip_check', () => {
+    const needs = jobNeeds(testShardJob);
+    expect(needs).toEqual([
+      'node_consumer_smoke',
+      'doc_change_filter',
+      'shard_selector',
+      'skip_check',
+    ]);
+  });
+
+  it('test_shard does not directly need lint or any lint_* job', () => {
+    const needs = jobNeeds(testShardJob);
+    expect(needs).not.toContain('lint');
+    const lintDeps = needs.filter((n) => n.startsWith('lint_'));
+    expect(lintDeps, `unexpected lint_* deps: ${lintDeps.join(', ')}`).toEqual(
+      [],
+    );
+  });
+
+  it('test_shard has no transitive dependency on lint or any lint_* job', () => {
+    const closure = transitiveNeeds(jobs, 'test_shard');
+    expect(closure.has('lint')).toBe(false);
+    const lintInClosure = [...closure].filter((n) => n.startsWith('lint'));
+    expect(
+      lintInClosure,
+      `transitive lint dependency found: ${lintInClosure.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('lint aggregator needs exactly the four linters plus node_consumer_smoke', () => {
+    const needs = jobNeeds(lintJob);
+    expect(needs).toEqual([
+      'lint_github_actions',
+      'lint_javascript',
+      'lint_shell',
+      'lint_yaml',
+      'node_consumer_smoke',
+    ]);
+  });
+
+  it('node_consumer_smoke needs only skip_check', () => {
+    const needs = jobNeeds(nodeConsumerSmokeJob);
+    expect(needs).toEqual(['skip_check']);
+  });
+
+  it('node_consumer_smoke preserves its skip condition', () => {
+    expect(nodeConsumerSmokeJob?.if).toContain("should_skip != 'true'");
+  });
+
+  it('preserves the Lint aggregator name', () => {
+    expect(lintJob?.name).toBe('Lint');
+  });
+
+  it('preserves the Test aggregator name', () => {
+    expect(testJob?.name).toBe('Test');
+  });
+
+  it('preserves the Test aggregator failure check for skipped test shards', () => {
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const runText = checkStep.run ?? '';
+    expect(testJob?.if).toContain('always()');
+    expect(jobNeeds(testJob)).toEqual([
+      'test_shard',
+      'shard_selector',
+      'skip_check',
+      'node_consumer_smoke',
+      'acp_conformance',
+    ]);
+    expect(runText).toContain("shard_result='${{ needs.test_shard.result }}'");
+    expect(runText).toContain(`if [ "$shard_result" != "success" ]; then
+    echo "::error::Test shards did not all succeed (result: $shard_result)"
+    exit 1
+  fi`);
+  });
+
+  it('fails the no-tests path when node_consumer_smoke fails', () => {
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const result = runTestAggregate(checkStep.run ?? '', {
+      shouldSkip: 'false',
+      selector: 'success',
+      hasTests: 'false',
+      shards: 'skipped',
+      nodeConsumerSmoke: 'failure',
+      acp: 'success',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Node Consumer Smoke did not succeed (result: failure)',
+    );
+  });
+
+  it('passes aggregate results to Bash without evaluating shell syntax', () => {
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const sentinel = 'TEST_AGGREGATE_SHELL_INJECTION';
+    const nodeConsumerSmoke = `failure'; printf '${sentinel}' >&2; #`;
+    const result = runTestAggregate(checkStep.run ?? '', {
+      shouldSkip: 'false',
+      selector: 'success',
+      hasTests: 'false',
+      shards: 'skipped',
+      nodeConsumerSmoke,
+      acp: 'success',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      `Node Consumer Smoke did not succeed (result: ${nodeConsumerSmoke})`,
+    );
+    expect(result.stderr).not.toContain(sentinel);
+  });
+
+  it('preserves the exact test_shard condition', () => {
+    expect(testShardJob?.if).toBe(
+      "${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' && needs.shard_selector.result == 'success' && needs.shard_selector.outputs.has_tests == 'true' }}",
+    );
+  });
+
+  it('preserves test_shard matrix scheduling from shard_selector', () => {
+    const strategy = asOptionalRecord(testShardJob?.strategy);
+    expect(strategy?.['fail-fast']).toBe(false);
+    expect(asOptionalRecord(strategy?.['matrix'])).toEqual({
+      include: '${{ fromJSON(needs.shard_selector.outputs.matrix) }}',
+    });
+  });
+
+  it('secure_store_backend still needs lint', () => {
+    const needs = jobNeeds(secureStoreJob);
+    expect(needs).toContain('lint');
   });
 });
