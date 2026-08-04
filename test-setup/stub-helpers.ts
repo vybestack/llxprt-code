@@ -300,19 +300,17 @@ async function waitForWithFakeTimers<T>(
   let pendingResolved = false;
   let pendingValue: T | undefined;
   let pendingRejected = false;
-  let attempted = false;
 
   let elapsed = 0;
   for (;;) {
     if (!hasPending) {
-      // The real-timer path checks the callback once before the first
-      // interval fires, so a condition that already holds resolves at t=0.
-      // Advance only from the second attempt onwards to match that.
-      if (elapsed > 0 || attempted) {
-        scheduler!.advanceTimersByTime(interval);
-        elapsed += interval;
-      }
-      attempted = true;
+      // Advance before the first callback, not after it. Under fake timers
+      // nothing else moves the clock, so a callback waiting on a scheduled
+      // effect would observe t=0 and fail on its first attempt; this mirrors
+      // the pre-existing Bun scheduler contract asserted by
+      // `test-setup/stub-helpers.bun.test.ts`.
+      scheduler!.advanceTimersByTime(interval);
+      elapsed += interval;
 
       let result: T | Promise<T>;
       try {
