@@ -103,9 +103,27 @@ function checkLauncherSentinels(prefix) {
       content.includes(OWNERSHIP_SENTINEL),
       'cmd launcher missing ownership sentinel',
     );
+    // Issue #2999: the entry is no longer baked in at install time, it is
+    // resolved on every launch into %_llxprt_entry%. The property this check
+    // exists to defend is unchanged -- bun.exe is invoked directly, with no
+    // node or shim in between, and every argument is forwarded via %*.
     assert(
-      /"%~dp0.*bun\.exe" "%~dp0.*index\.ts" %\*/.test(content),
+      /"%~dp0.*bun\.exe" "%_llxprt_entry%" %\*/.test(content),
       'cmd launcher does not directly invoke bun.exe with %*',
+    );
+    // Pin the resolution itself, so the assertion above cannot be satisfied by
+    // a launcher that sets %_llxprt_entry% to something arbitrary.
+    assert(
+      /set "_llxprt_entry=%~dp0.*index\.ts"/.test(content),
+      'cmd launcher does not default the entry to the TypeScript source',
+    );
+    assert(
+      content.includes('LLXPRT_FORCE_SOURCE_ENTRY'),
+      'cmd launcher does not honour the force-source escape hatch',
+    );
+    assert(
+      /if exist "%~dp0.*" set "_llxprt_entry=%~dp0.*"/.test(content),
+      'cmd launcher does not prefer the prebuilt bundle when present',
     );
     assert(
       !content.includes('LLXPRT_LAUNCH_FAIL'),
