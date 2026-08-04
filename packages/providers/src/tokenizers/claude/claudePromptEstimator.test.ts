@@ -14,7 +14,10 @@ import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import { ModelPromptEstimatorRegistry } from '../ModelPromptEstimatorRegistry.js';
-import { applyClaudeCalibration } from './claudeCalibration.js';
+import {
+  applyClaudeCalibration,
+  applyClaudeMarginalCalibration,
+} from './claudeCalibration.js';
 import { extractClaudeContentFeatures } from './claudeContentFeatures.js';
 import { isClaude5CalibratedProvider } from './claudeCalibrationAssets.js';
 import {
@@ -26,6 +29,7 @@ import {
 } from './claudeCalibrationAssets.js';
 import {
   CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
+  createClaudeRuntimeTokenizer,
   estimateClaude5Prompt,
 } from './claudePromptEstimator.js';
 
@@ -373,6 +377,93 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
     expect((error as ModelPromptEstimatorError).remediation).toBe(
       withheld.withheldReason,
     );
+  });
+});
+
+describe('Claude 5 incremental history counter', () => {
+  const HISTORY_TEXT = 'Explain tokenization in two sentences. 日本語 ';
+
+  it('counts a history entry with the model own marginal calibration', async () => {
+    const tokenizer = createClaudeRuntimeTokenizer(
+      'claudecode',
+      'claude-opus-5',
+    );
+    expect(tokenizer).toBeDefined();
+    const encoder = tiktoken.get_encoding('o200k_base');
+    const baseTokens = encoder.encode(HISTORY_TEXT, [], []).length;
+    expect(await tokenizer!.countTokens(HISTORY_TEXT)).toBe(
+      applyClaudeMarginalCalibration(
+        baseTokens,
+        extractClaudeContentFeatures(HISTORY_TEXT),
+        CLAUDE_OPUS_5_CALIBRATION,
+      ),
+    );
+  });
+
+  /**
+   * The intercept is per-request framing carried by the synchronized baseline.
+   * Charging it to every history entry would inflate the running total by
+   * roughly 1,600 tokens per message.
+   */
+  it('does not charge per-request framing to a history entry', async () => {
+    const tokenizer = createClaudeRuntimeTokenizer(
+      'claudecode',
+      'claude-opus-5',
+    );
+    const encoder = tiktoken.get_encoding('o200k_base');
+    const baseTokens = encoder.encode(HISTORY_TEXT, [], []).length;
+    const wholeRequestForm = applyClaudeCalibration(
+      baseTokens,
+      extractClaudeContentFeatures(HISTORY_TEXT),
+      CLAUDE_OPUS_5_CALIBRATION,
+    );
+    const entry = await tokenizer!.countTokens(HISTORY_TEXT);
+    expect(CLAUDE_OPUS_5_CALIBRATION.intercept).toBeLessThan(0);
+    expect(entry).toBeGreaterThan(wholeRequestForm);
+    expect(entry).toBeGreaterThan(baseTokens);
+  });
+
+  it('gives each model its own counter', async () => {
+    const opus = createClaudeRuntimeTokenizer('claudecode', 'claude-opus-5');
+    const fable = createClaudeRuntimeTokenizer('claudecode', 'claude-fable-5');
+    expect(opus).toBeDefined();
+    expect(fable).toBeDefined();
+    const long = HISTORY_TEXT.repeat(400);
+    expect(await opus!.countTokens(long)).not.toBe(
+      await fable!.countTokens(long),
+    );
+  });
+
+  it('refuses to silently degrade', () => {
+    expect(
+      createClaudeRuntimeTokenizer('claudecode', 'claude-opus-5')
+        ?.fallbackPolicy,
+    ).toBe('deny');
+  });
+
+  it.each(['claude-opus-5-mini', 'claude-opus-50', 'claude-sonnet-5'])(
+    'leaves %s on its existing counter',
+    (model) => {
+      expect(createClaudeRuntimeTokenizer('claudecode', model)).toBeUndefined();
+    },
+  );
+
+  it.each(['zai', 'openrouter'])(
+    'leaves provider %s on its existing counter',
+    (provider) => {
+      expect(
+        createClaudeRuntimeTokenizer(provider, 'claude-opus-5'),
+      ).toBeUndefined();
+    },
+  );
+
+  it('counts JSON-serializable content', async () => {
+    const tokenizer = createClaudeRuntimeTokenizer(
+      'claudecode',
+      'claude-opus-5',
+    );
+    const count = await tokenizer!.countTokens({ role: 'user', text: 'hello' });
+    expect(count).toBeGreaterThan(0);
   });
 });
 

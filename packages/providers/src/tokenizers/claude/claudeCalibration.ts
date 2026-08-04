@@ -180,11 +180,43 @@ export function applyClaudeCalibration(
   calibration: ClaudeCalibrationCoefficients,
 ): number {
   if (baseTokens === 0 && features.codePoints === 0) return 0;
-  let total =
-    calibration.intercept + calibration.baseTokenCoefficient * baseTokens;
+  const total =
+    calibration.intercept + marginalTokens(baseTokens, features, calibration);
+  const rounded = total <= 0 ? 0 : Math.round(total);
+  return rounded < baseTokens ? baseTokens : rounded;
+}
+
+function marginalTokens(
+  baseTokens: number,
+  features: ClaudeContentFeatures,
+  calibration: ClaudeCalibrationCoefficients,
+): number {
+  let total = calibration.baseTokenCoefficient * baseTokens;
   for (const entry of calibration.featureCoefficients) {
     total += entry.coefficient * features[entry.feature];
   }
-  const rounded = total <= 0 ? 0 : Math.round(total);
+  return total;
+}
+
+/**
+ * The content-only contribution of one piece of a request.
+ *
+ * The calibration's features are extensive, so a whole request decomposes into
+ * one per-request framing constant plus the sum of its parts. The intercept is
+ * that framing constant: it belongs to the request, not to any single message,
+ * and adding it once per message would inflate every count.
+ *
+ * This is used for incremental history accounting, where the per-request
+ * framing is carried by the baseline that provider usage synchronizes after
+ * every response, not by the individual entries.
+ */
+export function applyClaudeMarginalCalibration(
+  baseTokens: number,
+  features: ClaudeContentFeatures,
+  calibration: ClaudeCalibrationCoefficients,
+): number {
+  if (baseTokens === 0 && features.codePoints === 0) return 0;
+  const marginal = marginalTokens(baseTokens, features, calibration);
+  const rounded = marginal <= 0 ? 0 : Math.round(marginal);
   return rounded < baseTokens ? baseTokens : rounded;
 }

@@ -8,6 +8,7 @@ import type {
   RuntimePromptEstimateRequest,
   RuntimePromptEstimateResult,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ProviderFinalizedPromptProjection } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
@@ -18,7 +19,10 @@ import {
   loadTiktokenModule,
   type TiktokenModuleLoader,
 } from '../o200kBaseCounter.js';
-import { applyClaudeCalibration } from './claudeCalibration.js';
+import {
+  applyClaudeCalibration,
+  applyClaudeMarginalCalibration,
+} from './claudeCalibration.js';
 import type { ClaudeCalibration } from './claudeCalibration.js';
 import {
   extractClaudeContentFeatures,
@@ -155,6 +159,54 @@ export async function estimateClaude5Prompt(
       { cause: error },
     );
   }
+}
+
+/**
+ * Per-entry token counter for incremental history accounting.
+ *
+ * Uses the same calibration as the pre-send estimate but in its marginal form,
+ * because a history entry carries content, not the per-request framing the
+ * intercept models. Returns undefined for anything this family has not
+ * measured, so unclaimed models keep their existing counter rather than
+ * receiving coefficients fitted elsewhere.
+ */
+export function createClaudeRuntimeTokenizer(
+  activeProvider: string,
+  canonicalModel: string,
+): RuntimeTokenizer | undefined {
+  const spec = CLAUDE_5_FAMILY_SPECS.find(
+    (candidate) =>
+      candidate.claim.test(canonicalModel) &&
+      candidate.matches(canonicalModel) &&
+      candidate.appliesToProvider(activeProvider),
+  );
+  const calibration = spec?.calibration;
+  if (spec === undefined || calibration === undefined) return undefined;
+  return {
+    fallbackPolicy: 'deny',
+    async countTokens(content: unknown): Promise<number> {
+      const text =
+        typeof content === 'string' ? content : JSON.stringify(content);
+      if (typeof text !== 'string') {
+        throw new ModelPromptEstimatorError(
+          'tokenization-failed',
+          {
+            activeProvider,
+            canonicalModel,
+            protocol: 'anthropic-messages',
+            family: spec.family,
+          },
+          'provide string or JSON-serializable content to the runtime tokenizer',
+        );
+      }
+      const encoder = await getO200kBaseEncoder();
+      return applyClaudeMarginalCalibration(
+        countO200kBaseTokens(encoder, text),
+        extractClaudeContentFeatures(text),
+        calibration,
+      );
+    },
+  };
 }
 
 function toRegistration(
