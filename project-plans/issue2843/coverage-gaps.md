@@ -274,3 +274,36 @@ token storage and isolation) and
 `packages/auth/src/__tests__/oauth-manager-contract.test.ts` (8 cases,
 manager interface including `getToken` and `forceRefreshToken`). Neither
 exercises a real CLI process.
+
+## Vacuous assertions found while porting
+
+`InputPrompt.completion.test.tsx` has ESC tests whose intermediate wait is
+`expect(onEscapePromptChange).toHaveBeenCalledWith(false)`. That call happens on
+mount, so the wait is satisfied immediately and the assertion proves nothing
+about the ESC keypress. "should reset escape state on any non-ESC key" consists
+only of two such waits, so it passes without exercising any escape behaviour at
+all.
+
+These were passing under Vitest for the same reason. They are noted rather than
+rewritten here because correcting them requires understanding why the
+double-ESC clear does not fire (below), and a rewrite that merely makes them
+strict would convert silent no-ops into red tests without adding information.
+
+### `should clear buffer on second ESC press` — still failing
+
+Established by direct probe rather than inference:
+
+- a lone `\x1B` written to the ink-testing-library stdin is delivered as an
+  `escape` key, twice in a row (probe rendered `KeypressProvider` directly)
+- a bracketed paste is likewise delivered as a single `paste` key, so the
+  keypress pipeline and the ink stub are not at fault
+- `completion.showSuggestions` is `false` in this test, so ESC is not being
+  consumed by the suggestion-dismiss branch of `handleEscapeKey`
+- the mocked buffer's `setText` does update `text`, so `buffer.text` is
+  non-empty when the first ESC arrives, and the empty-buffer early return in
+  `handleEscapeKey` should not apply
+
+Despite that, `onEscapePromptChange` is never called with `true`, so
+`setShowEscapePrompt(true)` never runs and the second ESC never reaches
+`buffer.setText('')`. The remaining unknown is inside `InputPrompt`'s own
+dispatch. Left failing rather than adjusted to match current output.

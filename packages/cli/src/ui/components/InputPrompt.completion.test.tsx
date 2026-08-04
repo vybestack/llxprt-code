@@ -671,10 +671,8 @@ describe('InputPrompt', () => {
     it('should clear buffer on second ESC press', async () => {
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
-      // The first ESC is a no-op on an empty buffer, and the mocked setText
-      // does not update `text`, so the state has to be set directly. Clearing
-      // the spy afterwards keeps the later assertion about the clear itself.
-      props.buffer.text = 'text to clear';
+      // Seed the buffer, then clear the spy so the later assertion is about
+      // the ESC-driven clear rather than this setup call.
       props.buffer.setText('text to clear');
       (props.buffer.setText as unknown as Mock).mockClear();
 
