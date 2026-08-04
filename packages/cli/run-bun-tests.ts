@@ -77,7 +77,9 @@ export function discoverTestFiles(root: string): string[] {
   for (const testRoot of TEST_ROOTS) {
     collectTestFiles(join(root, testRoot), results);
   }
-  return results.map((file) => relative(root, file).split('\\').join('/')).sort();
+  return results
+    .map((file) => relative(root, file).split('\\').join('/'))
+    .sort();
 }
 
 interface TestResult {
@@ -152,7 +154,9 @@ export function generateJUnit(results: readonly TestResult[]): string {
   const failedCount = results.filter((result) => !result.passed).length;
   const testCases = results
     .map((result) => {
-      const className = escapeXml(result.file.replace(/\.(test|spec)\.tsx?$/, ''));
+      const className = escapeXml(
+        result.file.replace(/\.(test|spec)\.tsx?$/, ''),
+      );
       const failure = result.passed
         ? ''
         : result.timedOut

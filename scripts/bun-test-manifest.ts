@@ -683,6 +683,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: [
       'test-setup/augment-bun-vi.test.ts',
       'test-setup/stub-helpers.bun.test.ts',
+      'test-setup/vitest-parity.test.ts',
     ],
   },
   {
