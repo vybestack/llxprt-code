@@ -246,3 +246,31 @@ passing test that asserts incorrect behavior").
   fail `toBeGreaterThan(0)` with "Expected and actual values must be numbers or
   bigints". Bun's `toMatchObject` was probed and does reject missing keys, so
   matcher leniency is not the explanation. Left failing rather than guessed at.
+
+## `test/integration/auth-e2e.integration.test.ts` — deleted (5 cases)
+
+Every case spawned the CLI with `spawn('npm', ['run', 'cli', ...])`. There is no
+`cli` script in `packages/cli/package.json` or in the root `package.json`, and
+none appears anywhere in the history reachable from this branch. The spawn
+therefore produced no output and every assertion ran against an empty string, so
+the file could never have passed. It was invisible because
+`test/integration/**` was outside the Vitest selection.
+
+Rebuilding it means writing a real interactive-CLI harness; the repository
+already has one (`dev-docs/tmux-harness.md`) and a root-level
+`integration-tests/` tree that is the right home for end-to-end coverage.
+
+Behaviours with no end-to-end equivalent today:
+
+- OAuth tokens persist across a complete CLI restart
+- `/auth logout` completely removes access
+- expired tokens are refreshed automatically on use
+- multiple providers hold independent sessions
+- a returning user is not asked to re-authenticate
+
+Related unit-level coverage that does exist and still passes:
+`packages/auth/src/__tests__/keyring-token-store.di.test.ts` (28 cases,
+token storage and isolation) and
+`packages/auth/src/__tests__/oauth-manager-contract.test.ts` (8 cases,
+manager interface including `getToken` and `forceRefreshToken`). Neither
+exercises a real CLI process.
