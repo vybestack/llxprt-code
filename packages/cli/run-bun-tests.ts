@@ -27,6 +27,13 @@ import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
 const PER_FILE_TIMEOUT_MS = 120_000;
+/**
+ * Per-test timeout, matching the testTimeout the removed vitest.config.ts set.
+ * Bun defaults to 5s, which the tests that spawn the real CLI exceed once the
+ * suite runs with concurrency. Passed as a flag because the bunfig.toml key is
+ * not picked up for a single-file invocation.
+ */
+const PER_TEST_TIMEOUT_MS = 30_000;
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
   'dist',
@@ -94,11 +101,15 @@ function runTestFile(file: string): Promise<TestResult> {
   return new Promise((resolve) => {
     let settled = false;
     let output = '';
-    const child = spawn(process.execPath, ['test', file], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
-    });
+    const child = spawn(
+      process.execPath,
+      ['test', '--timeout', String(PER_TEST_TIMEOUT_MS), file],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      },
+    );
 
     child.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
