@@ -23,10 +23,17 @@
 
 import { afterAll, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cliBundleConfig } from '../bun-build.config.ts';
+import { cliBundleConfig, dependenciesInstalled } from '../bun-build.config.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(__filename, '..', '..', '..');
@@ -100,3 +107,39 @@ describe.skipIf(!RUN_BUILD_TEST)(
     });
   },
 );
+
+// Ungated: this must always run, because it guards the escape hatch that keeps
+// `npm pack` working in dependency-free checkouts.
+describe('issue #2999: prepack skips bundling without dependencies', () => {
+  it('reports dependencies missing for a tree with no node_modules', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'llxprt-nodeps-'));
+    try {
+      // Real filesystem state, not a mock: prepack fires on any `npm pack` of
+      // packages/cli, including the release-pack smoke's copy of the repo made
+      // without node_modules. Bun cannot resolve a single import there, so the
+      // build must be skipped rather than failing for an unactionable reason.
+      expect(dependenciesInstalled(empty)).toBe(false);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('reports dependencies present once node_modules exists', () => {
+    const populated = mkdtempSync(join(tmpdir(), 'llxprt-deps-'));
+    try {
+      mkdirSync(join(populated, 'node_modules'));
+      // The negative case alone would pass even if the predicate always
+      // returned false, so pin the positive case too: a real publisher has
+      // dependencies installed and must still get a bundle.
+      expect(dependenciesInstalled(populated)).toBe(true);
+    } finally {
+      rmSync(populated, { recursive: true, force: true });
+    }
+  });
+
+  it('defaults to the repo root, which has dependencies installed', () => {
+    // Guards the default argument: if it drifted to another directory, the real
+    // prepack would silently skip bundling on every publish.
+    expect(dependenciesInstalled()).toBe(true);
+  });
+});

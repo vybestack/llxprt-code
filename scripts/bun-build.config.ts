@@ -25,7 +25,7 @@
  * a2a-server build. Top-level execution is guarded by `import.meta.main`.
  */
 
-import { copyFileSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -203,6 +203,18 @@ export async function buildCliBundle(): Promise<readonly string[]> {
   return cliResult.outputs.map((o) => `${o.path}=${o.size}`);
 }
 
+/**
+ * Reports whether workspace dependencies are installed.
+ *
+ * `prepack` fires on any `npm pack` of packages/cli, including from a copy of
+ * the repo made without node_modules (the release-pack smoke does exactly
+ * this). Bundling is impossible there -- Bun cannot resolve a single import --
+ * so the build would fail for a reason that says nothing about the code.
+ */
+export function dependenciesInstalled(rootDir: string = root): boolean {
+  return existsSync(join(rootDir, 'node_modules'));
+}
+
 async function runBuilds(argv: readonly string[]): Promise<void> {
   const cliOnly = argv.includes('--cli-only');
   const a2aOnly = argv.includes('--a2a-only');
@@ -212,6 +224,20 @@ async function runBuilds(argv: readonly string[]): Promise<void> {
       'bun-build.config: --cli-only and --a2a-only are mutually exclusive.',
     );
     process.exit(1);
+  }
+
+  // Skipping is safe specifically because the bundle is an optimisation, not a
+  // requirement: packages/cli ships its TypeScript source too, and the entry
+  // resolver falls back to it when no bundle is present. A publisher always has
+  // dependencies installed, so a real release still gets the bundle; this only
+  // spares dependency-free `npm pack` callers a failure they cannot act on.
+  if (!dependenciesInstalled()) {
+    console.error(
+      'bun-build.config: node_modules is absent, so the CLI bundle cannot be ' +
+        'built. Skipping the bundle; the package still ships TypeScript source ' +
+        'and the launcher falls back to it. Run `npm install` to bundle.',
+    );
+    return;
   }
 
   const artifacts: string[] = [];
