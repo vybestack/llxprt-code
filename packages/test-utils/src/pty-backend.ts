@@ -79,10 +79,25 @@ interface BunSpawnGlobal {
  * combination where `@lydell/node-pty` stops delivering PTY events.
  */
 export function shouldUseBunTerminal(
-  runtime: { readonly bun?: string } = process.versions,
+  runtime: Readonly<
+    Record<string, string | undefined>
+  > = process.versions as unknown as Record<string, string | undefined>,
   platform: string = process.platform,
 ): boolean {
-  return typeof runtime.bun === 'string' && platform !== 'win32';
+  return typeof runtime['bun'] === 'string' && platform !== 'win32';
+}
+
+/**
+ * Resolves Bun's spawn global without depending on Bun's type definitions,
+ * which are not on the `types` list of every workspace that compiles this
+ * file.
+ */
+function bunSpawnGlobal(): BunSpawnGlobal {
+  const candidate = (globalThis as { Bun?: unknown }).Bun;
+  if (candidate === undefined) {
+    throw new Error('Bun.spawn is unavailable outside the Bun runtime');
+  }
+  return candidate as BunSpawnGlobal;
 }
 
 function stringOnlyEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -104,27 +119,24 @@ function spawnBunTerminal(
   const exitListeners: Array<(event: TestPtyExit) => void> = [];
   const decoder = utf8Decoder();
 
-  const subprocess = (Bun as unknown as BunSpawnGlobal).spawn(
-    [file, ...args],
-    {
-      cwd: options.cwd,
-      env: stringOnlyEnv(options.env),
-      terminal: {
-        cols: options.cols,
-        rows: options.rows,
-        name: options.name,
-        data: (_terminal, chunk) => {
-          const text = decoder.decode(chunk, { stream: true });
-          if (text === '') {
-            return;
-          }
-          for (const listener of dataListeners) {
-            listener(text);
-          }
-        },
+  const subprocess = bunSpawnGlobal().spawn([file, ...args], {
+    cwd: options.cwd,
+    env: stringOnlyEnv(options.env),
+    terminal: {
+      cols: options.cols,
+      rows: options.rows,
+      name: options.name,
+      data: (_terminal, chunk) => {
+        const text = decoder.decode(chunk, { stream: true });
+        if (text === '') {
+          return;
+        }
+        for (const listener of dataListeners) {
+          listener(text);
+        }
       },
     },
-  );
+  });
 
   void subprocess.exited.then((code) => {
     // Match node-pty: dispatch once, to whoever is subscribed at that moment.

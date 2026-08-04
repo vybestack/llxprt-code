@@ -1,6 +1,5 @@
-test(bun): point CI, the orchestrator and the docs at the Bun-native suite
+fix(test-utils): resolve Bun globals without Bun type definitions
 
-Root scripts, scripts/test.ts and the CI workflows now invoke the Bun-native
-runner for the script harness, evals and integration tests. Roots that call a
-real provider are marked credentialed so an unfiltered run stays offline and
-the parity job can execute the complete suite without burning quota.
+packages/cli compiles pty-backend.ts through a tsconfig that does not list
+Bun's types, so process.versions.bun and the Bun global are read through
+explicit narrow shapes instead.
