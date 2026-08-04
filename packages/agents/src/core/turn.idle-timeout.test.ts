@@ -290,7 +290,9 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // awaiting the run completes it. `runAllTimersAsync` must not be used here
     // — it never returns under Bun on Linux for this pipeline.
     resolveIterator!();
+    process.stderr.write('CIMARK D resolved\n');
     await runPromise;
+    process.stderr.write('CIMARK D run-done\n');
 
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe(AgentEventType.Content);
@@ -302,7 +304,9 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // "which of the two configured durations is used", which does not need a
     // fake clock: the config value is two orders of magnitude larger, so only
     // the env-driven one can fire inside the wait below.
+    process.stderr.write('CIMARK E start\n');
     vi.useRealTimers();
+    process.stderr.write('CIMARK E real-timers\n');
     const envTimeoutMs = 50;
     const configTimeoutMs = 20_000;
 
@@ -378,7 +382,9 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // The stream stalls after its first chunk, so the env-driven 50ms watchdog
     // fires. Were the 20s config value being used instead, no timeout event
     // would arrive and this wait would fail.
+    process.stderr.write('CIMARK E await-gap\n');
     expect(await waitForCondition(() => gapReached)).toBe(true);
+    process.stderr.write('CIMARK E gap-done\n');
     expect(
       await waitForConditionInRealTime(() =>
         events.some((e) => e.type === AgentEventType.StreamIdleTimeout),
@@ -386,8 +392,10 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     ).toBe(true);
 
     // Release the stall so the generator can unwind, then let the run finish.
+    process.stderr.write('CIMARK E timeout-seen\n');
     releaseGap!();
     await runPromise;
+    process.stderr.write('CIMARK E run-done\n');
     expect(runSettled).toBe(true);
   });
 
@@ -460,13 +468,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // The core assertion: with neither source configuring a duration, no
     // watchdog timer is registered at all. Checked while the fake clock is
     // still installed, since that is what exposes the timer count.
+    process.stderr.write('CIMARK D pre-count\n');
     expect(vi.getTimerCount()).toBe(0);
+    process.stderr.write('CIMARK D count-ok\n');
 
     // Then hold the stall open in real time to show nothing fires. The fake
     // clock is not used for this: draining the pipeline to completion under
     // Bun's fake timers deadlocks.
     vi.useRealTimers();
+    process.stderr.write('CIMARK D real-timers\n');
     await delayRealTime(250);
+    process.stderr.write('CIMARK D slept\n');
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
