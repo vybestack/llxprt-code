@@ -120,6 +120,19 @@ cover the container against the current architecture and pass (21 cases). The
 gaps above are the parts they do not reach — chiefly the auto-updater, settings
 precedence for footer/tips, and context-file messaging.
 
+## Deleted: individual cases whose presentation was removed
+
+- `src/ui/components/TodoPanel.responsive.test.tsx` — the case
+  `should show only task count and status indicators for narrow width`, plus
+  count-summary assertions (`3 tasks`, `1 completed`, `1 in progress`,
+  `1 pending`) in neighbouring cases. `TodoPanel` renders no count summary at
+  all any more, and narrow widths now truncate content rather than hiding it,
+  so the case's premise no longer describes the component.
+
+  Coverage lost — the todo panel summarising how many tasks are complete, in
+  progress and pending. Truncation at narrow widths is still covered by the
+  remaining 6 cases in that file.
+
 ## Ported, not deleted
 
 - `src/ui/components/ContextIndicator.ui.test.tsx` — constructed
