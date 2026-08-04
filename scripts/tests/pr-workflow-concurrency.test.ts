@@ -149,6 +149,8 @@ function resolveOperand(
   operand: string,
   context: ResolverContext,
 ): ExpressionValue {
+  // Either quote alone means a literal was intended, so a malformed one is
+  // reported as a bad literal rather than as an unknown context path.
   if (operand.startsWith("'") || operand.endsWith("'")) {
     if (!/^'[^']*'$/.test(operand)) {
       throw new Error(`Unsupported single-quoted string literal: ${operand}`);
@@ -288,21 +290,23 @@ describe('PR workflow concurrency cancellation', () => {
       '${{ github.workflow }}',
       '${{ github.event_name }}',
       'github.event.pull_request.number || inputs.branch_ref || github.ref',
+      '${{ github.event.label.name }}',
       '${{ matrix.sandbox }}',
     ]);
     expectGroupsEqual(
       normalize(asOptionalString(linuxConcurrency?.['group'])),
-      '${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ matrix.sandbox }}',
+      '${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ github.event.label.name }}-${{ matrix.sandbox }}',
     );
     expectConcurrencyGroup(macConcurrency, [
       '${{ github.workflow }}',
       '${{ github.event_name }}',
       'github.event.pull_request.number || inputs.branch_ref || github.ref',
+      '${{ github.event.label.name }}',
       '-macos',
     ]);
     expectGroupsEqual(
       normalize(asOptionalString(macConcurrency?.['group'])),
-      '${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-macos',
+      '${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ github.event.label.name }}-macos',
     );
     expect(workflowJob(workflow, 'skip_check').concurrency).toBeUndefined();
     expect(
@@ -511,6 +515,25 @@ describe('PR workflow concurrency cancellation', () => {
         ),
       ),
     );
+  });
+
+  it('isolates E2E job groups by pull_request_target label', () => {
+    for (const job of ['e2e_linux', 'e2e_mac']) {
+      const group = jobConcurrencyGroup('.github/workflows/e2e.yml', job);
+      const approved = withSandbox(
+        e2ePullRequestContext('pull_request_target', 123, 'maintainer:e2e:ok'),
+        'sandbox:none',
+      );
+      const unrelated = withSandbox(
+        e2ePullRequestContext('pull_request_target', 123, 'ci/cd'),
+        'sandbox:none',
+      );
+
+      expectGroupsDifferent(
+        resolveConcurrencyGroup(group, approved),
+        resolveConcurrencyGroup(group, unrelated),
+      );
+    }
   });
 
   it('isolates an E2E PR number from the same dispatch branch_ref', () => {

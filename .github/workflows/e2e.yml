@@ -177,7 +177,7 @@ jobs:
       group: >-
         ${{ github.workflow }}-${{ github.event_name }}-${{
         github.event.pull_request.number || inputs.branch_ref || github.ref
-        }}-${{ matrix.sandbox }}
+        }}-${{ github.event.label.name }}-${{ matrix.sandbox }}
       cancel-in-progress: true
     if: |
       !cancelled() &&
@@ -358,7 +358,7 @@ jobs:
       group: >-
         ${{ github.workflow }}-${{ github.event_name }}-${{
         github.event.pull_request.number || inputs.branch_ref || github.ref
-        }}-macos
+        }}-${{ github.event.label.name }}-macos
       cancel-in-progress: true
     if: |
       !cancelled() &&
