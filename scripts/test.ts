@@ -251,10 +251,24 @@ function createRunnerWithPATH(rootDir: string): CommandRunner {
 // packs a CLI tarball and runs three npm installs, far beyond the budget the
 // rest of the script harness needs. It therefore lives in its own Bun-native
 // root with a much larger timeout (issue #2780).
-const SCRIPTS_TEST_COMMAND =
-  'bun scripts/run_bun_tests.ts --root scripts-tests';
-const SCRIPTS_SLOW_TEST_COMMAND =
-  'bun scripts/run_bun_tests.ts --root scripts-tests-slow';
+/**
+ * Bun-native roots owned by the scripts shard, in execution order.
+ *
+ * These belong to no workspace, so nothing else would run them. Exported as
+ * the single source of truth: `scripts/tests/bun-manifest-root-ownership.bun.test.ts`
+ * reads this list to prove every manifest root has exactly one executor, and
+ * the root `test:scripts` script delegates here rather than restating it.
+ */
+export const SCRIPTS_SHARD_ROOTS: readonly string[] = [
+  'scripts-tests',
+  'scripts-tests-slow',
+  'test-setup',
+];
+
+export function scriptsRootCommand(root: string): string {
+  return `bun scripts/run_bun_tests.ts --root ${root}`;
+}
+
 const SCRIPTS_TEST_DIRECTORY = 'scripts/tests';
 
 function matchesFilter(workspace: WorkspaceInfo, filter: string): boolean {
@@ -462,27 +476,21 @@ function runScriptTests(
   if (!existsSync(join(rootDir, SCRIPTS_TEST_DIRECTORY))) {
     return;
   }
-  const mainResult = runPhase(
-    'scripts',
-    'scripts',
-    SCRIPTS_TEST_COMMAND,
-    rootDir,
-    runner,
-  );
-  results.push(mainResult);
-
-  // The release-install smoke test runs as a separate root so its much larger
-  // timeout does not weaken the budget that catches hangs in the rest of the
-  // harness (issue #2780). Fail-fast: skip it if the main suite already failed.
-  if (mainResult.success) {
-    const slowResult = runPhase(
+  // Each root runs as its own invocation so a root with a much larger budget
+  // (the release-install smoke, issue #2780) cannot weaken the timeout that
+  // catches hangs in the rest of the harness. Fail-fast between roots.
+  for (const root of SCRIPTS_SHARD_ROOTS) {
+    const result = runPhase(
       'scripts',
       'scripts',
-      SCRIPTS_SLOW_TEST_COMMAND,
+      scriptsRootCommand(root),
       rootDir,
       runner,
     );
-    results.push(slowResult);
+    results.push(result);
+    if (!result.success) {
+      return;
+    }
   }
 }
 

@@ -21,6 +21,7 @@ import {
   BUN_NATIVE_TEST_MANIFEST,
   type BunTestWorkspaceEntry,
 } from '../bun-test-manifest.ts';
+import { SCRIPTS_SHARD_ROOTS, scriptsRootCommand } from '../test.ts';
 
 const repoRoot = resolve(import.meta.dir, '..', '..');
 
@@ -46,13 +47,15 @@ const COVERED_BY_BESPOKE_RUNNER: Readonly<Record<string, string>> = {
   core: 'packages/core/run-bun-tests.ts',
 };
 
-/** Every script the sharded CI matrix actually executes. */
+/**
+ * Every command the sharded CI matrix actually executes.
+ *
+ * The scripts shard runs through `scripts/test.ts`, not the root
+ * `test:scripts` script, so the roots come from the orchestrator's own list —
+ * reading package.json here would have checked a command CI never runs.
+ */
 function executingScripts(): readonly string[] {
-  const scripts: string[] = [];
-  const scriptsHarness = rootPackage.scripts?.['test:scripts'];
-  if (scriptsHarness !== undefined) {
-    scripts.push(scriptsHarness);
-  }
+  const scripts: string[] = SCRIPTS_SHARD_ROOTS.map(scriptsRootCommand);
   for (const relativePath of rootPackage.workspaces ?? []) {
     const workspacePackage = readPackageJson(
       join(repoRoot, relativePath, 'package.json'),
