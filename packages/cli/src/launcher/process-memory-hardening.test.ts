@@ -5,12 +5,12 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { FatalError } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   applyProcessMemoryHardening,
+  HARDENING_FAILURE_EXIT_CODE,
   type ProcessMemoryHardeningOptions,
 } from './process-memory-hardening.js';
 
@@ -158,7 +158,7 @@ describe('applyProcessMemoryHardening — warn-and-continue (not credential-bear
         platform: 'linux',
         writeWarning: sink,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toStrictEqual({});
 
     expect(prctl).toHaveBeenCalledWith(4, 0, 0, 0, 0);
     expect(messages).toHaveLength(1);
@@ -178,7 +178,7 @@ describe('applyProcessMemoryHardening — warn-and-continue (not credential-bear
         platform: 'linux',
         writeWarning: sink,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toStrictEqual({});
 
     expect(prctl).toHaveBeenCalledTimes(1);
     expect(messages).toHaveLength(1);
@@ -193,7 +193,7 @@ describe('applyProcessMemoryHardening — warn-and-continue (not credential-bear
 
     await expect(
       applyProcessMemoryHardening({ prctl, platform: 'linux' }),
-    ).resolves.toBeUndefined();
+    ).resolves.toStrictEqual({});
 
     expect(prctl).toHaveBeenCalledTimes(1);
   });
@@ -214,24 +214,20 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
     vi.restoreAllMocks();
   });
 
-  it('FAILS CLOSED (throws FatalError exit 44) when credential-bearing and prctl returns non-zero', async () => {
+  it('FAILS CLOSED (returns abortReason, exit code 44) when credential-bearing and prctl returns non-zero', async () => {
     const prctl = vi.fn((() => -1) as PrctlCallable);
     const { sink, messages } = warningSink();
 
-    let caught: unknown;
-    try {
-      await applyProcessMemoryHardening({
-        prctl,
-        platform: 'linux',
-        writeWarning: sink,
-      });
-    } catch (e) {
-      caught = e;
-    }
+    const { abortReason } = await applyProcessMemoryHardening({
+      prctl,
+      platform: 'linux',
+      writeWarning: sink,
+    });
 
-    expect(caught).toBeInstanceOf(FatalError);
-    expect((caught as FatalError).exitCode).toBe(44);
-    // The warning sink must NOT have been called — we threw, not warned.
+    expect(abortReason).toBeDefined();
+    expect(abortReason).toContain('credential-bearing');
+    expect(HARDENING_FAILURE_EXIT_CODE).toBe(44);
+    // The warning sink must NOT have been called — we aborted, not warned.
     expect(messages).toHaveLength(0);
   });
 
@@ -241,28 +237,26 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
     }) as PrctlCallable);
     const { sink } = warningSink();
 
-    await expect(
-      applyProcessMemoryHardening({
-        prctl,
-        platform: 'linux',
-        writeWarning: sink,
-      }),
-    ).rejects.toBeInstanceOf(FatalError);
+    const { abortReason } = await applyProcessMemoryHardening({
+      prctl,
+      platform: 'linux',
+      writeWarning: sink,
+    });
+    expect(abortReason).toBeDefined();
   });
 
   it('FAILS CLOSED when credential-bearing and prctl cannot be resolved (null)', async () => {
     const { sink } = warningSink();
 
-    await expect(
-      // Injecting null models "prctl could not be resolved from libc" and
-      // short-circuits resolveLibcPrctl(), so this stays deterministic under
-      // both Node and Bun rather than depending on bun:ffi availability.
-      applyProcessMemoryHardening({
-        prctl: null,
-        platform: 'linux',
-        writeWarning: sink,
-      }),
-    ).rejects.toBeInstanceOf(FatalError);
+    // Injecting null models "prctl could not be resolved from libc" and
+    // short-circuits resolveLibcPrctl(), so this stays deterministic under
+    // both Node and Bun rather than depending on bun:ffi availability.
+    const { abortReason } = await applyProcessMemoryHardening({
+      prctl: null,
+      platform: 'linux',
+      writeWarning: sink,
+    });
+    expect(abortReason).toBeDefined();
   });
 
   it('FAILS CLOSED when credential-bearing via LLXPRT_CREDENTIAL_SOCKET even if SANDBOX is unset', async () => {
@@ -271,13 +265,12 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
     const prctl = vi.fn((() => -1) as PrctlCallable);
     const { sink } = warningSink();
 
-    await expect(
-      applyProcessMemoryHardening({
-        prctl,
-        platform: 'linux',
-        writeWarning: sink,
-      }),
-    ).rejects.toBeInstanceOf(FatalError);
+    const { abortReason } = await applyProcessMemoryHardening({
+      prctl,
+      platform: 'linux',
+      writeWarning: sink,
+    });
+    expect(abortReason).toBeDefined();
   });
 });
 

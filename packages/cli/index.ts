@@ -8,7 +8,10 @@
 
 import { FatalError, writeToStderr } from '@vybestack/llxprt-code-core';
 import { runBunLauncherIfNeeded } from './src/launcher/bun-launcher.js';
-import { applyProcessMemoryHardening } from './src/launcher/process-memory-hardening.js';
+import {
+  applyProcessMemoryHardening,
+  HARDENING_FAILURE_EXIT_CODE,
+} from './src/launcher/process-memory-hardening.js';
 
 // --- Global Entry Point ---
 
@@ -94,7 +97,13 @@ runBunLauncherIfNeeded()
     // /proc/<pid>/mem. No-op off Linux or when neither sandboxed nor
     // credential-bearing; fails closed (FatalError) if hardening fails while
     // credential-bearing, warns and continues otherwise. See issue #3028.
-    await applyProcessMemoryHardening();
+    // The hardening module returns an abort reason rather than throwing so it
+    // stays free of package imports at this earliest bootstrap point; the
+    // fatal-error policy lives here.
+    const { abortReason } = await applyProcessMemoryHardening();
+    if (abortReason !== undefined) {
+      throw new FatalError(abortReason, HARDENING_FAILURE_EXIT_CODE);
+    }
     const { main } = await import('./src/cli.js');
     try {
       await main();

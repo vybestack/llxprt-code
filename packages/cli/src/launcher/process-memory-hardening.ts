@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FatalError } from '@vybestack/llxprt-code-core/utils/errors.js';
-
 /**
  * prctl(2) option that sets the process "dumpable" flag. Setting it to 0 makes
  * `/proc/<pid>/{maps,mem,...}` root-owned, so `ptrace_may_access` denies a
@@ -16,7 +14,19 @@ import { FatalError } from '@vybestack/llxprt-code-core/utils/errors.js';
 const PR_SET_DUMPABLE = 4;
 
 /** Exit code for a fatal sandbox-hardening failure (matches FatalSandboxError). */
-const HARDENING_FAILURE_EXIT_CODE = 44;
+export const HARDENING_FAILURE_EXIT_CODE = 44;
+
+/**
+ * Outcome of {@link applyProcessMemoryHardening}. When `abortReason` is set the
+ * caller MUST abort startup: the process is credential-bearing and could not be
+ * protected. The reason is returned rather than thrown as a `FatalError` so this
+ * module — which runs at the earliest bootstrap point, before the CLI is
+ * imported — stays free of package imports. `packages/cli/index.ts` owns the
+ * fatal-error policy.
+ */
+export interface ProcessMemoryHardeningResult {
+  readonly abortReason?: string;
+}
 
 /**
  * Raw prctl callable signature. The real symbol is resolved lazily from libc
@@ -130,26 +140,26 @@ async function resolveLibcPrctl(): Promise<PrctlCallable | null> {
 
 /**
  * Applies the failure policy for a hardening failure. When the process is
- * credential-bearing this **fails closed** by throwing a {@link FatalError}:
- * the CLI must not start if it cannot protect the credential in memory. When
- * the process is NOT credential-bearing it warns on stderr and continues,
- * preserving the compatibility path for tokenless custom images.
+ * credential-bearing this **fails closed** by returning an abort reason: the
+ * CLI must not start if it cannot protect the credential in memory. When the
+ * process is NOT credential-bearing it warns on stderr and returns no abort
+ * reason, preserving the compatibility path for tokenless custom images.
  */
 function reportHardeningFailure(
   reason: string,
   credentialBearing: boolean,
   writeWarning: (message: string) => void,
-): void {
+): ProcessMemoryHardeningResult {
   if (credentialBearing) {
-    throw new FatalError(
-      'Process memory hardening failed and this process is credential-bearing ' +
+    return {
+      abortReason:
+        'Process memory hardening failed and this process is credential-bearing ' +
         '(LLXPRT_CAPABILITY_FD or LLXPRT_CREDENTIAL_SOCKET is set), so the CLI ' +
         'refuses to start rather than expose the credential to an in-container ' +
         `memory read. ${reason} Likely cause: a non-glibc sandbox image where ` +
         'prctl cannot be resolved from libc. Use the official Debian bookworm ' +
         '/ glibc sandbox image.',
-      HARDENING_FAILURE_EXIT_CODE,
-    );
+    };
   }
   writeWarning(
     'Process memory hardening skipped: ' +
@@ -157,6 +167,7 @@ function reportHardeningFailure(
       ' The CLI will continue, but an in-container process may be able to ' +
       'read its memory.\n',
   );
+  return {};
 }
 
 /**
@@ -170,8 +181,8 @@ function reportHardeningFailure(
  * No-op off Linux or when neither sandboxed nor credential-bearing. On any
  * failure (`bun:ffi` unavailable, libc missing, `prctl` returns non-zero, or
  * the callable throws):
- * - **Credential-bearing** => throws `FatalError` (fail closed). The CLI
- *   refuses to start because it cannot protect the credential.
+ * - **Credential-bearing** => returns an `abortReason` (fail closed). The
+ *   caller must refuse to start because the credential cannot be protected.
  * - **Not credential-bearing** => writes a visible warning to stderr and
  *   returns normally (warn and continue), preserving tokenless custom images.
  *
@@ -179,10 +190,10 @@ function reportHardeningFailure(
  */
 export async function applyProcessMemoryHardening(
   options: ProcessMemoryHardeningOptions = {},
-): Promise<void> {
+): Promise<ProcessMemoryHardeningResult> {
   const platform = options.platform ?? process.platform;
   if (!shouldHarden(platform, process.env)) {
-    return;
+    return {};
   }
 
   const credentialBearing = isCredentialBearing(process.env);
@@ -199,12 +210,11 @@ export async function applyProcessMemoryHardening(
     options.prctl !== undefined ? options.prctl : await resolveLibcPrctl();
 
   if (prctl === null) {
-    reportHardeningFailure(
+    return reportHardeningFailure(
       'Could not resolve prctl from libc.',
       credentialBearing,
       writeWarning,
     );
-    return;
   }
 
   let result: number;
@@ -212,19 +222,19 @@ export async function applyProcessMemoryHardening(
     result = prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    reportHardeningFailure(
+    return reportHardeningFailure(
       `prctl(PR_SET_DUMPABLE) threw ${detail}.`,
       credentialBearing,
       writeWarning,
     );
-    return;
   }
 
   if (result !== 0) {
-    reportHardeningFailure(
+    return reportHardeningFailure(
       `prctl(PR_SET_DUMPABLE) returned ${result}.`,
       credentialBearing,
       writeWarning,
     );
   }
+  return {};
 }
