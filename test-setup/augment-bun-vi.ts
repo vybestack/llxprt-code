@@ -426,6 +426,14 @@ const toNamespace = (exports: unknown): object =>
  */
 const registeredModuleMocks = new Map<string, object>();
 
+/**
+ * The genuine exports captured just before a module was first mocked, keyed by
+ * resolved module id. `vi.unmock` restores from here because once a mock is
+ * registered Bun's `require` can hand back the mocked namespace instead of the
+ * real module.
+ */
+const preMockSnapshots = new Map<string, object>();
+
 const applyModuleMock = (
   mockId: string,
   resolvedId: string,
@@ -479,11 +487,21 @@ const registerModuleMock = (
       Object.assign(actualSnapshot, { default: realModule });
     }
     actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
-    return applyModuleMock(
-      mockId,
-      resolvedId,
-      toNamespace(automockValue(realModule, new Map())),
-    );
+    preMockSnapshots.set(resolvedId, actualSnapshot);
+    const automocked = toNamespace(automockValue(realModule, new Map()));
+    // CommonJS modules such as `node:fs/promises` expose no `default` key, but
+    // `import fs from 'fs/promises'` still binds the whole namespace as the
+    // default export. Mirror that interop so an automocked default import sees
+    // the mocked functions instead of the real module.
+    if (!('default' in automocked)) {
+      Object.defineProperty(automocked, 'default', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: { ...automocked },
+      });
+    }
+    return applyModuleMock(mockId, resolvedId, automocked);
   }
 
   // Bun's mock.module does NOT drain the microtask queue inside factory
@@ -527,6 +545,7 @@ const registerModuleMock = (
     Object.assign(actualSnapshot, { default: syncActual });
   }
   actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
+  preMockSnapshots.set(resolvedId, actualSnapshot);
   const importOriginal = (): unknown => syncActual;
   const factoryResult = factory(importOriginal as () => Promise<unknown>);
 
@@ -601,6 +620,24 @@ const unsupportedModuleIsolation = (): never => {
   throw new Error(
     'Bun does not support resetting or unmocking modules; run the test in an isolated process',
   );
+};
+
+/**
+ * Restores a module that a preload (or an earlier call) mocked, by
+ * re-registering it with the real implementation loaded outside the mock
+ * registry. Bun has no `unmock`, but re-registering the genuine exports is
+ * observationally identical for a test that wants the real module back.
+ */
+const unmockModule = (id: string): void => {
+  const resolvedId = resolveActualId(id);
+  const snapshot = preMockSnapshots.get(resolvedId);
+  const namespace =
+    snapshot ?? toNamespace(loadIsolatedModuleSync(resolvedId));
+  mockedResolvedIds.delete(resolvedId);
+  for (const candidate of new Set([id, resolvedId])) {
+    registeredModuleMocks.delete(candidate);
+    mock.module(candidate, () => namespace);
+  }
 };
 
 const unsupportedMockRegistry = new Proxy(Object.freeze({}), {
@@ -828,8 +865,8 @@ const viAugmentations = {
       return result as object;
     });
   },
-  doUnmock: unsupportedModuleIsolation,
-  unmock: unsupportedModuleIsolation,
+  doUnmock: unmockModule,
+  unmock: unmockModule,
   isMockFunction,
   advanceTimersByTimeAsync: advanceTimersByTimeAsyncImpl,
   runAllTimersAsync: async (): Promise<void> => {
@@ -886,6 +923,8 @@ afterEach(() => {
 const forceOverride = new Set([
   'mock',
   'doMock',
+  'unmock',
+  'doUnmock',
   'spyOn',
   'fn',
   'stubEnv',

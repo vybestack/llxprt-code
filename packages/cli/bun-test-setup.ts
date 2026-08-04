@@ -119,7 +119,11 @@ Bun.plugin({
 // ---------------------------------------------------------------------------
 // Provider aliases mock (prevents "Provider not found" in fs-mocked tests)
 // ---------------------------------------------------------------------------
-mock.module(
+// Registered through `vi.mock` rather than `mock.module` so the compatibility
+// shim snapshots the real module first; a test that needs the genuine aliases
+// (test/providers/providerAliases.test.ts) can then restore them with
+// `vi.unmock`.
+vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerAliases.js',
   () => ({
     loadProviderAliasEntries: () => [
