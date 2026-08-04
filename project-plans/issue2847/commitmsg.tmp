@@ -1,5 +1,1 @@
-fix(test-utils): resolve Bun globals without Bun type definitions
-
-packages/cli compiles pty-backend.ts through a tsconfig that does not list
-Bun's types, so process.versions.bun and the Bun global are read through
-explicit narrow shapes instead.
+style(ide-integration): drop assertions made redundant by the local os mock
