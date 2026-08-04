@@ -778,12 +778,13 @@ export interface AgentPolicyControl {
 }
 
 /**
- * Projected public view of an async task. OMITS abortController and any
- * non-serializable internal (REQ-003.7).
+ * Projected public view of a subagent async task. OMITS abortController and
+ * any non-serializable internal (REQ-003.7).
  * @plan:PLAN-20260622-COREAPIGAP.P08
  * @requirement:REQ-003
  */
-export interface AgentTaskInfo {
+export interface AgentSubagentTaskInfo {
+  readonly kind: 'subagent';
   readonly id: string;
   readonly subagentName: string;
   readonly goalPrompt: string;
@@ -794,7 +795,31 @@ export interface AgentTaskInfo {
 }
 
 /**
- * Undefined-safe async-task administration (REQ-003).
+ * Projected public view of a managed background shell job (#1995).
+ * @plan PLAN-20260130-ASYNCTASK.P08
+ */
+export interface AgentShellJobInfo {
+  readonly kind: 'shell';
+  readonly id: string;
+  readonly command: string;
+  readonly cwd: string;
+  readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
+  readonly launchedAt: number;
+  readonly completedAt?: number;
+  readonly exitCode?: number;
+  readonly signal?: string;
+  readonly failureReason?: string;
+}
+
+/**
+ * Discriminated union of projected async work items — subagent tasks and
+ * managed background shell jobs (#1995 slice 7). Consumers narrow on `kind`.
+ */
+export type AgentTaskInfo = AgentSubagentTaskInfo | AgentShellJobInfo;
+
+/**
+ * Undefined-safe async-task administration (REQ-003). Cancellation is async
+ * because a shell job stop is TERM → wait → KILL (#1995 slice 7).
  * @plan:PLAN-20260622-COREAPIGAP.P08
  * @requirement:REQ-003
  */
@@ -802,8 +827,8 @@ export interface AgentTasksControl {
   list(): readonly AgentTaskInfo[];
   listRunning(): readonly AgentTaskInfo[];
   get(id: string): AgentTaskInfo | undefined;
-  cancel(id: string): boolean;
-  cancelAllRunning(): number;
+  cancel(id: string): Promise<boolean>;
+  cancelAllRunning(): Promise<number>;
 }
 
 /**

@@ -249,6 +249,14 @@ describe('McpClientManager', () => {
       await vi.advanceTimersByTimeAsync(300);
       const secondRequest = onToolsUpdated?.();
       rejectFirstRefresh(new Error('refresh failed'));
+      // Flush the rejection microtask so consumeMcpContextRefreshes catches the
+      // error and schedules the retry debounce timer BEFORE time advances.
+      // Under Bun's fake timers, advanceTimersByTime advances the full duration
+      // before flushing microtasks, so the retry debounce would be scheduled
+      // beyond the target and never fire. The zero-advance flush lets the
+      // microtask run at the current clock position, scheduling the retry at
+      // the correct time so the subsequent advance fires it.
+      await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(300);
       await Promise.all([firstRequest, secondRequest]);
 

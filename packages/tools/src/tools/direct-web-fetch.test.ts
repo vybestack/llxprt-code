@@ -8,10 +8,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DirectWebFetchToolParams } from './direct-web-fetch.js';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import type { IToolHost, ToolResult as _ToolResult } from '../index.js';
-import fetch from 'node-fetch';
 
-vi.mock('node-fetch');
-const mockedFetch = fetch as unknown as ReturnType<typeof vi.fn>;
+const { mockedFetch } = vi.hoisted(() => ({ mockedFetch: vi.fn() }));
+vi.mock('node-fetch', () => ({
+  default: mockedFetch,
+}));
 
 describe('DirectWebFetchTool', () => {
   let config: IToolHost;

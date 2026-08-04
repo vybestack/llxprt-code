@@ -311,7 +311,7 @@ jobs:
           TEST_CONFIG: 'vitest.config.native-keyring.ts'
           KEYRING_PASSWORD: 'llxprt-ci-keyring'
         run: |-
-          npm run test:ci --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
+          npm run test:vitest --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
 
   e2e_full:
     name: 'E2E Full - ${{ matrix.os }} - ${{ matrix.sandbox }}'
@@ -517,6 +517,44 @@ jobs:
           ENCODED="$(base64 < "${TRIMMED_OUTPUT_FILE}" | tr -d '\r\n')"
           printf 'smoke_output=%s\n' "${ENCODED}" >> "${GITHUB_OUTPUT}"
 
+  # Issue #2999: the published package prefers the prebuilt bundle over
+  # index.ts, so a bundle that builds but cannot launch would shadow the
+  # working TypeScript source and break startup for every user. The test is
+  # gated off the PR path because the build costs ~16s; running it here is what
+  # actually catches externals drift (a new native dependency added without an
+  # EXTERNALS entry) before it reaches a release.
+  cli_bundle_launch:
+    name: 'CLI bundle builds and launches (Nightly)'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 15
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+
+      - name: 'Build and launch the prebuilt CLI bundle'
+        env:
+          CI: true
+          LLXPRT_RUN_BUNDLE_BUILD_TEST: '1'
+        run: 'bun test scripts/tests/issue-2999-cli-bundle.bun.test.ts'
+
   notify_failure:
     name: 'Create Issue on Failure'
     runs-on: 'ubuntu-latest'
@@ -528,6 +566,7 @@ jobs:
       - 'e2e_full'
       - 'behavioral_evals'
       - 'windows_bun_native_smoke'
+      - 'cli_bundle_launch'
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
       issues: 'write'
@@ -543,6 +582,7 @@ jobs:
           E2E_FULL_RESULT: '${{ needs.e2e_full.result }}'
           BEHAVIORAL_EVALS_RESULT: '${{ needs.behavioral_evals.result }}'
           WINDOWS_BUN_NATIVE_SMOKE_RESULT: '${{ needs.windows_bun_native_smoke.result }}'
+          CLI_BUNDLE_LAUNCH_RESULT: '${{ needs.cli_bundle_launch.result }}'
           SMOKE_OUTPUT_B64: '${{ needs.windows_bun_native_smoke.outputs.smoke_output }}'
         shell: 'bash'
         run: |
@@ -555,6 +595,7 @@ jobs:
           [[ "${MACOS_SECURE_STORE_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("macos_secure_store=${MACOS_SECURE_STORE_RESULT}")
           [[ "${E2E_FULL_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("e2e_full=${E2E_FULL_RESULT}")
           [[ "${BEHAVIORAL_EVALS_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("behavioral_evals=${BEHAVIORAL_EVALS_RESULT}")
+          [[ "${CLI_BUNDLE_LAUNCH_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("cli_bundle_launch=${CLI_BUNDLE_LAUNCH_RESULT}")
 
           INCLUDE_SMOKE_OUTPUT=false
           SMOKE_OUTPUT_FILE=smoke_output_decoded.txt

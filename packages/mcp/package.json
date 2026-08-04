@@ -21,8 +21,10 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:ci": "vitest run",
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace mcp --junit junit.xml",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace mcp",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace mcp --junit junit.xml",
+    "test:vitest": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },

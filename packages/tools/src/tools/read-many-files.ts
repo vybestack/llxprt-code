@@ -38,6 +38,7 @@ import {
   resolveImageResizePolicy,
   type ImageResizePolicy,
 } from '../utils/imageResize.js';
+import { estimateNonTextPartTokens } from '../utils/imageTokenEstimation.js';
 import {
   buildParameterSchema,
   formatExcludePatterns,
@@ -705,8 +706,13 @@ ${this.host.getTargetDir()}
       );
     }
 
-    // Non-text content (images/PDFs)
-    const estimatedTokens = 85;
+    // Non-text content (images/PDFs). No provider is available at the tool
+    // layer, so image estimates use the provider-agnostic default family.
+    const inlineData = fileReadResult.llmContent.inlineData;
+    const estimatedTokens = estimateNonTextPartTokens(
+      inlineData?.mimeType,
+      inlineData?.data,
+    );
 
     if (totalTokens + estimatedTokens > limits.maxTokens) {
       skippedFiles.push({

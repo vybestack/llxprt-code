@@ -244,4 +244,175 @@ describe('ToolConfirmationMessage', () => {
       expect(lastFrame()).toContain('Allow for all future sessions');
     });
   });
+
+  describe('exec confirmation background note', () => {
+    it('renders the background note when isBackground is true (T23 / AC-9)', () => {
+      const confirmationDetails: ToolCallConfirmationDetails = {
+        type: 'exec',
+        title: 'Confirm Shell Command',
+        command: 'npm run dev',
+        rootCommand: 'npm',
+        rootCommands: ['npm'],
+        isBackground: true,
+        onConfirm: vi.fn(),
+      };
+
+      const { lastFrame } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={confirmationDetails}
+          config={mockConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      expect(lastFrame()).toContain('Background:');
+      expect(lastFrame()).toContain(
+        'this command will keep running after the tool returns; its output goes to a log file.',
+      );
+    });
+
+    it('renders no background note when the flag is absent (T24 / AC-9)', () => {
+      const confirmationDetails: ToolCallConfirmationDetails = {
+        type: 'exec',
+        title: 'Confirm Shell Command',
+        command: 'npm run dev',
+        rootCommand: 'npm',
+        rootCommands: ['npm'],
+        onConfirm: vi.fn(),
+      };
+
+      const { lastFrame } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={confirmationDetails}
+          config={mockConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      expect(lastFrame()).not.toContain(
+        'this command will keep running after the tool returns; its output goes to a log file.',
+      );
+    });
+
+    it('renders both notes with one blank line before the block and none between them (G2a)', () => {
+      const confirmationDetails: ToolCallConfirmationDetails = {
+        type: 'exec',
+        title: 'Confirm Shell Command',
+        command: 'echo hi > out.txt',
+        rootCommand: 'echo',
+        rootCommands: ['echo'],
+        isBackground: true,
+        onConfirm: vi.fn(),
+      };
+
+      const { lastFrame } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={confirmationDetails}
+          config={mockConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      const frame = String(lastFrame());
+      // Both notes are present.
+      expect(frame).toContain(
+        'Command contains redirection which can be undesirable.',
+      );
+      expect(frame).toContain(
+        'this command will keep running after the tool returns; its output goes to a log file.',
+      );
+
+      const noteLine = frame.indexOf('Note: ');
+      const backgroundLine = frame.indexOf('Background: ');
+      const tipLine = frame.indexOf('Tip:  ');
+      // All three markers render.
+      expect(noteLine).toBeGreaterThanOrEqual(0);
+      expect(backgroundLine).toBeGreaterThanOrEqual(0);
+      expect(tipLine).toBeGreaterThanOrEqual(0);
+      // The background note comes after the tip line, not before the note.
+      expect(backgroundLine).toBeGreaterThan(tipLine);
+
+      // Exactly one blank line between the command body and the warning
+      // block, and no blank line between the redirection tip and the
+      // background note.
+      const lines = frame.split('\n');
+      const tipIndex = lines.findIndex((line) => line.startsWith('Tip:  '));
+      const backgroundIndex = lines.findIndex((line) =>
+        line.startsWith('Background: '),
+      );
+      // No blank line between tip and background note (adjacent lines).
+      expect(backgroundIndex).toBe(tipIndex + 1);
+
+      // No double blank lines anywhere in the rendered output.
+      let consecutiveBlanks = 0;
+      let maxConsecutiveBlanks = 0;
+      for (const line of lines) {
+        if (line.trim() === '') {
+          consecutiveBlanks += 1;
+          maxConsecutiveBlanks = Math.max(
+            maxConsecutiveBlanks,
+            consecutiveBlanks,
+          );
+        } else {
+          consecutiveBlanks = 0;
+        }
+      }
+      expect(maxConsecutiveBlanks).toBeLessThanOrEqual(1);
+    });
+
+    it('renders a background-only note with a single leading blank line (G2b)', () => {
+      const confirmationDetails: ToolCallConfirmationDetails = {
+        type: 'exec',
+        title: 'Confirm Shell Command',
+        command: 'npm run dev',
+        rootCommand: 'npm',
+        rootCommands: ['npm'],
+        isBackground: true,
+        onConfirm: vi.fn(),
+      };
+
+      const { lastFrame } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={confirmationDetails}
+          config={mockConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      const frame = String(lastFrame());
+      // Existing T23 assertions still hold.
+      expect(frame).toContain('Background:');
+      expect(frame).toContain(
+        'this command will keep running after the tool returns; its output goes to a log file.',
+      );
+
+      const lines = frame.split('\n');
+      const backgroundIndex = lines.findIndex((line) =>
+        line.startsWith('Background: '),
+      );
+      // Exactly one blank line precedes the background note (its spacer).
+      expect(backgroundIndex).toBeGreaterThan(0);
+      expect(lines[backgroundIndex - 1]).toBe('');
+
+      // No double blank lines anywhere.
+      let consecutiveBlanks = 0;
+      let maxConsecutiveBlanks = 0;
+      for (const line of lines) {
+        if (line.trim() === '') {
+          consecutiveBlanks += 1;
+          maxConsecutiveBlanks = Math.max(
+            maxConsecutiveBlanks,
+            consecutiveBlanks,
+          );
+        } else {
+          consecutiveBlanks = 0;
+        }
+      }
+      expect(maxConsecutiveBlanks).toBeLessThanOrEqual(1);
+    });
+  });
 });

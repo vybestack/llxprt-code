@@ -424,7 +424,7 @@ describe('KeyringTokenStore advisory lock behavior', () => {
       // Node.js, causing the lock-owner child's readiness signal to be missed
       // or the lock file to be released before the parent attempts acquisition.
       // These tests verify Node.js-specific process semantics.
-      it.skipIf(process.versions.bun !== undefined).each([
+      it.skipIf('bun' in process.versions).each([
         {
           lockType: 'auth',
           acquire: (store: KeyringTokenStore, waitMs: number) =>

@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -82,11 +82,31 @@ describe('Bun native test manifest', () => {
 
   it('contains only nonempty workspace entries and existing files', () => {
     for (const entry of BUN_NATIVE_TEST_MANIFEST) {
-      const resolved = resolveBunNativeTestFiles(repoRoot, entry.workspace);
-      expect(resolved.length, entry.workspace).toBeGreaterThan(0);
-      if (entry.files !== undefined) {
-        expect(resolved, entry.workspace).toHaveLength(entry.files.length);
+      expect(
+        resolveBunNativeTestFiles(repoRoot, entry.workspace).length,
+        entry.workspace,
+      ).toBeGreaterThan(0);
+    }
+
+    // A workspace may be declared by more than one entry, and an entry may
+    // derive its files from globs rather than a curated list. Only the
+    // curated entries have a count that can be predicted here.
+    for (const workspace of new Set(
+      BUN_NATIVE_TEST_MANIFEST.map(({ workspace }) => workspace),
+    )) {
+      const entries = BUN_NATIVE_TEST_MANIFEST.filter(
+        (entry) => entry.workspace === workspace,
+      );
+      if (entries.some((entry) => entry.files === undefined)) {
+        continue;
       }
+      const expectedFileCount = entries.reduce(
+        (total, entry) => total + (entry.files?.length ?? 0),
+        0,
+      );
+      expect(resolveBunNativeTestFiles(repoRoot, workspace)).toHaveLength(
+        expectedFileCount,
+      );
     }
   });
 

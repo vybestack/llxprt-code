@@ -42,10 +42,22 @@ llxprt --sandbox-engine podman "review this code"
   (`cpus`, `memory`, `pids`).
 - Exposure of the OS keyring and system token store to tool execution. In
   container mode (Docker or Podman), the OS keyring is not accessible from
-  inside the container. However, API keys (`GEMINI_API_KEY`, `GOOGLE_API_KEY`),
-  Google application default credential files, and the `gcloud` configuration
-  directory currently leak into the container as a known defect — see
-  [Known credential leakage in containers](#known-credential-leakage-in-containers).
+  inside the container. `GEMINI_API_KEY` and `GOOGLE_API_KEY` are no longer
+  forwarded as container environment variables, and the `~/.config/gcloud`
+  directory and the `GOOGLE_APPLICATION_CREDENTIALS` file are no longer mounted
+  (and that variable is no longer set inside the container). The Gemini provider
+  itself still works: keys saved on the host with `/key save` are resolved
+  inside the container through the
+  [credential proxy](#credential-proxy-container-mode-only), either via
+  `/key load <name>` or a profile `auth-key-name`. Note that Vertex AI, application
+  default credentials (ADC), and service-account authentication do **not** work
+  from inside a container sandbox (see
+  [Credential handling in containers](#credential-handling-in-containers)). The
+  LLxprt global configuration directory is still mounted into the container, so
+  a profile containing an inline `auth-key`, or a global `.env`, remains
+  readable from inside it (see issue
+  [#2957](https://github.com/vybestack/llxprt-code/issues/2957)); prefer
+  `/key save` over inline profile keys.
 
 **What sandboxing is NOT intended to protect against:**
 
@@ -56,8 +68,7 @@ llxprt --sandbox-engine podman "review this code"
   sandbox to support development workflows (the credential proxy, SSH agent
   forwarding, git config passthrough, and paths you explicitly mount) — see
   [Intentional boundary crossings](#intentional-boundary-crossings). These are
-  opt-in or design choices, separate from the known credential leakage defect
-  described below.
+  opt-in or design choices.
 - Network exfiltration of data that networking is left enabled for. If
   `network` is `on`, outbound network access is available to tool execution.
 
@@ -113,14 +124,14 @@ confirmation.
 The boundary differs by engine. The table summarizes what each engine isolates
 by default. Detailed limitations follow.
 
-| Boundary          | Docker / Podman (container)                                                                                               | Seatbelt (macOS `sandbox-exec`)                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Filesystem writes | Restricted to mounted paths (project, temp)                                                                               | Restricted to allow-listed paths (project, temp, config)   |
-| Filesystem reads  | Restricted to mounted paths                                                                                               | Broader read access; writes are the primary restriction    |
-| Network           | Configurable (`on` / `off` / `proxied`)                                                                                   | Configurable; selects a matching built-in Seatbelt profile |
-| Resource limits   | Enforced (`cpus`, `memory`, `pids`)                                                                                       | Not available                                              |
-| Process isolation | Separate container process namespace                                                                                      | Runs directly on your host                                 |
-| Stored secrets    | OS keyring not accessible; API keys and credential files currently **leak** into the container (known defect — see below) | Host keyring and token store are fully available           |
+| Boundary          | Docker / Podman (container)                                                                                                                                                                                                                                                                                                                                                                                                                                 | Seatbelt (macOS `sandbox-exec`)                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Filesystem writes | Restricted to mounted paths (project, temp)                                                                                                                                                                                                                                                                                                                                                                                                                 | Restricted to allow-listed paths (project, temp, config)   |
+| Filesystem reads  | Restricted to mounted paths                                                                                                                                                                                                                                                                                                                                                                                                                                 | Broader read access; writes are the primary restriction    |
+| Network           | Configurable (`on` / `off` / `proxied`)                                                                                                                                                                                                                                                                                                                                                                                                                     | Configurable; selects a matching built-in Seatbelt profile |
+| Resource limits   | Enforced (`cpus`, `memory`, `pids`)                                                                                                                                                                                                                                                                                                                                                                                                                         | Not available                                              |
+| Process isolation | Separate container process namespace                                                                                                                                                                                                                                                                                                                                                                                                                        | Runs directly on your host                                 |
+| Stored secrets    | OS keyring not accessible; `GEMINI_API_KEY`/`GOOGLE_API_KEY` are not forwarded and gcloud/ADC files are not mounted. Gemini API keys resolve through the [credential proxy](#credential-proxy-container-mode-only). Vertex AI/ADC/service-account auth does not work. The LLxprt global config directory (holding profiles with inline `auth-key` and a global `.env`) is still mounted — see [#2957](https://github.com/vybestack/llxprt-code/issues/2957) | Host keyring and token store are fully available           |
 
 ### Filesystem
 
@@ -128,18 +139,17 @@ In container mode, these paths are always mounted into the container:
 
 - Your project working directory (read-write)
 - The system temp directory (read-write)
-- The LLxprt Code settings directory (read-write)
+- The LLxprt Code settings directory (read-write). This directory holds your
+  profiles (`profiles/*.json`) and a global `.env`; a profile containing an
+  inline `auth-key`, or that `.env`, is therefore readable from inside the
+  container. Prefer `/key save` over inline profile keys — see issue
+  [#2957](https://github.com/vybestack/llxprt-code/issues/2957).
 - Git configuration files, mounted read-only (see
   [Git config passthrough](#git-config-passthrough))
 
 Additional paths are conditionally mounted based on your host environment and
 profile configuration:
 
-- The `~/.config/gcloud` directory (read-only) if it exists — see
-  [Known credential leakage in containers](#known-credential-leakage-in-containers).
-- The file pointed to by `GOOGLE_APPLICATION_CREDENTIALS` (read-only) if the
-  variable is set and the file exists — see
-  [Known credential leakage in containers](#known-credential-leakage-in-containers).
 - The SSH agent socket, if SSH agent forwarding is enabled — see
   [SSH agent forwarding](#ssh-agent-forwarding).
 - Any paths you add via `LLXPRT_SANDBOX_MOUNTS` / `SANDBOX_MOUNTS` or a profile
@@ -253,39 +263,66 @@ Limitations:
 Seatbelt is auto-detected only on macOS when `sandbox-exec` is on your `PATH`.
 Use Docker or Podman when available.
 
-## Known credential leakage in containers
+## Credential handling in containers
 
-Container mode (Docker or Podman) provides a separate process namespace and
-keeps the OS keyring out of the container. However, a **known defect** currently
-weakens that isolation: several Google-related credentials are forwarded or
-mounted into the container, where any process inside can read them. This is
-upstream Gemini/Vertex authentication plumbing that was never reconciled with
-the credential proxy. It is tracked as
-[issue #2946](https://github.com/vybestack/llxprt-code/issues/2946) and slated
-for the 0.11.0 milestone.
+Earlier releases forwarded several long-lived Google credentials into the
+container as a known defect (tracked as
+[issue #2946](https://github.com/vybestack/llxprt-code/issues/2946)). Those
+crossings have been removed:
 
-What currently leaks:
+- **`GEMINI_API_KEY` and `GOOGLE_API_KEY`** are no longer forwarded as container
+  environment variables, even when set on the host.
+- **`~/.config/gcloud`** is no longer mounted into the container.
+- **The file named by `GOOGLE_APPLICATION_CREDENTIALS`** is no longer mounted,
+  and that variable is no longer set inside the container.
 
-- **`GEMINI_API_KEY` and `GOOGLE_API_KEY`** — copied from your host environment
-  into the container's environment. These are your raw, stored API keys, not
-  short-lived tokens. Any process inside the container can read them.
-- **`~/.config/gcloud`** — the entire gcloud configuration directory is mounted
-  read-only if it exists. It can contain long-lived credentials, including
-  service-account keys and cached access tokens. Any process in the container
-  can read these files.
-- **The file named by `GOOGLE_APPLICATION_CREDENTIALS`** — if this variable
-  points to an existing file (typically a service-account JSON key), the file is
-  mounted read-only and the variable is set inside the container. Any process in
-  the container can read it.
+The Gemini provider itself still works from inside a container sandbox. Only the
+environment-variable and credential-file routes were removed; named API keys are
+unaffected. Save the key once on the host:
 
-> **Consequence:** A process inside the container that reads these credentials
-> obtains the same standing as the corresponding service account or API key on
-> the host. This is a higher level of exposure than the credential proxy, which
-> only ever issues short-lived tokens. Until the defect is fixed, unset
-> `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_APPLICATION_CREDENTIALS`
-> before starting the sandbox if you do not want these credentials exposed, and
-> consider whether `~/.config/gcloud` contains secrets you do not want
-> forwarded.
+```
+/key save gemini-personal <your-api-key>
+```
+
+Then, from inside the sandbox, either load it interactively:
+
+```
+/key load gemini-personal
+```
+
+or reference it from a profile with `auth-key-name`, which resolves it
+automatically at startup. Either way the key is fetched over the
+[credential proxy](#credential-proxy-container-mode-only) rather than read from
+the container's environment, and authenticates against the Gemini Developer API.
+
+Which `/key` subcommands work where:
+
+| Subcommand               | On the host | Inside a container           |
+| ------------------------ | ----------- | ---------------------------- |
+| `/key load`              | yes         | yes (read via the proxy)     |
+| `/key list`, `/key show` | yes         | yes (read via the proxy)     |
+| `/key save`              | yes         | no — manage keys on the host |
+| `/key delete`            | yes         | no — manage keys on the host |
+
+`/key save` and `/key delete` fail inside the container with "API key management
+is not available in sandbox mode". That is deliberate: the proxy serves key
+reads but refuses writes, so the sandbox cannot alter what is stored on your
+host.
+
+Vertex AI, application default credentials (ADC), and service-account
+authentication do **not** work from inside a container sandbox. A proxy-resolved
+named key authenticates against the Gemini Developer API, not Vertex AI, because
+Vertex AI requires the `vertex-ai` auth mode which is not established from a
+proxy-resolved key. This is tracked as issue
+[#2959](https://github.com/vybestack/llxprt-code/issues/2959).
+
+> **Remaining exposure:** the LLxprt global configuration directory is still
+> mounted read-write into the container (see
+> [Filesystem](#filesystem)). That directory holds your `profiles/*.json` files
+> and a global `.env`, so a profile containing an inline `auth-key`, or a
+> global `.env`, is still readable from inside the container. Prefer
+> `/key save` over inline profile keys. This is tracked as issue
+> [#2957](https://github.com/vybestack/llxprt-code/issues/2957).
 
 ## Intentional boundary crossings
 
@@ -293,7 +330,6 @@ The sandbox forwards certain credentials and configuration into the boundary so
 that development workflows (authentication, git operations) continue to work.
 These are intentional design choices that you opted into or that are part of the
 sandbox design, and each carries a risk you should understand before enabling.
-They are distinct from the credential leakage defect described above.
 
 ### Credential proxy (container mode only)
 
@@ -306,8 +342,8 @@ What the proxy provides:
 
 - **Short-lived access tokens** — the container receives short-lived tokens, not
   your stored refresh tokens. Refresh tokens stay on the host.
-- **Key reads** — `/key list`, `/key show`, and key resolution for providers
-  read host-saved keys through the proxy.
+- **Key reads** — `/key load`, `/key list`, `/key show`, and key resolution for
+  providers read host-saved keys through the proxy.
 - **OAuth flows** — OAuth login opens the browser on the host; the container
   authenticates through the proxy.
 
@@ -317,11 +353,15 @@ What the proxy blocks:
   container mode ("API key management is not available in sandbox mode"). Keys
   must be managed on the host.
 - **Your stored secrets are not mounted** — `~/.git-credentials` is
-  intentionally not mounted into the container. The proxy is the intended way
-  for the container to obtain access tokens. (Note: API keys and Google
-  credential files currently leak into the container through a separate,
-  unintentional path — see
-  [Known credential leakage in containers](#known-credential-leakage-in-containers).)
+  intentionally not mounted into the container, and `GEMINI_API_KEY`,
+  `GOOGLE_API_KEY`, the gcloud config directory, and the ADC file are not
+  forwarded or mounted (see
+  [Credential handling in containers](#credential-handling-in-containers)). The
+  proxy is the intended way for the container to obtain access tokens and
+  resolve named API keys. The LLxprt global configuration directory is still
+  mounted, however, so a profile containing an inline `auth-key`, or a global
+  `.env`, remains readable from inside the container (see issue
+  [#2957](https://github.com/vybestack/llxprt-code/issues/2957)).
 
 How the container proves it is authorised: a per-session capability token is
 passed to LLxprt Code through an inherited file descriptor, never through

@@ -72,6 +72,9 @@ const baseExclude: readonly string[] = [
   // Sandbox SSH agent preflight tests are Bun-native for the same reason
   // (issue #1699).
   '**/src/utils/sandbox-ssh-agent-preflight.test.ts',
+  // Sandbox container credential-isolation tests are Bun-native for the same
+  // reason (issue #2946).
+  '**/src/utils/sandbox-containers.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
@@ -486,4 +489,4 @@ export function buildTestGroups(
  * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 534;
+export const SELECTED_FILE_COUNT: number = 531;

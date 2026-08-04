@@ -65,6 +65,23 @@ function loadCliInstaller(): ReturnType<typeof nodeRequire> {
   return { ...mod, ...mod._testing };
 }
 
+// The production generators intentionally declare no default arguments, so a
+// caller that omits a path fails loudly instead of baking `undefined` into a
+// launcher. Tests that only care about one of the three paths use these
+// fixtures rather than repeating the other two at every call site.
+const FIXTURE_BUNDLE = 'bundle/llxprt.js';
+const FIXTURE_SOURCE = 'index.ts';
+
+type Installer = ReturnType<typeof loadCliInstaller>;
+
+function cmdFixture(mod: Installer, bun = 'bun.exe'): string {
+  return mod.generateCmdLauncher(bun, FIXTURE_BUNDLE, FIXTURE_SOURCE);
+}
+
+function ps1Fixture(mod: Installer, bun = 'bun.exe'): string {
+  return mod.generatePs1Launcher(bun, FIXTURE_BUNDLE, FIXTURE_SOURCE);
+}
+
 /**
  * Per-process cache dir keyed by the CLI manifest fingerprint so concurrent
  * test runs do not corrupt a shared cache. The fingerprint is derived from the
@@ -197,32 +214,32 @@ describe('install-native-launchers module (CLI workspace)', () => {
   describe('cmd launcher generation', () => {
     it('generates a cmd with no delayed expansion', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       expect(cmd).not.toMatch(/enableDelayedExpansion/i);
     });
 
     it('embeds the ownership sentinel', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       expect(cmd).toContain(mod.OWNERSHIP_SENTINEL);
     });
 
-    it('directly invokes bun.exe with %* using %~dp0 prefix', () => {
+    it('invokes bun.exe with the runtime entry variable using %~dp0 and %*', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
-      expect(cmd).toMatch(/"%~dp0bun\.exe" "%~dp0index\.ts" %\*/);
+      const cmd = cmdFixture(mod);
+      expect(cmd).toMatch(/"%~dp0bun\.exe" "%_llxprt_entry%" %\*/);
     });
 
     it('exits with code 43 on missing Bun', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       expect(cmd).toContain('exit /b ' + mod.LAUNCHER_ERROR_EXIT_CODE);
       expect(cmd).toMatch(/npm install|bun\.sh/i);
     });
 
     it('does not set LLXPRT_BUN_RELAUNCHED', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       expect(cmd).not.toMatch(/LLXPRT_BUN_RELAUNCHED/i);
     });
   });
@@ -230,39 +247,39 @@ describe('install-native-launchers module (CLI workspace)', () => {
   describe('PowerShell launcher generation', () => {
     it('uses an argument array and propagates LASTEXITCODE', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).toContain('$allArgs = @($entry) + $args');
       expect(ps1).toContain('exit $LASTEXITCODE');
     });
 
     it('supports pipeline input', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).toContain('ExpectingInput');
       expect(ps1).toContain('$input | & $bunExe');
     });
 
     it('embeds the ownership sentinel', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).toContain(mod.OWNERSHIP_SENTINEL);
     });
 
     it('exits with code 43 on missing Bun', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).toContain('exit ' + mod.LAUNCHER_ERROR_EXIT_CODE);
     });
 
     it('does not set LLXPRT_BUN_RELAUNCHED', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).not.toMatch(/LLXPRT_BUN_RELAUNCHED/i);
     });
 
     it('uses forward-slash relative paths for Join-Path', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('sub/bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod, 'sub/bun.exe');
       expect(ps1).toContain("Join-Path $basedir 'sub/bun.exe'");
     });
   });
@@ -823,7 +840,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
   describe('cmd launcher exit-code preservation', () => {
     it('preserves the child exit code exactly (no remapping)', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       // cmd cannot reliably distinguish a launch failure from a legitimate
       // nonzero exit, so it must NOT remap any errorlevel. It preserves
       // %ERRORLEVEL% directly.
@@ -834,7 +851,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
 
     it('does not remap errorlevel 5, 193, or 9009', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       // These errorlevels may be legitimate CLI exit codes; remapping them
       // would corrupt the child's real exit status.
       expect(cmd).not.toMatch(/equ 9009/);
@@ -844,7 +861,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
 
     it('still exits 43 for missing bun (existence preflight)', () => {
       const mod = loadCliInstaller();
-      const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
+      const cmd = cmdFixture(mod);
       expect(cmd).toContain('goto :LLXPRT_NO_BUN');
       expect(cmd).toContain('exit /b ' + mod.LAUNCHER_ERROR_EXIT_CODE);
     });
@@ -853,7 +870,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
   describe('ps1 launcher launch-failure diagnostics', () => {
     it('wraps invocation in try/catch for native launch exceptions', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).toContain('try {');
       expect(ps1).toContain('} catch {');
       expect(ps1).toContain('exit ' + mod.LAUNCHER_ERROR_EXIT_CODE);
@@ -861,7 +878,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
 
     it('still propagates LASTEXITCODE for normal nonzero exits', () => {
       const mod = loadCliInstaller();
-      const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
+      const ps1 = ps1Fixture(mod);
       expect(ps1).toContain('exit $LASTEXITCODE');
     });
   });

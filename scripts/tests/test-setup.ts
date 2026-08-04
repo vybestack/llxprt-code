@@ -5,8 +5,7 @@
  */
 
 /**
- * Setup shared by every script-harness test file, loaded as a Vitest
- * `setupFiles` entry and as a Bun `--preload`.
+ * Setup shared by every script-harness test file, loaded as a Bun `--preload`.
  *
  * This file previously mocked `fs.appendFileSync` globally. No test asserted
  * on that mock, and under Bun a `vi.mock('fs')` registration also intercepts
@@ -15,6 +14,13 @@
  * scripts already write only when the corresponding environment variable is
  * set, and the tests point it at a temp file, so real I/O is correct here.
  */
+
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { beforeEach } from 'vitest';
+
+beforeEach(async () => {
+  await yieldToEventLoop();
+});
 
 /**
  * Vitest intercepts `process.exit()` and turns it into a thrown error so tests

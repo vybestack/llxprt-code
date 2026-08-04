@@ -17,6 +17,24 @@ import {
 } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 
 /**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed by throwing if the operation fulfills, so tests cannot pass
+ * silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    throw new Error('expected the operation to reject');
+  }
+  return outcome;
+}
+
+/**
  * Captured fetch request for assertion.
  */
 interface CapturedRequest {
@@ -203,9 +221,11 @@ describe('CodexImageBackend', () => {
       };
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate({ prompt: '   ' }, new AbortController().signal),
-      ).rejects.toBeInstanceOf(ImageValidationError);
+      expect(
+        await captureRejection(
+          backend.generate({ prompt: '   ' }, new AbortController().signal),
+        ),
+      ).toBeInstanceOf(ImageValidationError);
       expect(fetchCalled).toBe(false);
     });
   });
@@ -218,9 +238,11 @@ describe('CodexImageBackend', () => {
       });
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate({ prompt: 'hello' }, new AbortController().signal),
-      ).rejects.toMatchObject({
+      expect(
+        await captureRejection(
+          backend.generate({ prompt: 'hello' }, new AbortController().signal),
+        ),
+      ).toMatchObject({
         name: 'ImageGenerationError',
         status: 403,
         endpoint: expect.stringContaining('/images/generations'),
@@ -235,9 +257,11 @@ describe('CodexImageBackend', () => {
       });
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate({ prompt: 'hello' }, new AbortController().signal),
-      ).rejects.toMatchObject({
+      expect(
+        await captureRejection(
+          backend.generate({ prompt: 'hello' }, new AbortController().signal),
+        ),
+      ).toMatchObject({
         name: 'ImageGenerationError',
         status: 500,
         endpoint: expect.stringContaining('/images/generations'),
@@ -252,9 +276,11 @@ describe('CodexImageBackend', () => {
       });
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate({ prompt: 'hello' }, new AbortController().signal),
-      ).rejects.toBeInstanceOf(ImageGenerationError);
+      expect(
+        await captureRejection(
+          backend.generate({ prompt: 'hello' }, new AbortController().signal),
+        ),
+      ).toBeInstanceOf(ImageGenerationError);
     });
 
     it('throws ImageGenerationError when data[0] lacks b64_json', async () => {
@@ -264,9 +290,11 @@ describe('CodexImageBackend', () => {
       });
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate({ prompt: 'hello' }, new AbortController().signal),
-      ).rejects.toBeInstanceOf(ImageGenerationError);
+      expect(
+        await captureRejection(
+          backend.generate({ prompt: 'hello' }, new AbortController().signal),
+        ),
+      ).toBeInstanceOf(ImageGenerationError);
     });
   });
 
@@ -305,12 +333,14 @@ describe('CodexImageBackend', () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        backend.generate(
-          { prompt: 'hello' } satisfies ImageGenerateRequest,
-          controller.signal,
+      expect(
+        await captureRejection(
+          backend.generate(
+            { prompt: 'hello' } satisfies ImageGenerateRequest,
+            controller.signal,
+          ),
         ),
-      ).rejects.toThrow('aborted');
+      ).toMatchObject({ message: expect.stringContaining('aborted') });
     });
 
     it('forwards the abort signal to the underlying fetch call', async () => {
@@ -344,12 +374,14 @@ describe('CodexImageBackend', () => {
       }) as typeof fetch;
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate(
-          { prompt: 'hello', n: 2 },
-          new AbortController().signal,
+      expect(
+        await captureRejection(
+          backend.generate(
+            { prompt: 'hello', n: 2 },
+            new AbortController().signal,
+          ),
         ),
-      ).rejects.toThrow('n=1');
+      ).toMatchObject({ message: expect.stringContaining('n=1') });
 
       expect(fetchCalled).toBe(false);
     });
@@ -362,12 +394,14 @@ describe('CodexImageBackend', () => {
       }) as typeof fetch;
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate(
-          { prompt: 'hello', n: 0 },
-          new AbortController().signal,
+      expect(
+        await captureRejection(
+          backend.generate(
+            { prompt: 'hello', n: 0 },
+            new AbortController().signal,
+          ),
         ),
-      ).rejects.toThrow('n=1');
+      ).toMatchObject({ message: expect.stringContaining('n=1') });
 
       expect(fetchCalled).toBe(false);
     });
@@ -381,9 +415,11 @@ describe('CodexImageBackend', () => {
       });
       const backend = makeBackend({ fetchImpl });
 
-      await expect(
-        backend.generate({ prompt: 'hello' }, new AbortController().signal),
-      ).rejects.toBeInstanceOf(ImageGenerationError);
+      expect(
+        await captureRejection(
+          backend.generate({ prompt: 'hello' }, new AbortController().signal),
+        ),
+      ).toBeInstanceOf(ImageGenerationError);
     });
   });
 

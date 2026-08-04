@@ -81,7 +81,7 @@ function dirContains(dir: string, name: string): boolean {
 /**
  * Recursively search the repository for Markdown files containing a marker
  * string. Only `.md` files are inspected. Excludes node_modules, .git, dist,
- * bundle, coverage, .integration-tests, and project-plans.
+ * bundle, coverage, .integration-tests, project-plans, and research snapshots.
  */
 function searchRepoForMarker(marker: string): string[] {
   const excludeDirs = new Set([
@@ -92,6 +92,7 @@ function searchRepoForMarker(marker: string): string[] {
     'coverage',
     '.integration-tests',
     'project-plans',
+    'research',
   ]);
   const results: string[] = [];
   collectFilesWithMarker(repoRoot, marker, excludeDirs, results);

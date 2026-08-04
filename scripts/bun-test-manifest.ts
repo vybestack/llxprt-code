@@ -7,6 +7,9 @@
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { validateResolvedFiles } from './bun-test-manifest-validation.js';
+import { TOOLS_MANIFEST_ENTRY } from './bun-test-manifest-data-tools.ts';
+import { MCP_MANIFEST_ENTRY } from './bun-test-manifest-data-mcp.ts';
+import { STORAGE_MANIFEST_ENTRY } from './bun-test-manifest-data-storage.ts';
 
 export interface BunTestWorkspaceEntry {
   readonly workspace: string;
@@ -154,6 +157,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'agents',
     files: [
+      'src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
       'test-bun/generatingModelStamp.issue2511.bun.ts',
       'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
     ],
@@ -175,12 +179,30 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspTransport.test.ts',
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
+      'src/utils/sandbox-containers.test.ts',
       // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
+      // Issue #2951: Windows Ctrl+Enter steering. Each file pins
+      // process.platform at the very top before the key-matcher module graph
+      // loads, so win32 and darwin must run in separate processes.
+      'test-bun/steerKey.win32.bun.ts',
+      'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
+    ],
+  },
+  {
+    workspace: 'cli',
+    preload: 'bun-test-setup.ts',
+    files: [
+      'src/ui/hooks/agentStream/__tests__/useAgentEventStream.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useAgentStreamOrchestration.terminal.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.doublecancel.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.terminalError.bun.tsx',
     ],
   },
   {
@@ -196,6 +218,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/__tests__/attemptLifecycle.helpers.test.ts',
       'src/__tests__/auth-migration-p16.integration.test.ts',
       'src/__tests__/BaseProvider.guard.test.ts',
+      'src/__tests__/BaseProvider.proxyKeyStorage.test.ts',
       'src/__tests__/baseProvider.stateless.test.ts',
       'src/__tests__/BaseProviderNormalization.ephemeralPropagation.test.ts',
       'src/__tests__/BaseProviderNormalization.invocation.test.ts',
@@ -289,6 +312,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.tools.test.ts',
       'src/anthropic/AnthropicRateLimitHandler.test.ts',
       'test-bun/AnthropicRequestBuilder.issue1738.bun.ts',
+      'test-bun/token-access-coordinator.bun.ts',
       'src/anthropic/AnthropicRequestBuilder.modelParams.test.ts',
       'src/anthropic/AnthropicResponseParser.issue1844.test.ts',
       'src/anthropic/AnthropicStreamProcessor.retryOwnership.test.ts',
@@ -333,7 +357,6 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // 'src/auth/__tests__/proactive-renewal-manager.spec.ts',
       'src/auth/__tests__/provider-registry.spec.ts',
       'src/auth/__tests__/provider-usage-info.spec.ts',
-      'src/auth/__tests__/token-access-coordinator.spec.ts',
       'src/auth/anthropic-oauth-provider.local-flow.spec.ts',
       'src/auth/anthropic-oauth-provider.no-refresh-on-gettoken.spec.ts',
       'src/auth/anthropic-oauth-provider.refresh.spec.ts',
@@ -495,6 +518,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/kimi/kimiMediaProcessing.test.ts',
       'src/kimi/usageInfo.test.ts',
       'src/loadBalancing/failoverState.test.ts',
+      'src/loadBalancing/loadBalancerTokenEstimator.imageTokens.test.ts',
       'src/logging/conversationResponseLogger.test.ts',
       'src/logging/ProviderPerformanceTracker.test.ts',
       'src/logging/serverToolLogger.test.ts',
@@ -690,23 +714,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/zai/usageInfo.test.ts',
     ],
   },
-  {
-    workspace: 'storage',
-    preload: 'test-setup-storage-isolation.ts',
-    files: [
-      'test-bun/credential-write-lock.bun.ts',
-      'test-bun/keyring-write-verification.bun.ts',
-      'test-bun/machine-secret.bun.ts',
-      'test-bun/machine-secret.concurrent-write.bun.ts',
-      'test-bun/secure-store.bun.ts',
-      'test-bun/secure-store.concurrent-write.bun.ts',
-      'test-bun/storage.bun.ts',
-    ],
-  },
-  {
-    workspace: 'tools',
-    files: ['test-bun/language-analysis.followup.bun.ts'],
-  },
+  TOOLS_MANIFEST_ENTRY,
+  MCP_MANIFEST_ENTRY,
   {
     workspace: 'telemetry',
     preload: [
@@ -715,6 +724,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
     include: ['src/**/*.test.ts'],
   },
+  STORAGE_MANIFEST_ENTRY,
   {
     workspace: 'test-utils',
     preload: ['../../test-setup/augment-bun-vi.ts'],

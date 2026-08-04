@@ -5,12 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fetch from 'node-fetch';
 
 import { CodeSearchTool, type CodeSearchToolParams } from './codesearch.js';
 
-vi.mock('node-fetch');
-const mockedFetch = fetch as unknown as ReturnType<typeof vi.fn>;
+const { mockedFetch } = vi.hoisted(() => ({ mockedFetch: vi.fn() }));
+vi.mock('node-fetch', () => ({
+  default: mockedFetch,
+}));
 
 describe('CodeSearchTool', () => {
   const keyStorage = { resolveKey: vi.fn() };

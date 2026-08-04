@@ -103,9 +103,51 @@ function checkLauncherSentinels(prefix) {
       content.includes(OWNERSHIP_SENTINEL),
       'cmd launcher missing ownership sentinel',
     );
+    // Issue #2999: the entry is no longer baked in at install time, it is
+    // resolved on every launch into %_llxprt_entry%. The property this check
+    // exists to defend is unchanged -- bun.exe is invoked directly, with no
+    // node or shim in between, and every argument is forwarded via %*.
     assert(
-      /"%~dp0.*bun\.exe" "%~dp0.*index\.ts" %\*/.test(content),
+      /"%~dp0.*bun\.exe" "%_llxprt_entry%" %\*/.test(content),
       'cmd launcher does not directly invoke bun.exe with %*',
+    );
+    // Pin the resolution itself, so the assertion above cannot be satisfied by
+    // a launcher that sets %_llxprt_entry% to something arbitrary.
+    const sourceDefault = /set "_llxprt_entry=%~dp0[^"]*index\.ts"/.exec(
+      content,
+    );
+    assert(
+      sourceDefault !== null,
+      'cmd launcher does not default the entry to the TypeScript source',
+    );
+    // The backreference matters: it forces the probed path and the assigned
+    // path to be the *same* bundle path. A looser `.*` on both sides is
+    // satisfied by `if exist "%~dp0index.ts" set "_llxprt_entry=%~dp0index.ts"`,
+    // i.e. a launcher that never prefers the bundle at all.
+    const bundlePreference =
+      /if exist "%~dp0([^"]*bundle[\\/]llxprt\.js)" set "_llxprt_entry=%~dp0\1"/.exec(
+        content,
+      );
+    assert(
+      bundlePreference !== null,
+      'cmd launcher does not prefer the prebuilt bundle when present',
+    );
+    // Presence of the variable name proves nothing; the escape hatch only
+    // works if the branch jumps *past* the bundle override. Pin the ordering.
+    const forceSource =
+      /if "%LLXPRT_FORCE_SOURCE_ENTRY%"=="1" goto :(\S+)/.exec(content);
+    assert(
+      forceSource !== null,
+      'cmd launcher does not honour the force-source escape hatch',
+    );
+    assert(
+      forceSource.index > sourceDefault.index &&
+        forceSource.index < bundlePreference.index,
+      'cmd launcher force-source branch does not bypass the bundle override',
+    );
+    assert(
+      new RegExp(`^:${forceSource[1]}\\s*$`, 'm').test(content),
+      `cmd launcher jumps to a label that does not exist: ${forceSource[1]}`,
     );
     assert(
       !content.includes('LLXPRT_LAUNCH_FAIL'),

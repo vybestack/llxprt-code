@@ -823,3 +823,71 @@ export function resetParser(): void {
 function isNode(node: Node | null): node is Node {
   return node !== null;
 }
+
+/**
+ * Result of detecting whether a command ends with a trailing async `&`
+ * (#1995 slice 6).
+ *
+ * - `promoted`: true when the final top-level construct is a background
+ *   operator (the command should be launched as a managed job).
+ * - `command`: when promoted, the original command with ONLY the trailing
+ *   operator (and any trailing comment/whitespace) stripped; when not
+ *   promoted, the original command unchanged.
+ */
+export interface TrailingBackgroundResult {
+  promoted: boolean;
+  command: string;
+}
+
+/**
+ * Detect whether a command's final top-level construct is a trailing async
+ * `&` operator using the tree-sitter Bash AST (#1995 slice 6).
+ *
+ * The tree-sitter grammar represents a background `&` as an anonymous node
+ * of type `"&"` that is a direct child of the `program` root node (NOT
+ * inside a `list` node — `&&` and `||` live inside `list`). This avoids the
+ * defects of a naive `endsWith('&')` check, which misreads `echo '&'`,
+ * `printf foo\&`, `a && b`, and misses `cmd & # comment`.
+ *
+ * Rules:
+ * 1. If the parser is unavailable or the parse produces errors, do NOT
+ *    promote — run normally.
+ * 2. The LAST child of the program root (including comments) must be the
+ *    anonymous `"&"` node. When a comment follows the `&` the command is
+ *    NOT promoted — being conservative avoids ambiguity.
+ * 3. There must be at least one named child before the `&` (the command).
+ * 4. Strip ONLY the operator and return the remainder.
+ */
+export function detectTrailingBackgroundOperator(
+  command: string,
+): TrailingBackgroundResult {
+  const tree = parseShellCommand(command);
+  if (tree === null) {
+    return { promoted: false, command };
+  }
+
+  const root = tree.rootNode;
+  if (root.type !== 'program' || root.hasError) {
+    return { promoted: false, command };
+  }
+
+  if (root.childCount === 0) {
+    return { promoted: false, command };
+  }
+
+  const lastChild = root.child(root.childCount - 1);
+  if (lastChild === null || lastChild.type !== '&') {
+    return { promoted: false, command };
+  }
+
+  if (root.namedChildCount === 0) {
+    return { promoted: false, command };
+  }
+
+  const stripped = command.slice(0, lastChild.startIndex).trimEnd();
+  if (stripped.length === 0) {
+    return { promoted: false, command };
+  }
+
+  return { promoted: true, command: stripped };
+}

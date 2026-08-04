@@ -17,6 +17,24 @@ import {
 import { ModelPromptEstimatorRegistry } from './ModelPromptEstimatorRegistry.js';
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
 
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed by throwing if the operation fulfills, so tests cannot pass
+ * silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    throw new Error('expected the operation to reject');
+  }
+  return outcome;
+}
+
 interface Fixture {
   readonly name: string;
   readonly text?: string;
@@ -99,9 +117,9 @@ describe('GPT-5.6 o200k fixtures', () => {
     'maps isolated %s codec initialization failures to asset-unavailable',
     async (_name, failure) => {
       const loadModule = () => Promise.reject(failure);
-      await expect(
-        estimateGpt56Prompt(request(), loadModule),
-      ).rejects.toMatchObject({
+      expect(
+        await captureRejection(estimateGpt56Prompt(request(), loadModule)),
+      ).toMatchObject({
         code: 'asset-unavailable',
         cause: failure,
       });
@@ -140,7 +158,7 @@ describe('GPT-5.6 runtime tokenizer input normalization', () => {
   const tokenizer = createGpt56RuntimeTokenizer('codex-alias', 'gpt-5.6-sol');
 
   it('counts structured serializable input exactly', async () => {
-    await expect(tokenizer.countTokens({ value: 'hello' })).resolves.toBe(5);
+    expect(await tokenizer.countTokens({ value: 'hello' })).toBe(5);
   });
 
   it.each([
@@ -155,7 +173,7 @@ describe('GPT-5.6 runtime tokenizer input normalization', () => {
       })(),
     ],
   ])('rejects %s with a typed failure', async (_name, value) => {
-    await expect(tokenizer.countTokens(value)).rejects.toMatchObject({
+    expect(await captureRejection(tokenizer.countTokens(value))).toMatchObject({
       code: 'tokenization-failed',
     });
   });
@@ -201,7 +219,9 @@ describe('ModelPromptEstimatorRegistry', () => {
     'rejects claimed malformed identity %s without legacy fallback',
     async (model) => {
       const input = request(model);
-      await expect(registry.estimatePrompt(input)).rejects.toMatchObject({
+      expect(
+        await captureRejection(registry.estimatePrompt(input)),
+      ).toMatchObject({
         code: 'unresolved-model-identity',
       });
       expect(input.legacyEstimate).not.toHaveBeenCalled();
@@ -214,7 +234,9 @@ describe('ModelPromptEstimatorRegistry', () => {
       'anthropic-messages',
       'messages/v1',
     );
-    await expect(registry.estimatePrompt(input)).rejects.toMatchObject({
+    expect(
+      await captureRejection(registry.estimatePrompt(input)),
+    ).toMatchObject({
       code: 'unsupported-protocol',
     });
     expect(input.legacyEstimate).not.toHaveBeenCalled();

@@ -8,18 +8,23 @@ import type {
   IShellToolHost,
   ShellExecutionResult as ToolsShellExecutionResult,
   ShellOutputEvent as ToolsShellOutputEvent,
+  HostShellJobInfo as ToolsShellJobInfo,
+  HostShellJobTailResult as ToolsShellJobTailResult,
+  BackgroundPromotionResult,
 } from '@vybestack/llxprt-code-tools';
 import { ShellTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import { ShellExecutionService } from '../services/shellExecutionService.js';
 import type { ShellOutputEvent } from '../services/shellExecutionService.js';
+import type { ShellJob } from '../services/shellJobManager.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 import {
   getCommandRoots,
   isCommandAllowed,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
+import { detectTrailingBackgroundOperator } from '../utils/shell-parser.js';
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
 import type { AnyToolInvocation } from '../index.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -221,6 +226,38 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     };
   }
 
+  launchBackgroundJob(input: {
+    command: string;
+    cwd: string;
+  }): ToolsShellJobInfo {
+    const manager = this.config.getShellJobManager();
+    if (manager === undefined) {
+      throw new Error(
+        'Background jobs are not available (ShellJobManager is not configured).',
+      );
+    }
+    const job = manager.launch({ command: input.command, cwd: input.cwd });
+    return toToolsShellJobInfo(job);
+  }
+
+  tailBackgroundJob(id: string): ToolsShellJobTailResult {
+    const manager = this.config.getShellJobManager();
+    if (manager === undefined) {
+      throw new Error(
+        'Background jobs are not available (ShellJobManager is not configured).',
+      );
+    }
+    return manager.tailOutput(id);
+  }
+
+  detectTrailingBackground(command: string): BackgroundPromotionResult {
+    const result = detectTrailingBackgroundOperator(command);
+    return {
+      promoted: result.promoted,
+      command: result.command,
+    };
+  }
+
   private mapOutputEvent(event: ShellOutputEvent): ToolsShellOutputEvent {
     switch (event.type) {
       case 'data':
@@ -233,6 +270,21 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
         return exhaustiveOutputEvent(event);
     }
   }
+}
+
+function toToolsShellJobInfo(job: ShellJob): ToolsShellJobInfo {
+  return {
+    id: job.id,
+    command: job.command,
+    cwd: job.cwd,
+    state: job.state,
+    startedAt: job.startedAt,
+    endedAt: job.endedAt,
+    pid: job.pid,
+    exitCode: job.exitCode,
+    signal: job.signal,
+    failureReason: job.failureReason,
+  };
 }
 
 function exhaustiveOutputEvent(event: never): ToolsShellOutputEvent {

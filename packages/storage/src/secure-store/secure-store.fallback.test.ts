@@ -13,7 +13,7 @@
  * @plan PLAN-20260211-SECURESTORE.P05
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
@@ -826,7 +826,7 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     expect(fallbackDir).toContain('test-service');
   });
 
-  it.runIf(process.platform === 'darwin')(
+  it.skipIf(process.platform !== 'darwin')(
     'default fallbackDir uses macOS Application Support path',
     () => {
       const store = new SecureStore('test-service', {
@@ -838,7 +838,7 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     },
   );
 
-  it.runIf(process.platform === 'win32')(
+  it.skipIf(process.platform !== 'win32')(
     'default fallbackDir uses Windows AppData path',
     () => {
       const store = new SecureStore('test-service', {
@@ -850,29 +850,7 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     },
   );
 
-  it.runIf(process.platform === 'linux')(
-    'default fallbackDir uses Linux XDG data path with XDG_DATA_HOME set',
-    async () => {
-      vi.stubEnv('XDG_DATA_HOME', '/tmp/custom-xdg');
-      try {
-        vi.resetModules();
-        const { SecureStore: EnvSecureStore } = await import(
-          './secure-store.js'
-        );
-        const store = new EnvSecureStore('test-service', {
-          keyringLoader: async () => null,
-          fallbackPolicy: 'allow',
-        });
-        const fallbackDir = getFallbackDir(store);
-        expect(fallbackDir).toContain('/tmp/custom-xdg');
-      } finally {
-        vi.unstubAllEnvs();
-        vi.resetModules();
-      }
-    },
-  );
-
-  it.runIf(process.platform === 'linux' && !process.env.XDG_DATA_HOME)(
+  it.skipIf(!(process.platform === 'linux' && !process.env.XDG_DATA_HOME))(
     'default fallbackDir uses Linux XDG data path default',
     () => {
       const store = new SecureStore('test-service', {

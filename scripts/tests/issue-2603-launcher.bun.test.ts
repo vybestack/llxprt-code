@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -12,36 +12,30 @@ import {
   symlinkSync,
   readFileSync,
 } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-
-const thisFile = fileURLToPath(import.meta.url);
-const repoRoot = resolve(thisFile, '..', '..', '..');
-const launcherPath = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
-const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
+import {
+  launcherPath,
+  LAUNCHER_FAILURE_EXIT,
+  SHELL_PROBE_TIMEOUT_MS,
+  SHORT_LAUNCH_TIMEOUT_MS,
+  STANDARD_LAUNCH_TIMEOUT_MS,
+  ensureBun,
+  expectNoSpawnError,
+  expectExitOk,
+  realBunVersion,
+  makeEntry,
+  makeLayout,
+  makeBundle,
+} from './launcher-test-helpers.js';
 
 /**
- * The exit code the launcher uses for all launch-failure modes (missing Bun,
- * corrupt Bun, wrong platform/unrecognized format, missing entry point).
- * Centralized so a change to the launcher's failure code only requires updating
- * one place. Mirrors the LAUNCHER_ERROR_EXIT_CODE constant in
- * packages/cli/scripts/install-native-launchers.cjs.
+ * Creating a symlink on Windows requires elevation or Developer Mode, so
+ * `symlinkSync` throws EPERM on an unprivileged host. CI runs this suite on
+ * ubuntu-latest only, but a local Windows run should skip those cases rather
+ * than error inside the fixture before reaching any launcher assertion.
  */
-const LAUNCHER_FAILURE_EXIT = 43;
-
-/**
- * The bundled Bun binary filename. The launcher resolves and exec's
- * node_modules/bun/bin/<BUN_BINARY_NAME> on all platforms; on Windows the
- * launcher runs through the .cmd/.ps1 wrapper but the binary itself is still
- * named bun.exe. This constant makes the platform-independent binary name
- * explicit so a rename here stays in sync with the launcher.
- */
-const BUN_BINARY_NAME = 'bun.exe';
-
-const SHELL_PROBE_TIMEOUT_MS = 10_000;
-const SHORT_LAUNCH_TIMEOUT_MS = 15_000;
-const STANDARD_LAUNCH_TIMEOUT_MS = 30_000;
+const itNeedsSymlinks = process.platform === 'win32' ? it.skip : it;
 
 /**
  * Extracts the inner `case "$_llxprt_magic"` block that follows a kernel
@@ -54,81 +48,6 @@ function launcherMagicBlockAfter(marker: string): string {
   const magicStart = source.indexOf('case "$_llxprt_magic"', start);
   const magicEsac = source.indexOf('esac', magicStart);
   return source.slice(magicStart, magicEsac);
-}
-
-// Bun is a declared root dependency (see trustedDependencies in the root
-// package.json) and a test prerequisite: the launcher exec's it directly. A
-// missing Bun means the repo install is broken — skipping would hide that, so
-// we throw rather than mark tests as skipped.
-function ensureBun(): string {
-  if (existsSync(repoBun)) {
-    return repoBun;
-  }
-  // Use POSIX-standard 'command -v' instead of non-standard 'which' for
-  // better portability on minimal container images.
-  const commandVResult = spawnSync('sh', ['-c', 'command -v bun'], {
-    encoding: 'utf8',
-  });
-  if (commandVResult.status === 0 && commandVResult.stdout.trim()) {
-    return commandVResult.stdout.trim();
-  }
-  throw new Error('Bun not found for test setup');
-}
-
-/** Guard: surfaces spawn failures (ENOENT, EACCES) before null status checks. */
-function expectNoSpawnError(result: { error?: Error }): void {
-  if (result.error) {
-    throw new Error(`spawn failed: ${result.error.message}`);
-  }
-}
-
-/**
- * Returns the real Bun version from the repo's bun package.json so tests can
- * write matching pins. Bun is a declared dependency and test prerequisite; a
- * missing/unreadable version indicates a broken installation, so we throw
- * rather than fall back to a hardcoded version that would become stale on the
- * next Bun upgrade.
- */
-function realBunVersion(): string {
-  const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
-  const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
-  if (typeof bunPkg.version === 'string' && bunPkg.version.length > 0) {
-    return bunPkg.version;
-  }
-  throw new Error(
-    `Bun package.json at ${bunPkgPath} has no valid version field; ` +
-      'the repo installation appears broken.',
-  );
-}
-
-function makeEntry(pkgRoot: string, code: string): void {
-  writeFileSync(join(pkgRoot, 'index.ts'), `#!/usr/bin/env -S bun\n${code}\n`);
-}
-
-function makeLayout(
-  tempDir: string,
-  opts: { withBun?: boolean; withIndex?: boolean; entryCode?: string } = {},
-): { pkgRoot: string; launcherTarget: string } {
-  const pkgRoot = join(tempDir, 'pkg');
-  const binDir = join(pkgRoot, 'bin');
-  mkdirSync(binDir, { recursive: true });
-
-  const launcherTarget = join(binDir, 'llxprt');
-  copyFileSync(launcherPath, launcherTarget);
-  chmodSync(launcherTarget, 0o755);
-
-  if (opts.withIndex !== false) {
-    makeEntry(pkgRoot, opts.entryCode ?? 'process.exit(0);');
-  }
-
-  if (opts.withBun !== false) {
-    const bunPath = ensureBun();
-    const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-    mkdirSync(bunDir, { recursive: true });
-    copyFileSync(bunPath, join(bunDir, BUN_BINARY_NAME));
-  }
-
-  return { pkgRoot, launcherTarget };
 }
 
 describe('POSIX launcher portability', () => {
@@ -163,31 +82,34 @@ describe('POSIX launcher portability', () => {
     expect(source).toMatch(/od -An -tx1 -N4 -- "\$_llxprt_bun"/);
   });
 
-  it('readlink -- resolves symlinks on stock macOS (behavioral proof)', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-readlink-'));
-    try {
-      const target = join(tempDir, 'real-target');
-      writeFileSync(target, '#!/bin/sh\necho ok\n');
-      chmodSync(target, 0o755);
-      const link = join(tempDir, 'mylink');
-      symlinkSync(target, link);
-      const r = spawnSync('sh', ['-c', `readlink -- "${link}"`], {
-        encoding: 'utf8',
-        timeout: SHELL_PROBE_TIMEOUT_MS,
-      });
-      expect(r.status, r.stderr).toBe(0);
-      expect(r.stdout.trim()).toBe(target);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
+  itNeedsSymlinks(
+    'readlink -- resolves symlinks on stock macOS (behavioral proof)',
+    () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-readlink-'));
+      try {
+        const target = join(tempDir, 'real-target');
+        writeFileSync(target, '#!/bin/sh\necho ok\n');
+        chmodSync(target, 0o755);
+        const link = join(tempDir, 'mylink');
+        symlinkSync(target, link);
+        const r = spawnSync('sh', ['-c', `readlink -- "${link}"`], {
+          encoding: 'utf8',
+          timeout: SHELL_PROBE_TIMEOUT_MS,
+        });
+        expectExitOk(r);
+        expect(r.stdout.trim()).toBe(target);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('dirname -- handles dash-prefixed names on stock macOS (behavioral proof)', () => {
     const r = spawnSync('sh', ['-c', `dirname -- "-weird-name"`], {
       encoding: 'utf8',
       timeout: SHELL_PROBE_TIMEOUT_MS,
     });
-    expect(r.status, r.stderr).toBe(0);
+    expectExitOk(r);
     expect(r.stdout.trim()).toBe('.');
   });
 
@@ -201,7 +123,7 @@ describe('POSIX launcher portability', () => {
         ['-c', `od -An -tx1 -N4 -- "${elfFile}" | tr -d ' \\n'`],
         { encoding: 'utf8', timeout: SHELL_PROBE_TIMEOUT_MS },
       );
-      expect(r.status, r.stderr).toBe(0);
+      expectExitOk(r);
       expect(r.stdout.trim()).toBe('7f454c46');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -289,7 +211,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout.trim()).toBe('1');
     expect(existsSync(counterFile)).toBe(true);
     expect(readFileSync(counterFile, 'utf8').trim()).toBe('1');
@@ -461,7 +383,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
   });
   it('exits 43 when Bun is a corrupt text file (not a native binary)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
@@ -592,7 +514,7 @@ describe('POSIX launcher execution behavior', () => {
         ['-c', `od -An -tx1 -N4 -- "${peFile}" | tr -d ' \\n'`],
         { encoding: 'utf8', timeout: SHELL_PROBE_TIMEOUT_MS },
       );
-      expect(r.status, r.stderr).toBe(0);
+      expectExitOk(r);
       expect(r.stdout.trim().startsWith('4d5a')).toBe(true);
     } finally {
       rmSync(tempDir2, { recursive: true, force: true });
@@ -635,7 +557,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(readFileSync(counterFile, 'utf8').trim()).toBe('1');
   });
   it('preserves a legitimate non-zero exit code from the entry', () => {
@@ -664,21 +586,24 @@ describe('POSIX launcher execution behavior', () => {
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/entry point|index\.ts|corrupt/i);
   });
-  it('resolves symlinks so $0 works through npm .bin links', () => {
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir);
-    const binLink = join(pkgRoot, 'node_modules', '.bin', 'llxprt');
-    mkdirSync(dirname(binLink), { recursive: true });
-    symlinkSync(launcherTarget, binLink);
+  itNeedsSymlinks(
+    'resolves symlinks so $0 works through npm .bin links',
+    () => {
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir);
+      const binLink = join(pkgRoot, 'node_modules', '.bin', 'llxprt');
+      mkdirSync(dirname(binLink), { recursive: true });
+      symlinkSync(launcherTarget, binLink);
 
-    const result = spawnSync(binLink, ['--version'], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expectNoSpawnError(result);
-    expect(result.status).toBe(0);
-  });
+      const result = spawnSync(binLink, ['--version'], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expectNoSpawnError(result);
+      expect(result.status).toBe(0);
+    },
+  );
   it('does not mutate the environment with LLXPRT_BUN_RELAUNCHED', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: `console.log(process.env.LLXPRT_BUN_RELAUNCHED ?? 'unset');`,
@@ -689,7 +614,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
     expect(result.stdout.trim()).toBe('unset');
   });
 });
@@ -790,7 +715,7 @@ describe('POSIX launcher version-pin and platform validation', () => {
       timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status, result.stderr).toBe(0);
+    expectExitOk(result);
   });
   it('does not scan beyond the enclosing node_modules for Bun', () => {
     // The package is nested two levels deep inside node_modules. The enclosing
@@ -848,4 +773,68 @@ describe('POSIX launcher version-pin and platform validation', () => {
     },
     15_000,
   );
+});
+
+describe('POSIX launcher bundle preference (issue #2999)', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bundle-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('execs the prebuilt bundle when present (observable via distinct output)', () => {
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `console.log('SOURCE');`,
+    });
+    makeBundle(pkgRoot, `console.log('BUNDLE');`);
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expectExitOk(result);
+    expect(result.stdout.trim()).toBe('BUNDLE');
+  });
+
+  it('falls back to index.ts when the bundle is absent', () => {
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `console.log('SOURCE');`,
+    });
+    // No bundle created.
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expectExitOk(result);
+    expect(result.stdout.trim()).toBe('SOURCE');
+  });
+
+  it('uses index.ts when LLXPRT_FORCE_SOURCE_ENTRY=1 even if a bundle exists', () => {
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `console.log('SOURCE');`,
+    });
+    makeBundle(pkgRoot, `console.log('BUNDLE');`);
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        PATH: '/usr/bin:/bin',
+        LLXPRT_FORCE_SOURCE_ENTRY: '1',
+      },
+    });
+    expectExitOk(result);
+    expect(result.stdout.trim()).toBe('SOURCE');
+  });
 });

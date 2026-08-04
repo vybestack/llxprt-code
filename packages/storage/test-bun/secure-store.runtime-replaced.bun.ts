@@ -21,7 +21,7 @@
  * @plan PLAN-20260801-ISSUE2926
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -30,20 +30,20 @@ import {
   SecureStoreError,
   createDefaultKeyringAdapter,
   type KeyringAdapter,
-} from './secure-store.js';
+} from '../src/secure-store/secure-store.js';
 import {
   isSecureStoreError,
   isRuntimeReplacedError,
-} from './secure-store-errors.js';
+} from '../src/secure-store/secure-store-errors.js';
 import {
   resetRuntimeIdentityForTesting,
   forceRuntimeReplacedForTesting,
-} from './runtime-identity.js';
+} from '../src/secure-store/runtime-identity.js';
 import {
   resetRuntimeReplacedWarningForTesting,
   hasRuntimeReplacedWarningBeenEmitted,
   RUNTIME_REPLACED_REMEDIATION,
-} from './runtime-replaced-errors.js';
+} from '../src/secure-store/runtime-replaced-errors.js';
 
 // ─── Shared helpers (RULES.md: no copy-pasted setup) ────────────────────────
 
@@ -132,6 +132,11 @@ function assertRuntimeReplacedError(error: unknown): void {
     expect(error.code).toBe('RUNTIME_REPLACED');
     expect(error.remediation).toContain('Restart');
     expect(error.remediation).toContain('Always Allow');
+    // Issue #2962: this error is now rethrown out of the OAuth token layer and
+    // surfaced to the user, and every consumer renders `message` only — none
+    // read `.remediation`. The message must therefore carry the fix, not just
+    // the diagnosis.
+    expect(error.message).toContain(error.remediation);
   }
 }
 

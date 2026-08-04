@@ -512,14 +512,12 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       client = await startAndConnect(server);
 
       // The connection is now idle (handshake done, no pending requests).
-      // Advance past IDLE_TIMEOUT_MS with fake timers.
+      // Advance past IDLE_TIMEOUT_MS, then let real socket close events drain.
+      // Async fake-timer advancement deadlocks Bun's socket event loop on Linux.
       vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.advanceTimersByTime(301_000);
-      // Allow the gracefulClose callback to run.
-      await vi.advanceTimersByTimeAsync(0);
       vi.useRealTimers();
-      // Yield to let gracefulClose's socket.end() settle.
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // After the idle timer fires, the client's socket is closed and
       // handshakeComplete is false. The next request must trigger a fresh

@@ -950,7 +950,8 @@ jobs:
       # (scripts/postinstall.cjs) then symlinks Bun's static workspace copies to
       # the real workspace dirs so build/test resolve workspace `dist/` (see
       # dev-docs/bun.md). Per-shard tests run via `bun scripts/test.ts --shard`
-      # which invokes each workspace's `test` script under Vitest through npm.
+      # which invokes each workspace's `test` script. The tools, mcp, and storage
+      # workspaces use native Bun; all other packages use their configured runner.
       - name: 'Install dependencies for testing'
         # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
         # restore the committed lockfile so no downstream step sees a dirty one.
@@ -1404,10 +1405,10 @@ jobs:
                 printf "GNOME login collection is not unlocked: %s\n" "$login_collection_locked" >&2
                 exit 1
               fi
-              npm run test:ci --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
+              npm run test:vitest --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
             '
           else
-            npm run test:ci --workspace @vybestack/llxprt-code-storage -- \
+            npm run test:vitest --workspace @vybestack/llxprt-code-storage -- \
               --config "$TEST_CONFIG"
           fi
 

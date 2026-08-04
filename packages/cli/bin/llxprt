@@ -238,6 +238,97 @@ _llxprt_verify_workspace_root() {
   return 0
 }
 
+_llxprt_kernel=$(uname -s 2>/dev/null || printf '%s' '')
+
+# Entry precedence (issue #2999):
+#   1. LLXPRT_FORCE_SOURCE_ENTRY=1 -> source index.ts (debug escape hatch)
+#   2. prebuilt bundle (<pkg>/bundle/llxprt.js) if present
+#   3. source index.ts
+# Fallback to source is mandatory: dev checkouts and source runs have no bundle.
+_llxprt_entry=""
+if [ "${LLXPRT_FORCE_SOURCE_ENTRY:-0}" != "1" ] && \
+   [ -f "$_llxprt_pkg_root/bundle/llxprt.js" ]; then
+  _llxprt_entry="$_llxprt_pkg_root/bundle/llxprt.js"
+fi
+if [ -z "$_llxprt_entry" ]; then
+  _llxprt_entry="$_llxprt_pkg_root/index.ts"
+fi
+
+if [ ! -f "$_llxprt_entry" ]; then
+  printf '%s
+' 'LLxprt Code: entry point was not found.' >&2
+  printf '%s
+' "Expected: $_llxprt_entry" >&2
+  printf '%s
+' 'Your installation may be corrupt; reinstall @vybestack/llxprt-code.' >&2
+  exit 43
+fi
+
+# Compares two dotted versions. Returns 0 when $1 >= $2, comparing only the
+# numeric major.minor.patch core. A prerelease suffix is stripped rather than
+# ordered (so "1.3.15-canary" counts as 1.3.15). That is deliberately generous:
+# the floor exists to keep an ancient Bun out, not to enforce exact identity.
+# A non-numeric component (e.g. a range pin such as "^1.3.14") returns 1, so an
+# unparseable pin falls back to the bundled runtime rather than guessing.
+_llxprt_version_ge() {
+  _llxprt_v_have=${1%%-*}
+  _llxprt_v_want=${2%%-*}
+  _llxprt_v_field=0
+  while [ "$_llxprt_v_field" -lt 3 ]; do
+    _llxprt_v_h=${_llxprt_v_have%%.*}
+    _llxprt_v_w=${_llxprt_v_want%%.*}
+    case $_llxprt_v_h in
+      ''|*[!0-9]*) return 1 ;;
+      *) ;;
+    esac
+    case $_llxprt_v_w in
+      ''|*[!0-9]*) return 1 ;;
+      *) ;;
+    esac
+    if [ "$_llxprt_v_h" -gt "$_llxprt_v_w" ]; then
+      return 0
+    fi
+    if [ "$_llxprt_v_h" -lt "$_llxprt_v_w" ]; then
+      return 1
+    fi
+    case $_llxprt_v_have in
+      *.*) _llxprt_v_have=${_llxprt_v_have#*.} ;;
+      *) _llxprt_v_have=0 ;;
+    esac
+    case $_llxprt_v_want in
+      *.*) _llxprt_v_want=${_llxprt_v_want#*.} ;;
+      *) _llxprt_v_want=0 ;;
+    esac
+    _llxprt_v_field=$((_llxprt_v_field + 1))
+  done
+  return 0
+}
+
+# macOS only: prefer a Bun already on PATH when it meets the pinned version
+# floor (issue #2962).
+#
+# Why: npm removes and re-extracts the whole package tree on every install,
+# including the nested bun dependency, even when that dependency did not change.
+# That unlinks the executable of every RUNNING session. On macOS an unlinked
+# executable cannot be identified by securityd, which then cannot evaluate any
+# Keychain item's ACL and falls back to a login-password prompt on every
+# credential operation. Exec'ing a Bun that npm does not own removes the trigger.
+#
+# This knowingly relaxes the "never look at PATH" rule that governs the bundled
+# resolution below. The trade is accepted: anyone who can write your PATH can
+# already run code as you, and a successful `bun --version` proves the candidate
+# is an executable, working Bun — a stronger check than the magic-byte
+# inspection applied to the bundled binary. Linux and Windows are untouched;
+# neither keys credential access on code identity, so neither has anything to
+# gain here.
+if [ "$_llxprt_kernel" = "Darwin" ] && [ -n "$_llxprt_bun_pin" ]; then
+  if _llxprt_path_bun_version=$(bun --version 2>/dev/null) && \
+     [ -n "$_llxprt_path_bun_version" ] && \
+     _llxprt_version_ge "$_llxprt_path_bun_version" "$_llxprt_bun_pin"; then
+    exec bun "$_llxprt_entry" "$@"
+  fi
+fi
+
 # Resolve the bundled Bun runtime. Resolution is strictly bounded so an
 # unrelated consumer Bun can never be accepted:
 #
@@ -335,7 +426,6 @@ _llxprt_od_out=$(od -An -tx1 -N4 -- "$_llxprt_bun" 2>&1) || {
 }
 _llxprt_magic=$(printf '%s' "$_llxprt_od_out" | tr -d ' \n')
 
-_llxprt_kernel=$(uname -s 2>/dev/null || printf '%s' '')
 case "$_llxprt_kernel" in
   MINGW*|MSYS*|CYGWIN*)
     # Windows POSIX layer: only PE/COFF is accepted (the OS runs PE natively;
@@ -378,14 +468,5 @@ case "$_llxprt_kernel" in
     esac
     ;;
 esac
-
-_llxprt_entry="$_llxprt_pkg_root/index.ts"
-
-if [ ! -f "$_llxprt_entry" ]; then
-  printf '%s\n' 'LLxprt Code: TypeScript entry point (index.ts) was not found.' >&2
-  printf '%s\n' "Expected: $_llxprt_entry" >&2
-  printf '%s\n' 'Your installation may be corrupt; reinstall @vybestack/llxprt-code.' >&2
-  exit 43
-fi
 
 exec "$_llxprt_bun" "$_llxprt_entry" "$@"

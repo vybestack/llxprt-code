@@ -168,6 +168,19 @@ export {
 export type { MediaBlock, MediaCategory } from './utils/mediaUtils.js';
 export { classifyMediaBlock } from './utils/mediaUtils.js';
 export {
+  type ImageDimensions,
+  parseImageDimensions,
+  parseImageDimensionsFromBase64,
+} from './utils/imageDimensions.js';
+export {
+  type ImageTokenProviderFamily,
+  DEFAULT_IMAGE_TOKEN_ESTIMATE,
+  resolveImageTokenProviderFamily,
+  type ImageTokenEstimateInput,
+  estimateImageTokens,
+  estimateNonTextPartTokens,
+} from './utils/imageTokenEstimation.js';
+export {
   DEFAULT_DIFF_OPTIONS,
   DEFAULT_CREATE_PATCH_OPTIONS,
   getDiffStat,
