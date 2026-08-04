@@ -362,7 +362,7 @@ describe('Configuration Integration Tests', () => {
      * Converting the exit into a throw lets the rejection be asserted without
      * changing how the CLI behaves for real users.
      */
-    async function expectArgumentParsingToReject(): Promise<void> {
+    async function parseArgumentsWithExitAsThrow(): Promise<unknown> {
       const realExit = process.exit;
       const realStdoutWrite = process.stdout.write.bind(process.stdout);
       process.exit = ((code?: number) => {
@@ -371,7 +371,7 @@ describe('Configuration Integration Tests', () => {
       // yargs prints the full help text on failure; keep it out of the report.
       process.stdout.write = (() => true) as typeof process.stdout.write;
       try {
-        await expect(parseArguments({} as Settings)).rejects.toThrow(Error);
+        return await parseArguments({} as Settings);
       } finally {
         process.exit = realExit;
         process.stdout.write = realStdoutWrite;
@@ -385,7 +385,7 @@ describe('Configuration Integration Tests', () => {
         process.argv = ['node', 'script.js', '--approval-mode', 'invalid_mode'];
 
         // Should throw during argument parsing due to yargs validation
-        await expectArgumentParsingToReject();
+        await expect(parseArgumentsWithExitAsThrow()).rejects.toThrow(Error);
       } finally {
         process.argv = originalArgv;
       }
@@ -404,7 +404,7 @@ describe('Configuration Integration Tests', () => {
         ];
 
         // Should throw during argument parsing due to conflict validation
-        await expectArgumentParsingToReject();
+        await expect(parseArgumentsWithExitAsThrow()).rejects.toThrow(Error);
       } finally {
         process.argv = originalArgv;
       }
