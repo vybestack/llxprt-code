@@ -548,11 +548,20 @@ export class SecureStore {
           this.serviceName,
           key,
         );
+        this.recordKeyringSuccess();
       } catch (error) {
         keyringFailure = {
           code: classifyError(error),
           message: error instanceof Error ? error.message : String(error),
         };
+        // A thrown NOT_FOUND means the keyring responded correctly but had
+        // nothing to delete — the delete-path analogue of get() returning
+        // null, which records neither success nor failure. Treating it as a
+        // keyring failure would wrongly erode the probe cache for a healthy
+        // keyring.
+        if (keyringFailure.code !== 'NOT_FOUND') {
+          this.recordKeyringFailure();
+        }
         this.logger.debug(
           () =>
             `[delete] key='${key}' keyring delete failed (${keyringFailure!.code}): ${keyringFailure!.message}`,
@@ -659,9 +668,11 @@ export class SecureStore {
       try {
         const value = await adapter.getPassword(this.serviceName, key);
         if (value !== null) {
+          this.recordKeyringSuccess();
           return true;
         }
       } catch (error) {
+        this.recordKeyringFailure();
         const classified = classifyError(error);
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.debug(

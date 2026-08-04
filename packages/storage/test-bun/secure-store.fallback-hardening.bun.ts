@@ -62,8 +62,19 @@ function useTempFallbackDir(): {
       try {
         await fs.access(path.join(tempDir, relPath));
         return true;
-      } catch {
-        return false;
+      } catch (error) {
+        // Return false only for ENOENT (genuinely absent); rethrow all other
+        // fs errors (EACCES, ENOTDIR, I/O) so a "cleaned up" assertion cannot
+        // pass on a masked error.
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        ) {
+          return false;
+        }
+        throw error;
       }
     },
   };
@@ -117,6 +128,47 @@ function keyringThrowingOnGet(error: Error): KeyringAdapter {
     setPassword: async () => {},
     deletePassword: async () => false,
   };
+}
+
+/**
+ * In-memory KeyringAdapter that behaves like a real keyring (round-trips
+ * set/get/delete) while throwing caller-specified errors for specific account
+ * names. Tallies probe operations (setPassword calls for the
+ * `__securestore_probe__` account) so tests can assert on re-probe behaviour
+ * through observable adapter interactions rather than private fields.
+ *
+ * @plan PLAN-20260803-ISSUE1985
+ */
+function makeProbeableAdapter(opts: {
+  getPasswordThrowsFor?: Set<string>;
+  getPasswordError?: Error;
+  deleteThrowsFor?: Set<string>;
+  deleteError?: Error;
+  seed?: Map<string, string>;
+}): { adapter: KeyringAdapter; probeCount: () => number } {
+  const entries = new Map<string, string>(opts.seed ?? []);
+  let probes = 0;
+  const adapter: KeyringAdapter = {
+    getPassword: async (_service, account) => {
+      if (opts.getPasswordThrowsFor?.has(account) && opts.getPasswordError) {
+        throw opts.getPasswordError;
+      }
+      return entries.get(account) ?? null;
+    },
+    setPassword: async (_service, account, value) => {
+      if (account.startsWith('__securestore_probe__')) {
+        probes += 1;
+      }
+      entries.set(account, value);
+    },
+    deletePassword: async (_service, account) => {
+      if (opts.deleteThrowsFor?.has(account) && opts.deleteError) {
+        throw opts.deleteError;
+      }
+      return entries.delete(account);
+    },
+  };
+  return { adapter, probeCount: () => probes };
 }
 
 /**
@@ -460,5 +512,123 @@ describe('SecureStore fallback hardening — has() matches get() fallback semant
     expect(error).toBeInstanceOf(SecureStoreError);
     expect(error.code).toBe('RUNTIME_REPLACED');
     expect(isRuntimeReplacedError(error)).toBe(true);
+  });
+});
+
+// ─── consecutive-failure tracking erodes the probe cache (AC-3) ───────────────
+
+describe('SecureStore fallback hardening — consecutive-failure tracking erodes the probe cache', () => {
+  const env = useTempFallbackDir();
+
+  it('invalidates the cached probe after 3 consecutive failing has() calls (TIMEOUT)', async () => {
+    const { adapter, probeCount } = makeProbeableAdapter({
+      getPasswordThrowsFor: new Set(['fail-has']),
+      getPasswordError: new Error('Operation timed out'),
+    });
+    const store = new SecureStore(SERVICE, {
+      fallbackDir: env.dir(),
+      lockDir: env.lockDir(),
+      keyringLoader: async () => adapter,
+    });
+
+    // Prime the probe cache with a successful probe.
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
+
+    // Two failures via has(): below threshold, cache stays valid.
+    await store.has('fail-has');
+    await store.has('fail-has');
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1); // still cached, no re-probe
+
+    // Third failure reaches threshold, invalidating the cache.
+    await store.has('fail-has');
+
+    // The next availability check must perform a fresh probe instead of
+    // returning the stale cached value.
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(2);
+  });
+
+  it('invalidates the cached probe after 3 consecutive failing delete() calls with a non-NOT_FOUND error', async () => {
+    const { adapter, probeCount } = makeProbeableAdapter({
+      deleteThrowsFor: new Set(['fail-delete']),
+      deleteError: new Error('Keyring locked'),
+    });
+    const store = new SecureStore(SERVICE, {
+      fallbackDir: env.dir(),
+      lockDir: env.lockDir(),
+      keyringLoader: async () => adapter,
+    });
+
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
+
+    await store.delete('fail-delete').catch(() => {});
+    await store.delete('fail-delete').catch(() => {});
+    // Still cached after 2 failures.
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
+
+    // Third failure reaches threshold.
+    await store.delete('fail-delete').catch(() => {});
+
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(2);
+  });
+
+  it('does NOT invalidate the cached probe after NOT_FOUND deletePassword rejections', async () => {
+    const { adapter, probeCount } = makeProbeableAdapter({
+      deleteThrowsFor: new Set(['nf-delete']),
+      deleteError: new Error('credential not found'),
+    });
+    const store = new SecureStore(SERVICE, {
+      fallbackDir: env.dir(),
+      lockDir: env.lockDir(),
+      keyringLoader: async () => adapter,
+    });
+
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
+
+    // Several NOT_FOUND deletes — must NOT erode the probe cache.
+    for (let i = 0; i < 5; i++) {
+      await store.delete('nf-delete');
+    }
+
+    // Probe cache still valid: no re-probe.
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
+  });
+
+  it('retains the cached probe when an intervening success resets the failure counter', async () => {
+    const { adapter, probeCount } = makeProbeableAdapter({
+      getPasswordThrowsFor: new Set(['fail-has']),
+      getPasswordError: new Error('Operation timed out'),
+      seed: new Map([['ok-key', 'present']]),
+    });
+    const store = new SecureStore(SERVICE, {
+      fallbackDir: env.dir(),
+      lockDir: env.lockDir(),
+      keyringLoader: async () => adapter,
+    });
+
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
+
+    // Two failures (below threshold).
+    await store.has('fail-has');
+    await store.has('fail-has');
+
+    // Intervening success resets the consecutive counter to 0.
+    await store.has('ok-key');
+
+    // Two more failures — the counter never reaches the threshold.
+    await store.has('fail-has');
+    await store.has('fail-has');
+
+    // Probe cache was NOT invalidated.
+    await store.isKeychainAvailable();
+    expect(probeCount()).toBe(1);
   });
 });
