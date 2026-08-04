@@ -172,6 +172,27 @@ Coverage lost:
 Also worth filling: the *current* behaviour (a single info message on
 `LoopDetected`) has no test at all.
 
+### `src/ui/components/messages/ToolConfirmationMessage.responsive.test.tsx` (10 cases)
+
+Every case exercised a responsive summary/details toggle: a narrow-width
+summary plus `Press 'd' to see full details`, expanding to `Full Parameters:`.
+Neither string exists anywhere in any package's source; the affordance was
+removed.
+
+Coverage lost:
+
+- narrow-width summary with a details toggle, for exec and info confirmations
+- `d` toggles full details on, and again toggles back to the summary
+- full URLs appear once details are expanded
+- `d` is ignored when the component is not focused
+- a details toggle is still offered at standard width for very long commands
+- more detail is shown by default at wide width
+- commands with no parameters render gracefully
+- details state survives a re-render
+
+Non-responsive confirmation behaviour is still covered by
+`ToolConfirmationMessage.test.tsx` (13 cases, passing).
+
 ## Ported, not deleted
 
 - `src/ui/components/ContextIndicator.ui.test.tsx` — constructed
