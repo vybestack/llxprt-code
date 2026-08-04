@@ -344,7 +344,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
-      const { result, rerender } = renderHook(
+      const { rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
           useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
         { initialProps: { pattern: '' } },
