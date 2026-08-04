@@ -127,6 +127,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
+      // Issue #2951: Windows Ctrl+Enter steering. Each file pins
+      // process.platform at the very top before the key-matcher module graph
+      // loads, so win32 and darwin must run in separate processes.
+      'test-bun/steerKey.win32.bun.ts',
+      'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
     ],
   },
   {

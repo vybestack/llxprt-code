@@ -238,6 +238,13 @@ export const defaultKeyBindings: KeyBindingConfig = {
   // typed text at the next tool-call boundary. When not streaming, Ctrl+Enter
   // falls through to NEWLINE (both match the same key; the handler checks
   // STEER first and only consumes it when streaming).
+  //
+  // Windows consoles deliver Ctrl+Enter as a bare line feed (0x0A), which the
+  // keypress parser reports as `{ name: 'j', ctrl: true }`. The Windows alias
+  // for STEER is therefore applied separately by `resolveKeyBindings` (see
+  // `windowsKeyBindingAdditions`) so `defaultKeyBindings` — and thus the
+  // generated `docs/keyboard-shortcuts.md` — stays platform-neutral (issue
+  // #2951).
   [Command.STEER]: [{ key: 'return', ctrl: true }],
   [Command.NEWLINE]: [
     { key: 'return', ctrl: true },
@@ -288,6 +295,65 @@ export function getDefaultKeyBindingHint(command: Command): string {
   ].filter((modifier): modifier is string => modifier !== undefined);
   const key = binding.key ?? binding.sequence ?? '';
   return [...modifiers, key].join('+');
+}
+
+/**
+ * Windows consoles deliver Ctrl+Enter as a bare line feed (0x0A), which the
+ * keypress parser reports as `{ name: 'j', ctrl: true }` — indistinguishable
+ * from Ctrl+J. Without this alias `Command.STEER` can never match on Windows
+ * and Ctrl+Enter always falls through to `Command.NEWLINE` (issue #2951).
+ *
+ * `defaultKeyBindings` deliberately stays platform-neutral so the generated
+ * `docs/keyboard-shortcuts.md` is identical on every platform.
+ */
+export const windowsKeyBindingAdditions: Partial<
+  Record<Command, readonly KeyBinding[]>
+> = {
+  [Command.STEER]: [{ key: 'j', ctrl: true }],
+};
+
+const BINDING_FIELDS = [
+  'key',
+  'ctrl',
+  'shift',
+  'command',
+  'paste',
+] as const satisfies ReadonlyArray<keyof KeyBinding>;
+
+function isSameBinding(a: KeyBinding, b: KeyBinding): boolean {
+  return BINDING_FIELDS.every((field) => a[field] === b[field]);
+}
+
+/**
+ * Resolve the active key-binding configuration for a platform. Non-Windows
+ * platforms return `defaultKeyBindings` unchanged; Windows APPENDS
+ * `windowsKeyBindingAdditions` to the defaults (de-duplicated) so STEER also
+ * matches the bare-LF key the console emits for Ctrl+Enter.
+ *
+ * The additions are extra bindings rather than replacement arrays, so any
+ * future change to `defaultKeyBindings` flows through to Windows automatically
+ * instead of silently diverging.
+ */
+export function resolveKeyBindings(
+  platform: NodeJS.Platform = process.platform,
+): KeyBindingConfig {
+  if (platform !== 'win32') return defaultKeyBindings;
+
+  const resolved = { ...defaultKeyBindings } as Record<
+    Command,
+    readonly KeyBinding[]
+  >;
+  for (const [command, additions] of Object.entries(
+    windowsKeyBindingAdditions,
+  ) as Array<[Command, readonly KeyBinding[]]>) {
+    const existing = resolved[command];
+    const novel = additions.filter(
+      (addition) =>
+        !existing.some((binding) => isSameBinding(binding, addition)),
+    );
+    if (novel.length > 0) resolved[command] = [...existing, ...novel];
+  }
+  return resolved;
 }
 
 interface CommandCategory {
