@@ -40,8 +40,6 @@
 
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import * as nodePath from 'path';
 import {
   createFakeRepo,
@@ -52,7 +50,7 @@ import {
   makeLabeledEvent,
   daysAgo,
 } from './assign-helpers.ts';
-import { asRecord, stateIssue } from './typed-test-helpers.ts';
+import { stateIssue } from './typed-test-helpers.ts';
 
 function defaultStateWith(overrides: Record<string, unknown>) {
   return { ...defaultState(), ...overrides };
@@ -428,8 +426,6 @@ describe('K3: ambiguous marker POST ownership-aware rollback', () => {
     'removes label on TERM signal after applied-error label POST',
     { timeout: 30000 },
     () => {
-      const hookDir = mkdtempSync(nodePath.join(tmpdir(), 'assign-signal-k3-'));
-      const hookFile = nodePath.join(hookDir, 'hook');
       const repo = createFakeRepo(
         defaultStateWith({
           issues: { 42: makeIssue({ number: 42, assignees: [] }) },
@@ -450,57 +446,23 @@ describe('K3: ambiguous marker POST ownership-aware rollback', () => {
               endpoint: 'repos/test/repo/issues/42/assignees',
               on_nth: 1,
               timing: 'post',
-              action: 'pause',
-              hook_file: hookFile,
-              seconds: 0.5,
+              action: 'signal_parent',
+              signal: 'SIGTERM',
             },
           ],
         }),
       );
-      const assignScript = nodePath.join(
-        import.meta.dirname,
-        '../..',
-        '.github/scripts/assign-issue.sh',
+      const result = repo.runAssign({
+        issueNumber: 42,
+        commenter: 'alice',
+        extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
+      });
+
+      expect(result.status).toBe(143);
+      expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
+      expect(stateIssue(result.state, '42')._label_names).not.toContain(
+        'auto-assigned',
       );
-      const env = {
-        ...process.env,
-        GH_TOKEN: 'fake-token',
-        GITHUB_TOKEN: 'fake-token',
-        GITHUB_REPOSITORY: 'test/repo',
-        ISSUE_NUMBER: '42',
-        COMMENTER_LOGIN: 'alice',
-        GH_FAKE_STATE: repo.stateFile,
-        ASSIGN_ELECTION_DELAY: '0',
-        PATH: `${repo.binDir}${nodePath.delimiter}${process.env.PATH}`,
-        ASSIGN_SCRIPT: assignScript,
-        SIGNAL_HOOK: hookFile,
-      };
-
-      try {
-        let status = 0;
-        try {
-          execFileSync(
-            'bash',
-            [
-              '-c',
-              'rm -f "$SIGNAL_HOOK"; bash "$ASSIGN_SCRIPT" >/dev/null 2>&1 & pid=$!; found=false; for _ in $(seq 1 500); do if [[ -f "$SIGNAL_HOOK" ]]; then found=true; break; fi; sleep 0.01; done; if [[ "$found" != true ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; exit 99; fi; kill -TERM "$pid"; wait "$pid"',
-            ],
-            { env, stdio: ['ignore', 'pipe', 'pipe'] },
-          );
-        } catch (error: unknown) {
-          const errRecord = asRecord(error);
-          status =
-            typeof errRecord['status'] === 'number' ? errRecord['status'] : 1;
-        }
-
-        const state = repo.readState();
-        expect(status).not.toBe(0);
-        expect(stateIssue(state, '42')._label_names).not.toContain(
-          'auto-assigned',
-        );
-      } finally {
-        rmSync(hookDir, { recursive: true, force: true });
-      }
     },
   );
 });
