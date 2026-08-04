@@ -133,6 +133,27 @@ precedence for footer/tips, and context-file messaging.
   progress and pending. Truncation at narrow widths is still covered by the
   remaining 6 cases in that file.
 
+### `src/ui/hooks/useAgentStream.cancellation.test.tsx` (3 cases)
+
+Every case asserted that the CLI hook writes cancelled tool responses back
+through `client.addHistory`. `addHistory` is not called anywhere in
+`src/ui/hooks/agentStream/` or `useAgentStream*.ts` any more — continuation is
+owned by the Agent loop, as the comment in `useAgentStreamLifecycle.ts` states.
+The same cases also expected `markToolsAsDisplayCleared` for primary tools; it
+now fires only for external (subagent) tools.
+
+Coverage lost:
+
+- all tool calls being cancelled leaves history in the expected shape
+- multiple cancelled tool responses group into a single history entry
+- no follow-up API call is made after a cancellation
+
+Partly mitigated: `useAgentStream.usercancel.test.tsx` passes and covers
+cancelling an in-progress stream, the `onCancelSubmit` handler, shell focus
+restoration, cancelling while a tool is in progress, and that processing stops
+after cancellation. The gap is specifically the *history-writing* half, which
+should now be covered wherever the Agent loop owns it.
+
 ## Ported, not deleted
 
 - `src/ui/components/ContextIndicator.ui.test.tsx` — constructed
