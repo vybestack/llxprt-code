@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mapCoreStatusToDisplayStatus, mapToDisplay } from './toolMapping.js';
 import {
   DEFAULT_AGENT_ID,
   type AnyDeclarativeTool,
@@ -42,6 +41,13 @@ vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
     },
   };
 });
+
+// Loaded with top-level await instead of a static import: toolMapping.ts
+// resolves its logger at module scope, so it must be evaluated AFTER the mock
+// above is registered.
+const { mapCoreStatusToDisplayStatus, mapToDisplay } = await import(
+  './toolMapping.js'
+);
 
 describe('toolMapping', () => {
   beforeEach(() => {
