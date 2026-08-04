@@ -12,6 +12,14 @@ vi.mock('os', async (importOriginal) => {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
     platform: vi.fn(() => 'linux'),
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    getIdeTrust: vi.fn(),
+  };
+});
   };
 });
 
@@ -597,14 +605,6 @@ describe('isWorkspaceTrusted', () => {
       TrustLevel.TRUST_FOLDER;
     expect(isWorkspaceTrusted(mockSettings)).toBe(true);
   });
-});
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    getIdeTrust: vi.fn(),
-  };
 });
 
 describe('isWorkspaceTrusted with IDE override', () => {

@@ -388,23 +388,21 @@ describe('permissionsCommand', () => {
         `TRUST_FOLDER ${workspacePath}`,
       );
 
+      // Bun's toMatchObject caches asymmetric matchers across calls on the
+      // same property, so only the first stringContaining assertion works
+      // reliably. Extract content once and use toContain for the rest.
       expect(result).toMatchObject({
         type: 'message',
         messageType: 'error',
-        content: expect.stringContaining('disconnect failed'),
       });
-      expect(result).toMatchObject({
-        content: expect.stringContaining('refresh failed'),
-      });
-      expect(result).toMatchObject({
-        content: expect.stringContaining('saved rollback failed'),
-      });
-      expect(result).toMatchObject({
-        content: expect.stringContaining('policy rollback failed'),
-      });
-      expect(result).not.toMatchObject({
-        content: expect.stringMatching(/setting was restored/i),
-      });
+      const content = (
+        result as { content?: string }
+      ).content;
+      expect(content).toContain('disconnect failed');
+      expect(content).toContain('refresh failed');
+      expect(content).toContain('saved rollback failed');
+      expect(content).toContain('policy rollback failed');
+      expect(content).not.toMatch(/setting was restored/i);
     });
 
     it('resolves a relative target against Config working directory', async () => {

@@ -16,6 +16,7 @@ import {
   guardUnconfiguredProvider,
   UNCONFIGURED_PROVIDER_MESSAGE,
 } from './unconfiguredProviderGuard.js';
+import { buildImageModeFlags } from './config/imageModeDispatch.js';
 
 function makeConfig(hasActive: boolean, interactive: boolean): Config {
   return {
@@ -28,7 +29,7 @@ function makeConfig(hasActive: boolean, interactive: boolean): Config {
 }
 
 function setupCommonMainMocks(callOrder: string[], config: Config): void {
-  vi.mock('./cliProviderInit.js', () => ({
+  vi.doMock('./cliProviderInit.js', () => ({
     activateConfiguredProvider: async () => {
       callOrder.push('activation');
       return { authFailed: false, token: undefined, intent: undefined };
@@ -39,36 +40,36 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       callOrder.push('acp-activated');
     },
   }));
-  vi.mock('./cliTerminalSession.js', () => ({
+  vi.doMock('./cliTerminalSession.js', () => ({
     constructAgentWithSpinner: async () => {
       callOrder.push('agent-construction');
       return {};
     },
     prepareTerminalSession: async () => {},
   }));
-  vi.mock('./cliSessionBootstrap.js', () => ({
+  vi.doMock('./cliSessionBootstrap.js', () => ({
     bootstrapRuntimeAndConfig: async () => ({
       config,
       runtimeSettingsService: {},
     }),
     setupSessionRecording: async () => undefined,
   }));
-  vi.mock('./session/nonInteractiveSession.js', () => ({
+  vi.doMock('./session/nonInteractiveSession.js', () => ({
     dispatchInteractiveOrNonInteractive: async () => {
       callOrder.push('dispatch');
     },
   }));
-  vi.mock('./cliSandbox.js', () => ({ maybeHopIntoSandbox: async () => {} }));
-  vi.mock('./config/cliArgParser.js', () => ({
+  vi.doMock('./cliSandbox.js', () => ({ maybeHopIntoSandbox: async () => {} }));
+  vi.doMock('./config/cliArgParser.js', () => ({
     parseArguments: async () => ({ prompt: 'hello' }),
   }));
-  vi.mock('./config/settings.js', () => ({
+  vi.doMock('./config/settings.js', () => ({
     loadSettings: () => {
       callOrder.push('loadSettings');
       return { merged: { ui: { unicode: 'auto' } }, errors: [] };
     },
   }));
-  vi.mock('./cliBootstrap.js', () => ({
+  vi.doMock('./cliBootstrap.js', () => ({
     configureEarlyDebugLogging: () => {},
     createMemoizedStdinReader: () => async () => '',
     ensureStdinOrPromptProvided: async () => {},
@@ -77,35 +78,37 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     redirectConsoleForAcp: () => {},
     rejectPromptInteractiveWithPipedStdin: async () => {},
     throwIfSettingsErrors: () => {},
+    validateDnsResolutionOrder: () => {},
+    registerDynamicToolSettings: () => {},
     ParsedCliArgs: {} as never,
   }));
-  vi.mock('./utils/cleanup.js', () => ({
+  vi.doMock('./utils/cleanup.js', () => ({
     cleanupCheckpoints: async () => {},
     runExitCleanup: async () => {},
     registerSyncCleanup: () => {},
   }));
-  vi.mock('./utils/sessionCleanup.js', () => ({
+  vi.doMock('./utils/sessionCleanup.js', () => ({
     cleanupExpiredSessions: async () => {},
   }));
-  vi.mock('./zed-integration/zedIntegration.js', () => ({
+  vi.doMock('./zed-integration/zedIntegration.js', () => ({
     runZedIntegration: async () => {},
   }));
-  vi.mock('./config/pathMigration.js', () => ({
+  vi.doMock('./config/pathMigration.js', () => ({
     runStartupMigration: () => ({ migrated: false }),
     reportStartupResult: () => ({ messages: [], needsLegacyFallback: false }),
   }));
-  vi.mock('./session/errorReporting.js', () => ({
+  vi.doMock('./session/errorReporting.js', () => ({
     formatNonInteractiveError: () => '',
   }));
-  vi.mock('./session/outputListeners.js', () => ({
+  vi.doMock('./session/outputListeners.js', () => ({
     initializeOutputListenersAndFlush: () => {},
   }));
-  vi.mock('./session/signalHandlers.js', () => ({
+  vi.doMock('./session/signalHandlers.js', () => ({
     installNonInteractiveSigintHandler: () => {},
     setupUnhandledRejectionHandler: () => {},
     __resetUnhandledRejectionStateForTesting: () => {},
   }));
-  vi.mock('./session/interactiveUI.js', () => ({
+  vi.doMock('./session/interactiveUI.js', () => ({
     startInteractiveUI: async () => {},
   }));
 }
@@ -186,20 +189,21 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   async function runMainWithConfig(config: Config): Promise<void> {
-    vi.mock('./unconfiguredProviderGuard.js', async (importOriginal) => {
-      const actual =
-        await importOriginal<typeof import('./unconfiguredProviderGuard.js')>();
-      return {
-        ...actual,
-        guardUnconfiguredProvider: async (
-          cfg: Config,
-          runCleanup: () => Promise<void>,
-        ) => {
-          callOrder.push('guard');
-          return actual.guardUnconfiguredProvider(cfg, runCleanup);
-        },
-      };
-    });
+    // Capture the real guard function BEFORE mocking. Bun's mock.module
+    // patches the module namespace in-place, so any reference obtained after
+    // mocking would point to the mock and recurse. We snapshot the function
+    // reference itself (not the namespace) before registration.
+    const realGuard = guardUnconfiguredProvider;
+    vi.doMock('./unconfiguredProviderGuard.js', () => ({
+      guardUnconfiguredProvider: async (
+        cfg: Config,
+        runCleanup: () => Promise<void>,
+      ) => {
+        callOrder.push('guard');
+        return realGuard(cfg, runCleanup);
+      },
+      UNCONFIGURED_PROVIDER_MESSAGE,
+    }));
     setupCommonMainMocks(callOrder, config);
     const { main } = await import('./cli.js');
     await main();
@@ -258,18 +262,18 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
   });
 
   async function runMainConfigured(config: Config): Promise<void> {
-    vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+    vi.doMock('@vybestack/llxprt-code-providers/auth.js', () => ({
       createTokenStore: () => {
         callOrder.push('createTokenStore');
         return {};
       },
     }));
-    vi.mock('./utils/sandbox-bashrc.js', () => ({
+    vi.doMock('./utils/sandbox-bashrc.js', () => ({
       applySandboxBashrc: () => {
         callOrder.push('applySandboxBashrc');
       },
     }));
-    vi.mock('./unconfiguredProviderGuard.js', () => ({
+    vi.doMock('./unconfiguredProviderGuard.js', () => ({
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
@@ -345,17 +349,17 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       configurable: true,
     });
 
-    vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+    vi.doMock('@vybestack/llxprt-code-providers/auth.js', () => ({
       createTokenStore: () => ({}),
     }));
-    vi.mock('./utils/sandbox-bashrc.js', () => ({
+    vi.doMock('./utils/sandbox-bashrc.js', () => ({
       applySandboxBashrc: () => {},
     }));
-    vi.mock('./unconfiguredProviderGuard.js', () => ({
+    vi.doMock('./unconfiguredProviderGuard.js', () => ({
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
-    vi.mock('./cliProviderInit.js', () => ({
+    vi.doMock('./cliProviderInit.js', () => ({
       activateConfiguredProvider: async () => ({
         authFailed: false,
         token: undefined,
@@ -365,38 +369,38 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       connectIdeClientIfEnabled: async () => {},
       ensureAcpProviderActivated: () => {},
     }));
-    vi.mock('./cliTerminalSession.js', () => ({
+    vi.doMock('./cliTerminalSession.js', () => ({
       constructAgentWithSpinner: async () => ({}),
       prepareTerminalSession: async () => {},
     }));
-    vi.mock('./cliSessionBootstrap.js', () => ({
+    vi.doMock('./cliSessionBootstrap.js', () => ({
       bootstrapRuntimeAndConfig: async () => ({
         config,
         runtimeSettingsService: {},
       }),
       setupSessionRecording: async () => undefined,
     }));
-    vi.mock('./session/nonInteractiveSession.js', () => ({
+    vi.doMock('./session/nonInteractiveSession.js', () => ({
       dispatchInteractiveOrNonInteractive: async () => {},
     }));
-    vi.mock('./cliSandbox.js', () => ({
+    vi.doMock('./cliSandbox.js', () => ({
       maybeHopIntoSandbox: async () => {},
     }));
     // parseArguments returns image-mode flags with NO conversational prompt.
-    vi.mock('./config/cliArgParser.js', () => ({
+    vi.doMock('./config/cliArgParser.js', () => ({
       parseArguments: async () => ({
         imageOutput: 'out.png',
         imagePrompt: 'draw a cat',
         experimentalAcp: false,
       }),
     }));
-    vi.mock('./config/settings.js', () => ({
+    vi.doMock('./config/settings.js', () => ({
       loadSettings: () => ({
         merged: { ui: { unicode: 'auto' } },
         errors: [],
       }),
     }));
-    vi.mock('./cliBootstrap.js', () => ({
+    vi.doMock('./cliBootstrap.js', () => ({
       configureEarlyDebugLogging: () => {},
       createMemoizedStdinReader: () => async () => '',
       // Track whether the guard is invoked.
@@ -408,47 +412,47 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       redirectConsoleForAcp: () => {},
       rejectPromptInteractiveWithPipedStdin: async () => {},
       throwIfSettingsErrors: () => {},
+      validateDnsResolutionOrder: () => {},
+      registerDynamicToolSettings: () => {},
       ParsedCliArgs: {} as never,
     }));
-    vi.mock('./utils/cleanup.js', () => ({
+    vi.doMock('./utils/cleanup.js', () => ({
       cleanupCheckpoints: async () => {},
       runExitCleanup: async () => {},
       registerSyncCleanup: () => {},
     }));
-    vi.mock('./utils/sessionCleanup.js', () => ({
+    vi.doMock('./utils/sessionCleanup.js', () => ({
       cleanupExpiredSessions: async () => {},
     }));
-    vi.mock('./zed-integration/zedIntegration.js', () => ({
+    vi.doMock('./zed-integration/zedIntegration.js', () => ({
       runZedIntegration: async () => {},
     }));
-    vi.mock('./config/pathMigration.js', () => ({
+    vi.doMock('./config/pathMigration.js', () => ({
       runStartupMigration: () => ({ migrated: false }),
       reportStartupResult: () => ({
         messages: [],
         needsLegacyFallback: false,
       }),
     }));
-    vi.mock('./session/errorReporting.js', () => ({
+    vi.doMock('./session/errorReporting.js', () => ({
       formatNonInteractiveError: () => '',
     }));
-    vi.mock('./session/outputListeners.js', () => ({
+    vi.doMock('./session/outputListeners.js', () => ({
       initializeOutputListenersAndFlush: () => {},
     }));
-    vi.mock('./session/signalHandlers.js', () => ({
+    vi.doMock('./session/signalHandlers.js', () => ({
       installNonInteractiveSigintHandler: () => {},
       setupUnhandledRejectionHandler: () => {},
       __resetUnhandledRejectionStateForTesting: () => {},
     }));
-    vi.mock('./session/interactiveUI.js', () => ({
+    vi.doMock('./session/interactiveUI.js', () => ({
       startInteractiveUI: async () => {},
     }));
     // Track whether image-mode dispatch is reached. The REAL
     // buildImageModeFlags is preserved so the stdin-guard bypass decision is
     // exercised against the real flag-detection logic, not a stub.
-    vi.mock('./config/imageModeDispatch.js', async (importOriginal) => ({
-      ...(await importOriginal<
-        typeof import('./config/imageModeDispatch.js')
-      >()),
+    vi.doMock('./config/imageModeDispatch.js', () => ({
+      buildImageModeFlags,
       runDirectImageModeAndExit: async () => {
         callOrder.push('image-dispatch');
         return 0;

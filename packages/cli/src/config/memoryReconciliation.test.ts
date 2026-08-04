@@ -60,9 +60,9 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
     );
     await expect(fs.promises.access(dataFile)).rejects.toThrow('ENOENT');
     // Marker written
-    await expect(
-      fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-    ).resolves.toBeUndefined();
+    await fs.promises.access(
+      path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+    );
   });
 
   it('appends data content to existing config content when both present, preserves config', async () => {
@@ -181,9 +181,9 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       await fs.promises.readFile(path.join(configDir, 'LLXPRT.md'), 'utf8'),
     ).toBe('later content');
     // The marker is now stamped because a file was reconciled.
-    await expect(
-      fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-    ).resolves.toBeUndefined();
+    await fs.promises.access(
+      path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+    );
   });
 
   it('crash-after-archive evidence repairs the marker (durable config + matching archive + no source)', async () => {
@@ -206,9 +206,9 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
     expect(result.migrated).toBe(false);
     expect(result.error).not.toBe(true);
     // The marker is stamped because durable crash evidence exists.
-    await expect(
-      fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-    ).resolves.toBeUndefined();
+    await fs.promises.access(
+      path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+    );
     // The archive is left intact.
     expect(await fs.promises.readFile(archive, 'utf8')).toBe(
       'published then archived',
@@ -484,7 +484,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
         fs.promises.access(path.join(configDir, 'LLXPRT.md')),
       ).rejects.toThrow('ENOENT');
       // The held lock artifact is NOT removed by the deferred caller.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
     });
 
     it('defers benignly on a stale empty/tokenless lock (no pathname reclaim, Finding #2+#3)', async () => {
@@ -508,7 +508,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
       // The orphaned lock is NOT removed by the deferring caller.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
       // Content was NOT migrated while the lock is present.
       await expect(
         fs.promises.access(path.join(configDir, 'LLXPRT.md')),
@@ -533,7 +533,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
       // The orphaned lock is NOT removed.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
     });
 
     it('releases the lock after a successful reconciliation', async () => {
@@ -607,7 +607,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
       // The live lock is NOT removed by the deferring caller.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
       // Content was NOT migrated while the lock is live.
       await expect(
         fs.promises.access(path.join(configDir, 'LLXPRT.md')),
@@ -650,7 +650,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
       // The orphaned lock is NOT removed.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
       // Content was NOT migrated while the lock is present.
       await expect(
         fs.promises.access(path.join(configDir, 'LLXPRT.md')),
@@ -691,7 +691,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
         expect(result.error).not.toBe(true);
         expect(result.migrated).toBe(false);
         // The live owner's lock is NOT removed.
-        await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+        await fs.promises.access(lockPath);
         // Content was not migrated while the lock is held.
         await expect(
           fs.promises.access(path.join(configDir, 'LLXPRT.md')),
@@ -729,7 +729,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
       // The orphaned lock is NOT removed.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
     });
 
     it('defers on a token-bearing lock with no PID (replacement/malformed, no reclaim)', async () => {
@@ -747,7 +747,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       // Live lock held by another owner → benign deferral, no steal.
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
     });
 
     it('does not unlink a busy lock without verifiable owner identity', async () => {
@@ -772,7 +772,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(false);
       // The other process's lock is NOT removed by the deferred caller.
-      await expect(fs.promises.access(lockPath)).resolves.toBeUndefined();
+      await fs.promises.access(lockPath);
       // Content was not migrated while the lock was busy.
       await expect(
         fs.promises.access(path.join(configDir, 'LLXPRT.md')),
@@ -1006,9 +1006,9 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       // Crash repair: the next run writes the completion marker because
       // durable crash-after-archive evidence exists (config + matching
       // archive + no source).
-      await expect(
-        fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-      ).resolves.toBeUndefined();
+      await fs.promises.access(
+        path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+      );
     });
 
     it('crash repair: canonical config + .migrated archive + no source + no marker → next run writes marker, returns coherent result', async () => {
@@ -1039,9 +1039,9 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.migrated).toBe(false);
       expect(result.filesCopied).toBe(0);
       // The completion marker is now written.
-      await expect(
-        fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-      ).resolves.toBeUndefined();
+      await fs.promises.access(
+        path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+      );
       // Config is unchanged (no duplicate append).
       expect(
         await fs.promises.readFile(path.join(configDir, 'LLXPRT.md'), 'utf8'),
@@ -1076,9 +1076,9 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       expect(result.error).not.toBe(true);
       expect(result.migrated).toBe(true);
       // Marker is present (written before release).
-      await expect(
-        fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-      ).resolves.toBeUndefined();
+      await fs.promises.access(
+        path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+      );
       // Lock is released.
       await expect(
         fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_LOCK_FILE)),

@@ -16,12 +16,10 @@ import {
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createRequire } from 'module';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Mock } from 'vitest';
-
-// This test writes real alias files, needs real providerAliases module
-vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
 
 /**
  * Minimal typed Agent double for the /provider switch path. The command only
@@ -48,6 +46,26 @@ const mocks = vi.hoisted(() => {
     runtimeApi,
     getRuntimeApiMock: vi.fn(() => runtimeApi),
     agent,
+  };
+});
+
+// This test writes real alias files. The global bun-test-setup.ts mocks
+// providerAliases.js with a stub whose writeProviderAliasConfig is a no-op.
+// Bun does not support vi.unmock(). providerCommand.ts imports
+// writeProviderAliasConfig from composition.js, which re-exports from
+// providerAliases.js. We must mock composition.js with the REAL
+// writeProviderAliasConfig obtained via createRequire (bypasses mock.module).
+vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
+  const real = createRequire(import.meta.url)(
+    '@vybestack/llxprt-code-providers/composition/providerAliases.js',
+  );
+  return {
+    getProviderManager: mocks.getProviderManagerMock,
+    refreshAliasProviders: mocks.refreshAliasProvidersMock,
+    writeProviderAliasConfig: real.writeProviderAliasConfig,
+    loadProviderAliasEntries: real.loadProviderAliasEntries,
+    getUserAliasDir: real.getUserAliasDir,
+    getAliasFilePath: real.getAliasFilePath,
   };
 });
 

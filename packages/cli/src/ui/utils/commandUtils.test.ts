@@ -27,8 +27,15 @@ vi.mock('clipboardy', () => ({
   },
 }));
 
-// Mock child_process
-vi.mock('child_process');
+// Mock child_process — provide an explicit factory so spawn is a vi.fn()
+// under Bun (automocking of builtins differs from Vitest).
+const mockSpawnHoisted = vi.hoisted(() => vi.fn());
+vi.mock('node:child_process', () => ({
+  spawn: mockSpawnHoisted,
+  exec: vi.fn(),
+  execSync: vi.fn(),
+  fork: vi.fn(),
+}));
 
 // fs (for /dev/tty)
 const mockFs = vi.hoisted(() => ({
@@ -106,9 +113,8 @@ describe('commandUtils', () => {
     // Reset platform to default for test isolation
     mockProcess.platform = 'darwin';
 
-    // Dynamically import and set up spawn mock
-    const { spawn } = await import('node:child_process');
-    mockSpawn = spawn as Mock;
+    // Use the hoisted spawn mock directly (Bun automock differs from Vitest)
+    mockSpawn = mockSpawnHoisted;
 
     // Create mock child process with stdout/stderr emitters
     mockChild = Object.assign(new EventEmitter(), {

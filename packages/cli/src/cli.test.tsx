@@ -30,6 +30,7 @@ import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import { getCliVersion } from './utils/version.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
+import { __setRenderForTesting } from './session/interactiveUI.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -149,10 +150,6 @@ vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
-vi.mock('ink', () => ({
-  render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
-}));
-
 // Mock the Agent composition root so interactive-path tests do not construct a
 // real Agent via fromConfig (which would require a fully wired Config). The
 // fake exposes getMessageBus() because dispatch reads the session bus from the
@@ -226,6 +223,10 @@ describe('cli.tsx main function', () => {
     });
 
   beforeEach(async () => {
+    // Bun shares one module registry per process (unlike Vitest's per-file
+    // module graph), so vi.fn() call counts persist across tests. Clear them
+    // to replicate Vitest's per-test isolation.
+    vi.clearAllMocks();
     loadSettingsMock = vi.mocked(loadSettings);
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-main-'));
     dynamicSettingsRegistry.reset();
@@ -575,6 +576,9 @@ describe('cli.tsx main function', () => {
       quiet: undefined,
     });
 
+    const renderMock = vi.fn().mockReturnValue({ unmount: vi.fn() });
+    __setRenderForTesting(renderMock);
+
     const originalIsTTY = process.stdin.isTTY;
     const originalSetRawMode = process.stdin.setRawMode;
     Object.defineProperty(process.stdin, 'isTTY', {
@@ -597,10 +601,10 @@ describe('cli.tsx main function', () => {
         value: originalSetRawMode,
         configurable: true,
       });
+      __setRenderForTesting(null);
     }
 
-    const { render } = await import('ink');
-    expect(vi.mocked(render)).toHaveBeenCalledTimes(1);
+    expect(renderMock).toHaveBeenCalledTimes(1);
 
     // The interactive path creates exactly one Agent at the composition root,
     // adopting the existing Config.
@@ -767,11 +771,24 @@ describe('cli.tsx main function', () => {
 describe('cli.tsx deferred initialization', () => {
   const originalEnv = { ...process.env };
 
+  // Under Vitest, the module-level processExitSpy persists across describe
+  // blocks. Under Bun, vi.restoreAllMocks() in the first describe's afterEach
+  // restores process.exit. Re-create a spy in beforeEach so main()'s
+  // process.exit calls do not terminate the test process.
+  let deferredExitSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    deferredExitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
     process.env = { ...originalEnv };
     delete process.env.SANDBOX;
     delete process.env.LLXPRT_CODE_NO_RELAUNCH;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   afterEach(() => {

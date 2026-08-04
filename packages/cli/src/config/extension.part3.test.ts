@@ -18,6 +18,7 @@ import {
   loadExtensionConfig,
   loadExtensions,
   uninstallExtension,
+  __setLoadSettingsForTesting,
 } from './extension.js';
 import {
   ExtensionUninstallEvent,
@@ -141,6 +142,7 @@ describe('extension tests', () => {
       vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
       vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
       vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
+      __setLoadSettingsForTesting(mockLoadSettings);
       vi.mocked(execSync).mockClear();
       Object.values(mockGit).forEach((fn) => fn.mockReset());
       mockLogExtensionInstallEvent.mockReset();
@@ -185,6 +187,7 @@ describe('extension tests', () => {
     }
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
+    __setLoadSettingsForTesting(null);
     vi.restoreAllMocks();
   });
 
