@@ -76,19 +76,33 @@ function runTestAggregate(
   runText: string,
   results: TestAggregateResults,
 ): SpawnSyncReturns<string> {
-  const expressions = new Map([
-    ['${{ needs.skip_check.outputs.should_skip }}', results.shouldSkip],
-    ['${{ needs.shard_selector.result }}', results.selector],
-    ['${{ needs.shard_selector.outputs.has_tests }}', results.hasTests],
-    ['${{ needs.test_shard.result }}', results.shards],
-    ['${{ needs.node_consumer_smoke.result }}', results.nodeConsumerSmoke],
-    ['${{ needs.acp_conformance.result }}', results.acp],
-  ]);
+  const substitutions = [
+    ["'${{ needs.skip_check.outputs.should_skip }}'", '"$1"'],
+    ["'${{ needs.shard_selector.result }}'", '"$2"'],
+    ["'${{ needs.shard_selector.outputs.has_tests }}'", '"$3"'],
+    ["'${{ needs.test_shard.result }}'", '"$4"'],
+    ["'${{ needs.node_consumer_smoke.result }}'", '"$5"'],
+    ["'${{ needs.acp_conformance.result }}'", '"$6"'],
+  ] as const;
   let script = runText;
-  for (const [expression, value] of expressions) {
-    script = script.replaceAll(expression, value);
+  for (const [expression, parameter] of substitutions) {
+    script = script.replaceAll(expression, parameter);
   }
-  return spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+  return spawnSync(
+    'bash',
+    [
+      '-c',
+      script,
+      '--',
+      results.shouldSkip,
+      results.selector,
+      results.hasTests,
+      results.shards,
+      results.nodeConsumerSmoke,
+      results.acp,
+    ],
+    { encoding: 'utf8' },
+  );
 }
 
 describe('Issue #2564: acp_conformance CI job', () => {
@@ -455,6 +469,25 @@ describe('Issue #2877: test matrix scheduling', () => {
     expect(result.stdout).toContain(
       'Node Consumer Smoke did not succeed (result: failure)',
     );
+  });
+
+  it('passes aggregate results to Bash without evaluating shell syntax', () => {
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const sentinel = 'TEST_AGGREGATE_SHELL_INJECTION';
+    const nodeConsumerSmoke = `failure'; printf '${sentinel}' >&2; #`;
+    const result = runTestAggregate(checkStep.run ?? '', {
+      shouldSkip: 'false',
+      selector: 'success',
+      hasTests: 'false',
+      shards: 'skipped',
+      nodeConsumerSmoke,
+      acp: 'success',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      `Node Consumer Smoke did not succeed (result: ${nodeConsumerSmoke})`,
+    );
+    expect(result.stderr).not.toContain(sentinel);
   });
 
   it('preserves the exact test_shard condition', () => {
