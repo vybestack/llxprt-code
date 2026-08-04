@@ -1,1 +1,0 @@
-style(ide-integration): drop assertions made redundant by the local os mock
