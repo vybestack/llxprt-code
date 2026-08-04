@@ -118,6 +118,19 @@ export function makeEntry(pkgRoot: string, code: string): void {
   writeFileSync(join(pkgRoot, 'index.ts'), `#!/usr/bin/env -S bun\n${code}\n`);
 }
 
+/**
+ * Writes a prebuilt CLI bundle fixture at `<pkgRoot>/bundle/llxprt.js` (issue
+ * #2999). The bundle is a plain JS file Bun executes directly, mirroring the
+ * real publish-time artifact's location relative to the package root.
+ */
+export function makeBundle(pkgRoot: string, code: string): string {
+  const bundleDir = join(pkgRoot, 'bundle');
+  mkdirSync(bundleDir, { recursive: true });
+  const bundlePath = join(bundleDir, 'llxprt.js');
+  writeFileSync(bundlePath, `${code}\n`);
+  return bundlePath;
+}
+
 export function makeLayout(
   tempDir: string,
   opts: { withBun?: boolean; withIndex?: boolean; entryCode?: string } = {},

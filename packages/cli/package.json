@@ -27,10 +27,12 @@
     "test:ci:fast": "vitest run -c vitest.ci.fast.config.ts",
     "test:ci": "vitest run",
     "test:legacy": "OPENAI_RESPONSES_DISABLE=true vitest run -t \"legacy|gpt-3.5-turbo\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "bun ../../scripts/bun-build.config.ts --cli-only"
   },
   "files": [
     "bin",
+    "bundle",
     "index.ts",
     "src",
     "scripts/install-native-launchers.cjs",

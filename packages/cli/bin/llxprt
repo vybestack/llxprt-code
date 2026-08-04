@@ -240,11 +240,23 @@ _llxprt_verify_workspace_root() {
 
 _llxprt_kernel=$(uname -s 2>/dev/null || printf '%s' '')
 
-_llxprt_entry="$_llxprt_pkg_root/index.ts"
+# Entry precedence (issue #2999):
+#   1. LLXPRT_FORCE_SOURCE_ENTRY=1 -> source index.ts (debug escape hatch)
+#   2. prebuilt bundle (<pkg>/bundle/llxprt.js) if present
+#   3. source index.ts
+# Fallback to source is mandatory: dev checkouts and source runs have no bundle.
+_llxprt_entry=""
+if [ "${LLXPRT_FORCE_SOURCE_ENTRY:-0}" != "1" ] && \
+   [ -f "$_llxprt_pkg_root/bundle/llxprt.js" ]; then
+  _llxprt_entry="$_llxprt_pkg_root/bundle/llxprt.js"
+fi
+if [ -z "$_llxprt_entry" ]; then
+  _llxprt_entry="$_llxprt_pkg_root/index.ts"
+fi
 
 if [ ! -f "$_llxprt_entry" ]; then
   printf '%s
-' 'LLxprt Code: TypeScript entry point (index.ts) was not found.' >&2
+' 'LLxprt Code: entry point was not found.' >&2
   printf '%s
 ' "Expected: $_llxprt_entry" >&2
   printf '%s
