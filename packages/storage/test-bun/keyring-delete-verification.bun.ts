@@ -291,12 +291,35 @@ describe('createDefaultKeyringAdapter deletePassword — delete verification (is
   });
 
   it('fires the runtime-replaced guard before any native call (case 11)', async () => {
+    // Stage the fake so that either native call, if it ran, would leave
+    // observable evidence: deleteCredential() would remove the seeded entry,
+    // and getPassword() would reject with a distinctive probe error. Asserting
+    // on that evidence proves the guard ran first without inspecting call
+    // counts, which would be testing wiring rather than behaviour.
+    controller.entries.set(compositeKey('svc', 'acct'), 'seeded-secret');
+    controller.deleteResult = true;
+    controller.actuallyRemoves = true;
+    controller.probeError = new Error('probe must never run');
     const adapter = await loadAdapter();
     // Force the terminal state on an already-cached adapter.
     forceRuntimeReplacedForTesting();
 
-    await expect(adapter.deletePassword('svc', 'acct')).rejects.toBeInstanceOf(
-      SecureStoreError,
+    let caught: unknown = null;
+    try {
+      await adapter.deletePassword('svc', 'acct');
+    } catch (error) {
+      caught = error;
+    }
+
+    // The runtime-replaced error, not the probe error — so getPassword()
+    // never ran.
+    expect(caught).toBeInstanceOf(SecureStoreError);
+    if (caught instanceof SecureStoreError) {
+      expect(caught.code).toBe('RUNTIME_REPLACED');
+    }
+    // The credential survives — so deleteCredential() never ran.
+    expect(controller.entries.get(compositeKey('svc', 'acct'))).toBe(
+      'seeded-secret',
     );
   });
 });
