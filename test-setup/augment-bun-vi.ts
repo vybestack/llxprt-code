@@ -184,6 +184,12 @@ const advanceTimersByTimeAsyncImpl = async (ms: number): Promise<void> => {
   }
 
   if (Math.floor(total) === 0) {
+    // Vitest runs the timers that are already due when advancing by zero (a
+    // common way to flush `setTimeout(fn, 0)` callbacks). Bun's advance loop
+    // above does nothing for a zero advance, so run the due timers explicitly.
+    if (realIsFakeTimers()) {
+      realAdvanceTimersByTime(0);
+    }
     await flushPendingTasks();
   }
 };
