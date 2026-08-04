@@ -17,11 +17,14 @@
 import type {
   ContentBlock,
   IContent,
+  MediaBlock,
   ToolCallBlock,
   ToolResponseBlock,
 } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
+import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 
 /**
  * Resolve the effective model name. An active target model always wins over
@@ -106,6 +109,29 @@ export function serializeWireContentForEstimate(content: IContent): string {
 /** Abstraction over HistoryService's tokenizer lookup. */
 export interface TokenizerProvider {
   getTokenizerForModel(modelName: string): ITokenizer;
+  /**
+   * The active provider name (e.g. 'anthropic', 'openai', 'gemini'), used to
+   * pick the correct image token estimation family. Optional for callers that
+   * have no provider context (defaults to the 'default' family).
+   */
+  readonly activeProvider?: string;
+}
+
+/**
+ * Estimate the image token cost of a base64/URL media block for the given
+ * provider family. This is independent of the text tokenizer and cannot throw,
+ * so it is added outside the tokenizer try/catch in {@link estimateContentTokens}.
+ */
+function estimateMediaBlockImageTokens(
+  block: MediaBlock,
+  provider: string | undefined,
+): number {
+  if (!block.mimeType.toLowerCase().startsWith('image/')) return 0;
+  const dimensions =
+    block.encoding === 'base64'
+      ? parseImageDimensionsFromBase64(block.data)
+      : undefined;
+  return estimateImageTokens({ provider, dimensions });
 }
 
 /**
@@ -121,6 +147,12 @@ export async function estimateContentTokens(
   let totalTokens = 0;
 
   for (const block of content.blocks) {
+    if (block.type === 'media') {
+      totalTokens += estimateMediaBlockImageTokens(
+        block,
+        tokenizerProvider.activeProvider,
+      );
+    }
     const blockText = blockToEstimationText(block, logger);
     if (!blockText) {
       continue;

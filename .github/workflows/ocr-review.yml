@@ -4841,7 +4841,7 @@ jobs:
             if (outOfDiffRouted.length > 0) {
               body.push('', '### Findings outside the PR diff', '');
               for (const f of outOfDiffRouted) {
-                const where = f && f.path ? ``${f.path}`: ` : '';
+                const where = f && f.path ? `\`${f.path}\`: ` : '';
                 const label = categorySeverityLabel(f);
                 const rawText = f.content || f.comment || f.message || f.body;
                 const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
