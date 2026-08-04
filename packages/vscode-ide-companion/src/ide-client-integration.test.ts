@@ -513,19 +513,30 @@ describe('IdeClient with the VS Code companion server', () => {
     ]);
     expect(stopResult).toBe('stopped');
 
-    // The former endpoint no longer accepts connections.
-    const endpointCheck = await new Promise<string>((resolve) => {
-      const req = http.request(
-        `http://127.0.0.1:${port}/mcp`,
-        { method: 'POST' },
-        (res) => {
-          res.destroy();
-          resolve(`responded-${res.statusCode}`);
-        },
-      );
-      req.on('error', () => resolve('rejected'));
-      req.end();
-    });
+    // The former endpoint no longer accepts connections. `stop()` resolving
+    // means the server relinquished the socket, but releasing the listening
+    // descriptor is the runtime's job and is not necessarily complete on the
+    // very next turn — poll within a bounded budget rather than racing it.
+    const probeEndpoint = (): Promise<string> =>
+      new Promise<string>((resolve) => {
+        const req = http.request(
+          `http://127.0.0.1:${port}/mcp`,
+          { method: 'POST' },
+          (res) => {
+            res.destroy();
+            resolve(`responded-${res.statusCode}`);
+          },
+        );
+        req.on('error', () => resolve('rejected'));
+        req.end();
+      });
+
+    const deadline = Date.now() + 5000;
+    let endpointCheck = await probeEndpoint();
+    while (endpointCheck !== 'rejected' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      endpointCheck = await probeEndpoint();
+    }
     expect(endpointCheck).toBe('rejected');
 
     // The client can still be disconnected without hanging.

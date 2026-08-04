@@ -11,12 +11,14 @@ const isWin = process.platform === 'win32';
 
 it.skipIf(!isWin)(
   'run_shell_command windows placeholder (CP932 decoding & PowerShell path)',
-  async ({ task }) => {
+  async () => {
     // Import TestRig only if on Windows
     const { TestRig } = await import('./test-helper.js');
 
     const rig = new TestRig();
-    rig.setup(task.name);
+    rig.setup(
+      'run_shell_command windows placeholder (CP932 decoding & PowerShell path)',
+    );
 
     // Test 1: Verify PowerShell UTF-8 path handling
     const utf8Path = 'テスト.txt';

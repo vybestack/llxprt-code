@@ -17,6 +17,22 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
+import { afterEach } from 'vitest';
+
+// Track smoke handles that need disposal after each test. Under Vitest,
+// ctx.onTestFinished provides per-test cleanup; Bun does not pass a test
+// context to callbacks, so we use afterEach as a cross-runner fallback.
+const pendingDisposals: Array<() => void> = [];
+
+afterEach(() => {
+  for (const dispose of pendingDisposals.splice(0)) {
+    try {
+      dispose();
+    } catch {
+      // best effort cleanup
+    }
+  }
+});
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -250,11 +266,12 @@ describe('release-like CLI pack/install smoke (issue #2603)', () => {
 
   it(
     'release-like global + local install runs --version and exits 0, release manifest has exact versions',
-    async (ctx) => {
+    async () => {
       const smoke = runSmokeAsync();
-      // Guarantee the child is killed and listeners cleared even if the test is
-      // cancelled (timeout) or fails before reaching the finally below.
-      ctx.onTestFinished(() => smoke.dispose());
+      // Register cleanup for both runners: afterEach (cross-runner) and
+      // try/finally (immediate on success/failure). Under Vitest the original
+      // code also used ctx.onTestFinished; the afterEach fallback covers Bun.
+      pendingDisposals.push(() => smoke.dispose());
       let result: { status: number | null; stdout: string; stderr: string };
       try {
         result = await smoke.promise;

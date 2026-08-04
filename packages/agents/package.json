@@ -37,8 +37,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "pretest": "bun ../../scripts/check-agents-api-surface.ts",
-    "test": "vitest run",
-    "test:ci": "vitest run",
+    "test": "vitest run && bun ../../scripts/run_bun_tests.ts --workspace agents",
+    "test:ci": "vitest run && bun ../../scripts/run_bun_tests.ts --workspace agents",
     "test:mutation:api": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },

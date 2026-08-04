@@ -213,9 +213,12 @@ describe('ProfileManager — deleteProfile', () => {
     await expect(pm.deleteProfile('member-a')).rejects.toThrow(
       /referenced by load balancer profile\(s\): lb-main/,
     );
+    // `fs.access` resolves with an implementation-defined empty value; the
+    // behaviour under test is that it does not reject, i.e. the referenced
+    // member profile was left on disk.
     await expect(
       fs.access(path.join(tempDir, 'member-a.json')),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeFalsy();
   });
 });
 

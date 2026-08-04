@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  TestContext,
-} from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getReleaseVersion } from '../get-release-version.ts';
 import { execSync, spawnSync as realSpawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -45,7 +37,10 @@ describe('getReleaseVersion', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    vi.resetModules();
+    // vi.resetModules() was removed: getReleaseVersion reads process.env at
+    // call time (not import time), so module-graph resetting is unnecessary.
+    // Mock state is re-established by the mockReturnValue calls below and
+    // resetAllMocks in afterEach.
     process.env = { ...originalEnv };
     delete process.env.IS_NIGHTLY;
     delete process.env.IS_PREVIEW;
@@ -319,7 +314,7 @@ describe('get-release-version script CLI contract', () => {
     return cachedGitAvailable;
   }
 
-  function skipWhenBunUnavailable(ctx: TestContext & object) {
+  function skipWhenBunUnavailable(): boolean {
     if (bunAvailable()) {
       return false;
     }
@@ -328,12 +323,23 @@ describe('get-release-version script CLI contract', () => {
         'bun is required for get-release-version CLI contract tests in CI.',
       );
     }
-    ctx.skip();
     return true;
   }
 
-  it('writes only JSON to stdout (release.yml parses it with jq)', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  function skipWhenGitUnavailable(): boolean {
+    if (gitAvailable()) {
+      return false;
+    }
+    if (process.env.CI === 'true') {
+      throw new Error(
+        'git is required for nightly get-release-version CLI contract tests in CI.',
+      );
+    }
+    return true;
+  }
+
+  it('writes only JSON to stdout (release.yml parses it with jq)', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript();
@@ -346,17 +352,11 @@ describe('get-release-version script CLI contract', () => {
     expect(parsed.npmTag).toBe('latest');
   });
 
-  it('keeps nightly diagnostic text off stdout', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('keeps nightly diagnostic text off stdout', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
-    if (!gitAvailable()) {
-      if (process.env.CI === 'true') {
-        throw new Error(
-          'git is required for nightly get-release-version CLI contract tests in CI.',
-        );
-      }
-      ctx.skip();
+    if (skipWhenGitUnavailable()) {
       return;
     }
     const result = runScript({
@@ -373,17 +373,11 @@ describe('get-release-version script CLI contract', () => {
     );
   });
 
-  it('uses MANUAL_VERSION as nightly base for manual nightly dispatch', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('uses MANUAL_VERSION as nightly base for manual nightly dispatch', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
-    if (!gitAvailable()) {
-      if (process.env.CI === 'true') {
-        throw new Error(
-          'git is required for nightly get-release-version CLI contract tests in CI.',
-        );
-      }
-      ctx.skip();
+    if (skipWhenGitUnavailable()) {
       return;
     }
     const result = runScript({
@@ -400,17 +394,11 @@ describe('get-release-version script CLI contract', () => {
     );
   });
 
-  it('supports v-prefixed MANUAL_VERSION for manual nightly dispatch', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('supports v-prefixed MANUAL_VERSION for manual nightly dispatch', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
-    if (!gitAvailable()) {
-      if (process.env.CI === 'true') {
-        throw new Error(
-          'git is required for nightly get-release-version CLI contract tests in CI.',
-        );
-      }
-      ctx.skip();
+    if (skipWhenGitUnavailable()) {
       return;
     }
     const result = runScript({
@@ -424,8 +412,8 @@ describe('get-release-version script CLI contract', () => {
     expect(parsed.releaseTag).toMatch(/^v0\.11\.0-nightly\.\d{6}\.[0-9a-f]+$/);
   });
 
-  it('rejects malformed MANUAL_VERSION base under nightly dispatch', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('rejects malformed MANUAL_VERSION base under nightly dispatch', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -444,8 +432,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('rejects prerelease MANUAL_VERSION base under nightly dispatch', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('rejects prerelease MANUAL_VERSION base under nightly dispatch', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -464,8 +452,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('rejects build-metadata MANUAL_VERSION base under nightly dispatch', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('rejects build-metadata MANUAL_VERSION base under nightly dispatch', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -484,8 +472,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('rejects leading-zero major in MANUAL_VERSION nightly base before tag creation', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('rejects leading-zero major in MANUAL_VERSION nightly base before tag creation', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -504,8 +492,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('rejects leading-zero minor in MANUAL_VERSION nightly base before tag creation', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('rejects leading-zero minor in MANUAL_VERSION nightly base before tag creation', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -524,8 +512,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('rejects leading-zero patch in MANUAL_VERSION nightly base before tag creation', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('rejects leading-zero patch in MANUAL_VERSION nightly base before tag creation', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -544,8 +532,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('keeps manual-version diagnostic text off stdout', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('keeps manual-version diagnostic text off stdout', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -559,8 +547,8 @@ describe('get-release-version script CLI contract', () => {
     expect(parsed.releaseTag).toBe('v1.2.3');
     expect(parsed.releaseVersion).toBe('1.2.3');
   });
-  it('keeps prefixed manual-version diagnostic text off stdout', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('keeps prefixed manual-version diagnostic text off stdout', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -575,8 +563,8 @@ describe('get-release-version script CLI contract', () => {
     expect(parsed.npmTag).toBe('latest');
   });
 
-  it('keeps preview/beta diagnostic text off stdout', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('keeps preview/beta diagnostic text off stdout', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -590,8 +578,8 @@ describe('get-release-version script CLI contract', () => {
     expect(parsed.npmTag).toBe('beta');
   });
 
-  it('exits non-zero and writes error to stderr for invalid version', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('exits non-zero and writes error to stderr for invalid version', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({
@@ -610,8 +598,8 @@ describe('get-release-version script CLI contract', () => {
     }
   });
 
-  it('exits non-zero and writes error to stderr for build metadata', (ctx) => {
-    if (skipWhenBunUnavailable(ctx)) {
+  it('exits non-zero and writes error to stderr for build metadata', () => {
+    if (skipWhenBunUnavailable()) {
       return;
     }
     const result = runScript({

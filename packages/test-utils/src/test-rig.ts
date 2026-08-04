@@ -10,7 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from 'node:process';
 import fs from 'node:fs';
-import * as pty from '@lydell/node-pty';
+import { spawnTestPty, type TestPtySpawnOptions } from './pty-backend.js';
 import stripAnsi from 'strip-ansi';
 import { createDiagnosticsSink } from './diagnostics.js';
 import { InteractiveRun } from './interactive-run.js';
@@ -487,7 +487,7 @@ export class TestRig {
       this.fakeResponsesPath,
     );
 
-    const ptyOptions: pty.IPtyForkOptions = {
+    const ptyOptions: TestPtySpawnOptions = {
       name: 'xterm-color',
       cols: 80,
       rows: 80,
@@ -518,7 +518,7 @@ export class TestRig {
       command === 'bun' && typeof process.versions.bun === 'string'
         ? process.execPath
         : command;
-    const ptyProcess = pty.spawn(executable, commandArgs, ptyOptions);
+    const ptyProcess = await spawnTestPty(executable, commandArgs, ptyOptions);
 
     const run = new InteractiveRun(ptyProcess, this._diagnostics, {
       quotaGuardEnabled,

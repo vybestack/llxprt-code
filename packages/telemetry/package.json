@@ -101,10 +101,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace telemetry --junit junit.xml",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace telemetry",
-    "test:ci": "vitest run",
-    "test:vitest": "vitest run",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace telemetry --junit junit.xml",
     "typecheck": "tsc --noEmit"
   },
   "files": [
