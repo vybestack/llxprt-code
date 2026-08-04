@@ -124,6 +124,14 @@ function createMockProvider(
             },
           ],
         };
+      } else {
+        // Any other provider name still has to produce a response, otherwise
+        // callers observe an empty stream and cannot distinguish "completed
+        // with no output" from "never ran".
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: `${name} response` }],
+        };
       }
     },
     getServerTools: vi
@@ -197,8 +205,18 @@ class MockProviderManager implements ProviderManager {
   }
 }
 
+// Per-provider key shapes. Anthropic keys carry hyphenated segments, so a
+// single alphanumeric pattern cannot cover both.
+const REDACTION_PATTERNS: Record<string, string> = {
+  anthropic: 'sk-ant-[a-zA-Z0-9-]+',
+  gemini: 'AIza[a-zA-Z0-9_-]+',
+  default: 'sk-[a-zA-Z0-9]{32,}',
+};
+
 class MockConversationDataRedactor implements ConversationDataRedactor {
-  redactMessage(message: IContent, _provider: string): IContent {
+  redactMessage(message: IContent, provider: string): IContent {
+    const pattern =
+      REDACTION_PATTERNS[provider] ?? REDACTION_PATTERNS['default'];
     return {
       ...message,
       blocks: message.blocks.map((block) => {
@@ -206,7 +224,7 @@ class MockConversationDataRedactor implements ConversationDataRedactor {
           return {
             ...block,
             text: block.text.replace(
-              testRegex('sk-[a-zA-Z0-9]{48}', 'g'),
+              testRegex(pattern, 'g'),
               '[REDACTED-API-KEY]',
             ),
           };
@@ -472,14 +490,29 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       },
     ];
 
+    // has_tools reflects the tool declarations offered with the request, so the
+    // request has to carry them for the telemetry assertion below to mean
+    // anything.
+    const offeredTools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'search_web',
+            description: 'Search the web',
+            parameters: { query: 'string' },
+          },
+        ],
+      },
+    ];
+
     // Test with OpenAI (JSON format)
     await consumeAsyncIterable(
-      openaiWrapper.generateChatCompletion(messagesWithTools),
+      openaiWrapper.generateChatCompletion(messagesWithTools, offeredTools),
     );
 
     // Test with Anthropic (XML format)
     await consumeAsyncIterable(
-      anthropicWrapper.generateChatCompletion(messagesWithTools),
+      anthropicWrapper.generateChatCompletion(messagesWithTools, offeredTools),
     );
 
     const entries = storage.getEntries();
@@ -821,8 +854,14 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       },
     ];
 
-    // Use different provider for each message to simulate switching
+    // Use a different provider for each message. The switch has to go through
+    // the manager, which is what emits the provider-switch telemetry asserted
+    // below; simply using a different wrapper does not record a switch.
+    const manager = new MockProviderManager();
+    providers.forEach((provider) => manager.registerProvider(provider));
+
     for (let i = 0; i < conversationMessages.length; i++) {
+      manager.setActiveProvider(providers[i].name);
       const wrapper = wrappers[i];
       await consumeAsyncIterable(
         wrapper.generateChatCompletion([conversationMessages[i]]),
