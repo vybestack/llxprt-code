@@ -9,6 +9,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
+import { createSessionMetrics } from '../../test-utils/sessionMetrics.js';
 
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   const actual = await importOriginal<typeof SessionContext>();
@@ -38,7 +39,7 @@ const renderWithMockedStats = (metrics: SessionMetrics) => {
 
 describe('<SessionSummaryDisplay />', () => {
   it('renders the summary display with a title', () => {
-    const metrics: SessionMetrics = {
+    const metrics: SessionMetrics = createSessionMetrics({
       models: {
         'gemini-2.5-pro': {
           api: { totalRequests: 10, totalErrors: 1, totalLatencyMs: 50234 },
@@ -65,7 +66,24 @@ describe('<SessionSummaryDisplay />', () => {
         totalLinesAdded: 42,
         totalLinesRemoved: 15,
       },
-    };
+      timing: {
+        completeTokensPerMinute: 0,
+        outputGenerationTps: 0,
+        effectiveInputTps: 0,
+        uncachedInputTps: null,
+        lastRequestTpm: 0,
+        // Consistent with the single model's totalLatencyMs below, so the
+        // rendered "API Time" percentage is meaningful rather than 0%.
+        accumulatedApiTimeMs: 50234,
+        accumulatedToolTimeMs: 0,
+        agentActiveTimeMs: 50234,
+        accumulatedWorkMs: 0,
+        lastTtftMs: null,
+        weightedAvgTtftMs: null,
+        lastOutputGenerationTps: 0,
+        lastEffectiveInputTps: 0,
+      },
+    });
 
     const { lastFrame } = renderWithMockedStats(metrics);
     const output = lastFrame();
