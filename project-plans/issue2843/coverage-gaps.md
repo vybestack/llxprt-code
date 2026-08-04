@@ -84,6 +84,42 @@ props handed to a mock. That requires a render harness that preserves colour
 information in the captured frame; the current ink stub discards it, which is
 why the original authors reached for prop instrumentation.
 
+## Deleted: written against a component contract that no longer exists
+
+The `src/ui/App.*.test.tsx` family (5 files, 41 cases) renders
+`<AppWrapper config={...} />`. `config` has not been a prop of `AppWrapper` for
+some time — it now takes `uiRuntime: UiRuntime`, and reads
+`props.uiRuntime.app` and `props.uiRuntime.session.getSessionId()`.
+
+Reviving them needs two migrations, not one. Substituting
+`buildUiRuntimeFromSource(mockConfig)` for the `config` prop gets past the first
+error and straight into the second: the CLI runtime scope introduced by
+PLAN-20251023-STATELESS-HARDENING, which requires `setCliRuntimeContext()` and
+`registerCliProviderInfrastructure()` to be established around every render.
+
+Deleted (`App.e2e.test.tsx` is kept — it passes, 3 cases):
+
+- `src/ui/App.test.tsx` (10 cases) — auto-updater behaviour (skips when running
+  from git, success/failure messaging, spawn failure, the
+  `LLXPRT_CODE_DISABLE_AUTOUPDATER` opt-out) and IDE open-file display.
+- `src/ui/App.behavior.test.tsx` (1 case) — cancelling while a tool is executing
+  clears the prompt without cancelling the tool.
+- `src/ui/App.components.test.tsx` (10 cases) — footer/tips visibility including
+  system-over-workspace-over-user settings precedence, theme dialog vs
+  `NO_COLOR`, initial render, automatic submission of an initial prompt, error
+  count aggregation, column layout.
+- `src/ui/App.context.test.tsx` (16 cases) — context-file messaging (custom
+  `contextFileName`, singular/plural, zero-count suppression, core memory files
+  listed separately, MCP server counts), and Tips/Header/TodoPanel/Footer
+  visibility toggles.
+- `src/ui/App.dialogs.test.tsx` (4 cases) — `NO_COLOR` rendering and the folder
+  trust dialog's open/disabled states.
+
+Partly mitigated: `src/ui/__tests__/AppContainer.{mount,keybindings,render-budget}.test.tsx`
+cover the container against the current architecture and pass (21 cases). The
+gaps above are the parts they do not reach — chiefly the auto-updater, settings
+precedence for footer/tips, and context-file messaging.
+
 ## Ported, not deleted
 
 - `src/ui/components/ContextIndicator.ui.test.tsx` — constructed
