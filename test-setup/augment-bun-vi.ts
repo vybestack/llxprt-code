@@ -559,16 +559,31 @@ const registerModuleMock = (
   // loadActualSync detect the dangerous case where localRequire would
   // return the mock instead of the actual module (issue #2909 / #2910).
   mockedResolvedIds.add(resolvedId);
-  const syncActual = loadIsolatedModuleSync(resolvedId);
-  // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
-  // REAL exports, not the mock.module-patched namespace. Bun's mock.module
-  // patches the module namespace object IN PLACE, so storing a reference to
-  // the namespace would later reflect the mocked values. A shallow clone
-  // preserves the original export values at registration time.
-  const actualSnapshot = snapshotExports(syncActual);
-  actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
-  preMockSnapshots.set(resolvedId, actualSnapshot);
-  const importOriginal = (): unknown => syncActual;
+  // Some dependencies (async ESM such as `ink`) cannot be loaded through
+  // require at all. Registering their mock must still work; only a factory
+  // that actually asks for the original exports needs to fail, and it should
+  // fail with the underlying loader error rather than a missing snapshot.
+  let syncActual: unknown;
+  let loadError: unknown;
+  try {
+    syncActual = loadIsolatedModuleSync(resolvedId);
+  } catch (error: unknown) {
+    loadError = error;
+  }
+  if (loadError === undefined) {
+    // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
+    // REAL exports, not the mock.module-patched namespace. Bun's mock.module
+    // patches the module namespace object IN PLACE, so storing a reference to
+    // the namespace would later reflect the mocked values. A shallow clone
+    // preserves the original export values at registration time.
+    const actualSnapshot = snapshotExports(syncActual);
+    actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
+    preMockSnapshots.set(resolvedId, actualSnapshot);
+  }
+  const importOriginal = (): unknown => {
+    if (loadError !== undefined) throw loadError;
+    return syncActual;
+  };
   const factoryResult = factory(importOriginal as () => Promise<unknown>);
 
   if (!(factoryResult instanceof Promise)) {
@@ -653,8 +668,7 @@ const unsupportedModuleIsolation = (): never => {
 const unmockModule = (id: string): void => {
   const resolvedId = resolveActualId(id);
   const snapshot = preMockSnapshots.get(resolvedId);
-  const namespace =
-    snapshot ?? toNamespace(loadIsolatedModuleSync(resolvedId));
+  const namespace = snapshot ?? toNamespace(loadIsolatedModuleSync(resolvedId));
   mockedResolvedIds.delete(resolvedId);
   for (const candidate of new Set([id, resolvedId])) {
     registeredModuleMocks.delete(candidate);
@@ -700,9 +714,7 @@ interface TrackedMock {
 const trackedMocks: TrackedMock[] = [];
 
 const fnCompat = ((implementation?: (...args: never[]) => unknown) => {
-  const mockFn = originalFn(
-    implementation as Parameters<typeof originalFn>[0],
-  );
+  const mockFn = originalFn(implementation as Parameters<typeof originalFn>[0]);
   const tracked = mockFn as unknown as TrackedMock['mockFn'];
   trackedMocks.push({ mockFn: tracked, implementation });
   // Vitest's mockRestore() returns the mock to the implementation it was
@@ -773,9 +785,7 @@ const findInstalledSpy = (
   target: object,
   key: PropertyKey,
 ): InstalledSpy | undefined =>
-  installedSpies.find(
-    (entry) => entry.target === target && entry.key === key,
-  );
+  installedSpies.find((entry) => entry.target === target && entry.key === key);
 
 /**
  * Vitest's `vi.spyOn` installs a NEW spy with an empty call history even when
