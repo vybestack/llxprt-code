@@ -51,7 +51,16 @@ export type JspTurnOutcome = 'completed' | 'failed' | 'cancelled';
 
 export interface JspTodoItem {
   readonly text: string;
-  readonly completed: boolean;
+  /**
+   * The native task state, published as the source reports it.
+   *
+   * Deliberately a bare string rather than a closed union: the recognized
+   * values are `pending`, `in_progress` and `completed`, but the vocabulary is
+   * open so a consumer reads anything else as neither completed nor active.
+   * Narrowing the type here would force the producer to guess, which is the
+   * defect this field exists to remove.
+   */
+  readonly state: string;
 }
 
 export interface JspTodoList {
