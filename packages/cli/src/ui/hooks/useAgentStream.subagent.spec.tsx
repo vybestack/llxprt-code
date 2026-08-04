@@ -131,16 +131,17 @@ const mockSendMessageStream = vi
   .mockReturnValue((async function* () {})());
 const mockStartChat = vi.fn();
 
-const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (
-    this: Record<string, unknown>,
-    _config: unknown,
-  ) {
-    this.startChat = mockStartChat;
-    this.sendMessageStream = mockSendMessageStream;
-    this.addHistory = vi.fn();
-  }),
-);
+// A real class rather than vi.fn().mockImplementation: the value is only ever
+// used with `new`, and a mock function's implementation is not applied as a
+// constructor consistently across test runners, which left instances without
+// their members.
+class MockedAgentClientClass {
+  startChat = mockStartChat;
+  sendMessageStream = mockSendMessageStream;
+  addHistory = vi.fn();
+
+  constructor(_config: unknown) {}
+}
 
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const original =
