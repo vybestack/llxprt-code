@@ -34,10 +34,8 @@
 import { statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import {
-  resolveBunNativeTestFiles,
-  type BunTestFile,
-} from './bun-test-manifest.js';
+import { type BunTestFile } from './bun-test-manifest.js';
+import { resolveBunNativeTestFiles } from './bun-test-manifest-resolve.js';
 
 /**
  * Detects and kills stale orphaned `bun test` processes (PPID=1) before

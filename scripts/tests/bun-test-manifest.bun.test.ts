@@ -11,9 +11,11 @@ import { join, resolve } from 'node:path';
 import {
   BUN_NATIVE_TEST_MANIFEST,
   BunManifestStatError,
+} from '../bun-test-manifest.js';
+import {
   resolveBunNativeTestFiles,
   resolveWorkspaceCwd,
-} from '../bun-test-manifest.js';
+} from '../bun-test-manifest-resolve.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const temporaryRoots: string[] = [];
