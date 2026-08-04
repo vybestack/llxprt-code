@@ -657,6 +657,7 @@ export async function runBunTests(
   const setups = collectGlobalSetups(files);
   const started: string[] = [];
   let testResults: FileTestResult[] = [];
+  let teardownFailures = 0;
   try {
     for (const setup of setups) {
       const module = await dependencies.loadGlobalSetup(setup);
@@ -671,7 +672,7 @@ export async function runBunTests(
       junitTempDir,
     );
   } finally {
-    await teardownSetups(started, dependencies);
+    teardownFailures = await teardownSetups(started, dependencies);
   }
 
   reportResults(testResults, dependencies);
@@ -680,7 +681,10 @@ export async function runBunTests(
 
   const passed = testResults.filter((r) => r.passed).length;
   const failed = testResults.length - passed;
-  return failed > 0 ? 1 : 0;
+  // A global teardown that throws means the root's cleanup contract was
+  // violated (e.g. an eval run's temp storage survived). Vitest fails the run
+  // in that case, so reporting success here would leak the failure.
+  return failed > 0 || teardownFailures > 0 ? 1 : 0;
 }
 
 function resolveTsconfig(
@@ -733,15 +737,25 @@ function runAllFiles(
   return results;
 }
 
+/**
+ * Runs every started root's teardown in reverse order and returns how many
+ * threw.
+ *
+ * A throwing teardown must not stop the remaining ones — leaking another
+ * root's temp directories would compound the problem — but it also must not be
+ * swallowed, so the count is surfaced to the caller for the exit code.
+ */
 async function teardownSetups(
   started: string[],
   dependencies: BunTestRunnerDependencies,
-): Promise<void> {
+): Promise<number> {
+  let failures = 0;
   for (const setup of started.reverse()) {
     try {
       const module = await dependencies.loadGlobalSetup(setup);
       await module.teardown?.();
     } catch (error: unknown) {
+      failures++;
       dependencies.stderr(
         `Global teardown failed for ${setup}: ${
           error instanceof Error ? error.message : String(error)
@@ -749,6 +763,7 @@ async function teardownSetups(
       );
     }
   }
+  return failures;
 }
 
 function reportResults(

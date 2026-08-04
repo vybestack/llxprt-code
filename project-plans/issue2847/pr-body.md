@@ -1,6 +1,6 @@
 Fixes #2847.
 
-Completes the repository-wide migration to Bun's native test runner (final sub-issue of #2578) and finalizes CI on the Bun-native path.
+Migrates every test root named in #2847 to Bun's native test runner and moves CI's test execution onto it. `agents` and `cli` still run under Vitest and are tracked separately by #2578 — see "Remaining Vitest usage" below for the full, honest enumeration.
 
 ## Test roots replace curated file lists
 
@@ -56,7 +56,22 @@ Each of these was a whole class of failures rather than a single file:
 
 Ten `vitest.config.ts` files are deleted. The invariants they guarded are re-expressed against the manifest rather than dropped: the evals report path (`scripts/tests/evals-report-path.test.ts`), the OCR workflow's test discovery, the scripts shard's two invocations, and the settings boundary alias check.
 
-Remaining Vitest usage is not test execution: `vitest` stays in `devDependencies` because test files still import `describe`/`it`/`expect` from the `vitest` specifier, which Bun resolves through its own injected handler. `packages/storage` keeps its two backend-specific configs and the other partially migrated workspaces keep theirs, both tracked by #2578.
+## Remaining Vitest usage
+
+Vitest is no longer the runner for any root named in #2847, but it is **not** yet absent from the repository. Enumerated honestly:
+
+**Still executes Vitest** (out of this issue's scope, tracked by #2578):
+
+| Path | What runs it |
+| --- | --- |
+| `packages/agents` `test` / `test:ci` | the `agents` shard, via `scripts/test.ts` |
+| `packages/cli` `test` / `test:ci` (+ `test:integration`, `test:ci:covered`, `test:ci:fast`, `test:legacy`) | the `cli` shard, via `scripts/test.ts` |
+| `packages/storage` `test:vitest` | the `secure_store_backend` job in `ci.yml` and its nightly twin, which need the two backend-specific configs |
+| `packages/test-utils/src/quota-guard-vitest-integration.test.ts` | spawns a nested Vitest deliberately — it is the test *of* Vitest integration |
+
+**Does not execute** — `vitest` stays in `devDependencies` because migrated test files still import `describe`/`it`/`expect` from the `vitest` specifier, which Bun resolves through its own injected handler. `test:vitest` escape hatches remain on `auth`, `lsp`, `mcp`, `providers`, `storage` and `tools`; no workflow or `test` script invokes them.
+
+So the issue's "CI uses Bun-native execution as the primary path for all workspaces" holds for every root this PR owns, and does not yet hold for `agents`, `cli` or the SecureStore backend matrix.
 
 ## Two decisions worth a second opinion
 
