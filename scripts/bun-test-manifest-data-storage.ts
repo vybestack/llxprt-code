@@ -15,6 +15,7 @@ export const STORAGE_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'test-bun/machine-secret.bun.ts',
     'test-bun/machine-secret.concurrent-write.bun.ts',
     'test-bun/secure-store.bun.ts',
+    'test-bun/secure-store.fallback-hardening.bun.ts',
     'test-bun/secure-store.concurrent-write.bun.ts',
     'test-bun/secure-store.runtime-replaced.bun.ts',
     'test-bun/storage.bun.ts',

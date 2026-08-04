@@ -135,7 +135,12 @@ describe('Bun native test manifest', () => {
     if (!(thrown instanceof BunManifestStatError)) {
       throw new Error('Expected BunManifestStatError');
     }
-    expect(thrown.path).toBe('/fixture/packages/core/src/utils/errors.test.ts');
+    // Built with `join` so the expectation uses native separators; the
+    // resolver joins the same way, so a literal POSIX path only matches
+    // on POSIX platforms.
+    expect(thrown.path).toBe(
+      join('/fixture', 'packages/core/src/utils/errors.test.ts'),
+    );
     expect(thrown.code).toBe('EACCES');
     expect(thrown.cause).toBe(cause);
   });
@@ -146,9 +151,17 @@ describe('Bun native test manifest', () => {
       `bun-test-manifest-directory-${process.pid}-${Date.now()}`,
     );
     temporaryRoots.push(fixtureRoot);
-    mkdirSync(join(fixtureRoot, 'packages/core/src/utils/errors.test.ts'), {
-      recursive: true,
-    });
+    // Every declared 'core' path must exist as a directory, otherwise the
+    // missing-file check fires before the non-file check under assertion.
+    for (const entry of BUN_NATIVE_TEST_MANIFEST.filter(
+      (candidate) => candidate.workspace === 'core',
+    )) {
+      for (const file of entry.files) {
+        mkdirSync(join(fixtureRoot, 'packages/core', file), {
+          recursive: true,
+        });
+      }
+    }
 
     expect(() => resolveBunNativeTestFiles(fixtureRoot, 'core')).toThrow(
       'Bun native test manifest contains non-files',
