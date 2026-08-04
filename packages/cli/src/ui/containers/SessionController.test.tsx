@@ -13,6 +13,25 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Mock before imports
+// SessionController reads the runtime bridge both as a hook and via the
+// module-level accessor. The real provider resolves the CLI runtime scope,
+// which this container test does not establish.
+vi.mock('../contexts/RuntimeContext.js', () => {
+  const status = {
+    providerName: 'gemini',
+    isPaidMode: false,
+  };
+  const api = {
+    getActiveProviderStatus: () => status,
+    getActiveProfileName: () => undefined,
+    getCliProviderManager: () => undefined,
+  };
+  return {
+    useRuntimeApi: () => api,
+    getRuntimeApi: () => api,
+  };
+});
+
 vi.mock('../hooks/useHistoryManager.js', () => ({
   useHistory: vi.fn(() => ({
     history: [],
@@ -114,6 +133,10 @@ describe('SessionController', () => {
       getDebugMode: vi.fn(() => false),
       getFileService: vi.fn(),
       getExtensionContextFilePaths: vi.fn(() => []),
+      // The memory refresh now passes the loaded extensions through to
+      // loadHierarchicalLlxprtMemory; without this the refresh throws before
+      // reaching it.
+      getExtensions: vi.fn(() => []),
       getFolderTrust: vi.fn(() => true),
       getUserMemory: vi.fn(() => 'test memory content'),
       setUserMemory: vi.fn(),
