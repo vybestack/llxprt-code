@@ -79,22 +79,9 @@ vi.mock('../utils/clipboardUtils.js', () => ({
   clipboardHasImage: vi.fn(),
 }));
 
-vi.mock('../hooks/usePromptEnhancement.js', () => ({
-  usePromptEnhancement: () => ({
-    enhancedPrompt: '',
-    isEnhancing: false,
-    enhancePrompt: vi.fn(),
-    acceptEnhancement: vi.fn(),
-    cancelEnhancement: vi.fn(),
-  }),
-}));
-
-vi.mock('../hooks/useProviderModelDialog.js', () => ({
-  useProviderModelDialog: () => ({
-    dialog: null,
-    showDialog: vi.fn(),
-  }),
-}));
+// Mocks for '../hooks/usePromptEnhancement.js' and
+// '../hooks/useProviderModelDialog.js' were removed: neither module exists
+// anywhere in the workspace any more, so both mocks targeted nothing.
 
 // Variable to store the keypress handler
 let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
