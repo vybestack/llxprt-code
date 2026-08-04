@@ -273,7 +273,7 @@ describe('useAgentStream', () => {
           };
           yield {
             type: ServerEventType.Finished,
-            value: { reason: 'MAX_TOKENS', usageMetadata: undefined },
+            value: { reason: 'max_tokens', usageMetadata: undefined },
           };
         })(),
       );
@@ -489,67 +489,75 @@ describe('useAgentStream', () => {
     });
 
     it.each([
+      { reason: 'stop', stopReason: 'STOP', shouldAddMessage: false },
       {
-        reason: 'STOP',
+        reason: 'stop',
+        stopReason: 'FINISH_REASON_UNSPECIFIED',
         shouldAddMessage: false,
       },
       {
-        reason: 'FINISH_REASON_UNSPECIFIED',
-        shouldAddMessage: false,
-      },
-      {
-        reason: 'SAFETY',
+        reason: 'safety',
+        stopReason: 'SAFETY',
         message: 'WARNING:  Response stopped due to safety reasons.',
       },
       {
-        reason: 'RECITATION',
+        reason: 'safety',
+        stopReason: 'RECITATION',
         message: 'WARNING:  Response stopped due to recitation policy.',
       },
       {
-        reason: 'LANGUAGE',
+        reason: 'other',
+        stopReason: 'LANGUAGE',
         message: 'WARNING:  Response stopped due to unsupported language.',
       },
       {
-        reason: 'BLOCKLIST',
+        reason: 'safety',
+        stopReason: 'BLOCKLIST',
         message: 'WARNING:  Response stopped due to forbidden terms.',
       },
       {
-        reason: 'PROHIBITED_CONTENT',
+        reason: 'safety',
+        stopReason: 'PROHIBITED_CONTENT',
         message: 'WARNING:  Response stopped due to prohibited content.',
       },
       {
-        reason: 'SPII',
+        reason: 'safety',
+        stopReason: 'SPII',
         message:
           'WARNING:  Response stopped due to sensitive personally identifiable information.',
       },
       {
-        reason: 'OTHER',
+        reason: 'other',
+        stopReason: 'OTHER',
         message: 'WARNING:  Response stopped for other reasons.',
       },
       {
-        reason: 'MALFORMED_FUNCTION_CALL',
+        reason: 'error',
+        stopReason: 'MALFORMED_FUNCTION_CALL',
         message: 'WARNING:  Response stopped due to malformed function call.',
       },
       {
-        reason: 'IMAGE_SAFETY',
+        reason: 'safety',
+        stopReason: 'IMAGE_SAFETY',
         message: 'WARNING:  Response stopped due to image safety violations.',
       },
       {
-        reason: 'UNEXPECTED_TOOL_CALL',
+        reason: 'error',
+        stopReason: 'UNEXPECTED_TOOL_CALL',
         message: 'WARNING:  Response stopped due to unexpected tool call.',
       },
     ])(
-      'should handle $reason finish reason correctly',
-      async ({ reason, shouldAddMessage = true, message }) => {
+      'should handle $stopReason finish reason correctly',
+      async ({ reason, stopReason, shouldAddMessage = true, message }) => {
         mockSendMessageStream.mockReturnValue(
           (async function* () {
             yield {
               type: ServerEventType.Content,
-              value: `Response for ${reason}`,
+              value: `Response for ${stopReason}`,
             };
             yield {
               type: ServerEventType.Finished,
-              value: { reason, usageMetadata: undefined },
+              value: { reason, stopReason, usageMetadata: undefined },
             };
           })(),
         );
@@ -557,7 +565,7 @@ describe('useAgentStream', () => {
         const { result } = renderHookWithDefaults();
 
         await act(async () => {
-          await result.current.submitQuery(`Test ${reason}`);
+          await result.current.submitQuery(`Test ${stopReason}`);
         });
 
         // Wait for the stream to complete and state to settle

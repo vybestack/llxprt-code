@@ -154,6 +154,24 @@ restoration, cancelling while a tool is in progress, and that processing stops
 after cancellation. The gap is specifically the *history-writing* half, which
 should now be covered wherever the Agent loop owns it.
 
+### `src/ui/hooks/useAgentStream.loopdetect.test.tsx` (5 cases)
+
+Every case drove a loop-detection *confirmation* flow. Neither
+`loopDetectionConfirmationRequest` nor `disableForSession` appears anywhere in
+any package's source. The flow was replaced: `handleLoopDetectedEvent` in
+`useStreamEventHandlers.ts` now just adds an info message and halts the request.
+
+Coverage lost:
+
+- a confirmation request is raised when a `LoopDetected` event arrives
+- choosing "disable" disables loop detection for the session and reports it
+- choosing "keep" leaves it enabled and reports it
+- repeated loop-detection events are handled
+- `LoopDetected` is processed after pending history is flushed
+
+Also worth filling: the *current* behaviour (a single info message on
+`LoopDetected`) has no test at all.
+
 ## Ported, not deleted
 
 - `src/ui/components/ContextIndicator.ui.test.tsx` — constructed
