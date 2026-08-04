@@ -256,6 +256,7 @@ export const PROVIDERS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/auth/proxy/__tests__/github-broker-p10.test.ts',
     'src/auth/proxy/__tests__/github-broker-p10b.test.ts',
     'src/auth/proxy/__tests__/github-broker-security.test.ts',
+    'src/auth/proxy/__tests__/github-broker-unknown-param.bun.test.ts',
     'src/auth/proxy/__tests__/github-broker-watch.test.ts',
     'src/auth/proxy/__tests__/github-broker-write-ops.test.ts',
     'src/auth/proxy/__tests__/github-broker.test.ts',
