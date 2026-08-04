@@ -35,7 +35,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { waitForCondition, flushEventLoop } from '../test-utils/eventLoop.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -357,7 +357,12 @@ describe('subagent.ts', () => {
       vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
       vi.mocked(getEnvironmentContext).mockResolvedValue('');
 
-      const runPromise = scope.runNonInteractive(new ContextState());
+      let runSettled = false;
+      const runPromise = scope
+        .runNonInteractive(new ContextState())
+        .finally(() => {
+          runSettled = true;
+        });
 
       // Reach the stall before moving the clock. A real event-loop yield is
       // only reliable while the fake clock is still, so this gate has to come
@@ -382,7 +387,10 @@ describe('subagent.ts', () => {
       // TIMEOUT this test exists to rule out.
       vi.useRealTimers();
       resolveIterator!();
-      await flushEventLoop();
+      // Unwinding takes an unpredictable number of real event-loop turns on a
+      // loaded machine, so wait for the run to actually settle rather than
+      // assuming a fixed number of yields is enough.
+      expect(await waitForCondition(() => runSettled)).toBe(true);
 
       await runPromise;
       // Should complete normally (not timeout)
@@ -469,7 +477,12 @@ describe('subagent.ts', () => {
       const runPromise = scope.runNonInteractive(new ContextState());
 
       // Attach catch handler before advancing timers to prevent unhandled rejection
-      const resultPromise = runPromise.catch((e) => e);
+      let resultSettled = false;
+      const resultPromise = runPromise
+        .catch((e) => e)
+        .finally(() => {
+          resultSettled = true;
+        });
 
       // Reach the gap before moving the clock.
       expect(await waitForCondition(() => gapReached)).toBe(true);
@@ -480,9 +493,11 @@ describe('subagent.ts', () => {
       // produces again, which never returns under Bun on Linux.
       vi.advanceTimersByTime(12_000);
 
-      // The watchdog has fired; let the pipeline unwind on real timers.
+      // The watchdog has fired; let the pipeline unwind on real timers. Wait
+      // for the run to actually settle rather than assuming a fixed number of
+      // yields is enough on a loaded machine.
       vi.useRealTimers();
-      await flushEventLoop();
+      expect(await waitForCondition(() => resultSettled)).toBe(true);
 
       // Should have timed out due to env value (8s), not config (45s)
       const _result = await resultPromise;

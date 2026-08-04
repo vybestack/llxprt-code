@@ -11,7 +11,7 @@ import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
-import { waitForCondition, flushEventLoop } from '../test-utils/eventLoop.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -352,11 +352,14 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const signal = new AbortController().signal;
 
+    let runSettled = false;
     const runPromise = (async () => {
       for await (const event of turn.run(reqParts, signal)) {
         events.push(event);
       }
-    })();
+    })().finally(() => {
+      runSettled = true;
+    });
 
     // Reach the gap before moving the clock (real yields are only reliable
     // while the fake clock is still).
@@ -370,9 +373,10 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // The watchdog has fired; hand the teardown back to real timers. Draining
     // this pipeline under fake timers deadlocks under Bun on Linux.
     vi.useRealTimers();
-    // Give the pipeline a real event-loop turn to unwind on before awaiting it.
-    // Safe here because the fake clock is no longer installed.
-    await flushEventLoop();
+    // Unwinding takes an unpredictable number of real event-loop turns on a
+    // loaded machine, so wait for the run to actually settle rather than
+    // assuming a fixed number of yields is enough.
+    expect(await waitForCondition(() => runSettled)).toBe(true);
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -434,11 +438,14 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     const reqParts: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const abortController = new AbortController();
 
+    let runSettled = false;
     const runPromise = (async () => {
       for await (const event of turn.run(reqParts, abortController.signal)) {
         events.push(event);
       }
-    })();
+    })().finally(() => {
+      runSettled = true;
+    });
 
     // Park inside the stream before the clock moves; a real event-loop yield is
     // only reliable while the fake clock is still.
@@ -461,9 +468,10 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // deadlocks under Bun on Linux.
     vi.useRealTimers();
     resolveIterator!();
-    // Give the pipeline a real event-loop turn to deliver the chunk on before
-    // awaiting it. Safe here because the fake clock is no longer installed.
-    await flushEventLoop();
+    // Delivering the chunk takes an unpredictable number of real event-loop
+    // turns on a loaded machine, so wait for the run to actually settle rather
+    // than assuming a fixed number of yields is enough.
+    expect(await waitForCondition(() => runSettled)).toBe(true);
     await runPromise;
 
     expect(events).toHaveLength(1);
