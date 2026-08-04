@@ -491,12 +491,18 @@ describe('.github/workflows/nightly.yml', () => {
     expect(
       asOptionalRecord(notifyFailureStep.env)?.BEHAVIORAL_EVALS_RESULT,
     ).toBe('${{ needs.behavioral_evals.result }}');
+    expect(
+      asOptionalRecord(notifyFailureStep.env)?.CLI_BUNDLE_LAUNCH_RESULT,
+    ).toBe('${{ needs.cli_bundle_launch.result }}');
     expect(normalizedRun).toContain('LABEL_ARGS+=(--label "ci/cd")');
     expect(normalizedRun).not.toContain('LABEL_ARGS+=(--label "bug")');
     expect(normalizedRun).toContain('windows_ci=${WINDOWS_CI_RESULT}');
     expect(normalizedRun).toContain('e2e_full=${E2E_FULL_RESULT}');
     expect(normalizedRun).toContain(
       'behavioral_evals=${BEHAVIORAL_EVALS_RESULT}',
+    );
+    expect(normalizedRun).toContain(
+      'cli_bundle_launch=${CLI_BUNDLE_LAUNCH_RESULT}',
     );
     expect(normalizedRun).toContain('if [[ ${#FAILED_JOBS[@]} -eq 0 ]]');
     expect(normalizedRun).toContain('No failed or cancelled jobs detected');
@@ -563,6 +569,7 @@ describe('.github/workflows/nightly.yml', () => {
       'e2e_full',
       'behavioral_evals',
       'windows_bun_native_smoke',
+      'cli_bundle_launch',
     ];
     const actualNeeds = Array.isArray(notifyFailureJob?.needs)
       ? asStringArray(notifyFailureJob.needs)
