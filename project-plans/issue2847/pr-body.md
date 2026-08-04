@@ -43,7 +43,7 @@ Each of these was a whole class of failures rather than a single file:
 
 ## PTY
 
-`@lydell/node-pty` never delivers `onData`/`onExit` under Bun on POSIX (oven-sh/bun#25822), so the interactive harness selects `Bun.spawn`'s terminal backend (`packages/test-utils/src/pty-backend.ts`). It is not shared with `core`'s adapter because `core` already dev-depends on `test-utils`, and importing `core` here would close a dependency cycle.
+`@lydell/node-pty` never delivers `onData`/`onExit` under Bun on POSIX (https://github.com/oven-sh/bun/issues/25822), so the interactive harness selects `Bun.spawn`'s terminal backend (`packages/test-utils/src/pty-backend.ts`). It is not shared with `core`'s adapter because `core` already dev-depends on `test-utils`, and importing `core` here would close a dependency cycle.
 
 ## Bugs the migration exposed
 
