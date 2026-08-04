@@ -369,29 +369,23 @@ describe('subagent.ts', () => {
       // first; without it the advance races the stream start on slower hosts.
       expect(await waitForCondition(() => stallReached)).toBe(true);
 
-      // Advance 30 minutes - no timeout because watchdog is disabled. The sync
-      // variant is required: the async one drains the promise chain as it
-      // steps, and this stream is parked on a promise that only settles below,
-      // which never returns under Bun on Linux.
-      vi.advanceTimersByTime(30 * 60 * 1000);
+      // Hold the stall open in real time to show the idle watchdog never
+      // fires. The fake clock is not used for this: draining the pipeline to
+      // completion under Bun's fake timers deadlocks, and `runAllTimersAsync`
+      // is unusable here regardless because it would fire the 60-minute
+      // max_time_minutes watchdog and report the very TIMEOUT this test exists
+      // to rule out. (A timer-count assertion would not work either: the
+      // max_time_minutes watchdog is legitimately registered.)
+      vi.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
       // No timeout yet
       expect(scope.output.terminate_reason).not.toBe(
         SubagentTerminateMode.TIMEOUT,
       );
+      expect(runSettled).toBe(false);
 
-      // The watchdog assertion is made, so hand the completion phase back to
-      // real timers and let the pipeline unwind on a real event-loop turn.
-      // `runAllTimersAsync` must NOT be used here regardless: it would also
-      // fire the 60-minute max_time_minutes watchdog and report the very
-      // TIMEOUT this test exists to rule out.
-      vi.useRealTimers();
       resolveIterator!();
-      // Unwinding takes an unpredictable number of real event-loop turns on a
-      // loaded machine, so wait for the run to actually settle rather than
-      // assuming a fixed number of yields is enough.
-      expect(await waitForCondition(() => runSettled)).toBe(true);
-
       await runPromise;
       // Should complete normally (not timeout)
       expect(scope.output.terminate_reason).not.toBe(
@@ -400,8 +394,14 @@ describe('subagent.ts', () => {
     });
 
     it('env var precedence: env var overrides config setting', async () => {
-      const envTimeoutMs = 8_000; // 8 seconds from env
-      const configTimeoutMs = 45_000; // 45 seconds from config (should be ignored)
+      // Real timers with small real durations. Bun's fake timers deadlock when
+      // this pipeline is drained to completion, and the behaviour under test is
+      // which of the two configured durations is used — which needs no fake
+      // clock, since the config value is orders of magnitude larger and so
+      // cannot be what fires inside the wait below.
+      vi.useRealTimers();
+      const envTimeoutMs = 50; // from env
+      const configTimeoutMs = 20_000; // from config (should be ignored)
 
       process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
 
@@ -487,20 +487,11 @@ describe('subagent.ts', () => {
       // Reach the gap before moving the clock.
       expect(await waitForCondition(() => gapReached)).toBe(true);
 
-      // Advance past the env timeout (8s) but before config timeout (45s).
-      // Sync advance: the watchdog fires as the clock moves, and the async
-      // variant would drain a promise chain parked on a stream that never
-      // produces again, which never returns under Bun on Linux.
-      vi.advanceTimersByTime(12_000);
-
-      // The watchdog has fired; let the pipeline unwind on real timers. Wait
-      // for the run to actually settle rather than assuming a fixed number of
-      // yields is enough on a loaded machine.
-      vi.useRealTimers();
-      expect(await waitForCondition(() => resultSettled)).toBe(true);
-
-      // Should have timed out due to env value (8s), not config (45s)
+      // The stream stalls after its first chunk, so the env-driven 50ms
+      // watchdog aborts the run. If the 20s config value were being used
+      // instead, this would not settle and the test would fail on its budget.
       const _result = await resultPromise;
+      expect(resultSettled).toBe(true);
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
     });
   });

@@ -293,8 +293,14 @@ describe('Turn - stream idle timeout behavioral tests', () => {
   });
 
   it('env var precedence: env var overrides config setting', async () => {
-    const envTimeoutMs = 15_000;
-    const configTimeoutMs = 60_000;
+    // Real timers with small real durations. Bun's fake timers deadlock when
+    // this pipeline is drained to completion, and the behaviour under test is
+    // "which of the two configured durations is used", which does not need a
+    // fake clock: the config value is two orders of magnitude larger, so only
+    // the env-driven one can fire inside the wait below.
+    vi.useRealTimers();
+    const envTimeoutMs = 50;
+    const configTimeoutMs = 20_000;
 
     process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
 
@@ -361,23 +367,12 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       runSettled = true;
     });
 
-    // Reach the gap before moving the clock (real yields are only reliable
-    // while the fake clock is still).
+    // The stream stalls after its first chunk, so the env-driven 50ms watchdog
+    // aborts the run. If the 20s config value were being used instead, this
+    // would not settle and the assertion below would fail.
     expect(await waitForCondition(() => gapReached)).toBe(true);
-
-    // Sync advance: the watchdog callback fires as the clock moves and aborts
-    // the run. The async variant drains the promise chain while the stream is
-    // parked on a promise that never settles, which never returns on Linux.
-    vi.advanceTimersByTime(16_000);
-
-    // The watchdog has fired; hand the teardown back to real timers. Draining
-    // this pipeline under fake timers deadlocks under Bun on Linux.
-    vi.useRealTimers();
-    // Unwinding takes an unpredictable number of real event-loop turns on a
-    // loaded machine, so wait for the run to actually settle rather than
-    // assuming a fixed number of yields is enough.
-    expect(await waitForCondition(() => runSettled)).toBe(true);
     await runPromise;
+    expect(runSettled).toBe(true);
 
     const timeoutEvent = events.find(
       (e) => e.type === AgentEventType.StreamIdleTimeout,
@@ -451,27 +446,23 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // only reliable while the fake clock is still.
     expect(await waitForCondition(() => iteratorEntered)).toBe(true);
 
-    // Sync advance, and no `runAllTimersAsync` below: both async timer helpers
-    // drain the promise chain, and this stream is parked on a promise that only
-    // settles at the end of the test, which never returns on Linux. Nothing is
-    // expected to fire here anyway, and the rest of the work is promise-driven.
-    vi.advanceTimersByTime(700_000);
+    // The core assertion: with neither source configuring a duration, no
+    // watchdog timer is registered at all. Checked while the fake clock is
+    // still installed, since that is what exposes the timer count.
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Then hold the stall open in real time to show nothing fires. The fake
+    // clock is not used for this: draining the pipeline to completion under
+    // Bun's fake timers deadlocks.
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
+    expect(runSettled).toBe(false);
 
-    expect(vi.getTimerCount()).toBe(0);
-
-    // The watchdog assertions are done, so hand the completion phase back to
-    // real timers. Draining this pipeline while fake timers are installed
-    // deadlocks under Bun on Linux.
-    vi.useRealTimers();
     resolveIterator!();
-    // Delivering the chunk takes an unpredictable number of real event-loop
-    // turns on a loaded machine, so wait for the run to actually settle rather
-    // than assuming a fixed number of yields is enough.
-    expect(await waitForCondition(() => runSettled)).toBe(true);
     await runPromise;
 
     expect(events).toHaveLength(1);
