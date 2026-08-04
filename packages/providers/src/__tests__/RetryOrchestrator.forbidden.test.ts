@@ -166,7 +166,8 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
   });
 
   it('still refreshes then fails over when a bucketFailoverHandler is configured (AC4)', async () => {
-    let transportCalls = 0;
+    const attemptBuckets: string[] = [];
+    let failoverCalls = 0;
     const buckets = ['bucket1', 'bucket2'];
     let bucketIndex = 0;
     let currentBucket = buckets[bucketIndex];
@@ -178,7 +179,7 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
         'success',
       ],
       onTransportCall: () => {
-        transportCalls++;
+        attemptBuckets.push(currentBucket);
       },
     });
     const orchestrator = new RetryOrchestrator(provider, {
@@ -195,6 +196,7 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
               getBuckets: () => buckets,
               getCurrentBucket: () => currentBucket,
               tryFailover: async () => {
+                failoverCalls++;
                 bucketIndex++;
                 if (bucketIndex >= buckets.length) return false;
                 currentBucket = buckets[bucketIndex];
@@ -207,10 +209,12 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
       } as GenerateChatOptions),
     );
 
-    // First 403 triggers the refresh-retry allowance, second 403 triggers
-    // bucket failover. Failover behavior is unchanged by issue #2917.
-    expect(transportCalls).toBe(3);
-    expect(currentBucket).toBe('bucket2');
+    // First 403 triggers the refresh-retry allowance on the ORIGINAL bucket,
+    // and only the second 403 triggers bucket failover. Asserting the bucket
+    // per attempt pins that ordering: a failover after the first 403 would
+    // still produce three calls and still end on bucket2.
+    expect(attemptBuckets).toStrictEqual(['bucket1', 'bucket1', 'bucket2']);
+    expect(failoverCalls).toBe(1);
     expect(result).toHaveLength(1);
   });
 
