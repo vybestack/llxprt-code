@@ -23,6 +23,17 @@ on:
         default: 'main'
         type: 'string'
 
+# Event-type isolation prevents pull_request_target from cancelling pull_request
+# work and keeps merge_group out of PR-keyed groups. Label isolation prevents an
+# unrelated label from cancelling valid maintainer:e2e:ok E2E work.
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name }}-${{
+    github.event.pull_request.number ||
+    github.event.inputs.branch_ref || github.ref }}-${{
+    github.event.label.name }}
+  cancel-in-progress: true
+
 # An explicit top-level block is required because the mergeability-gate job
 # calls the reusable ./.github/workflows/_pr-mergeability-gate.yml, which
 # declares `pull-requests: read`. A called workflow cannot grant itself a
@@ -164,7 +175,9 @@ jobs:
     timeout-minutes: 60
     concurrency:
       group: >-
-        ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ matrix.sandbox }}
+        ${{ github.workflow }}-${{ github.event_name }}-${{
+        github.event.pull_request.number || inputs.branch_ref || github.ref
+        }}-${{ matrix.sandbox }}
       cancel-in-progress: true
     if: |
       !cancelled() &&
@@ -343,7 +356,9 @@ jobs:
     timeout-minutes: 60
     concurrency:
       group: >-
-        ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-macos
+        ${{ github.workflow }}-${{ github.event_name }}-${{
+        github.event.pull_request.number || inputs.branch_ref || github.ref
+        }}-macos
       cancel-in-progress: true
     if: |
       !cancelled() &&
