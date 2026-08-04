@@ -72,7 +72,7 @@ Add capabilities through MCP servers, lifecycle hooks, custom themes, and more.
 
 ## Tools
 
-LLxprt Code ships with built-in tools for file editing, shell commands, web search, code analysis, and memory. It also supports [MCP servers](./tools/mcp-server.md) and [extensions](./extension.md) for adding additional tools and capabilities. See the **[Tools Overview](./tools/index.md)** for the full list.
+LLxprt Code ships with built-in tools for file editing, shell commands, web search, code analysis, and memory. It also supports [MCP servers](./tools/mcp-server.md) and [extensions](./extension.md) for adding additional tools and capabilities. See the **[Tools Overview](./tools/index.md)** for the full list, including [image generation](./tools/image-generation.md).
 
 ## Reference
 

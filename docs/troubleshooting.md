@@ -200,6 +200,14 @@ PowerShell's IntelliSense treats `@` as a hashtable literal start, causing lag. 
 
 ## Common Error Messages
 
+**Image generation is unavailable**
+
+Image generation runs on your Codex account and is independent of the provider
+you are chatting with. If it reports that it is unavailable, Codex OAuth is
+almost always not set up. Run `/auth codex enable`, then retry — the browser
+login opens on that first request. See
+[Image Generation](./tools/image-generation.md) for the full guide.
+
 **`EADDRINUSE` (MCP server)**
 
 Another process is using that port. Stop it or configure a different port in your MCP server settings.
