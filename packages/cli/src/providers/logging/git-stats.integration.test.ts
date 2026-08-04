@@ -125,7 +125,9 @@ describe('Git Stats Integration', () => {
     expect(parsedLog.git_stats).toMatchObject({
       filesChanged: 2,
       totalLinesAdded: expect.any(Number),
-      totalLinesRemoved: 0,
+      // The second edit rewrites a line, which the diff records as one removal
+      // plus one addition.
+      totalLinesRemoved: 1,
       sessionId: config.getSessionId(),
     });
   });
@@ -186,12 +188,15 @@ describe('Git Stats Integration', () => {
       ),
     );
 
-    // All results should be successful
+    // All results should be successful. filesChanged is the running count of
+    // distinct files for the session, so each concurrent result observes a
+    // value between 1 and the total rather than 1.
     results.forEach((result) => {
       expect(result).not.toBeNull();
       expect(result!.linesAdded).toBe(1);
       expect(result!.linesRemoved).toBe(0);
-      expect(result!.filesChanged).toBe(1);
+      expect(result!.filesChanged).toBeGreaterThanOrEqual(1);
+      expect(result!.filesChanged).toBeLessThanOrEqual(concurrentEdits.length);
     });
 
     // Final summary should account for all edits
@@ -274,7 +279,9 @@ describe('Git Stats Integration', () => {
 
     // Verify stats are correct
     expect(stats).not.toBeNull();
-    expect(stats!.linesAdded).toBe(101); // 1 blank line + 100 added lines
+    // The joining newline terminates the previous last line rather than
+    // creating a blank one, so exactly 100 lines are added.
+    expect(stats!.linesAdded).toBe(100);
     expect(stats!.linesRemoved).toBe(0);
     expect(stats!.filesChanged).toBe(1);
 
@@ -310,7 +317,10 @@ describe('Git Stats Integration', () => {
 
     const summary = tracker.getSummary();
     expect(summary.filesChanged).toBe(1);
-    expect(summary.totalLinesAdded).toBe(1); // Added one line with symbols
+    // The comment line also changed, so the diff records two added lines (the
+    // rewritten comment and the new symbols line) and one removed.
+    expect(summary.totalLinesAdded).toBe(2);
+    expect(summary.totalLinesRemoved).toBe(1);
   });
 
   it('should validate no external network calls during integration', async () => {
