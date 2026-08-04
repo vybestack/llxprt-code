@@ -307,3 +307,31 @@ Despite that, `onEscapePromptChange` is never called with `true`, so
 `setShowEscapePrompt(true)` never runs and the second ESC never reaches
 `buffer.setText('')`. The remaining unknown is inside `InputPrompt`'s own
 dispatch. Left failing rather than adjusted to match current output.
+
+### `InputPrompt` keyboard-driven cases — same open unknown
+
+`InputPrompt.vim.test.tsx` fails 10 cases across two describes, all
+keyboard-driven ("queued message editing", "command queuing while streaming"),
+plus 12 snapshot comparisons. `InputPrompt.completion.test.tsx` has one ESC case
+in the same state.
+
+Ruled out by probe, not inference:
+
+- **key delivery** — a probe rendering `KeypressProvider` directly shows `\r`
+  arrives as `return`, `\u001B[A` as `up`, `\x1B` as `escape` (twice in a row),
+  and a bracketed paste as a single `paste`
+- **focus** — `props` is rebuilt per test with `focus: true`, so the
+  `!focus && key.name !== 'paste'` early return in `handleSpecialInputKey` does
+  not apply
+- **subscription state** — `useKeypress` is called with
+  `isActive: props.isEmbeddedShellFocused !== true`, which is `true` here
+- **a write/subscribe race** — the stub's `Stdin.write` emits immediately and
+  drops data when nothing is listening yet, which looked like the cause. Adding
+  replay buffering for pre-subscription writes changed nothing, so it is not.
+  That change was reverted rather than kept on the grounds that it seemed
+  reasonable.
+
+Paste reaches the component while every focus-gated key does not, which is the
+most specific clue available: paste is the one key that bypasses the focus
+check. The next step is tracing `state.handleInput` inside `inputPromptHooks`
+rather than another guess from outside.
