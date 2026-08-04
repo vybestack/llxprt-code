@@ -11,7 +11,7 @@ import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+import { waitForCondition, flushEventLoop } from '../test-utils/eventLoop.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -272,14 +272,20 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // here rather than after the advance.
     expect(await waitForCondition(() => iteratorEntered)).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    // Advance synchronously. The async variant drains the promise chain as it
+    // steps, and this stream is deliberately parked on a promise that never
+    // settles, which hangs it on Linux. Nothing is expected to fire here, so
+    // there is no timer continuation to wait for.
+    vi.advanceTimersByTime(30 * 60 * 1000);
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
 
+    // Releasing the stream is enough: the remaining work is promise-driven, so
+    // awaiting the run completes it. `runAllTimersAsync` must not be used here
+    // — it never returns under Bun on Linux for this pipeline.
     resolveIterator!();
-    await vi.runAllTimersAsync();
     await runPromise;
 
     expect(events).toHaveLength(1);
@@ -356,7 +362,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // while the fake clock is still).
     expect(await waitForCondition(() => gapReached)).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(16_000);
+    // Sync advance: the watchdog callback fires as the clock moves and aborts
+    // the run. The async variant drains the promise chain while the stream is
+    // parked on a promise that never settles, which never returns on Linux.
+    vi.advanceTimersByTime(16_000);
+
+    // The watchdog has fired; hand the teardown back to real timers. Draining
+    // this pipeline under fake timers deadlocks under Bun on Linux.
+    vi.useRealTimers();
+    // Give the pipeline a real event-loop turn to unwind on before awaiting it.
+    // Safe here because the fake clock is no longer installed.
+    await flushEventLoop();
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -428,7 +444,11 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     // only reliable while the fake clock is still.
     expect(await waitForCondition(() => iteratorEntered)).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(700_000);
+    // Sync advance, and no `runAllTimersAsync` below: both async timer helpers
+    // drain the promise chain, and this stream is parked on a promise that only
+    // settles at the end of the test, which never returns on Linux. Nothing is
+    // expected to fire here anyway, and the rest of the work is promise-driven.
+    vi.advanceTimersByTime(700_000);
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
@@ -436,8 +456,14 @@ describe('Turn - stream idle timeout behavioral tests', () => {
 
     expect(vi.getTimerCount()).toBe(0);
 
+    // The watchdog assertions are done, so hand the completion phase back to
+    // real timers. Draining this pipeline while fake timers are installed
+    // deadlocks under Bun on Linux.
+    vi.useRealTimers();
     resolveIterator!();
-    await vi.runAllTimersAsync();
+    // Give the pipeline a real event-loop turn to deliver the chunk on before
+    // awaiting it. Safe here because the fake clock is no longer installed.
+    await flushEventLoop();
     await runPromise;
 
     expect(events).toHaveLength(1);

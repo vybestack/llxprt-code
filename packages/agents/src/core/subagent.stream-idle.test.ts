@@ -35,7 +35,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+import { waitForCondition, flushEventLoop } from '../test-utils/eventLoop.js';
 const { TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -364,25 +364,25 @@ describe('subagent.ts', () => {
       // first; without it the advance races the stream start on slower hosts.
       expect(await waitForCondition(() => stallReached)).toBe(true);
 
-      // Advance 30 minutes - no timeout because watchdog is disabled
-      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+      // Advance 30 minutes - no timeout because watchdog is disabled. The sync
+      // variant is required: the async one drains the promise chain as it
+      // steps, and this stream is parked on a promise that only settles below,
+      // which never returns under Bun on Linux.
+      vi.advanceTimersByTime(30 * 60 * 1000);
 
       // No timeout yet
       expect(scope.output.terminate_reason).not.toBe(
         SubagentTerminateMode.TIMEOUT,
       );
 
-      // Resolve the iterator so the run can finish.
-      //
-      // `runAllTimersAsync` must NOT be used here: it would also fire the
-      // 60-minute max_time_minutes watchdog and report the very TIMEOUT this
-      // test exists to rule out. A real event-loop yield does not work either —
-      // after the clock has been advanced, a real `setImmediate` does not
-      // reliably run under Bun on Linux. Nudging the fake clock by a second
-      // pumps the pending promise chain through the fake-timer API itself and
-      // stays nowhere near the 60-minute limit.
+      // The watchdog assertion is made, so hand the completion phase back to
+      // real timers and let the pipeline unwind on a real event-loop turn.
+      // `runAllTimersAsync` must NOT be used here regardless: it would also
+      // fire the 60-minute max_time_minutes watchdog and report the very
+      // TIMEOUT this test exists to rule out.
+      vi.useRealTimers();
       resolveIterator!();
-      await vi.advanceTimersByTimeAsync(1_000);
+      await flushEventLoop();
 
       await runPromise;
       // Should complete normally (not timeout)
@@ -474,8 +474,15 @@ describe('subagent.ts', () => {
       // Reach the gap before moving the clock.
       expect(await waitForCondition(() => gapReached)).toBe(true);
 
-      // Advance past the env timeout (8s) but before config timeout (45s)
-      await vi.advanceTimersByTimeAsync(12_000);
+      // Advance past the env timeout (8s) but before config timeout (45s).
+      // Sync advance: the watchdog fires as the clock moves, and the async
+      // variant would drain a promise chain parked on a stream that never
+      // produces again, which never returns under Bun on Linux.
+      vi.advanceTimersByTime(12_000);
+
+      // The watchdog has fired; let the pipeline unwind on real timers.
+      vi.useRealTimers();
+      await flushEventLoop();
 
       // Should have timed out due to env value (8s), not config (45s)
       const _result = await resultPromise;
