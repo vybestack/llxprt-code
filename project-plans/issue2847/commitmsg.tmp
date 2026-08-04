@@ -1,9 +1,6 @@
-test(bun): make the token-tracking properties actually generate values
+test(bun): point CI, the orchestrator and the docs at the Bun-native suite
 
-The 3-argument itProp form was dropped by @fast-check/vitest v0.2, so the
-arbitraries were swallowed as an options object and every predicate ran once
-with the Vitest context instead of generated values. Driving them through
-plain fast-check exposed three assertions that never held: total deliberately
-excludes cache tokens, formatSessionTokenUsage groups digits via
-toLocaleString, and a freshly recorded entry is inside the 60-second window
-rather than outside it.
+Root scripts, scripts/test.ts and the CI workflows now invoke the Bun-native
+runner for the script harness, evals and integration tests. Roots that call a
+real provider are marked credentialed so an unfiltered run stays offline and
+the parity job can execute the complete suite without burning quota.

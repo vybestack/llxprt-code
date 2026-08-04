@@ -809,27 +809,33 @@ jobs:
       - name: 'Run test orchestrator on a single workspace'
         # Runs the orchestrator against one workspace. --skip-pretest skips
         # pretest hooks (like the agents API-surface guard) to keep the smoke
-        # fast. The workspace's test phase still runs (vitest run), but
-        # test-utils has a tiny test suite. --skip-scripts skips the root
-        # script harness tests. The only failure modes that matter here are
-        # bugs in the orchestrator itself (discovery, parsing, routing).
+        # fast. The workspace's test phase still runs, but test-utils has a
+        # tiny test suite. --skip-scripts skips the root script harness tests.
+        # The only failure modes that matter here are bugs in the orchestrator
+        # itself (discovery, parsing, routing).
         run: |-
           bun scripts/test.ts --workspace test-utils --skip-scripts
 
       - name: 'Run script harness tests for the orchestrator'
         run: |-
-          bunx vitest run --config ./scripts/tests/vitest.config.ts scripts/tests/test-orchestrator.test.ts
+          bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
 
   #
-  # Bun-native test compatibility (issue #2475)
+  # Bun-native test parity (issues #2475, #2847)
   #
-  # Runs representative tests from workspaces with supported Bun-native
-  # compatibility. Vitest-only workspaces remain covered by the primary test
-  # jobs and are intentionally excluded from this smoke gate.
+  # Executes every root declared in scripts/bun-test-manifest.ts, which after
+  # #2847 is the complete Bun-native suite rather than a sample. Roots marked
+  # `credentialed` (evals, integration-tests) are excluded from an unfiltered
+  # run because they call a real provider; they are exercised by the evals and
+  # e2e workflows, which request them by name.
+  #
+  # This is the single job that proves the whole suite passes under Bun's
+  # native runner in one place; `test_shard` below provides the fast sharded
+  # signal by invoking each workspace's own `test` script.
   bun_native_test_parity:
     name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 30
+    timeout-minutes: 90
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -858,7 +864,7 @@ jobs:
           bun install
           git checkout -- bun.lock
 
-      - name: 'Run Bun-native tests (manifest-based)'
+      - name: 'Run the complete Bun-native suite (manifest-based)'
         run: |-
           bun scripts/run_bun_tests.ts --timeout 30000
 
@@ -1021,7 +1027,8 @@ jobs:
           LLXPRT_COVERAGE: ${{ (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' && 'true' || 'false' }}
         # The orchestrator expands --shard to the shard's workspaces (or runs
         # npm run test:scripts for the scripts shard). Each workspace's tests
-        # still run under Vitest, preserving per-package config/reporters.
+        # run under whichever runner its own `test` script selects — Bun-native
+        # for the migrated workspaces, Vitest for the rest (issue #2578).
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Report harness toolchain versions'
@@ -1054,10 +1061,9 @@ jobs:
         run: 'sleep 2'
 
       - name: 'Publish Test Report (for non-forks)'
-        # The scripts shard runs the root script harness, which has no
-        # per-workspace junit.xml output (scripts/tests/vitest.config.ts does
-        # not configure the junit reporter). Skip it to avoid a "no test
-        # report files found" error.
+        # The scripts shard runs the root script harness, which produces no
+        # per-workspace junit.xml. Skip it to avoid a "no test report files
+        # found" error.
         if: |-
           ${{ always() && matrix.shard != 'scripts' && (github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3

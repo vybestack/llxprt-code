@@ -67,6 +67,13 @@ export interface BunTestWorkspaceEntry {
    * `process.env` are inherited by every spawned test process.
    */
   readonly globalSetup?: string;
+  /**
+   * Marks a root that calls a real provider and therefore needs credentials
+   * and quota. Such roots are excluded from an unfiltered run and must be
+   * selected explicitly with `--root`, so the ordinary PR gate never burns
+   * quota; their dedicated workflows request them by name.
+   */
+  readonly credentialed?: boolean;
 }
 
 export interface BunTestFile {
@@ -786,6 +793,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     include: ['**/*.eval.ts'],
     globalSetup: 'globalSetup.ts',
     timeout: 300_000,
+    credentialed: true,
   },
   {
     // End-to-end tests against a real provider: long per-test budget, a
@@ -798,6 +806,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     globalSetup: 'globalSetup.ts',
     timeout: 300_000,
     retries: 2,
+    credentialed: true,
   },
 ];
 
@@ -878,13 +887,30 @@ function toPreloadList(
   return typeof preload === 'string' ? [preload] : preload;
 }
 
+/**
+ * Decides whether a root participates in this run.
+ *
+ * A named filter selects exactly that root, credentialed or not. An
+ * unfiltered run covers every root that does not require provider
+ * credentials, so the ordinary gate stays complete without burning quota.
+ */
+export function selectsEntry(
+  entry: BunTestWorkspaceEntry,
+  workspaceFilter: string | undefined,
+): boolean {
+  if (workspaceFilter !== undefined) {
+    return entry.workspace === workspaceFilter;
+  }
+  return entry.credentialed !== true;
+}
+
 export function resolveBunNativeTestFiles(
   repoRoot: string,
   workspaceFilter?: string,
   dependencies: BunManifestDependencies = defaultManifestDependencies,
 ): BunTestFile[] {
-  const files = BUN_NATIVE_TEST_MANIFEST.filter(
-    ({ workspace }) => !workspaceFilter || workspace === workspaceFilter,
+  const files = BUN_NATIVE_TEST_MANIFEST.filter((entry) =>
+    selectsEntry(entry, workspaceFilter),
   ).flatMap((entry) => resolveManifestEntry(entry, repoRoot, dependencies));
   validateResolvedFiles(files, dependencies);
   return files.sort((left, right) => left.file.localeCompare(right.file));

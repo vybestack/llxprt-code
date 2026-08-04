@@ -102,7 +102,6 @@ const itProp = Object.assign(
   },
 );
 
-
 // Mock Config class
 class MockConfig {
   getRedactionConfig(): RedactionConfig {

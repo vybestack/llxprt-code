@@ -496,13 +496,14 @@ This script is a Bun-backed orchestrator that mirrors `npm run test
    (currently only `packages/agents`). This preserves the agents
    API-surface guard and any future pretest hooks.
 
-3. **Runs each workspace's `test` script** (typically `vitest run`) in the
-   workspace directory with `node_modules/.bin` on `PATH`. Tests still run
-   under **Vitest**, not Bun's native test runner, so all Vitest APIs and
-   per-package `vitest.config.ts` configuration remain fully available.
+3. **Runs each workspace's `test` script** in the workspace directory with
+   `node_modules/.bin` on `PATH`. Migrated workspaces point that script at
+   `scripts/run_bun_tests.ts` (Bun's native runner, one isolated process per
+   file); the workspaces still finishing their migration run under Vitest.
 
 4. **Runs the script harness tests** (`scripts/tests/`) after workspace
-   tests, matching the root `test:scripts` script.
+   tests, matching the root `test:scripts` script. These run natively under
+   Bun via the `scripts-tests` and `scripts-tests-slow` manifest roots.
 
 ### CLI flags
 
@@ -516,13 +517,25 @@ This script is a Bun-backed orchestrator that mirrors `npm run test
 The `--workspace` flag matches by directory name (`core`), relative path
 (`packages/core`), or package name (`@vybestack/llxprt-code-core`).
 
-### Relationship to `npm run test`
+### The canonical command
 
-Both paths run the same workspace Vitest suites and preserve the same
-pretest guards. The npm path (`npm run test`) remains the primary CI
-verification path; `test:bun` is the supported Bun-backed alternative. The
-npm path is not removed until the Bun-backed path is proven equivalent
-across all CI matrix legs.
+One command runs the complete suite:
+
+```bash
+bun run test:bun
+```
+
+It orchestrates every workspace plus the script harness, honouring pretest
+hooks. `npm run test` remains available and runs the same per-workspace
+`test` scripts, so the two agree by construction.
+
+Two roots are deliberately **not** part of that run because they call a real
+provider and consume quota. Request them by name when you have credentials:
+
+```bash
+npm run test:integration:sandbox:none   # bun scripts/run_bun_tests.ts --root integration-tests
+npm run test:all_evals                  # bun scripts/run_bun_tests.ts --root evals
+```
 
 ## Native Bun Test Runner Migration (issue #2475)
 
@@ -619,20 +632,35 @@ bun scripts/run_bun_tests.ts --workspace a2a-server
 npm run test:bun --workspace @vybestack/llxprt-code-a2a-server
 ```
 
-`run_bun_tests.ts` does not support `--exclude` — every file run must be
-explicitly listed in the manifest (`scripts/bun-test-manifest.ts`). Files
-that are not Bun-compatible are simply absent from the manifest rather than
-excluded at invocation time.
+### Test roots (`scripts/bun-test-manifest.ts`)
 
-Only `packages/a2a-server`, `packages/cli`, `packages/providers`,
-`packages/telemetry`, and `packages/test-utils` define a package-level
-`test:bun` script; each passes its exact manifest workspace name.
-The native `core` and `test-setup` entries are run through the root runner
-instead: `bun scripts/run_bun_tests.ts --workspace core` and
-`bun scripts/run_bun_tests.ts --workspace test-setup`. The root package's own
-`test:bun` command remains the separate Bun-backed Vitest orchestrator
-(`scripts/test.ts`), not the native runner. Use `bun scripts/run_bun_tests.ts`
-for all native manifest entries.
+Every file the native runner executes belongs to a **root** declared in
+`scripts/bun-test-manifest.ts`. A root selects its files in one of two ways:
+
+- **`include` / `exclude` globs** — used by fully migrated roots. This is the
+  Bun-native equivalent of a Vitest config's `include`, and it is what makes
+  "no test file can be silently dropped" mechanically true: a newly added
+  test file runs without any manifest edit.
+- **`files`** — an explicit list, used while a workspace is only partly
+  migrated and naming alone cannot tell a Bun-ready file from one still owned
+  by Vitest.
+
+A root may also declare:
+
+| Field          | Purpose                                                                        |
+| -------------- | ------------------------------------------------------------------------------ |
+| `preload`      | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)    |
+| `tsconfig`     | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`   |
+| `timeout`      | Per-test timeout, mirroring Vitest `testTimeout`                               |
+| `retries`      | Per-file retry budget, mirroring Vitest `retry`                                |
+| `globalSetup`  | `setup()` / `teardown()` run once in the runner process around the whole root  |
+| `credentialed` | Marks a root that calls a real provider; excluded unless requested by `--root` |
+
+`--root <name>` is an alias of `--workspace <name>`.
+
+An unfiltered `bun scripts/run_bun_tests.ts` runs every non-credentialed
+root — the complete offline suite. The `evals` and `integration-tests` roots
+are credentialed and must be named explicitly.
 
 ### CI parity
 

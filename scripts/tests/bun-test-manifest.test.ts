@@ -14,6 +14,7 @@ import {
   resolveBunNativeTestFiles,
   resolveEntryFileNames,
   resolveWorkspaceCwd,
+  selectsEntry,
 } from '../bun-test-manifest.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
@@ -156,6 +157,38 @@ describe('Bun native test manifest', () => {
     expect(() => resolveBunNativeTestFiles(fixtureRoot, 'core')).toThrow(
       'Bun native test manifest contains non-files',
     );
+  });
+});
+
+describe('selectsEntry', () => {
+  it('includes an ordinary root in an unfiltered run', () => {
+    expect(
+      selectsEntry({ workspace: 'core', files: ['a.test.ts'] }, undefined),
+    ).toBe(true);
+  });
+
+  it('excludes a credentialed root from an unfiltered run', () => {
+    expect(
+      selectsEntry(
+        { workspace: 'evals', files: ['a.eval.ts'], credentialed: true },
+        undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it('includes a credentialed root when it is requested by name', () => {
+    expect(
+      selectsEntry(
+        { workspace: 'evals', files: ['a.eval.ts'], credentialed: true },
+        'evals',
+      ),
+    ).toBe(true);
+  });
+
+  it('excludes any root that is not the named one', () => {
+    expect(
+      selectsEntry({ workspace: 'core', files: ['a.test.ts'] }, 'cli'),
+    ).toBe(false);
   });
 });
 

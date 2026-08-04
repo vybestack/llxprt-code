@@ -8,22 +8,19 @@
  * Bun-backed root test orchestration script.
  *
  * Mirrors `npm run test --workspaces --if-present` (plus `test:scripts`)
- * using Bun as the orchestration runtime. Each workspace's tests still run
- * under Vitest — not Bun's native test runner — preserving per-package
- * vitest.config.ts, setup files, coverage, and reporters.
+ * using Bun as the orchestration runtime. This is the single canonical entry
+ * point for the complete suite.
  *
  * Why this exists (issue #2463):
- *   `bun test` (Bun's native test runner) cannot run these tests because they
- *   rely on Vitest-specific APIs (vi.stubEnv, vi.unstubAllEnvs, vi.mocked,
- *   vi.setSystemTime, it.runIf, etc.) and per-package vitest configuration.
- *   Additionally, Bun's `bun run <script>` does not invoke npm lifecycle
- *   hooks (pretest/posttest) the way `npm run <script>` does, so the agents
- *   API-surface guard would be silently skipped.
+ *   Bun's `bun run <script>` does not invoke npm lifecycle hooks
+ *   (pretest/posttest) the way `npm run <script>` does, so the agents
+ *   API-surface guard would be silently skipped. This script runs pretest
+ *   hooks explicitly before each workspace's test phase.
  *
- *   This script addresses both failure modes by design:
- *   - Tests run under Vitest (the "compatibility setup" acceptance criterion),
- *     so all Vitest helper APIs are available.
- *   - Pretest hooks are run explicitly before each workspace's test phase.
+ *   Each workspace's `test` script decides its own runner. Migrated
+ *   workspaces invoke `scripts/run_bun_tests.ts`, which executes Bun's native
+ *   test runner with one isolated process per file; the remaining workspaces
+ *   still run under Vitest while their migration completes (issue #2578).
  *
  * Usage:
  *   bun scripts/test.ts                    # run all workspace + script tests
@@ -251,19 +248,14 @@ function createRunnerWithPATH(rootDir: string): CommandRunner {
 // ---------------------------------------------------------------------------
 
 // The release-install smoke test (issue #2603) takes ~175–195s because it
-// packs a CLI tarball and runs three npm installs. Running it inside the same
-// vitest worker pool as the ~169 fast script tests congests the vitest main
-// process: the worker's onTaskUpdate RPC call cannot get a response within
-// birpc's hardcoded 60s timeout (DEFAULT_TIMEOUT in vitest's birpc), causing a
-// spurious `[vitest-worker]: Timeout calling "onTaskUpdate"` error and exit
-// code 1 even though every test passed. This is not configurable via vitest
-// config. (issue #2780)
-const RELEASE_INSTALL_SLOW_TEST =
-  'scripts/tests/issue-2603-release-install.test.ts';
-
-const SCRIPTS_TEST_COMMAND = `vitest run --config ./scripts/tests/vitest.config.ts --exclude ${RELEASE_INSTALL_SLOW_TEST}`;
-const SCRIPTS_SLOW_TEST_COMMAND = `vitest run --config ./scripts/tests/vitest.config.ts ${RELEASE_INSTALL_SLOW_TEST}`;
-const SCRIPTS_TEST_CONFIG = 'scripts/tests/vitest.config.ts';
+// packs a CLI tarball and runs three npm installs, far beyond the budget the
+// rest of the script harness needs. It therefore lives in its own Bun-native
+// root with a much larger timeout (issue #2780).
+const SCRIPTS_TEST_COMMAND =
+  'bun scripts/run_bun_tests.ts --root scripts-tests';
+const SCRIPTS_SLOW_TEST_COMMAND =
+  'bun scripts/run_bun_tests.ts --root scripts-tests-slow';
+const SCRIPTS_TEST_DIRECTORY = 'scripts/tests';
 
 function matchesFilter(workspace: WorkspaceInfo, filter: string): boolean {
   if (workspace.relativePath === filter || workspace.name === filter) {
@@ -467,8 +459,7 @@ function runScriptTests(
   if (options.skipScripts) {
     return;
   }
-  const scriptConfigPath = join(rootDir, SCRIPTS_TEST_CONFIG);
-  if (!existsSync(scriptConfigPath)) {
+  if (!existsSync(join(rootDir, SCRIPTS_TEST_DIRECTORY))) {
     return;
   }
   const mainResult = runPhase(
@@ -480,10 +471,9 @@ function runScriptTests(
   );
   results.push(mainResult);
 
-  // The release-install smoke test runs as a separate vitest invocation so it
-  // never shares a worker pool with the fast script tests. This eliminates the
-  // vitest worker RPC timeout (issue #2780). Fail-fast: skip it if the main
-  // suite already failed.
+  // The release-install smoke test runs as a separate root so its much larger
+  // timeout does not weaken the budget that catches hangs in the rest of the
+  // harness (issue #2780). Fail-fast: skip it if the main suite already failed.
   if (mainResult.success) {
     const slowResult = runPhase(
       'scripts',
