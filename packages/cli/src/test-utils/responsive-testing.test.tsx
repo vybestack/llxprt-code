@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { render } from 'ink-testing-library';
 import type React from 'react';
 import { Box, Text } from 'ink';
+import { Colors } from '../ui/colors.js';
 import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
 import { useResponsive } from '../ui/hooks/useResponsive.js';
 
@@ -23,8 +24,8 @@ function TestComponent(): React.ReactElement {
   // strings outside <Text> and does not understand DOM elements.
   return (
     <Box>
-      <Text>{breakpoint}</Text>
-      <Text>{width}</Text>
+      <Text color={Colors.Foreground}>{breakpoint}</Text>
+      <Text color={Colors.Foreground}>{width}</Text>
     </Box>
   );
 }
