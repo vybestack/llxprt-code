@@ -23,14 +23,23 @@ import { createAgent } from '@vybestack/llxprt-code-agents';
 import { fixturesDir } from './helpers/agentHarness.js';
 
 describe('agents API build-order determinism @plan:PLAN-20260626-RUNTIMEBOUNDARY.P07', () => {
-  it('vitest aliases the public root to package source rather than dist @requirement:build-order @given:the package vitest config @when:its workspace alias plugin mapping is inspected @then:the public root maps to index.ts', async () => {
+  it('the test runner resolves the public root to package source rather than dist @requirement:build-order @given:the package tsconfig @when:its path mapping for the public root is inspected @then:the public root maps to index.ts', async () => {
+    // Bun resolves workspace specifiers through the tsconfig `paths` mapping,
+    // so that mapping is what keeps the public root pointing at source. (This
+    // previously asserted the equivalent alias in the Vitest config, which the
+    // workspace no longer has.)
     const configPath = resolve(
       fileURLToPath(new URL('../../..', import.meta.url)),
-      'vitest.config.ts',
+      'tsconfig.json',
     );
     const config = await readFile(configPath, 'utf8');
-    expect(config).toContain('workspaceAliasPlugin');
-    expect(config).toContain("new URL('./index.ts', import.meta.url)");
+    const mapping = (
+      JSON.parse(config) as {
+        compilerOptions: { paths: Record<string, string[]> };
+      }
+    ).compilerOptions.paths['@vybestack/llxprt-code-agents'];
+
+    expect(mapping).toStrictEqual(['./index.ts']);
   });
 
   it('the new surface types are present at runtime via createAgent output @requirement:build-order @given:an agent built via the public root @when:its new readonly controls are accessed @then:memory, skills, workspace, and lsp are defined objects (proves the source build includes the new controls)', async () => {

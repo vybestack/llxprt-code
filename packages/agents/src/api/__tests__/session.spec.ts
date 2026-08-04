@@ -78,7 +78,7 @@ function messageText(msg: AgentMessage | AgentHistoryItem): string {
  * checkpoint/recording artifacts never accumulate in the shared global temp.
  *
  * Storage resolves the global log dir via LLXPRT_LOG_HOME, then
- * LLXPRT_CONFIG_HOME, then the platform default. The vitest setup file
+ * LLXPRT_CONFIG_HOME, then the platform default. The test setup file
  * (test-setup-storage-isolation.ts) calls isolateStorageRoots() which sets all
  * of these to subdirectories under a unique temp root, so cleanup always
  * targets the isolated tree — never the real user home.

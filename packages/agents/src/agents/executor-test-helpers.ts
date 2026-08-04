@@ -49,7 +49,7 @@ export type MockFn<
   ) => Promise<unknown>,
 > = Mock<T>;
 
-/** Subset of the vitest `vi` API used by setupExecutorFixture. */
+/** Subset of the `vi` API used by setupExecutorFixture. */
 export interface ViTestApi {
   resetAllMocks: () => void;
   useFakeTimers: () => void;

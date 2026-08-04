@@ -24,7 +24,7 @@ vi.mock('./executor.js');
 
 const MockAgentExecutor = vi.mocked(AgentExecutor);
 
-// Local replacement for vitest's Mocked<T>: maps each method to a Mock<F>
+// Local mapped-type stand-in for a deep-mocked object: maps each method to a Mock<F>
 // while preserving non-method properties unchanged. Used for type annotations
 // on objects assembled from vi.fn() and cast through unknown.
 type Mocked<T> = {

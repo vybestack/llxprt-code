@@ -351,9 +351,6 @@ function isAllowed(specifier: string, fromAbs: string): boolean {
   if (specifier.startsWith('node:')) {
     return true;
   }
-  if (specifier === 'vitest' || specifier.startsWith('vitest/')) {
-    return true;
-  }
   if (specifier === 'bun:test' || specifier.startsWith('bun:test/')) {
     return true;
   }

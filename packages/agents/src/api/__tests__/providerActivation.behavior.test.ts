@@ -432,7 +432,7 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
         authMode: 'auto',
       };
       // Assert on the observable error name + message (behavioral) rather than
-      // instanceof, because vitest resolves the test's AgentBootstrapError
+      // instanceof, because the runner resolves the test's AgentBootstrapError
       // import and fromConfig's import to distinct module instances, breaking
       // instanceof identity. The error.name is the reliable cross-identity
       // signal that fromConfig surfaced an AgentBootstrapError.

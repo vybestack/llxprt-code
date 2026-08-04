@@ -35,8 +35,13 @@ The 34 failing files and their raw output are recorded in
 Merging main added one agents test file,
 `src/core/CompressionProfileResolver.proxyKeyStorage.test.ts`, which main
 introduced as **Bun-only**: it is listed in `scripts/bun-test-manifest.ts` and
-explicitly excluded from the Vitest selection in `packages/agents/vitest.config.ts`.
-So Bun legitimately runs one more file, and two more cases, than Vitest.
+was excluded from the Vitest selection. So Bun ran one more file, and two more
+cases, than the Vitest baseline did.
+
+**Vitest has since been removed from this workspace entirely** — no
+`test:vitest` script, no `vitest.config.ts`, no `vitest` devDependency, and no
+test file imports it. The figures below are therefore the final Bun numbers
+against the historical Vitest baseline; the Vitest column cannot be regenerated.
 
 | Metric      | Vitest | Bun      |
 | ----------- | ------ | -------- |

@@ -43,9 +43,15 @@ All 15 test files are Bun-native. Uses a storage-isolation preload that calls
 
 **Command:** `bun run-bun-tests.ts`
 
-All 331 test files are Bun-native; the workspace `test`/`test:ci` scripts run
-Bun and `test:vitest` is retained as the fallback. Test-count parity with Vitest
-is exact.
+All 331 test files are Bun-native and the workspace `test`/`test:ci` scripts run
+Bun. **Vitest is gone from this workspace entirely** — no `test:vitest` fallback,
+no `vitest.config.ts`, no `vitest` devDependency, and no test file imports it.
+The test API comes from `src/testApi.ts`, which re-exports `bun:test` with the
+corrections the compat shim actually installs at runtime.
+
+The Stryker mutation gate (`test:mutation:api`) was dropped with it: Stryker has
+no Bun runner, and its Vitest runner cannot execute suites that import
+`bun:test`.
 
 `run-bun-tests.ts` discovers every `src/**/*.{test,spec}.{ts,tsx}` file and runs
 each in its own `bun test` process. Per-file processes are required rather than

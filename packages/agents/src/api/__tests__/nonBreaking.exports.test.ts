@@ -4,7 +4,7 @@
  *
  * RUNTIME non-breaking export guard for the AgentClientContract promotion.
  *
- * This `.test.ts` file IS run by vitest and MUST stay GREEN both now (pre-P16,
+ * This `.test.ts` file IS run by the test runner and MUST stay GREEN both now (pre-P16,
  * contract not yet promoted) and after P16 (contract promoted as `export type`).
  * It carries ALL runtime assertions for P15; the companion
  * `contractPromotion.types.ts` holds compile-only type assertions.
