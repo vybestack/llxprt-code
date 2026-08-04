@@ -703,9 +703,21 @@ const fnCompat = ((implementation?: (...args: never[]) => unknown) => {
   const mockFn = originalFn(
     implementation as Parameters<typeof originalFn>[0],
   );
-  trackedMocks.push({
-    mockFn: mockFn as unknown as TrackedMock['mockFn'],
-    implementation,
+  const tracked = mockFn as unknown as TrackedMock['mockFn'];
+  trackedMocks.push({ mockFn: tracked, implementation });
+  // Vitest's mockRestore() returns the mock to the implementation it was
+  // created with; Bun's clears the implementation outright, so a
+  // `vi.fn(realImplementation)` would start returning undefined.
+  Object.defineProperty(mockFn, 'mockRestore', {
+    configurable: true,
+    writable: true,
+    value: (): unknown => {
+      tracked.mockReset();
+      if (implementation) {
+        tracked.mockImplementation(implementation);
+      }
+      return mockFn;
+    },
   });
   return mockFn;
 }) as typeof originalFn;
