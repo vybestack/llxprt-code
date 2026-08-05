@@ -362,6 +362,12 @@ export function buildCommandToExecute(
   // captures $? before running pgrep and re-exits with it, preserving the
   // body's exit status. Both the path and the whole action are single-quoted
   // via singleQuoteForShell so hostile paths stay literal shell data.
+  // Known boundary: a body that removes (`trap - EXIT`) or replaces the EXIT
+  // trap intentionally opts out — our pgrep temp file is not written and the
+  // epilogue does not re-emit the exit status. The trap is still the right
+  // choice because, unlike an appended epilogue, it survives trailing
+  // comments, heredocs, and terminal operators, and still fires when the body
+  // calls `exit`.
   const trapAction = `${TRAP_ACTION_PREFIX}${singleQuoteForShell(tempFilePath)}${TRAP_ACTION_SUFFIX}`;
   const newline = String.fromCharCode(10);
   return `trap ${singleQuoteForShell(trapAction)} EXIT${newline}${strippedCommand.trim()}`;

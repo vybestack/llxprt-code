@@ -251,6 +251,67 @@ describe.skipIf(isWindows)(
   },
 );
 
+// REQ-2980-4: characterize the known boundary where a body removes or
+// replaces the EXIT trap. Such a body intentionally opts out of the wrapper's
+// background-process discovery and epilogue exit-status re-emission. These
+// tests run REAL bash to pin the actual behavior; they are not a contract on
+// internal structure.
+describe.skipIf(isWindows)(
+  'buildCommandToExecute EXIT-trap opt-out boundary',
+  () => {
+    it('known opt-out: a body that clears the EXIT trap (trap - EXIT) suppresses the epilogue and writes no temp file', async () => {
+      await withTempDir(async (dir) => {
+        const tempFilePath = join(dir, 'pgrep.tmp');
+        const generated = buildCommandToExecute(
+          'trap - EXIT; echo cleared',
+          false,
+          tempFilePath,
+        );
+        const { status, stdout } = runInBash(generated, dir);
+        expect(status).toBe(0);
+        expect(stdout.trim()).toBe('cleared');
+        expect(existsSync(tempFilePath)).toBe(false);
+      });
+    });
+
+    it('known opt-out: a body that replaces the EXIT trap with its own action suppresses our epilogue (our temp file is absent) while its own action still fires', async () => {
+      await withTempDir(async (dir) => {
+        const tempFilePath = join(dir, 'pgrep.tmp');
+        const markerFile = join(dir, 'marker.txt');
+        const replacementTrap = `trap 'printf replaced > ${singleQuoteForShell(markerFile)}' EXIT`;
+        const generated = buildCommandToExecute(
+          `echo body; ${replacementTrap}`,
+          false,
+          tempFilePath,
+        );
+        const { status, stdout } = runInBash(generated, dir);
+        expect(status).toBe(0);
+        expect(stdout.trim()).toBe('body');
+        // The body's replacement trap fired on exit (its own marker exists)...
+        expect(existsSync(markerFile)).toBe(true);
+        expect(readFileSync(markerFile, 'utf8')).toBe('replaced');
+        // ...but our wrapper epilogue did not, so its temp file is absent.
+        expect(existsSync(tempFilePath)).toBe(false);
+      });
+    });
+
+    it('positive contrast: a body that calls exit <n> explicitly still triggers the epilogue, preserves the exact exit status, and writes the temp file', async () => {
+      await withTempDir(async (dir) => {
+        const tempFilePath = join(dir, 'pgrep.tmp');
+        const generated = buildCommandToExecute(
+          'echo bye; exit 42',
+          false,
+          tempFilePath,
+        );
+        const { status, stdout } = runInBash(generated, dir);
+        expect(status).toBe(42);
+        expect(stdout.trim()).toBe('bye');
+        expect(existsSync(tempFilePath)).toBe(true);
+      });
+    });
+  },
+);
+
 // REQ-2980-2: the pgrep temp-file path must be literal shell data, quoted with
 // singleQuoteForShell so command substitution never runs.
 describe.skipIf(isWindows)(
