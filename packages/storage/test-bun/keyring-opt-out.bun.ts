@@ -110,11 +110,18 @@ describe('LLXPRT_DISABLE_OS_KEYRING production opt-out (issue #3020)', () => {
     expect(encrypted).not.toContain('super-secret');
   });
 
-  it('produces an adapter for 0, empty, and true — only exactly 1 opts out (case 17)', async () => {
-    // '0', the empty string, and 'true' must NOT opt out: only the exact
-    // string '1' does, matching the existing test-marker convention. The test
-    // marker is cleared in beforeEach, so these reach the real factory check.
+  it('produces an adapter for 0, empty, unset, and true — only exactly 1 opts out (case 17)', async () => {
+    // '0', the empty string, an unset variable, and 'true' must NOT opt out:
+    // only the exact string '1' does, matching the existing test-marker
+    // convention. The test marker is cleared in beforeEach, so these reach the
+    // real factory check.
     process.env[PROD_ENV_KEY] = '0';
+    expect(await createDefaultKeyringAdapter()).not.toBeNull();
+
+    // Set explicitly rather than deleted: an assigned empty string and an
+    // absent variable are distinct states, and only assignment exercises the
+    // empty-string value itself.
+    process.env[PROD_ENV_KEY] = '';
     expect(await createDefaultKeyringAdapter()).not.toBeNull();
 
     delete process.env[PROD_ENV_KEY];
