@@ -24,6 +24,7 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/tools/github-ops.test.ts',
     'src/tools/github-display.test.ts',
     'src/tools/github-unknown-param.bun.test.ts',
+    'src/tools/line-range-tools-issue3036.bun.test.ts',
     'src/tools/check-async-tasks.test.ts',
     'src/tools/list-subagents.test.ts',
     'src/tools/codesearch.test.ts',
