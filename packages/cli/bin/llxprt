@@ -343,6 +343,7 @@ if [ "$_llxprt_kernel" = "Darwin" ] && [ -n "$_llxprt_bun_pin" ]; then
       if _llxprt_dr=$(codesign -d --requirements - "$_llxprt_path_bun_exe" 2>&1); then
         case "$_llxprt_dr" in
           *certificate\ leaf\[subject.OU]*) _llxprt_has_team_id=1 ;;
+          *) ;;
         esac
       fi
       if [ "$_llxprt_has_team_id" -eq 0 ]; then
