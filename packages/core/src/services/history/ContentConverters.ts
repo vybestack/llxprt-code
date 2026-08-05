@@ -101,11 +101,45 @@ export class ContentConverters {
       hasResult: ContentConverters.hasLegacyTruthyValue(toolResponse.result),
       hasError: ContentConverters.hasLegacyTruthyValue(toolResponse.error),
     });
+    if (ContentConverters.hasLegacyTruthyValue(toolResponse.error)) {
+      return ContentConverters.buildFailureFunctionResponse(toolResponse);
+    }
     return {
       functionResponse: {
         name: toolResponse.toolName,
         response: toolResponse.result as Record<string, unknown>,
         id: toolResponse.callId,
+      },
+    };
+  }
+
+  /**
+   * Canonical Gemini-shaped encoding of a failed tool response (issue #3076).
+   *
+   * Why: the failure marker on a tool_response block would otherwise be lost on
+   * the Gemini wire path (it is read by contentGeneratorAdapters and the
+   * streamRequestHelpers round trip). Encoding it inside `functionResponse`
+   * mirrors the precedent already set by GeminiMessageConverter and lets the
+   * inbound decoder reconstruct the failure. It deliberately preserves only
+   * `callId`, `toolName`, `result` and the `error` marker — `isComplete` and
+   * `providerMetadata` are local bookkeeping with no Gemini representation and
+   * are intentionally dropped, never encoded.
+   */
+  private static buildFailureFunctionResponse(
+    toolResponse: Extract<ContentBlock, { type: 'tool_response' }>,
+  ): GeminiContentPart {
+    const response: Record<string, unknown> = {
+      status: 'error',
+      error: toolResponse.error,
+    };
+    if (toolResponse.result !== undefined) {
+      response.result = toolResponse.result;
+    }
+    return {
+      functionResponse: {
+        name: toolResponse.toolName,
+        id: toolResponse.callId,
+        response,
       },
     };
   }
@@ -242,6 +276,27 @@ export class ContentConverters {
       return {};
     }
     return ContentConverters.parseResponseValue(response, callId);
+  }
+
+  /**
+   * Detect the canonical failure envelope produced by
+   * `buildFailureFunctionResponse` (issue #3076) and decode it verbatim.
+   * Returns null for any non-envelope response so the caller keeps the
+   * existing string/JSON coercion path untouched. The envelope's `result`
+   * is restored verbatim — it must NOT go through parseFunctionResponseResult,
+   * the whole point being fidelity to the original block.
+   */
+  private static decodeFailureEnvelope(
+    response: unknown,
+  ): { error: string; result: unknown } | null {
+    if (!ContentConverters.isPlainObject(response)) {
+      return null;
+    }
+    if (response.status !== 'error' || typeof response.error !== 'string') {
+      return null;
+    }
+    const result = 'result' in response ? response.result : {};
+    return { error: response.error, result };
   }
 
   /** Parse a non-null/non-undefined response value into a Record. */
@@ -388,23 +443,46 @@ export class ContentConverters {
       toolName: part.functionResponse!.name,
       matchedByPosition: !!matched,
     });
-    const result = ContentConverters.parseFunctionResponseResult(
-      part.functionResponse!.response,
-      callId,
+    const resolvedToolName = ContentConverters.firstNonEmpty(
+      matched?.toolName,
+      part.functionResponse!.name,
     );
-
     const blocks: ContentBlock[] = [
-      {
-        type: 'tool_response',
+      ContentConverters.buildToolResponseBlock(
         callId,
-        toolName: ContentConverters.firstNonEmpty(
-          matched?.toolName,
-          part.functionResponse!.name,
-        ),
-        result,
-      },
+        resolvedToolName,
+        part.functionResponse!.response,
+      ),
     ];
     return { blocks, responseIndex: responseIndex + 1 };
+  }
+
+  /**
+   * Build a tool_response block from a functionResponse payload, restoring a
+   * failure marker verbatim when the payload carries the issue #3076 envelope,
+   * otherwise falling back to the existing string/JSON coercion.
+   */
+  private static buildToolResponseBlock(
+    callId: string,
+    toolName: string,
+    response: unknown,
+  ): ContentBlock {
+    const failure = ContentConverters.decodeFailureEnvelope(response);
+    if (failure) {
+      return {
+        type: 'tool_response',
+        callId,
+        toolName,
+        result: failure.result,
+        error: failure.error,
+      };
+    }
+    return {
+      type: 'tool_response',
+      callId,
+      toolName,
+      result: ContentConverters.parseFunctionResponseResult(response, callId),
+    };
   }
 
   /** Convert a text-or-thought Part into a ContentBlock. */
