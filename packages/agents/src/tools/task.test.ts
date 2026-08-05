@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { TaskTool, type TaskToolParams } from './task.js';
+import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -144,6 +145,9 @@ describe('TaskTool', () => {
       agentId: 'agent-42',
       terminateReason: SubagentTerminateMode.GOAL,
       emittedVars: { summary: 'done' },
+      effectiveTimeoutSeconds: DEFAULT_TASK_TIMEOUT_SECONDS,
+      requestedTimeoutSeconds: undefined,
+      timeoutClamped: false,
     });
     expect(result.llmContent).toContain('"agent_id": "agent-42"');
     expect(result.error).toBeUndefined();
@@ -768,6 +772,9 @@ describe('TaskTool', () => {
     expect(result.metadata).toStrictEqual({
       agentId: 'agent-99',
       error: 'crashed',
+      effectiveTimeoutSeconds: DEFAULT_TASK_TIMEOUT_SECONDS,
+      requestedTimeoutSeconds: undefined,
+      timeoutClamped: false,
     });
   });
 

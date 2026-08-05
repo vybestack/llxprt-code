@@ -26,10 +26,18 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
+  requireEffectiveTimeoutSeconds,
+  validateTimeoutSeconds,
+  type TimeoutResolution,
+} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+import {
   createAbortState,
   createTimeoutControllers,
   isAbortError as isAbortErrorHelper,
   isTimeoutError as isTimeoutErrorHelper,
+  TASK_TIMEOUT_DEFAULT_SETTING,
+  TASK_TIMEOUT_MAX_SETTING,
+  type TimeoutControllers,
 } from './taskAbortHelpers.js';
 import {
   buildGovernedToolWhitelist,
@@ -39,6 +47,7 @@ import {
   type TaskToolInvocationParams,
 } from './taskToolGovernance.js';
 import {
+  attachTimeoutMetadata,
   createCancelledResult,
   createErrorResult,
   createTimeoutResult,
@@ -48,6 +57,7 @@ import {
 import { executeAsyncTask } from './taskAsyncExecution.js';
 import { startTaskHeartbeat, type TaskHeartbeat } from './taskHeartbeat.js';
 import { setupTaskStreaming } from './taskStreaming.js';
+import { taskToolSchema } from './taskSchema.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -254,17 +264,25 @@ class TaskToolInvocation extends BaseToolInvocation<
       return this.executeAsync(signal, updateOutput);
     }
 
-    const {
-      timeoutMs,
-      timeoutSeconds,
-      timeoutController,
-      timeoutId,
-      onUserAbort,
-    } = createTimeoutControllers(
+    const controllers = createTimeoutControllers(
       this.config,
       signal,
       this.params.timeout_seconds,
     );
+    const result = await this.runForeground(signal, updateOutput, controllers);
+    return attachTimeoutMetadata(result, controllers.resolution, {
+      defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+      maxSetting: TASK_TIMEOUT_MAX_SETTING,
+    });
+  }
+
+  private async runForeground(
+    signal: AbortSignal,
+    updateOutput: ((update: LiveOutputUpdate) => void) | undefined,
+    controllers: TimeoutControllers,
+  ): Promise<ToolResult> {
+    const { timeoutMs, timeoutController, timeoutId, onUserAbort } =
+      controllers;
 
     if (signal.aborted) {
       onUserAbort();
@@ -296,18 +314,16 @@ class TaskToolInvocation extends BaseToolInvocation<
     const launchRequest = this.createLaunchRequest(timeoutMs);
     taskLogger.debug(() => `Launching subagent '${launchRequest.name}'`);
 
-    const abortResult = await this.launchSubagent(
+    return this.launchSubagent(
       orchestrator,
       launchRequest,
       signal,
       timeoutController,
-      timeoutSeconds,
+      controllers.resolution,
       onUserAbort,
       timeoutId,
       updateOutput,
     );
-
-    return abortResult;
   }
 
   private async launchSubagent(
@@ -315,7 +331,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchRequest: SubagentLaunchRequest,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
     updateOutput?: (update: LiveOutputUpdate) => void,
@@ -339,7 +355,6 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchRequest,
       signal,
       timeoutController,
-      timeoutSeconds,
       onUserAbort,
       timeoutId,
       abortState,
@@ -355,7 +370,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         );
       }
       if (abortState.aborted.timedOut) {
-        return createTimeoutResult(timeoutSeconds);
+        return createTimeoutResult(requireEffectiveTimeoutSeconds(resolution));
       }
       return createCancelledResult('Task aborted during launch.');
     }
@@ -364,7 +379,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchResult,
       signal,
       timeoutController,
-      timeoutSeconds,
+      resolution,
       onUserAbort,
       timeoutId,
       abortState,
@@ -384,7 +399,6 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchRequest: SubagentLaunchRequest,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
     abortState: {
@@ -452,7 +466,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
     abortState: {
@@ -504,7 +518,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         agentId,
         signal,
         timeoutController,
-        timeoutSeconds,
+        resolution,
         teardown,
         abortState.aborted,
       );
@@ -513,7 +527,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         error,
         signal,
         timeoutController,
-        timeoutSeconds,
+        resolution,
         agentId,
         scope,
         teardown,
@@ -585,7 +599,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     error: unknown,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     agentId: string,
     scope: SubAgentScope,
     teardown: () => Promise<void>,
@@ -595,7 +609,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       isTimeoutErrorHelper(signal, timeoutController, isAbortErrorHelper, error)
     ) {
       await teardown();
-      return createTimeoutResult(timeoutSeconds, scope.output, agentId);
+      return createTimeoutResult(
+        requireEffectiveTimeoutSeconds(resolution),
+        scope.output,
+        agentId,
+      );
     }
 
     if (isAbortErrorHelper(error) || abortedState.aborted || signal.aborted) {
@@ -623,7 +641,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     agentId: string,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     teardown: () => Promise<void>,
     abortedState: { aborted: boolean; timedOut: boolean },
   ): Promise<ToolResult> {
@@ -638,7 +656,11 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
     if (isTimeoutErrorHelper(signal, timeoutController, isAbortErrorHelper)) {
       await teardown();
-      return createTimeoutResult(timeoutSeconds, scope.output);
+      return createTimeoutResult(
+        requireEffectiveTimeoutSeconds(resolution),
+        scope.output,
+        agentId,
+      );
     }
     const output = scope.output;
     taskLogger.debug(
@@ -695,7 +717,8 @@ class TaskToolInvocation extends BaseToolInvocation<
         getAsyncTaskManager: this.deps.getAsyncTaskManager,
         isInteractiveEnvironment: this.deps.isInteractiveEnvironment,
         getSchedulerFactory: this.deps.getSchedulerFactory,
-        buildLaunchRequest: () => this.createLaunchRequest(),
+        buildLaunchRequest: (timeoutMs?: number) =>
+          this.createLaunchRequest(timeoutMs),
         buildContextState: () => this.buildContextState(),
       },
       signal,
@@ -703,81 +726,6 @@ class TaskToolInvocation extends BaseToolInvocation<
     );
   }
 }
-
-// Model-facing schema: only snake_case properties are exposed to the LLM.
-// camelCase aliases (subagentName, expectedOutputs, etc.) exist in
-// TaskToolParams for programmatic callers but are intentionally excluded
-// from the schema — additionalProperties: false enforces this.
-const taskToolSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['subagent_name', 'goal_prompt'],
-  properties: {
-    subagent_name: {
-      type: 'string',
-      description:
-        'Name of the registered subagent to launch. Use the list_subagents tool to discover available subagents (defined via user config, settings, or extensions).',
-    },
-    goal_prompt: {
-      type: 'string',
-      description:
-        'Primary goal or prompt to pass to the subagent. Included as the first behavioural prompt.',
-    },
-    behaviour_prompts: {
-      type: 'array',
-      description:
-        'Additional behavioural prompts to append after the goal prompt.',
-      items: { type: 'string' },
-    },
-    tool_whitelist: {
-      type: 'array',
-      items: { type: 'string' },
-      description:
-        'Restrict the subagent to this explicit list of tools. Tool names must match the registry.',
-    },
-    expected_outputs: {
-      type: 'object',
-      description:
-        'Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
-      additionalProperties: { type: 'string' },
-    },
-    output_spec: {
-      type: 'object',
-      description:
-        'Deprecated alias for expected_outputs. Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
-      additionalProperties: { type: 'string' },
-    },
-    timeout_seconds: {
-      type: 'number',
-      description:
-        'Optional timeout in seconds for the task execution (-1 for unlimited).',
-    },
-    grace_period_seconds: {
-      type: 'number',
-      description:
-        'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
-    },
-    max_turns: {
-      type: 'number',
-      description:
-        'Maximum turns for the subagent. -1 means unlimited (no turn cap). A positive integer caps the run. ' +
-        'Precedence is: explicit task max_turns > selected subagent profile maxTurnsPerPrompt > ' +
-        'current foreground maxTurnsPerPrompt > fallback of 1000 turns. Only the task, profile, and foreground ' +
-        'layers accept -1 for unlimited; the 1000-turn fallback is a fixed constant that does not interpret -1.',
-    },
-    async: {
-      type: 'boolean',
-      description:
-        'If true, launch subagent in background and return immediately. Default: false.',
-    },
-    context: {
-      type: 'object',
-      description:
-        'Optional key/value pairs exposed to the subagent via the execution context.',
-      additionalProperties: true,
-    },
-  },
-} as const;
 
 /**
  * Task tool that launches subagents via SubagentOrchestrator.
@@ -822,6 +770,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       if (!Number.isInteger(maxTurns) || (maxTurns !== -1 && maxTurns < 1)) {
         return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
       }
+    }
+
+    const timeoutError = validateTimeoutSeconds(params.timeout_seconds);
+    if (timeoutError !== null) {
+      return timeoutError;
     }
 
     return validateOutputParams(params);

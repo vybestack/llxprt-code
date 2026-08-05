@@ -9,7 +9,15 @@ import { type ToolResult } from '@vybestack/llxprt-code-tools';
 import { type OutputObject } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
+import {
+  TASK_TIMEOUT_DEFAULT_SETTING,
+  TASK_TIMEOUT_MAX_SETTING,
+} from './taskAbortHelpers.js';
+import {
+  describeTimeoutClamp,
+  describeTimeoutTermination,
+  type TimeoutResolution,
+} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
 const resultLogger = new DebugLogger('llxprt:task');
 
@@ -132,27 +140,70 @@ export function createCancelledResult(
 }
 
 /**
- * Builds a timeout `ToolResult`.
+ * Builds a timeout `ToolResult`. The message names the termination reason
+ * (TIMEOUT), the effective timeout applied, and the parameter + settings that
+ * would raise it (Issue #3031). The timeout is a finite `number`: a timeout
+ * termination cannot be unbounded, because an unbounded run arms no timer and
+ * therefore can never fire — callers obtain the value via
+ * `requireEffectiveTimeoutSeconds`.
  */
 export function createTimeoutResult(
-  timeoutSeconds: number | undefined,
+  timeoutSeconds: number,
   output?: OutputObject,
   agentId?: string,
 ): ToolResult {
-  const message = `Task timed out after ${timeoutSeconds ?? DEFAULT_TASK_TIMEOUT_SECONDS}s (timeout_seconds).`;
+  const message = describeTimeoutTermination(timeoutSeconds, {
+    defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+    maxSetting: TASK_TIMEOUT_MAX_SETTING,
+  });
   return {
     llmContent: message,
     returnDisplay: message,
     metadata: {
       agentId: agentId ?? DEFAULT_AGENT_ID,
-      terminateReason: output?.terminate_reason,
+      terminateReason: output?.terminate_reason ?? 'TIMEOUT',
       emittedVars: output?.emitted_vars ?? {},
       ...(output?.final_message ? { finalMessage: output.final_message } : {}),
       timedOut: true,
+      effectiveTimeoutSeconds: timeoutSeconds,
     },
     error: {
       message,
       type: ToolErrorType.TIMEOUT,
     },
   };
+}
+
+/**
+ * Attaches the resolved timeout metadata (`effectiveTimeoutSeconds`,
+ * `requestedTimeoutSeconds`, `timeoutClamped`) to every task result, and —
+ * when the requested/default value was reduced to the ceiling — appends the
+ * clamp notice to the model-facing content so a caller that ignores metadata
+ * still learns its request was not honoured (Issue #3031).
+ */
+export function attachTimeoutMetadata(
+  result: ToolResult,
+  resolution: TimeoutResolution,
+  settings: { defaultSetting: string; maxSetting: string },
+): ToolResult {
+  const metadata: Record<string, unknown> = {
+    ...(result.metadata ?? {}),
+    effectiveTimeoutSeconds: resolution.effectiveTimeoutSeconds,
+    requestedTimeoutSeconds: resolution.requestedTimeoutSeconds,
+    timeoutClamped: resolution.clamped,
+  };
+  const clamp = describeTimeoutClamp(resolution, settings);
+  if (clamp === undefined) {
+    return { ...result, metadata };
+  }
+  const clampNotice = `\n\n${clamp}`;
+  const llmContent =
+    typeof result.llmContent === 'string'
+      ? `${result.llmContent}${clampNotice}`
+      : result.llmContent;
+  const returnDisplay =
+    typeof result.returnDisplay === 'string'
+      ? `${result.returnDisplay}${clampNotice}`
+      : result.returnDisplay;
+  return { ...result, metadata, llmContent, returnDisplay };
 }

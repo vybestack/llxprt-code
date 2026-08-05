@@ -61,6 +61,11 @@
       "bun": "./src/utils/imageTokenEstimation.ts",
       "import": "./dist/src/utils/imageTokenEstimation.js"
     },
+    "./utils/timeoutResolution.js": {
+      "types": "./dist/src/utils/timeoutResolution.d.ts",
+      "bun": "./src/utils/timeoutResolution.ts",
+      "import": "./dist/src/utils/timeoutResolution.js"
+    },
     "./textDelta.js": {
       "types": "./dist/src/utils/textDelta.d.ts",
       "bun": "./src/utils/textDelta.ts",
