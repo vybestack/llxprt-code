@@ -485,7 +485,19 @@ function matchClixmlToken(
       return { kind: 'emptyRecord', end };
     }
 
-    // Performance: skip suffix scan if already known to have no closer.
+    // Performance: skip the suffix scan when a previous opener already proved
+    // no closer exists in the remainder of the input.
+    //
+    // This is sound, and deliberately so — do not "fix" the comparison:
+    //   1. findClosingTagS(raw, X) === null proves there is no well-formed
+    //      </S> at ANY position >= X. Searching a SHORTER suffix can never
+    //      find a closer that searching a longer one missed.
+    //   2. The tokenizer only ever moves forward, so every subsequent opener
+    //      begins at a position > X.
+    // Together these mean the cached answer (recordOpenOnly) is identical to
+    // what a real scan would return, so caching raw.length and skipping via
+    // `end <= noCloserAfterS` yields the correct result rather than merely a
+    // faster one. It turns an O(n^2) suffix rescan into O(n).
     if (end <= noCloserAfterS) {
       return { kind: 'recordOpenOnly', end, scannedTo: undefined };
     }
