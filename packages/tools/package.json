@@ -156,6 +156,11 @@
       "bun": "./src/tools/glob.ts",
       "import": "./dist/src/tools/glob.js"
     },
+    "./tools/github-ops.js": {
+      "types": "./dist/src/tools/github-ops.d.ts",
+      "bun": "./src/tools/github-ops.ts",
+      "import": "./dist/src/tools/github-ops.js"
+    },
     "./tools/grep.js": {
       "types": "./dist/src/tools/grep.d.ts",
       "bun": "./src/tools/grep.ts",

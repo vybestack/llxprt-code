@@ -251,6 +251,7 @@ export const PROVIDERS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/auth/proxy/__tests__/deprecation-guard.test.ts',
     'src/auth/proxy/__tests__/e2e-credential-flow.test.ts',
     'src/auth/proxy/__tests__/factory-detection-wiring.test.ts',
+    'src/auth/proxy/__tests__/github-broker-catalog-drift.test.ts',
     'src/auth/proxy/__tests__/github-broker-envelope.test.ts',
     'src/auth/proxy/__tests__/github-broker-multistep.test.ts',
     'src/auth/proxy/__tests__/github-broker-p10.test.ts',

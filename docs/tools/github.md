@@ -75,6 +75,55 @@ Write operations ask for confirmation before running, through the same
 mechanism as every other tool — so your normal allow rules and "always allow"
 choices apply.
 
+### Per-operation parameters
+
+Every parameter an operation accepts is declared in the tool schema, so the
+model can see them in the function declaration rather than discovering them by
+trial and error. This table is the quick reference; the schema is the source of
+truth.
+
+| Operation           | Required         | Optional                                                                                                                                |
+| ------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `issue.view`        | `number`         | `comments`, `repo`                                                                                                                      |
+| `issue.list`        | —                | `search`, `state`, `label`, `limit`, `repo`                                                                                             |
+| `issue.create`      | `title`          | `body`, `label`, `assignee`, `milestone`, `project`, `repo`                                                                             |
+| `issue.comment`     | `number`, `body` | `repo`                                                                                                                                  |
+| `issue.edit`        | `number`         | `title`, `body`, `addLabel`, `removeLabel`, `addAssignee`, `removeAssignee`, `addProject`, `removeProject`, `milestone`, `type`, `repo` |
+| `issue.close`       | `number`         | `reason`, `repo`                                                                                                                        |
+| `pr.view`           | `number`         | `comments`, `repo`                                                                                                                      |
+| `pr.list`           | —                | `state`, `limit`, `repo`                                                                                                                |
+| `pr.diff`           | `number`         | `repo`                                                                                                                                  |
+| `pr.checks`         | `number`         | `repo`, `watch`                                                                                                                         |
+| `pr.reviews`        | `number`         | `actionable`, `repo`                                                                                                                    |
+| `pr.create`         | `title`          | `body`, `base`, `head`, `draft`, `repo`                                                                                                 |
+| `pr.comment`        | `number`, `body` | `repo`                                                                                                                                  |
+| `pr.edit`           | `number`         | `title`, `body`, `addLabel`, `removeLabel`, `addAssignee`, `milestone`, `repo`                                                          |
+| `pr.ready`          | `number`         | `repo`                                                                                                                                  |
+| `pr.resolve-thread` | `threadId`       | `repo`                                                                                                                                  |
+| `search.issues`     | `query`          | `limit`, `repo`                                                                                                                         |
+| `search.prs`        | `query`          | `limit`, `repo`                                                                                                                         |
+| `run.list`          | —                | `limit`, `branch`, `repo`                                                                                                               |
+| `label.list`        | —                | `limit`, `repo`                                                                                                                         |
+| `label.create`      | `name`           | `color`, `description`, `force`, `repo`                                                                                                 |
+
+- `number` and `limit` are positive integers (`limit` 1–100).
+- `state` is `open`, `closed`, `merged`, or `all`. The schema lists the full
+  set, but a per-operation value rule is enforced before the call is made:
+  `issue.list` only accepts `open`, `closed`, or `all` (`merged` is rejected),
+  while `pr.list` accepts the full set including `merged`.
+- `reason` is `completed` or `"not planned"`.
+- `label`, `addLabel`, `removeLabel`, `assignee`, `addAssignee`, and
+  `removeAssignee` are declared as arrays of strings in the tool schema (use a
+  single-element array for one label or assignee). The broker still accepts a
+  bare string for backwards compatibility, but the published contract is the
+  array form.
+- Every operation accepts an optional `repo` as `owner/name`.
+
+A missing required parameter, an unknown parameter, or an invalid value (such
+as `state: "merged"` on `issue.list`, or a non-integer `number`) is rejected
+before the call reaches GitHub, with a message that names the operation and
+lists what it accepts.
+
 ## Actionable reviews
 
 `pr.reviews` with `actionable: true` omits threads that are already resolved or
@@ -165,3 +214,15 @@ credential exists in the container for `gh` to use.
 > than isolating credentials, so `gh` there is already authenticated and the
 > tool provides convenience and shaped output rather than a boundary. See
 > [Sandbox](../sandbox.md) for why Docker or Podman is recommended.
+
+## Transcript display
+
+The transcript shows a human-readable summary per operation — for example,
+"Commented on issue #438" with the link, or "Issue #1663 · open · Fix the
+thing" — rather than a raw JSON blob. Read operations render their actual
+content as plain text: `pr.diff` shows the diff (capped at 200 lines),
+`issue.view` / `pr.view` show the body and each comment (bodies and comments
+are line-capped, with a "… N more" tail), and `pr.reviews` shows every comment
+in each thread. The model still receives the full shaped JSON (including every
+field, comment, and label) so it has the data it needs to act; only what is
+_displayed_ to you is condensed.

@@ -13,12 +13,12 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractNumber,
@@ -26,29 +26,19 @@ import {
   assertListShape,
 } from './github-broker-shaping.js';
 
-/**
- * The accepted parameters for run.list.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- */
-const RUN_LIST_PARAMS: Readonly<Record<string, ParamKind>> = {
-  limit: 'limit',
-  branch: 'freetext',
-  repo: 'repo',
-};
+const RUN_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['run.list'];
 
 /**
  * Validates parameters for run.list.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
 export function validateRunListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(RUN_LIST_PARAMS, params);
+  return validateParams(RUN_LIST_SPEC.params, params);
 }
 
 /**
@@ -121,8 +111,9 @@ export function shapeRunList(rawJson: unknown): readonly ShapedRunListItem[] {
  */
 export const runListDescriptor: OpDescriptor = {
   name: 'run.list',
-  mutating: false,
-  params: RUN_LIST_PARAMS,
+  requiredParams: RUN_LIST_SPEC.required,
+  mutating: RUN_LIST_SPEC.mutating,
+  params: RUN_LIST_SPEC.params,
   buildArgv: (params) => buildRunListArgv(params),
   shape: (rawJson) => ({ runs: shapeRunList(rawJson) }),
 };
