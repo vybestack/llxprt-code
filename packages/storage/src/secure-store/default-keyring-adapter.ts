@@ -29,6 +29,7 @@ import { NullStorageLoggerImpl } from '../types/logger.js';
 import { isRuntimeReplaced } from './runtime-identity.js';
 import { assertRuntimeNotReplaced } from './runtime-replaced-errors.js';
 import { verifyKeyringDelete } from './keyring-delete-verification.js';
+import { recordAuthorizedKeyringRead } from './keychain-grant-persistence.js';
 import { SecureStoreError } from './secure-store-errors.js';
 import type { KeyringAdapter } from './secure-store.js';
 
@@ -60,6 +61,20 @@ const DISABLE_OS_KEYRING_ENV = 'LLXPRT_TEST_DISABLE_OS_KEYRING';
 
 function isOsKeyringDisabledForTests(): boolean {
   return process.env[DISABLE_OS_KEYRING_ENV] === '1';
+}
+
+/**
+ * Production opt-out: when `LLXPRT_DISABLE_OS_KEYRING=1` the factory returns
+ * null and all credential traffic routes to the encrypted file fallback. This
+ * is the user-facing recovery lever for the discarded Keychain grant (issue
+ * #3020). Distinct from the test marker above, which exists for suite
+ * isolation: this one is shipped, documented, and leaves existing Keychain
+ * items untouched.
+ */
+const PROD_DISABLE_OS_KEYRING_ENV = 'LLXPRT_DISABLE_OS_KEYRING';
+
+function isOsKeyringDisabled(): boolean {
+  return process.env[PROD_DISABLE_OS_KEYRING_ENV] === '1';
 }
 
 function isErrorWithCode(value: unknown): value is { code: string } {
@@ -244,6 +259,9 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   if (isOsKeyringDisabledForTests()) {
     return null;
   }
+  if (isOsKeyringDisabled()) {
+    return null;
+  }
   try {
     const module = await import('@napi-rs/keyring');
     const keyring = resolveKeyringModule(module);
@@ -255,7 +273,23 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
     const adapter: KeyringAdapter = {
       getPassword: async (service: string, account: string) => {
         const entry = new kr.AsyncEntry(service, account);
-        return entry.getPassword();
+        // Issue #3020: time the native read with a monotonic clock
+        // (performance.now) so a repeatedly slow successful read of the
+        // SAME credential surfaces the discarded "Always Allow" grant.
+        // Only non-null reads are recorded; a rejection propagates
+        // untouched because the await throws before this record call is
+        // reached. The correlation key is an opaque Map key only — never
+        // logged or interpolated into any message.
+        const startedAt = performance.now();
+        const value = await entry.getPassword();
+        if (value !== null) {
+          recordAuthorizedKeyringRead({
+            credentialKey: `${service}\u0000${account}`,
+            startedAt,
+            endedAt: performance.now(),
+          });
+        }
+        return value;
       },
       setPassword: async (
         service: string,

@@ -45,6 +45,11 @@ export {
   isRuntimeReplacedError,
 } from './secure-store/secure-store-errors.js';
 export {
+  isKeychainGrantPersistenceBroken,
+  GRANT_NOT_PERSISTING_MESSAGE,
+  GRANT_NOT_PERSISTING_REMEDIATION,
+} from './secure-store/keychain-grant-persistence.js';
+export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,
   getProviderKeyStorage,
