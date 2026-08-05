@@ -500,9 +500,14 @@ describe('InputPrompt', () => {
     });
   });
 
-  describe('command search (Ctrl+R when not in shell)', () => {
+  // Ctrl+R command search is shell-mode only, and always has been: the guard
+  // `shellModeActive && keyMatchers[Command.REVERSE_SEARCH]` is present in the
+  // commit that introduced the feature, and the prompt prefix only renders
+  // "(r:)" in shell mode. These cases previously set shellModeActive = false
+  // and so asserted a mode the product does not implement.
+  describe('command search (Ctrl+R in shell mode)', () => {
     it('enters command search on Ctrl+R and shows suggestions', async () => {
-      props.shellModeActive = false;
+      props.shellModeActive = true;
 
       vi.mocked(useReverseSearchCompletion).mockImplementation(
         (buffer, data, isActive) => ({
@@ -536,7 +541,7 @@ describe('InputPrompt', () => {
     });
 
     it('expands and collapses long suggestion via Right/Left arrows', async () => {
-      props.shellModeActive = false;
+      props.shellModeActive = true;
       const longValue = 'l'.repeat(200);
 
       vi.mocked(useReverseSearchCompletion).mockReturnValue({
@@ -582,7 +587,7 @@ describe('InputPrompt', () => {
     });
 
     it('renders match window and expanded view (snapshots)', async () => {
-      props.shellModeActive = false;
+      props.shellModeActive = true;
       props.buffer.setText('commit');
 
       const label = 'git commit -m "feat: add search" in src/app';
@@ -623,7 +628,7 @@ describe('InputPrompt', () => {
     });
 
     it('does not show expand/collapse indicator for short suggestions', async () => {
-      props.shellModeActive = false;
+      props.shellModeActive = true;
       const shortValue = 'echo hello';
 
       vi.mocked(useReverseSearchCompletion).mockReturnValue({

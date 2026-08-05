@@ -1,13 +1,17 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots): command-search-render-collapsed-match 1`] = `
+
+
+exports[`InputPrompt command search (Ctrl+R in shell mode) renders match window and expanded view (snapshots): command-search-render-collapsed-match 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ > commit                                                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+│ (r:) commit                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+ git commit -m "feat: add search" in src/app"
 `;
 
-exports[`InputPrompt command search (Ctrl+R when not in shell) renders match window and expanded view (snapshots): command-search-render-expanded-match 1`] = `
+exports[`InputPrompt command search (Ctrl+R in shell mode) renders match window and expanded view (snapshots): command-search-render-expanded-match 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ > commit                                                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+│ (r:) commit                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+ git commit -m "feat: add search" in src/app"
 `;
