@@ -17,12 +17,9 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
+import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { extractString } from './github-broker-shaping.js';
 import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
 
@@ -50,27 +47,16 @@ export function shapeCreatedUrl(rawText: unknown): {
 
 // ─── issue.create ────────────────────────────────────────────────────────────
 
-/** Accepted parameters for issue.create. */
-const ISSUE_CREATE_PARAMS: Readonly<Record<string, ParamKind>> = {
-  title: 'freetext',
-  body: 'body',
-  label: 'label',
-  assignee: 'assignee',
-  milestone: 'milestone',
-  project: 'project',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for issue.create.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validateIssueCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_CREATE_PARAMS, params);
+  return validateParams(GITHUB_OP_SPECS['issue.create'].params, params);
 }
 
 /**
@@ -97,9 +83,9 @@ export function buildIssueCreateArgv(
 /** The issue.create operation descriptor. */
 export const issueCreateDescriptor: OpDescriptor = {
   name: 'issue.create',
-  requiredParams: ['title'],
-  mutating: true,
-  params: ISSUE_CREATE_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['issue.create'].required,
+  mutating: GITHUB_OP_SPECS['issue.create'].mutating,
+  params: GITHUB_OP_SPECS['issue.create'].params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildIssueCreateArgv(params),
@@ -108,23 +94,16 @@ export const issueCreateDescriptor: OpDescriptor = {
 
 // ─── issue.comment ───────────────────────────────────────────────────────────
 
-/** Accepted parameters for issue.comment. */
-const ISSUE_COMMENT_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  body: 'body',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for issue.comment.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validateIssueCommentParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_COMMENT_PARAMS, params);
+  return validateParams(GITHUB_OP_SPECS['issue.comment'].params, params);
 }
 
 /**
@@ -145,9 +124,9 @@ export function buildIssueCommentArgv(
 /** The issue.comment operation descriptor. */
 export const issueCommentDescriptor: OpDescriptor = {
   name: 'issue.comment',
-  requiredParams: ['number', 'body'],
-  mutating: true,
-  params: ISSUE_COMMENT_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['issue.comment'].required,
+  mutating: GITHUB_OP_SPECS['issue.comment'].mutating,
+  params: GITHUB_OP_SPECS['issue.comment'].params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildIssueCommentArgv(params),
@@ -156,23 +135,16 @@ export const issueCommentDescriptor: OpDescriptor = {
 
 // ─── issue.close ─────────────────────────────────────────────────────────────
 
-/** Accepted parameters for issue.close. */
-const ISSUE_CLOSE_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  reason: 'closeReason',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for issue.close.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validateIssueCloseParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_CLOSE_PARAMS, params);
+  return validateParams(GITHUB_OP_SPECS['issue.close'].params, params);
 }
 
 /**
@@ -191,9 +163,9 @@ export function buildIssueCloseArgv(params: Record<string, unknown>): string[] {
 /** The issue.close operation descriptor. */
 export const issueCloseDescriptor: OpDescriptor = {
   name: 'issue.close',
-  requiredParams: ['number'],
-  mutating: true,
-  params: ISSUE_CLOSE_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['issue.close'].required,
+  mutating: GITHUB_OP_SPECS['issue.close'].mutating,
+  params: GITHUB_OP_SPECS['issue.close'].params,
   rawOutput: true,
   buildArgv: (params) => buildIssueCloseArgv(params),
   shape: (_rawText, params) => ({

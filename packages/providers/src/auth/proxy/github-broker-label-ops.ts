@@ -12,12 +12,9 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
+import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractString,
@@ -25,27 +22,16 @@ import {
 } from './github-broker-shaping.js';
 
 /**
- * The accepted parameters for label.list.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- */
-const LABEL_LIST_PARAMS: Readonly<Record<string, ParamKind>> = {
-  limit: 'limit',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for label.list.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
 export function validateLabelListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(LABEL_LIST_PARAMS, params);
+  return validateParams(GITHUB_OP_SPECS['label.list'].params, params);
 }
 
 /**
@@ -106,8 +92,9 @@ export function shapeLabelList(
  */
 export const labelListDescriptor: OpDescriptor = {
   name: 'label.list',
-  mutating: false,
-  params: LABEL_LIST_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['label.list'].required,
+  mutating: GITHUB_OP_SPECS['label.list'].mutating,
+  params: GITHUB_OP_SPECS['label.list'].params,
   buildArgv: (params) => buildLabelListArgv(params),
   shape: (rawJson) => ({ labels: shapeLabelList(rawJson) }),
 };

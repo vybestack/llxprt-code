@@ -403,6 +403,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/proxy/__tests__/github-broker-security.test.ts',
       'src/auth/proxy/__tests__/github-broker-watch.test.ts',
       'src/auth/proxy/__tests__/github-broker-write-ops.test.ts',
+      'src/auth/proxy/__tests__/github-broker-catalog-drift.test.ts',
       'src/auth/proxy/__tests__/github-broker.test.ts',
       'src/auth/proxy/__tests__/integration.test.ts',
       'src/auth/proxy/__tests__/migration-completeness.test.ts',

@@ -35,6 +35,7 @@ import type {
   GhRunner,
 } from './github-broker-types.js';
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
+import { describeGithubOpParams } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { withBodyFiles } from './github-broker-body-file.js';
 import {
   classifyStderr,
@@ -368,7 +369,7 @@ export async function executeGitHubOp(
     throw new BrokerErrorException(
       makeBrokerError(
         validationError.code as BrokerError['code'],
-        validationError.message,
+        `${op}: ${validationError.message} ${describeGithubOpParams(op)}`,
       ),
     );
   }

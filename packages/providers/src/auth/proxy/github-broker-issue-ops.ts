@@ -13,12 +13,9 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
+import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractAuthor,
@@ -34,22 +31,9 @@ import { resolveLimit } from './github-broker-validation.js';
 // ─── issue.view ──────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for issue.view.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-008, REQ-009
- * @pseudocode 003-github-broker.md lines 52-55, 101-103
- */
-const ISSUE_VIEW_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  comments: 'boolean',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for the issue.view operation.
  *
- * @plan PLAN-20260731-GHBROKER.P08
+ * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
@@ -62,7 +46,7 @@ export function validateIssueViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(ISSUE_VIEW_PARAMS, params);
+  return validateParams(GITHUB_OP_SPECS['issue.view'].params, params);
 }
 
 /**
@@ -137,9 +121,9 @@ export function shapeIssueView(rawJson: unknown): ShapedIssueView {
  */
 export const issueViewDescriptor: OpDescriptor = {
   name: 'issue.view',
-  requiredParams: ['number'],
-  mutating: false,
-  params: ISSUE_VIEW_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['issue.view'].required,
+  mutating: GITHUB_OP_SPECS['issue.view'].mutating,
+  params: GITHUB_OP_SPECS['issue.view'].params,
   buildArgv: (params) => {
     const comments = params.comments === true;
     return buildIssueViewArgv(params, comments);
@@ -150,31 +134,16 @@ export const issueViewDescriptor: OpDescriptor = {
 // ─── issue.list ──────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for issue.list.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-008, REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 120-123
- */
-const ISSUE_LIST_PARAMS: Readonly<Record<string, ParamKind>> = {
-  search: 'freetext',
-  state: 'stateIssue',
-  label: 'label',
-  limit: 'limit',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for the issue.list operation.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31, 120-123
  */
 export function validateIssueListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_LIST_PARAMS, params);
+  return validateParams(GITHUB_OP_SPECS['issue.list'].params, params);
 }
 
 /**
@@ -279,8 +248,9 @@ export function shapeIssueList(
  */
 export const issueListDescriptor: OpDescriptor = {
   name: 'issue.list',
-  mutating: false,
-  params: ISSUE_LIST_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['issue.list'].required,
+  mutating: GITHUB_OP_SPECS['issue.list'].mutating,
+  params: GITHUB_OP_SPECS['issue.list'].params,
   buildArgv: (params) => buildIssueListArgv(params),
   shape: (rawJson) => ({ issues: shapeIssueList(rawJson) }),
 };

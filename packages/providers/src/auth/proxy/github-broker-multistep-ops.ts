@@ -17,12 +17,9 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import type {
-  GhRunner,
-  OpDescriptor,
-  ParamKind,
-} from './github-broker-types.js';
+import type { GhRunner, OpDescriptor } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
+import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   brokerError,
   type BrokerErrorException,
@@ -55,22 +52,6 @@ function dig(root: unknown, path: readonly string[]): unknown {
 }
 
 // ─── issue.edit ──────────────────────────────────────────────────────────────
-
-/** Accepted parameters for issue.edit. */
-const ISSUE_EDIT_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  title: 'freetext',
-  body: 'body',
-  addLabel: 'label',
-  removeLabel: 'label',
-  addAssignee: 'assignee',
-  removeAssignee: 'assignee',
-  addProject: 'project',
-  removeProject: 'project',
-  milestone: 'milestone',
-  type: 'freetext',
-  repo: 'repo',
-};
 
 /**
  * Builds argv for the `gh issue edit` portion of issue.edit. Pure.
@@ -268,9 +249,9 @@ export async function executeIssueEdit(
 /** The issue.edit operation descriptor. */
 export const issueEditDescriptor: OpDescriptor = {
   name: 'issue.edit',
-  requiredParams: ['number'],
-  mutating: true,
-  params: ISSUE_EDIT_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['issue.edit'].required,
+  mutating: GITHUB_OP_SPECS['issue.edit'].mutating,
+  params: GITHUB_OP_SPECS['issue.edit'].params,
   bodyParams: ['body'],
   buildArgv: (params) => buildIssueEditArgv(params),
   shape: (_raw, params) => ({
@@ -280,12 +261,6 @@ export const issueEditDescriptor: OpDescriptor = {
 };
 
 // ─── pr.resolve-thread ───────────────────────────────────────────────────────
-
-/** Accepted parameters for pr.resolve-thread. */
-const PR_RESOLVE_THREAD_PARAMS: Readonly<Record<string, ParamKind>> = {
-  threadId: 'threadId',
-  repo: 'repo',
-};
 
 /**
  * Executes pr.resolve-thread via the resolveReviewThread mutation.
@@ -334,9 +309,9 @@ export async function executeResolveThread(
 /** The pr.resolve-thread operation descriptor. */
 export const prResolveThreadDescriptor: OpDescriptor = {
   name: 'pr.resolve-thread',
-  requiredParams: ['threadId'],
-  mutating: true,
-  params: PR_RESOLVE_THREAD_PARAMS,
+  requiredParams: GITHUB_OP_SPECS['pr.resolve-thread'].required,
+  mutating: GITHUB_OP_SPECS['pr.resolve-thread'].mutating,
+  params: GITHUB_OP_SPECS['pr.resolve-thread'].params,
   buildArgv: () => ['api', 'graphql'],
   shape: (_raw, params) => ({ threadId: String(params.threadId) }),
   execute: (params, run) => executeResolveThread(params, run),
@@ -345,19 +320,27 @@ export const prResolveThreadDescriptor: OpDescriptor = {
 /**
  * Validates parameters for issue.edit.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validateIssueEditParams(params: Record<string, unknown>) {
-  return validateParams(ISSUE_EDIT_PARAMS, params, ['number']);
+  return validateParams(
+    GITHUB_OP_SPECS['issue.edit'].params,
+    params,
+    GITHUB_OP_SPECS['issue.edit'].required,
+  );
 }
 
 /**
  * Validates parameters for pr.resolve-thread.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validateResolveThreadParams(params: Record<string, unknown>) {
-  return validateParams(PR_RESOLVE_THREAD_PARAMS, params, ['threadId']);
+  return validateParams(
+    GITHUB_OP_SPECS['pr.resolve-thread'].params,
+    params,
+    GITHUB_OP_SPECS['pr.resolve-thread'].required,
+  );
 }
