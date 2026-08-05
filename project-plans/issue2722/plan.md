@@ -215,6 +215,15 @@ unchanged. `describeRejectedPayload` normalises via
 `iContentFromAgentMessageInput` before scanning blocks (AC9); it reuses the
 same per-block tool-name extraction.
 
+The moved `extractToolName` carried a vestigial legacy Google branch for
+`{ functionResponse: { name } }`. It is dropped: `AgentMessageInput` is the
+neutral union (`string | ContentBlock[] | IContent | IContent[]`), so that
+shape cannot reach the function, and `scripts/agents-neutral-gate.ts` (the
+issue #2424 enforcement) bans Google-shaped fixtures in this package — which
+means the branch could not be covered by a test either. Removing it is
+preferred over exempting it: it eliminates an unreachable defensive path
+rather than pinning one.
+
 Media descriptor formatting, from a `MediaBlock`
 (`packages/core/src/services/history/IContent.ts:273`):
 

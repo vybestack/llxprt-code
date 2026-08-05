@@ -149,10 +149,11 @@ export function isToolContentRejection(
 /**
  * Extracts a tool name from a single request part in neutral or legacy form.
  *
- * Recognizes:
- * - Neutral `tool_response`: `{ type: 'tool_response', toolName }`
- * - Neutral `tool_call`: `{ type: 'tool_call', name }`
- * - Legacy Google `functionResponse`: `{ functionResponse: { name } }`
+ * Recognizes the neutral block shapes only — `{ type: 'tool_response',
+ * toolName }` and `{ type: 'tool_call', name }`. `AgentMessageInput` is the
+ * neutral union (`string | ContentBlock[] | IContent | IContent[]`), so a
+ * Google-shaped `{ functionResponse: { name } }` part cannot reach here; the
+ * agents package is Google-shape free by policy (issue #2424 gate).
  *
  * Returns the extracted name, or `undefined` if the part is not a
  * tool-response/tool-call shape.
@@ -171,13 +172,6 @@ export function extractToolName(part: unknown): string | undefined {
     const name = obj['name'];
     if (typeof name === 'string' && name.length > 0) return name;
     return undefined;
-  }
-
-  if ('functionResponse' in obj) {
-    const funcResp = obj['functionResponse'];
-    if (isFunctionResponseWithName(funcResp)) {
-      return funcResp.name;
-    }
   }
 
   return undefined;
@@ -205,19 +199,6 @@ function isMediaBlock(block: unknown): block is MediaBlock {
   if (block == null || typeof block !== 'object') return false;
   const obj = block as Record<string, unknown>;
   return obj['type'] === 'media' && typeof obj['mimeType'] === 'string';
-}
-
-/**
- * Type guard for a legacy Google `functionResponse` value whose `name` is a
- * non-empty string. Extracted so the legacy branch validates the value the
- * same way the neutral branches do, without a cast to `{ name?: string }`.
- */
-function isFunctionResponseWithName(value: unknown): value is { name: string } {
-  if (value == null || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
-  if (!('name' in obj)) return false;
-  const name = obj['name'];
-  return typeof name === 'string' && name.length > 0;
 }
 
 function formatMediaDescriptor(block: MediaBlock): string {

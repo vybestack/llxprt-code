@@ -149,26 +149,19 @@ describe('toolContentRejection', () => {
       );
     });
 
-    it('extracts the name from a valid legacy functionResponse', () => {
-      expect(extractToolName({ functionResponse: { name: 'read_file' } })).toBe(
-        'read_file',
-      );
-    });
-
-    it('returns undefined for a legacy functionResponse with a non-string name', () => {
+    it('returns undefined for a tool_response whose toolName is not a non-empty string', () => {
       expect(
-        extractToolName({ functionResponse: { name: 123 } }),
+        extractToolName({ type: 'tool_response', toolName: '' }),
       ).toBeUndefined();
-    });
-
-    it('returns undefined for a legacy functionResponse with an empty name', () => {
       expect(
-        extractToolName({ functionResponse: { name: '' } }),
+        extractToolName({ type: 'tool_response', toolName: 123 }),
       ).toBeUndefined();
+      expect(extractToolName({ type: 'tool_response' })).toBeUndefined();
     });
 
-    it('returns undefined for a legacy functionResponse that is not an object', () => {
-      expect(extractToolName({ functionResponse: 'nope' })).toBeUndefined();
+    it('returns undefined for a tool_call whose name is not a non-empty string', () => {
+      expect(extractToolName({ type: 'tool_call', name: '' })).toBeUndefined();
+      expect(extractToolName({ type: 'tool_call', name: 123 })).toBeUndefined();
     });
 
     it('returns undefined for a non-tool part', () => {
