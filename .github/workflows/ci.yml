@@ -55,6 +55,11 @@ jobs:
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     env:
       GH_TOKEN: '${{ github.token }}'
+    # Reads PR file metadata (issue #342); be explicit rather than relying on
+    # the repo being public. Matches how shard_selector declares permissions.
+    permissions:
+      contents: 'read'
+      pull-requests: 'read'
     outputs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
@@ -63,6 +68,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
       - name: 'Determine documentation-only PR'
         id: 'detect'
         env:
@@ -70,76 +80,41 @@ jobs:
             ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
         run: |
           set -euo pipefail
+          # Non-PR events (push, merge_group, workflow_dispatch) always run full CI.
           if [[ -z "${PR_NUMBER:-}" ]]; then
             echo "docs_only=false" >>"$GITHUB_OUTPUT"
             exit 0
           fi
 
-          files="$(gh api \
+          # Fetch the full structured PR file list as NDJSON (one entry per line
+          # across all pages, including status/previous_filename/patch so renames
+          # and the .gitignore carve-out are handled) and the authoritative
+          # changed_files count. `|| true` keeps an API blip from failing this
+          # job: the detector script then resolves to docs_only=false (run full
+          # CI) rather than skipping the six heavy jobs and wedging the PR.
+          files_json="${RUNNER_TEMP}/pr-files.ndjson"
+          : >"$files_json"
+          gh api \
             --paginate \
             -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename')"
+            --jq '.[]' >"$files_json" || true
 
-          if [[ -z "$files" ]]; then
-            echo "docs_only=false" >>"$GITHUB_OUTPUT"
-            {
-              echo "### Unable to determine doc-only status"
-              echo "GitHub API returned no files; running full CI to be safe."
-            } >>"$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          changed_files="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq '.changed_files' || true)"
 
-          gitignore_patch=''
-          if grep -Fxq '.gitignore' <<<"$files"; then
-            gitignore_patch="$(gh api \
-              --paginate \
-              -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-              --jq '.[] | select(.filename == ".gitignore") | .patch' || true)"
-          fi
-
-          docs_only=true
-          while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-            case "$file" in
-              # integration-tests/ fixtures (any extension) are never docs.
-              integration-tests/*)
-                docs_only=false
-                break
-                ;;
-              docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
-                ;;
-              CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
-                ;;
-              *.md|*.mdx|*.rst|*.txt|*.adoc)
-                ;;
-              .gitignore)
-                if [[ -z "$gitignore_patch" ]]; then
-                  docs_only=false
-                  break
-                fi
-                if printf '%s\n' "$gitignore_patch" \
-                  | grep -E '^[+-][^+-]' \
-                  | grep -Ev '^[+-](!docs/reference/|#.*docs/reference)' >/dev/null; then
-                  docs_only=false
-                  break
-                fi
-                ;;
-              *)
-                docs_only=false
-                break
-                ;;
-            esac
-          done <<<"$files"
-
-          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
-          if [[ "$docs_only" == "true" ]]; then
-            {
-              echo "### Documentation-only PR detected"
-              echo "Skipping automated test suites (unit + coverage) for this PR."
-            } >>"$GITHUB_STEP_SUMMARY"
-          fi
+          # The classifier (scripts/docs-only-filter.ts) is a conservative
+          # allowlist (issue #342): runtime .md/.txt inputs under packages/ are
+          # CODE, renames require both sides to be docs, and the changed_files
+          # count guards against the 3000-file API ceiling. It writes docs_only
+          # to GITHUB_OUTPUT and a summary to GITHUB_STEP_SUMMARY, always
+          # exiting 0 so a detector blip never wedges a PR.
+          node scripts/docs-only-filter.ts \
+            --files-json "$files_json" \
+            --changed-files "$changed_files" \
+            --output github-actions || true
   #
   # Lint: GitHub Actions
   #
@@ -622,9 +597,62 @@ jobs:
       # test_shard depends directly on it (issue #2877); lint retains the
       # dependency here to preserve smoke coverage when the matrix is skipped.
       - 'node_consumer_smoke'
+      # doc_change_filter (issue #342) makes node_consumer_smoke skippable on
+      # docs-only PRs. skip_check makes every job skippable on duplicate runs.
+      # Both are read below so this required aggregator stays honest instead of
+      # being skipped by GitHub when a needed job is skipped.
+      - 'doc_change_filter'
+      - 'skip_check'
+    if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
-      - run: |-
+      - name: 'Check lint results'
+        run: |-
+          should_skip='${{ needs.skip_check.outputs.should_skip }}'
+          docs_only='${{ needs.doc_change_filter.outputs.docs_only }}'
+          lint_github_actions_result='${{ needs.lint_github_actions.result }}'
+          lint_javascript_result='${{ needs.lint_javascript.result }}'
+          lint_shell_result='${{ needs.lint_shell.result }}'
+          lint_yaml_result='${{ needs.lint_yaml.result }}'
+          node_consumer_smoke_result='${{ needs.node_consumer_smoke.result }}'
+
+          # Explicit duplicate-skip: skip_check said this run duplicates a
+          # passing one, so every downstream job was intentionally skipped.
+          # The required Lint check is green by design.
+          if [ "$should_skip" == "true" ]; then
+            echo "skip_check reported a duplicate passing run (should_skip=true). Lint check is green by design."
+            exit 0
+          fi
+
+          # Every linter must succeed regardless of PR type.
+          if [ "$lint_github_actions_result" != "success" ]; then
+            echo "::error::GitHub Actions lint did not succeed (result: $lint_github_actions_result)"
+            exit 1
+          fi
+          if [ "$lint_javascript_result" != "success" ]; then
+            echo "::error::JavaScript lint did not succeed (result: $lint_javascript_result)"
+            exit 1
+          fi
+          if [ "$lint_shell_result" != "success" ]; then
+            echo "::error::Shell lint did not succeed (result: $lint_shell_result)"
+            exit 1
+          fi
+          if [ "$lint_yaml_result" != "success" ]; then
+            echo "::error::YAML lint did not succeed (result: $lint_yaml_result)"
+            exit 1
+          fi
+
+          # node_consumer_smoke must succeed on code PRs. On docs-only PRs
+          # (issue #342) it is intentionally skipped, which is accepted here.
+          if [ "$node_consumer_smoke_result" != "success" ]; then
+            if [ "$docs_only" == "true" ] && [ "$node_consumer_smoke_result" == "skipped" ]; then
+              echo "docs-only PR: node_consumer_smoke intentionally skipped (issue #342)."
+            else
+              echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
+              exit 1
+            fi
+          fi
+
           echo 'All linters finished!'
 
   #
@@ -644,8 +672,11 @@ jobs:
     # fast instead of occupying a runner up to the 6-hour GitHub Actions default.
     timeout-minutes: 15
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change whether
+    # `bun install` resolves and links the workspaces.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -686,8 +717,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 15
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change native
+    # module load/operate behaviour under the Bun runtime.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -729,8 +763,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 15
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change npm
+    # package install/invocation compatibility.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     # This job installs the packed package with npm (executing third-party
     # install scripts) and only needs to read the repo, so scope permissions to
     # contents:read and drop credential persistence. It validates the published
@@ -788,8 +825,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 10
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change test
+    # orchestrator discovery/parsing/routing behaviour.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -840,8 +880,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 10
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change test
+    # manifest root resolution or file existence.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -1134,8 +1177,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 20
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change the
+    # built CLI's agent conformance behaviour.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -1235,12 +1281,14 @@ jobs:
       - 'skip_check'
       - 'node_consumer_smoke'
       - 'acp_conformance'
+      - 'doc_change_filter'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Check shard results'
         run: |-
           should_skip='${{ needs.skip_check.outputs.should_skip }}'
+          docs_only='${{ needs.doc_change_filter.outputs.docs_only }}'
           selector_result='${{ needs.shard_selector.result }}'
           has_tests='${{ needs.shard_selector.outputs.has_tests }}'
           shard_result='${{ needs.test_shard.result }}'
@@ -1255,15 +1303,31 @@ jobs:
             exit 0
           fi
 
+          # There is intentionally NO unconditional docs-only early return here
+          # (issue #342). shard_selector is an independent, stricter classifier
+          # than doc_change_filter; requiring it to succeed (and, when it reports
+          # tests, requiring the selected shards to succeed) means a
+          # misclassification by doc_change_filter fails closed instead of
+          # greening the required Test check. Only the docs-only-skippable jobs
+          # (node_consumer_smoke, acp_conformance) accept a `skipped` result when
+          # docs_only == 'true'; the selector/has_tests/test_shard logic below is
+          # unchanged.
+
           # Fail closed if the selector itself did not succeed.
           if [ "$selector_result" != "success" ]; then
             echo "::error::Shard selector did not succeed (result: $selector_result); cannot trust test selection."
             exit 1
           fi
 
+          # node_consumer_smoke must succeed on code PRs. On docs-only PRs
+          # (issue #342) it is intentionally skipped, which is accepted here.
           if [ "$node_consumer_smoke_result" != "success" ]; then
-            echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
-            exit 1
+            if [ "$docs_only" == "true" ] && [ "$node_consumer_smoke_result" == "skipped" ]; then
+              echo "docs-only PR: node_consumer_smoke intentionally skipped (issue #342)."
+            else
+              echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
+              exit 1
+            fi
           fi
 
           # Intentional no-test PR: selector succeeded and said has_tests=false.
@@ -1277,10 +1341,15 @@ jobs:
             fi
           fi
 
-          # ACP conformance must succeed (issue #2564).
+          # ACP conformance must succeed on code PRs. On docs-only PRs it is
+          # intentionally skipped (issue #342), which is accepted here.
           if [ "$acp_result" != "success" ]; then
-            echo "::error::ACP conformance job did not succeed (result: $acp_result)"
-            exit 1
+            if [ "$docs_only" == "true" ] && [ "$acp_result" == "skipped" ]; then
+              echo "docs-only PR: acp_conformance intentionally skipped (issue #342)."
+            else
+              echo "::error::ACP conformance job did not succeed (result: $acp_result)"
+              exit 1
+            fi
           fi
 
           echo 'All test shards finished!'
