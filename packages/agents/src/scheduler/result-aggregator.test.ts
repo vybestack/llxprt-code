@@ -12,6 +12,7 @@ import type { ToolResult } from '@vybestack/llxprt-code-tools';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { DEFAULT_MAX_TOKENS } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { ToolCallResponseInfo } from '../core/turn.js';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -351,6 +352,227 @@ describe('ResultAggregator', () => {
       // All succeed; batchOutputConfig was used instead of fallback for
       // individual publishing (fallback still called once during beginBatch)
       expect(callbacks.setSuccess).toHaveBeenCalledTimes(10);
+    });
+  });
+
+  // ---------- publishResult — error llmContent remedy (issue #3037) --------
+
+  describe('publishResult — model-facing error llmContent (issue #3037)', () => {
+    function publishedErrorResponse(): ToolCallResponseInfo {
+      const calls = (callbacks.setError as ReturnType<typeof vi.fn>).mock
+        .calls as Array<[string, ToolCallResponseInfo]>;
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      return calls[calls.length - 1][1];
+    }
+
+    function errorResultBlockText(response: ToolCallResponseInfo): string {
+      const block = response.responseParts[0];
+      if (block.type !== 'tool_response') {
+        throw new Error(
+          `expected a tool_response block but got ${String(block.type)}`,
+        );
+      }
+      const result = block.result;
+      if (
+        typeof result !== 'object' ||
+        result === null ||
+        !('error' in result)
+      ) {
+        throw new Error(
+          'tool_response block result is not an object with an error property',
+        );
+      }
+      if (typeof result.error !== 'string') {
+        throw new Error('tool_response block result.error is not a string');
+      }
+      return result.error;
+    }
+
+    // The issue's reproduction: insert_at_line out of range.
+    it('delivers the remedial llmContent to the model while keeping the terse message for logs/UI (AC1 + AC2)', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-ial', 'insert_at_line');
+      const result: ToolResult = {
+        error: {
+          message: 'line_number 999 exceeds file length (8)',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+        llmContent:
+          'Cannot insert at line 999: exceeds file length (8). Use line_number <= 9 to append.',
+        returnDisplay: 'Cannot insert at line 999: exceeds file length (8)',
+      };
+      agg.bufferResult('c-ial', 'insert_at_line', call, result, 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      const response = publishedErrorResponse();
+      expect(errorResultBlockText(response)).toBe(
+        'Cannot insert at line 999: exceeds file length (8). Use line_number <= 9 to append.',
+      );
+      expect(response.error?.message).toBe(
+        'line_number 999 exceeds file length (8)',
+      );
+      expect(response.resultDisplay).toBe(
+        'line_number 999 exceeds file length (8)',
+      );
+      expect(response.errorType).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+    });
+
+    it('delivers the apply_patch header-mismatch remedy to the model (AC6)', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-ap', 'apply_patch');
+      const result: ToolResult = {
+        error: {
+          message:
+            'Patch header target "other.txt" does not match absolute_path "target.txt".',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+        llmContent:
+          'Patch header targets "other.txt" but the absolute_path targets "target.txt". Ensure the patch header matches the target file, or use a separate apply_patch call for "other.txt".',
+        returnDisplay:
+          'Rejected patch: header target "other.txt" does not match absolute_path "target.txt".',
+      };
+      agg.bufferResult('c-ap', 'apply_patch', call, result, 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      const response = publishedErrorResponse();
+      expect(errorResultBlockText(response)).toContain(
+        'Ensure the patch header matches the target file',
+      );
+      expect(response.error?.message).toBe(
+        'Patch header target "other.txt" does not match absolute_path "target.txt".',
+      );
+    });
+
+    it('falls back to error.message when llmContent is empty (AC3)', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-empty', 'insert_at_line');
+      const result: ToolResult = {
+        error: {
+          message: 'line_number 999 exceeds file length (8)',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+        llmContent: '',
+        returnDisplay: 'Cannot insert at line 999: exceeds file length (8)',
+      };
+      agg.bufferResult('c-empty', 'insert_at_line', call, result, 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      expect(errorResultBlockText(publishedErrorResponse())).toBe(
+        'line_number 999 exceeds file length (8)',
+      );
+    });
+
+    it('falls back to error.message when llmContent is media-only (AC3)', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-media', 'insert_at_line');
+      const result: ToolResult = {
+        error: {
+          message: 'line_number 999 exceeds file length (8)',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+        llmContent: [{ inlineData: { data: 'YWJj', mimeType: 'text/plain' } }],
+        returnDisplay: 'Cannot insert at line 999: exceeds file length (8)',
+      };
+      agg.bufferResult('c-media', 'insert_at_line', call, result, 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      expect(errorResultBlockText(publishedErrorResponse())).toBe(
+        'line_number 999 exceeds file length (8)',
+      );
+    });
+
+    it('joins and delivers an array llmContent of text parts (AC3)', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-arr', 'insert_at_line');
+      const result: ToolResult = {
+        error: {
+          message: 'line_number 999 exceeds file length (8)',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+        llmContent: [
+          { text: 'Cannot insert at line 999.' },
+          { text: 'Use line_number <= 9 to append.' },
+        ],
+        returnDisplay: 'Cannot insert at line 999: exceeds file length (8)',
+      };
+      agg.bufferResult('c-arr', 'insert_at_line', call, result, 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      expect(errorResultBlockText(publishedErrorResponse())).toBe(
+        'Cannot insert at line 999.' + '\n' + 'Use line_number <= 9 to append.',
+      );
+    });
+
+    // bufferError synthesises llmContent === error.message, so the model-facing
+    // text is the same string whichever branch produces it. This pins the
+    // observable output rather than the internal path (AC5).
+    it('keeps bufferError observable output unchanged — still error.message (AC5)', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-rawerr', 'insert_at_line');
+      agg.bufferError('c-rawerr', 'insert_at_line', call, new Error('boom'), 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      expect(errorResultBlockText(publishedErrorResponse())).toBe('boom');
+    });
+
+    it('still publishes successful results untouched on the success path', async () => {
+      agg.beginBatch(1);
+      const call = makeScheduledCall('c-ok', 'read_file');
+      agg.bufferResult('c-ok', 'read_file', call, makeSuccessResult('done'), 0);
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      expect(callbacks.setSuccess).toHaveBeenCalledTimes(1);
+      expect(callbacks.setError).not.toHaveBeenCalled();
+    });
+
+    it('applies the batch output config to the error path (AC4)', async () => {
+      (
+        callbacks.getFallbackOutputConfig as ReturnType<typeof vi.fn>
+      ).mockReturnValue({
+        getEphemeralSettings: () => ({ 'tool-output-max-tokens': 2000 }),
+      } as ToolOutputSettingsProvider);
+
+      agg.beginBatch(2); // per-tool budget floored at 1000 tokens
+      const oversized = Array.from(
+        { length: 3000 },
+        (_, index) => `word${index}`,
+      ).join(' ');
+      const errorCall = makeScheduledCall('c-big', 'insert_at_line');
+      const successCall = makeScheduledCall('c-small', 'read_file');
+      agg.bufferResult(
+        'c-big',
+        'insert_at_line',
+        errorCall,
+        {
+          error: {
+            message: 'line_number 999 exceeds file length (8)',
+            type: ToolErrorType.INVALID_TOOL_PARAMS,
+          },
+          llmContent: oversized,
+          returnDisplay: 'Cannot insert at line 999',
+        },
+        0,
+      );
+      agg.bufferResult(
+        'c-small',
+        'read_file',
+        successCall,
+        makeSuccessResult('ok'),
+        1,
+      );
+
+      await agg.publishBufferedResults(makeAbortSignal());
+
+      const text = errorResultBlockText(publishedErrorResponse());
+      expect(text.length).toBeLessThan(oversized.length);
+      expect(text).toContain('[Output truncated due to token limit]');
     });
   });
 });
