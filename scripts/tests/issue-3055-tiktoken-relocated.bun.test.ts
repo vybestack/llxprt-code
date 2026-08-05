@@ -53,9 +53,26 @@ const tempDirs: string[] = [];
 
 afterAll(() => {
   // Clean up every temp directory even when an assertion throws, so a failure
-  // never leaves build/run trees behind on the runner.
+  // never leaves build/run trees behind on the runner. Each removal is
+  // attempted independently: a single rmSync failure (permission error,
+  // Windows file lock) must not abort the loop and leak every remaining tree.
+  // Failures are collected and surfaced as an AggregateError after every
+  // directory has been attempted, matching the pattern in
+  // gpt56-bundle-runtime.test.ts. This swallow-and-aggregate is scoped to
+  // external filesystem removal only — it is NOT a general pattern.
+  const cleanupErrors: unknown[] = [];
   for (const directory of tempDirs.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
+    try {
+      rmSync(directory, { recursive: true, force: true });
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      cleanupErrors,
+      'Failed to remove test directories',
+    );
   }
 });
 

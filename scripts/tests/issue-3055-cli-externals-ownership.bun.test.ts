@@ -87,6 +87,12 @@ describe('issue #3055: CLI bundle externals are declared direct dependencies', (
     // Sanity: the config we are guarding is wired up correctly. If the
     // external list were empty, the ownership test would vacuously pass.
     expect(cliBundleConfig.external.length).toBeGreaterThan(0);
+    // If CLI_DIRNAME_DEPENDENT_EXTERNALS were emptied during a refactor of
+    // bun-build.config.ts, the ownership test would find zero violations
+    // (vacuous pass) and the loop below would run zero times (vacuous pass
+    // too). Assert the list is populated so the guard cannot be silently
+    // turned off without failing this test.
+    expect(CLI_DIRNAME_DEPENDENT_EXTERNALS.length).toBeGreaterThan(0);
     for (const entry of CLI_DIRNAME_DEPENDENT_EXTERNALS) {
       expect(cliBundleConfig.external).toContain(entry);
     }

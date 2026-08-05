@@ -52,6 +52,47 @@ afterAll(() => {
   rmSync(bundleDir, { recursive: true, force: true });
 });
 
+/**
+ * Scans emitted bundle source for quoted string literals that begin with a
+ * build-root path form, returning every distinct offending literal.
+ *
+ * The repo root must be followed by a path separator (a forward slash, or
+ * the JavaScript-escaped Windows separator - a backslash Bun emits doubled)
+ * OR the closing quote, so a path that merely SHARES the repo root as a
+ * prefix is not mistaken for a leak: with root `/foo/bar` the unrelated
+ * literal `"/foo/barbecue/thing"` is NOT reported while
+ * `"/foo/bar/node_modules/..."` IS. A zero-width lookahead enforces that
+ * boundary while still letting `[^"]*"` capture the complete quoted literal,
+ * so the failure message names the full offending path.
+ *
+ * Extracted from the inline scan so the prefix-rejection contract is unit
+ * tested directly (synthetic strings) without building a real bundle, using
+ * the SAME predicate the real guard uses.
+ */
+function findBuildRootPathLeaks(
+  contents: string,
+  pathForms: Iterable<string>,
+): string[] {
+  const offending: string[] = [];
+  for (const pathForm of pathForms) {
+    if (pathForm.length === 0) continue;
+    // Lookahead asserts the repo root is followed by a path separator or the
+    // closing quote. A single backslash in the class covers the doubled `\`
+    // Bun emits (its first backslash satisfies the class) as well as any raw
+    // single-backslash path form.
+    const pattern = new RegExp(
+      `${escapeRegExp(`"${pathForm}`)}(?=[/\\\\]|")[^"]*"`,
+      'g',
+    );
+    for (const match of contents.matchAll(pattern)) {
+      if (!offending.includes(match[0])) {
+        offending.push(match[0]);
+      }
+    }
+  }
+  return offending;
+}
+
 describe('issue #3055: prebuilt CLI bundle is free of build-tree paths', () => {
   it('the shipped llxprt.js contains no absolute path rooted at the repo root', () => {
     // Start from a clean slate so a stale artifact can never satisfy the check.
@@ -115,16 +156,7 @@ describe('issue #3055: prebuilt CLI bundle is free of build-tree paths', () => {
       pathForms.add(JSON.stringify(basePath).slice(1, -1));
     }
 
-    const offending: string[] = [];
-    for (const pathForm of pathForms) {
-      if (pathForm.length === 0) continue;
-      const pattern = new RegExp(`${escapeRegExp(`"${pathForm}`)}[^"]*"`, 'g');
-      for (const match of contents.matchAll(pattern)) {
-        if (!offending.includes(match[0])) {
-          offending.push(match[0]);
-        }
-      }
-    }
+    const offending = findBuildRootPathLeaks(contents, pathForms);
 
     expect(
       offending,
@@ -135,6 +167,35 @@ describe('issue #3055: prebuilt CLI bundle is free of build-tree paths', () => {
         offending.map((path) => `  ${path}`).join('\n'),
     ).toEqual([]);
   }, 180_000);
+});
+
+describe('issue #3055: build-root leak scan rejects prefix false positives', () => {
+  // The scan must require the repo root to be followed by a path separator (or
+  // the closing quote), so a path that merely shares the repo root as a prefix
+  // is not mistaken for a leak. These exercise the SAME findBuildRootPathLeaks
+  // the real guard uses, so a regression here means the guard is broken too.
+  // No real bundle is built: pure-string inputs keep this fast and hermetic.
+
+  it('does not report a sibling path that only shares the repo-root prefix', () => {
+    const fakeRoot = '/foo/bar';
+    // "/foo/bar" + "ecue/..." shares the prefix but is a different path; it
+    // must NOT be flagged. The real leak ("/foo/bar/node_modules/...") MUST.
+    const source = `"${fakeRoot}ecue/thing", "${fakeRoot}/node_modules/leaked"`;
+    const offending = findBuildRootPathLeaks(source, [fakeRoot]);
+    expect(offending).toEqual([`"${fakeRoot}/node_modules/leaked"`]);
+  });
+
+  it('reports a real leak rooted at the repo root', () => {
+    const fakeRoot = '/foo/bar';
+    const leaked = `"${fakeRoot}/node_modules/@dqbd/tiktoken/asset.wasm"`;
+    expect(findBuildRootPathLeaks(leaked, [fakeRoot])).toEqual([leaked]);
+  });
+
+  it('reports an exact repo-root match followed immediately by the closing quote', () => {
+    const fakeRoot = '/foo/bar';
+    const exact = `"${fakeRoot}"`;
+    expect(findBuildRootPathLeaks(exact, [fakeRoot])).toEqual([exact]);
+  });
 });
 
 function escapeRegExp(value: string): string {
