@@ -44,6 +44,9 @@ const EXPECTED_HEAVY_IF =
 // Cheap jobs that must keep running even on docs-only PRs (docs are still
 // linted and workflow YAML is still actionlint'ed).
 const UNGATED_JOBS = [
+  // skip_check is the root dependency of both required aggregators; gating it
+  // on docs_only would stop Test and Lint from running at all.
+  'skip_check',
   'lint_github_actions',
   'lint_javascript',
   'lint_shell',

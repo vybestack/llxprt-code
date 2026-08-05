@@ -50,6 +50,10 @@ jobs:
   doc_change_filter:
     name: 'Detect doc-only changes'
     runs-on: 'ubuntu-latest'
+    # Every heavy job declares `needs: doc_change_filter`, so a stalled `gh api`
+    # call here would block the whole tier for the 6-hour Actions default. Cap
+    # it like shard_selector does; two API calls need nowhere near this.
+    timeout-minutes: 5
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}

@@ -500,6 +500,20 @@ function main(): void {
 const isMain =
   argv[1] !== undefined && resolve(argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  main();
+  // Single process-level boundary that makes the documented "always exits 0"
+  // contract structurally true, rather than nesting guards around each write.
+  // main() already reports its own failures; this only covers a failure of the
+  // reporting path itself (e.g. GITHUB_OUTPUT is unwritable). When no
+  // docs_only is emitted the workflow reads an empty output, which is
+  // `!= 'true'` and therefore runs full CI — the fail-closed default.
+  try {
+    main();
+  } catch (error) {
+    stderr.write(
+      `docs-only detector could not report a result: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
+  }
   exit(0);
 }
