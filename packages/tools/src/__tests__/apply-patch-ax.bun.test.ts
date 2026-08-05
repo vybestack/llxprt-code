@@ -314,6 +314,25 @@ describe('issue #3033 AC2 — success message is evidence', () => {
     expect(readFileSync(filePath, 'utf-8')).toBe('REPLACED\nx\nrepeat\ny\n');
   });
 
+  it('still announces ambiguity for a patch whose own line endings are CRLF', async () => {
+    const filePath = join(tempDir(), 'target.txt');
+    writeFileSync(filePath, 'repeat\nx\nrepeat\ny\n', 'utf-8');
+    // The patch text itself carries CRLF line endings (model-supplied input).
+    // jsdiff's parsePatch retains the carriage returns on hunk.lines, so
+    // buildAdvisoryNotes must normalise them or the duplicated-context block
+    // never matches and the ambiguity note is silently dropped.
+    const patch =
+      '--- a/target.txt\r\n+++ b/target.txt\r\n@@ -1,1 +1,1 @@\r\n-repeat\r\n+REPLACED\r\n';
+    const result = await runPatch(tempDir(), {
+      absolute_path: filePath,
+      patch_content: patch,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toContain(
+      'Hunk 1 context (declared at line 1) occurs 2 times in the file (lines 1, 3); check the reported landing lines.',
+    );
+  });
+
   it('notes when a hunk declared line differs from where it actually matched', async () => {
     const filePath = join(tempDir(), 'target.txt');
     writeFileSync(filePath, 'unique\nb\nc\n', 'utf-8');

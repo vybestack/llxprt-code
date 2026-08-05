@@ -257,7 +257,11 @@ function buildAdvisoryNotes(
     for (const line of hunk.lines) {
       if (line.startsWith('\\')) continue;
       if (line.startsWith(' ') || line.startsWith('-')) {
-        oldBlock.push(line.slice(1));
+        // Patch text is external, model-supplied input. parsePatch retains a
+        // trailing carriage return on every hunk line when the patch itself
+        // uses CRLF endings, which would never match the LF-normalised
+        // originalLines and silently drop every advisory note. Strip it.
+        oldBlock.push(line.slice(1).replace(/\r$/, ''));
       }
     }
     if (oldBlock.length === 0) return;

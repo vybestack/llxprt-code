@@ -276,9 +276,12 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     filePath: string,
     currentContent: string,
     newContent: string,
-  ): ToolCallConfirmationDetails | false {
+  ): ToolCallConfirmationDetails {
     const relativePath = makeRelative(filePath, getTargetDirCompat(this.host));
     const fileName = path.basename(filePath);
+    // Diff.createPatch always returns a non-empty string (verified for every
+    // input including full deletion and empty-to-empty), so there is no falsy
+    // state to guard against. The delete helper relies on the same invariant.
     const fileDiff = Diff.createPatch(
       fileName,
       currentContent,
@@ -287,7 +290,6 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       'Proposed',
       DEFAULT_CREATE_PATCH_OPTIONS,
     );
-    if (!fileDiff) return false;
 
     const ideConfirmation =
       this.ideService !== undefined &&
