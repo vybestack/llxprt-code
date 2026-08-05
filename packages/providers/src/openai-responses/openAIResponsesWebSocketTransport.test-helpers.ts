@@ -98,10 +98,15 @@ export class SocketHarness {
   ) {}
 
   readonly openSocket: OpenTransportSocket = (url, headers) => {
+    if (this.scripts.length === 0) {
+      throw new Error('SocketHarness requires at least one script');
+    }
     const socket = new FakeSocket();
     this.sockets.push(socket);
     this.urls.push(url);
     this.headers.push(headers);
+    // Deliberately reuse the first script for any socket beyond the scripted
+    // set: several tests rely on this for connection reuse/reconnect scenarios.
     const script = this.scripts[this.sockets.length - 1] ?? this.scripts[0];
     queueMicrotask(() => script(socket));
     return socket;

@@ -18,6 +18,11 @@ export type ResponsesEvent = {
   text?: string;
   content_index?: number;
   summary_index?: number;
+  // Real OpenAI ResponseErrorEvent carries these at the top level (not nested
+  // under error). See node_modules/openai/resources/responses/responses.d.ts.
+  message?: string;
+  code?: string;
+  param?: string | null;
   item?: {
     id: string;
     type: string;

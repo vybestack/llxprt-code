@@ -323,6 +323,18 @@ function createTerminalStreamError(
   });
 }
 
+// OpenAI's ResponseErrorEvent carries message/code/param at the top level.
+// Prefer those (the documented protocol shape); fall back to a legacy nested
+// error object for compatibility with older/test fixtures.
+function topLevelErrorPayload(
+  event: ResponsesEvent,
+): ResponsesApiError | undefined {
+  if (event.message !== undefined || event.code !== undefined) {
+    return { message: event.message, code: event.code };
+  }
+  return event.error;
+}
+
 function getIncompleteReason(
   event: ResponsesEvent,
   terminalReason: string,
@@ -719,7 +731,7 @@ function* dispatchEventCases(
         event.response?.status,
       );
     case 'error':
-      throw createTerminalStreamError(event.error);
+      throw createTerminalStreamError(topLevelErrorPayload(event));
     default:
       break;
   }
