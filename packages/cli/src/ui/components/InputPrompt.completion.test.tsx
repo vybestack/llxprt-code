@@ -7,6 +7,7 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
+import { ESC_TIMEOUT } from '../contexts/KeypressContext.js';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
@@ -687,6 +688,11 @@ describe('InputPrompt', () => {
           expect(onEscapePromptChange).toHaveBeenCalledWith(false);
         });
       });
+
+      // A second escape arriving inside ESC_TIMEOUT is coalesced with the
+      // first into a single escape sequence, so the component would see one
+      // press rather than two. Wait past that window to press ESC again.
+      await new Promise((resolve) => setTimeout(resolve, ESC_TIMEOUT + 10));
 
       await act(async () => {
         stdin.write('\x1B');
