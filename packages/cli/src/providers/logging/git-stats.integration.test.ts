@@ -151,12 +151,15 @@ describe('Git Stats Integration', () => {
     // Get summary that would be displayed in logging show
     const summary = tracker.getSummary();
 
-    expect(summary).toMatchObject({
-      sessionId: expect.any(String),
-      filesChanged: 3,
-      totalLinesAdded: expect.any(Number),
-      totalLinesRemoved: expect.any(Number),
-    });
+    // Asserted field by field rather than with toMatchObject + asymmetric
+    // matchers: Bun's toMatchObject writes the matchers from the expected
+    // object INTO the received object, so every later read of `summary` would
+    // see Any<Number> instead of the real value. Verified by probe —
+    // totalLinesAdded is 5 before the call and Any<Number> after it.
+    expect(summary.sessionId).toBeTypeOf('string');
+    expect(summary.filesChanged).toBe(3);
+    expect(summary.totalLinesAdded).toBeTypeOf('number');
+    expect(summary.totalLinesRemoved).toBeTypeOf('number');
 
     // Verify the summary contains reasonable data
     expect(summary.totalLinesAdded).toBeGreaterThan(0);
