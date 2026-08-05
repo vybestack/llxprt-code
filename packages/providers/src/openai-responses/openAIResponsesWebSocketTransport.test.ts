@@ -8,155 +8,23 @@ import { describe, expect, it } from 'vitest';
 import {
   createCodexResponsesWebSocketTransport,
   streamOverWebSocketOrFallback,
-  type OpenTransportSocket,
-  type StreamResponseOptions,
-  type TransportSocket,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
-
-type Listener<T> = (value: T) => void;
-
-class FakeSocket implements TransportSocket {
-  readonly CONNECTING = 0;
-  readonly OPEN = 1;
-  readyState = this.CONNECTING;
-  readonly sent: string[] = [];
-  closed = false;
-  onSend: ((data: string) => void) | undefined;
-  private readonly openListeners = new Set<Listener<void>>();
-  private readonly messageListeners = new Set<Listener<unknown>>();
-  private readonly closeListeners = new Set<Listener<void>>();
-  private readonly errorListeners = new Set<Listener<void>>();
-
-  send(data: string): void {
-    this.sent.push(data);
-    this.onSend?.(data);
-  }
-
-  close(): void {
-    this.closed = true;
-    this.readyState = 3;
-  }
-
-  onOpen(listener: Listener<void>): () => void {
-    this.openListeners.add(listener);
-    return () => this.openListeners.delete(listener);
-  }
-
-  onMessage(listener: Listener<unknown>): () => void {
-    this.messageListeners.add(listener);
-    return () => this.messageListeners.delete(listener);
-  }
-
-  onClose(listener: Listener<void>): () => void {
-    this.closeListeners.add(listener);
-    return () => this.closeListeners.delete(listener);
-  }
-
-  onError(listener: Listener<void>): () => void {
-    this.errorListeners.add(listener);
-    return () => this.errorListeners.delete(listener);
-  }
-
-  open(): void {
-    this.readyState = this.OPEN;
-    for (const listener of this.openListeners) listener();
-  }
-
-  message(data: unknown): void {
-    for (const listener of this.messageListeners) listener(data);
-  }
-
-  serverClose(): void {
-    this.readyState = 3;
-    for (const listener of this.closeListeners) listener();
-  }
-}
-
-class SocketHarness {
-  readonly sockets: FakeSocket[] = [];
-  readonly urls: string[] = [];
-  readonly headers: Array<Readonly<Record<string, string>>> = [];
-
-  constructor(
-    private readonly scripts: ReadonlyArray<(socket: FakeSocket) => void>,
-  ) {}
-
-  readonly openSocket: OpenTransportSocket = (url, headers) => {
-    const socket = new FakeSocket();
-    this.sockets.push(socket);
-    this.urls.push(url);
-    this.headers.push(headers);
-    const script = this.scripts[this.sockets.length - 1] ?? this.scripts[0];
-    queueMicrotask(() => script(socket));
-    return socket;
-  };
-}
-
-function request(): OpenAIResponsesRequest {
-  return {
-    model: 'gpt-5.6-sol',
-    input: [{ role: 'user', content: 'Hello' }],
-    stream: true,
-  };
-}
-
-function options(
-  overrides: Partial<StreamResponseOptions> = {},
-): StreamResponseOptions {
-  return {
-    responsesURL: 'https://chatgpt.com/backend-api/codex/responses',
-    headers: {
-      Authorization: 'Bearer token',
-      'ChatGPT-Account-ID': 'account',
-      'OpenAI-Beta': 'responses_websockets=2026-02-06',
-    },
-    ...overrides,
-  };
-}
-
-function complete(socket: FakeSocket, text?: string): void {
-  if (text !== undefined) {
-    socket.message(
-      JSON.stringify(
-        { type: 'response.output_text.delta', delta: text },
-        null,
-        2,
-      ),
-    );
-  }
-  socket.message(
-    JSON.stringify({
-      type: 'response.completed',
-      response: { id: 'response', status: 'completed' },
-    }),
-  );
-}
-
-function completingScript(text?: string): (socket: FakeSocket) => void {
-  return (socket) => {
-    socket.open();
-    socket.onSend = () => complete(socket, text);
-  };
-}
-
-async function drain(
-  iterator: AsyncIterableIterator<IContent>,
-): Promise<readonly IContent[]> {
-  const messages: IContent[] = [];
-  for await (const message of iterator) messages.push(message);
-  return messages;
-}
-
-function parsedObject(serialized: string): object {
-  const value: unknown = JSON.parse(serialized);
-  if (typeof value !== 'object' || value === null) {
-    throw new Error('Expected serialized request object');
-  }
-  return value;
-}
+import {
+  SocketHarness,
+  completingScript,
+  complete,
+  drain,
+  doneScript,
+  fallbackStream,
+  frame,
+  incompleteScript,
+  metadataOf,
+  options,
+  parsedObject,
+  request,
+  textContent,
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 
 describe('Codex Responses WebSocket transport', () => {
   it('sends a flat response.create request and converts the endpoint URL', async () => {
@@ -207,10 +75,7 @@ describe('Codex Responses WebSocket transport', () => {
       transport.streamResponse(request(), options()),
     );
 
-    expect(messages).toContainEqual({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'Hello' }],
-    });
+    expect(messages).toContainEqual(textContent('Hello'));
   });
 
   it('reuses one connection for sequential requests', async () => {
@@ -431,12 +296,11 @@ describe('Codex Responses WebSocket transport', () => {
     ).rejects.toThrow(/before response.completed/);
   });
 
-  it('does not fall back after a valid response event has arrived', async () => {
-    let fallbackCalls = 0;
+  it('does not fall back after content has been yielded to the consumer', async () => {
     const transport: WebSocketTransport = {
-      async *streamResponse(_request, streamOptions) {
-        streamOptions.onResponseEvent?.();
-        yield await Promise.reject(new Error('stream failed'));
+      async *streamResponse() {
+        yield textContent('partial');
+        throw new Error('stream failed');
       },
       close() {},
     };
@@ -447,23 +311,16 @@ describe('Codex Responses WebSocket transport', () => {
           transport,
           request(),
           options(),
-          async function* fallback() {
-            fallbackCalls += 1;
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'unexpected fallback' }],
-            };
-          },
+          fallbackStream('unexpected fallback'),
           undefined,
           undefined,
         ),
       ),
     ).rejects.toThrow('stream failed');
-    expect(fallbackCalls).toBe(0);
   });
 
   it('falls back and reports sticky fallback before any response event', async () => {
-    let fallbackCalls = 0;
+    const fallback = { calls: 0 };
     let stickyCalls = 0;
     const transport: WebSocketTransport = {
       async *streamResponse() {
@@ -477,13 +334,7 @@ describe('Codex Responses WebSocket transport', () => {
         transport,
         request(),
         options(),
-        async function* fallback() {
-          fallbackCalls += 1;
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'HTTP' }],
-          };
-        },
+        fallbackStream('HTTP', fallback),
         () => {
           stickyCalls += 1;
         },
@@ -491,11 +342,8 @@ describe('Codex Responses WebSocket transport', () => {
       ),
     );
 
-    expect(messages[0]).toStrictEqual({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'HTTP' }],
-    });
-    expect(fallbackCalls).toBe(1);
+    expect(messages[0]).toStrictEqual(textContent('HTTP'));
+    expect(fallback.calls).toBe(1);
     expect(stickyCalls).toBe(1);
   });
 
@@ -509,5 +357,340 @@ describe('Codex Responses WebSocket transport', () => {
     transport.close();
 
     expect(harness.sockets[0].closed).toBe(true);
+  });
+
+  it('treats response.incomplete as an accepted terminal, preserving text and metadata (defect 1)', async () => {
+    const harness = new SocketHarness([incompleteScript('Hello')]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    const messages = await drain(
+      transport.streamResponse(request(), options()),
+    );
+
+    expect(messages).toContainEqual(textContent('Hello'));
+    expect(metadataOf(messages)).toMatchObject({
+      finishReason: 'incomplete',
+      stopReason: 'max_tokens',
+      incompleteReason: 'max_output_tokens',
+      id: 'resp_incomplete',
+    });
+  });
+
+  it('treats response.done as an accepted terminal, preserving text and metadata (defect 1)', async () => {
+    const harness = new SocketHarness([doneScript('Done text')]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    const messages = await drain(
+      transport.streamResponse(request(), options()),
+    );
+
+    expect(messages).toContainEqual(textContent('Done text'));
+    expect(metadataOf(messages)).toMatchObject({
+      finishReason: 'completed',
+      stopReason: 'end_turn',
+      id: 'resp_done',
+    });
+  });
+
+  it('falls back to HTTP when only a control frame arrived before close (defect 4)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({
+              type: 'response.created',
+              response: { id: 'r', status: 'in_progress' },
+            }),
+          );
+          socket.serverClose();
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    let stickyCalls = 0;
+
+    const messages = await drain(
+      streamOverWebSocketOrFallback(
+        transport,
+        request(),
+        options(),
+        fallbackStream('HTTP'),
+        () => {
+          stickyCalls += 1;
+        },
+        undefined,
+      ),
+    );
+
+    expect(messages).toStrictEqual([textContent('HTTP')]);
+    expect(stickyCalls).toBe(1);
+  });
+
+  it('does not leak buffered non-terminal frames when closed before the consumer reads (defect 3 + 4)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({ type: 'response.output_text.delta', delta: 'WS leaked' }),
+          );
+          socket.serverClose();
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    const messages = await drain(
+      streamOverWebSocketOrFallback(
+        transport,
+        request(),
+        options(),
+        fallbackStream('HTTP'),
+        () => undefined,
+        undefined,
+      ),
+    );
+
+    expect(messages).toStrictEqual([textContent('HTTP')]);
+  });
+
+  it('rejects with the socket-error message, not the close message, when error precedes close (defect 2)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.error();
+          socket.serverClose();
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await expect(
+      drain(transport.streamResponse(request(), options())),
+    ).rejects.toThrow(/stream failed before/);
+  });
+
+  it('rejects with AbortError when abort precedes close (defect 2)', async () => {
+    const controller = new AbortController();
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          controller.abort();
+          socket.serverClose();
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await expect(
+      drain(
+        transport.streamResponse(
+          request(),
+          options({ abortSignal: controller.signal }),
+        ),
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('never falls back once text content has been delivered to the consumer (anti-replay invariant)', async () => {
+    let fallbackCalls = 0;
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({ type: 'response.output_text.delta', delta: 'partial' }),
+          );
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const iterator = streamOverWebSocketOrFallback(
+      transport,
+      request(),
+      options(),
+      async function* fallback() {
+        fallbackCalls += 1;
+        yield textContent('fallback');
+      },
+      () => undefined,
+      undefined,
+    );
+
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toStrictEqual(textContent('partial'));
+
+    harness.sockets[0].serverClose();
+
+    await expect(iterator.next()).rejects.toThrow(/before response.completed/);
+    expect(fallbackCalls).toBe(0);
+    expect(
+      harness.sockets[0].sent.filter((data) => data.length > 0),
+    ).toHaveLength(1);
+  });
+
+  it('surfaces the response.failed provider error rather than the close message (defect 1 + 2)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({
+              type: 'response.failed',
+              response: {
+                status: 'failed',
+                error: { message: 'rate limited', type: 'rate_limit' },
+              },
+            }),
+          );
+          socket.serverClose();
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await expect(
+      drain(transport.streamResponse(request(), options())),
+    ).rejects.toThrow(/rate limited/);
+  });
+
+  it('surfaces a top-level error provider message rather than the close message (defect 1 + 2)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({
+              type: 'error',
+              error: { message: 'server overloaded', code: 'overloaded' },
+            }),
+          );
+          socket.serverClose();
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await expect(
+      drain(transport.streamResponse(request(), options())),
+    ).rejects.toThrow(/server overloaded/);
+  });
+
+  it('closes the socket when a handshake error fires (defect 6)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        queueMicrotask(() => socket.error());
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await expect(
+      drain(transport.streamResponse(request(), options())),
+    ).rejects.toMatchObject({ name: 'StreamInterruptionError' });
+    expect(harness.sockets[0].closed).toBe(true);
+  });
+
+  it('invokes the caller-supplied onResponseEvent through streamOverWebSocketOrFallback (defect 5)', async () => {
+    let callerEvents = 0;
+    const harness = new SocketHarness([completingScript('Hi')]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await drain(
+      streamOverWebSocketOrFallback(
+        transport,
+        request(),
+        options({
+          onResponseEvent: () => {
+            callerEvents += 1;
+          },
+        }),
+        fallbackStream('unexpected'),
+        () => undefined,
+        undefined,
+      ),
+    );
+
+    expect(callerEvents).toBeGreaterThan(0);
+  });
+
+  it('attaches close diagnostics (code/reason/wasClean) to the interruption error (defect 7)', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () =>
+          socket.serverClose({
+            code: 1011,
+            reason: 'server crash',
+            wasClean: false,
+          });
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    const error = await drain(
+      transport.streamResponse(request(), options()),
+    ).then(
+      () => undefined,
+      (caught: unknown) => (caught instanceof Error ? caught : undefined),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      details: {
+        closeInfo: { code: 1011, reason: 'server crash', wasClean: false },
+      },
+    });
+  });
+
+  it('keeps the socket reusable after response.incomplete (socket reuse invariant)', async () => {
+    const harness = new SocketHarness([incompleteScript('Hi', false)]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await drain(transport.streamResponse(request(), options()));
+    await drain(transport.streamResponse(request(), options()));
+
+    expect(harness.sockets).toHaveLength(1);
+  });
+
+  it('keeps the socket reusable after response.done (socket reuse invariant)', async () => {
+    const harness = new SocketHarness([doneScript('Hi', false)]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await drain(transport.streamResponse(request(), options()));
+    await drain(transport.streamResponse(request(), options()));
+
+    expect(harness.sockets).toHaveLength(1);
   });
 });
