@@ -64,6 +64,11 @@ async function runCli(
       child.stdin.end();
     }
 
+    // Spawning the CLI runs TypeScript from source, which costs roughly ten
+    // seconds on a cold CI runner against well under a second locally. A 10s
+    // budget expired before the child could answer, so every assertion saw
+    // exit code -1. Sized as a hang guard, well inside the runner's 120s
+    // per-case budget for integration files.
     const timeout = setTimeout(() => {
       child.kill();
       resolve({
@@ -71,7 +76,7 @@ async function runCli(
         stderr,
         exitCode: -1,
       });
-    }, 10000);
+    }, 60_000);
 
     child.on('close', (code) => {
       clearTimeout(timeout);

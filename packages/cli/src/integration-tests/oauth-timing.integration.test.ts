@@ -95,6 +95,16 @@ function createMockOAuthManager(tokenStore: KeyringTokenStore) {
 describe('OAuth Timing Integration Tests', () => {
   let tempDir: string;
   let originalHome: string | undefined;
+  // Every resolver in this file declares provider env keys. CI injects real
+  // ones into the test step, and an env key outranks OAuth in the precedence
+  // chain, so the resolver would return the live key instead of the mocked
+  // OAuth token — surfacing as a masked "***" in the run log.
+  const PROVIDER_ENV_KEYS = [
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'GEMINI_API_KEY',
+  ] as const;
+  let originalProviderEnv: Array<[string, string | undefined]> = [];
   let settingsService: SettingsService;
   let profileManager: ProfileManager;
   let tokenStore: KeyringTokenStore;
@@ -104,6 +114,13 @@ describe('OAuth Timing Integration Tests', () => {
   beforeEach(async () => {
     // Store and override HOME for isolated testing
     originalHome = process.env.HOME;
+    originalProviderEnv = PROVIDER_ENV_KEYS.map((key) => [
+      key,
+      process.env[key],
+    ]);
+    for (const key of PROVIDER_ENV_KEYS) {
+      delete process.env[key];
+    }
     tempDir = await createTempDirectory();
     process.env.HOME = tempDir;
 
@@ -132,6 +149,13 @@ describe('OAuth Timing Integration Tests', () => {
   });
 
   afterEach(async () => {
+    for (const [key, value] of originalProviderEnv) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
     // Restore original HOME
     if (originalHome !== undefined) {
       process.env.HOME = originalHome;

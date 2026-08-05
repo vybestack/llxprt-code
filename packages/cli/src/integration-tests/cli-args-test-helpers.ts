@@ -74,8 +74,8 @@ export async function runCli(
 
     // Hang guard, not an assertion. The child boots the whole CLI from
     // TypeScript source, which is slow on a cold, loaded CI runner. The
-    // previous 5s budget killed the child before it could produce output, so
-    // every spawned-CLI assertion saw exit code -1. Kept well under the
+    // A 5s budget killed the child before it could produce output, and 20s
+    // still expired on CI: every spawned-CLI assertion then saw exit code -1. Kept well under the
     // runner's per-file budget for integration tests so a genuine hang is
     // still reported against this timeout rather than the outer one.
     const timeout = setTimeout(() => {
@@ -85,7 +85,7 @@ export async function runCli(
         stderr,
         exitCode: -1,
       });
-    }, 20_000);
+    }, 60_000);
 
     child.on('close', (code) => {
       clearTimeout(timeout);
