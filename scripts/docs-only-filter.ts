@@ -218,11 +218,10 @@ export function classifyDocsOnly({
     };
   }
 
-  if (
-    changedFiles !== undefined &&
-    Number.isInteger(changedFiles) &&
-    changedFiles !== entries.length
-  ) {
+  // No Number.isInteger() guard: a non-integer (NaN, 3.5) can never equal an
+  // integer entry count, so comparing directly fails closed. Skipping the
+  // comparison for such values would instead bypass the ceiling check.
+  if (changedFiles !== undefined && changedFiles !== entries.length) {
     return {
       docsOnly: false,
       reason: `API truncation: returned ${entries.length} entries but PR reports ${changedFiles} changed files — fail closed to full CI`,

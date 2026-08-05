@@ -63,6 +63,28 @@ function jobNeeds(job: WorkflowJob | undefined): string[] {
   return Array.isArray(needs) ? [...needs] : [needs];
 }
 
+/**
+ * Runs a real aggregator `run:` script with each `'${{ needs.* }}'` literal
+ * replaced by a positional parameter, then passes the values as bash args so
+ * shell metacharacters in a job result can never be evaluated.
+ *
+ * `expressions` and `values` are positional: `expressions[i]` is replaced by
+ * `"$(i+1)"` and receives `values[i]`.
+ */
+function runAggregateScript(
+  runText: string,
+  expressions: readonly string[],
+  values: readonly string[],
+): SpawnSyncReturns<string> {
+  let script = runText;
+  expressions.forEach((expression, index) => {
+    script = script.replaceAll(expression, `"$${index + 1}"`);
+  });
+  return spawnSync('bash', ['-c', script, '--', ...values], {
+    encoding: 'utf8',
+  });
+}
+
 interface TestAggregateResults {
   shouldSkip: string;
   docsOnly: string;
@@ -73,43 +95,30 @@ interface TestAggregateResults {
   acp: string;
 }
 
-// Runs the real `test` aggregator `run:` script with each `'${{ needs.* }}'`
-// literal replaced by a positional parameter, mirroring the existing
-// runTestAggregate harness. The substituted values are passed as bash args so
-// shell metacharacters cannot be evaluated.
+const TEST_AGGREGATE_EXPRESSIONS = [
+  "'${{ needs.skip_check.outputs.should_skip }}'",
+  "'${{ needs.doc_change_filter.outputs.docs_only }}'",
+  "'${{ needs.shard_selector.result }}'",
+  "'${{ needs.shard_selector.outputs.has_tests }}'",
+  "'${{ needs.test_shard.result }}'",
+  "'${{ needs.node_consumer_smoke.result }}'",
+  "'${{ needs.acp_conformance.result }}'",
+] as const;
+
+/** Runs the real `test` aggregator "Check shard results" script. */
 function runTestAggregate(
   runText: string,
   results: TestAggregateResults,
 ): SpawnSyncReturns<string> {
-  const substitutions = [
-    ["'${{ needs.skip_check.outputs.should_skip }}'", '"$1"'],
-    ["'${{ needs.doc_change_filter.outputs.docs_only }}'", '"$2"'],
-    ["'${{ needs.shard_selector.result }}'", '"$3"'],
-    ["'${{ needs.shard_selector.outputs.has_tests }}'", '"$4"'],
-    ["'${{ needs.test_shard.result }}'", '"$5"'],
-    ["'${{ needs.node_consumer_smoke.result }}'", '"$6"'],
-    ["'${{ needs.acp_conformance.result }}'", '"$7"'],
-  ] as const;
-  let script = runText;
-  for (const [expression, parameter] of substitutions) {
-    script = script.replaceAll(expression, parameter);
-  }
-  return spawnSync(
-    'bash',
-    [
-      '-c',
-      script,
-      '--',
-      results.shouldSkip,
-      results.docsOnly,
-      results.selector,
-      results.hasTests,
-      results.shards,
-      results.nodeConsumerSmoke,
-      results.acp,
-    ],
-    { encoding: 'utf8' },
-  );
+  return runAggregateScript(runText, TEST_AGGREGATE_EXPRESSIONS, [
+    results.shouldSkip,
+    results.docsOnly,
+    results.selector,
+    results.hasTests,
+    results.shards,
+    results.nodeConsumerSmoke,
+    results.acp,
+  ]);
 }
 
 interface LintAggregateResults {
@@ -122,41 +131,30 @@ interface LintAggregateResults {
   nodeConsumerSmoke: string;
 }
 
-// Runs the real `lint` aggregator `run:` script with each `'${{ needs.* }}'`
-// literal replaced by a positional parameter, mirroring runTestAggregate.
+const LINT_AGGREGATE_EXPRESSIONS = [
+  "'${{ needs.skip_check.outputs.should_skip }}'",
+  "'${{ needs.doc_change_filter.outputs.docs_only }}'",
+  "'${{ needs.lint_github_actions.result }}'",
+  "'${{ needs.lint_javascript.result }}'",
+  "'${{ needs.lint_shell.result }}'",
+  "'${{ needs.lint_yaml.result }}'",
+  "'${{ needs.node_consumer_smoke.result }}'",
+] as const;
+
+/** Runs the real `lint` aggregator "Check lint results" script. */
 function runLintAggregate(
   runText: string,
   results: LintAggregateResults,
 ): SpawnSyncReturns<string> {
-  const substitutions = [
-    ["'${{ needs.skip_check.outputs.should_skip }}'", '"$1"'],
-    ["'${{ needs.doc_change_filter.outputs.docs_only }}'", '"$2"'],
-    ["'${{ needs.lint_github_actions.result }}'", '"$3"'],
-    ["'${{ needs.lint_javascript.result }}'", '"$4"'],
-    ["'${{ needs.lint_shell.result }}'", '"$5"'],
-    ["'${{ needs.lint_yaml.result }}'", '"$6"'],
-    ["'${{ needs.node_consumer_smoke.result }}'", '"$7"'],
-  ] as const;
-  let script = runText;
-  for (const [expression, parameter] of substitutions) {
-    script = script.replaceAll(expression, parameter);
-  }
-  return spawnSync(
-    'bash',
-    [
-      '-c',
-      script,
-      '--',
-      results.shouldSkip,
-      results.docsOnly,
-      results.lintGithubActions,
-      results.lintJavascript,
-      results.lintShell,
-      results.lintYaml,
-      results.nodeConsumerSmoke,
-    ],
-    { encoding: 'utf8' },
-  );
+  return runAggregateScript(runText, LINT_AGGREGATE_EXPRESSIONS, [
+    results.shouldSkip,
+    results.docsOnly,
+    results.lintGithubActions,
+    results.lintJavascript,
+    results.lintShell,
+    results.lintYaml,
+    results.nodeConsumerSmoke,
+  ]);
 }
 
 describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {

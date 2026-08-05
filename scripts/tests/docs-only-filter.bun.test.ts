@@ -189,6 +189,15 @@ describe('docs-only-filter: GitHub API guards', () => {
     const result = classifyDocsOnly({ entries: [], changedFiles: 0 });
     expect(result.docsOnly).toBe(false);
   });
+
+  it('a non-integer changed_files count fails closed rather than skipping the ceiling check', () => {
+    // A caller passing NaN (e.g. from an unguarded Number(...)) must not bypass
+    // the truncation guard and green an all-docs entry list.
+    const entries = [entry('docs/index.md')];
+    const result = classifyDocsOnly({ entries, changedFiles: Number.NaN });
+    expect(result.docsOnly).toBe(false);
+    expect(result.reason).toContain('truncation');
+  });
 });
 
 describe('docs-only-filter: path classification unit cases', () => {
