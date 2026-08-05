@@ -21,9 +21,12 @@
  * missing provider; after the fix `openai` activates and the fixture receives
  * the chat-completion request.
  *
- * Gated behind `LLXPRT_RUN_BUNDLE_BUILD_TEST=1` (the build takes ~20s), the
- * same gate as the issue #2999 launchability test, so the default shard stays
- * fast while nightly CI exercises it.
+ * This runs unconditionally in the `scripts` shard (the build takes ~20s), like
+ * the issue #3055 bundle-purity guard. Each file executes in its own isolated
+ * process and cleans up its generated bundle in `afterAll`, so it neither
+ * conflicts with the issue #2999 launchability smoke nor leaves artifacts
+ * behind. Unlike #2999 (which stays behind a nightly opt-in gate), this is a
+ * production behavioral regression that must run on every PR.
  */
 
 import { afterAll, describe, expect, it } from 'bun:test';
@@ -58,7 +61,32 @@ const sourceAliasDir = join(
   'aliases',
 );
 
-const RUN_BUILD_TEST = process.env.LLXPRT_RUN_BUNDLE_BUILD_TEST === '1';
+/**
+ * Observation/telemetry env vars inherited from the parent process that must
+ * NOT leak into the spawned bundle. This test proves provider activation, not
+ * observation: an inherited `LLXPRT_JSP_BOOTSTRAP_FILE` (set whenever the test
+ * runs inside an llxprt-code agent) would make the bundle initialize telemetry
+ * against a parent-process bootstrap file, which is unrelated to provider
+ * activation and crashes the spawned CLI before it reaches the provider.
+ * Stripping these keeps the bundle in the same non-observing state CI runs it
+ * in, so the test is hermetic regardless of the host that executes it.
+ */
+const OBSERVATION_ENV_BLOCKLIST = [
+  'LLXPRT_JSP_BOOTSTRAP_FILE',
+  'LLXPRT_JSP_NO_CONTENT',
+] as const;
+
+function bundleSpawnEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OPENAI_API_KEY: 'test-key',
+    CI: 'true',
+  };
+  for (const key of OBSERVATION_ENV_BLOCKLIST) {
+    delete env[key];
+  }
+  return env;
+}
 
 /**
  * A minimal OpenAI-compatible SSE server: it streams a chat-completion whose
@@ -131,177 +159,170 @@ function startFixture(): Promise<{
   });
 }
 
-describe.skipIf(!RUN_BUILD_TEST)(
-  'issue #3062: CLI bundle ships built-in provider aliases and activates openai',
-  () => {
-    // The bundle is a gitignored publish artifact; clean it so a stale copy
-    // cannot mask a regression in either the build or the alias emission.
-    afterAll(() => {
-      rmSync(bundleDir, { recursive: true, force: true });
+describe('issue #3062: CLI bundle ships built-in provider aliases and activates openai', () => {
+  // The bundle is a gitignored publish artifact; clean it so a stale copy
+  // cannot mask a regression in either the build or the alias emission.
+  afterAll(() => {
+    rmSync(bundleDir, { recursive: true, force: true });
+  });
+
+  it('the CLI bundle build emits the built-in alias assets the bundled loader reads', () => {
+    rmSync(bundleDir, { recursive: true, force: true });
+
+    // Build via the same publish-time script `prepack`/`bundle:cli` invoke.
+    // A subprocess is used (rather than calling buildCliBundle() in-process)
+    // because Bun's in-test bundler cannot resolve the CLI's dynamic imports
+    // on every host, whereas the script-mode bundler always can; this is the
+    // real publish boundary either way.
+    const buildScript = join(repoRoot, 'scripts', 'bun-build.config.ts');
+    const build = spawnSync(bunExecutable, [buildScript, '--cli-only'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: 120_000,
+      env: { ...process.env, CI: 'true' },
     });
-
-    it('the CLI bundle build emits the built-in alias assets the bundled loader reads', () => {
-      rmSync(bundleDir, { recursive: true, force: true });
-
-      // Build via the same publish-time script `prepack`/`bundle:cli` invoke.
-      // A subprocess is used (rather than calling buildCliBundle() in-process)
-      // because Bun's in-test bundler cannot resolve the CLI's dynamic imports
-      // on every host, whereas the script-mode bundler always can; this is the
-      // real publish boundary either way.
-      const buildScript = join(repoRoot, 'scripts', 'bun-build.config.ts');
-      const build = spawnSync(bunExecutable, [buildScript, '--cli-only'], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        timeout: 120_000,
-        env: { ...process.env, CI: 'true' },
-      });
-      if (build.status !== 0) {
-        throw new Error(
-          `CLI bundle build failed (exit=${build.status}):\n${build.stderr ?? ''}`,
-        );
-      }
-
-      expect(existsSync(bundlePath)).toBe(true);
-      // The bundled loader reads bundle/providers/aliases (providerAliases.ts);
-      // openai.config must be present or `--provider openai` cannot activate.
-      expect(existsSync(join(bundleAliasDir, 'openai.config'))).toBe(true);
-
-      // Every shipped built-in alias asset must be emitted, not just openai.
-      const sourceAssets = readdirSync(sourceAliasDir).filter(
-        (name) => name.endsWith('.config') || name.endsWith('.json'),
+    if (build.status !== 0) {
+      throw new Error(
+        `CLI bundle build failed (exit=${build.status}):\n${build.stderr ?? ''}`,
       );
-      expect(sourceAssets.length).toBeGreaterThan(0);
-      for (const name of sourceAssets) {
-        expect(existsSync(join(bundleAliasDir, name))).toBe(true);
-      }
-    }, 180_000);
+    }
 
-    it('activates the openai provider and reaches the OpenAI-compatible fixture', async () => {
-      // The previous test built the bundle + aliases; assert the artifact exists
-      // so a missing build surfaces here rather than as an opaque spawn error.
-      expect(existsSync(bundlePath)).toBe(true);
+    expect(existsSync(bundlePath)).toBe(true);
+    // The bundled loader reads bundle/providers/aliases (providerAliases.ts);
+    // openai.config must be present or `--provider openai` cannot activate.
+    expect(existsSync(join(bundleAliasDir, 'openai.config'))).toBe(true);
 
-      const fixture = await startFixture();
-      // The fixture is an in-process HTTP server, so the bundle must run as an
-      // async child (not spawnSync, which would block this process's event loop
-      // and starve the server).
-      let child: ChildProcess | undefined;
-      let stdout = '';
-      let stderr = '';
-      let exited = false;
-      try {
-        child = spawn(
-          bunExecutable,
-          [
-            bundlePath,
-            '--provider',
-            'openai',
-            '--model',
-            'gpt-5.5',
-            '--baseurl',
-            `http://127.0.0.1:${fixture.port}/v1`,
-            '--prompt',
-            'Reply with exactly: haiku',
-          ],
-          {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              OPENAI_API_KEY: 'test-key',
-              CI: 'true',
-            },
-          },
-        );
-        child.stdout?.on('data', (data: Buffer) => {
-          stdout += data.toString();
+    // Every shipped built-in alias asset must be emitted, not just openai.
+    const sourceAssets = readdirSync(sourceAliasDir).filter(
+      (name) => name.endsWith('.config') || name.endsWith('.json'),
+    );
+    expect(sourceAssets.length).toBeGreaterThan(0);
+    for (const name of sourceAssets) {
+      expect(existsSync(join(bundleAliasDir, name))).toBe(true);
+    }
+  }, 180_000);
+
+  it('activates the openai provider and reaches the OpenAI-compatible fixture', async () => {
+    // The previous test built the bundle + aliases; assert the artifact exists
+    // so a missing build surfaces here rather than as an opaque spawn error.
+    expect(existsSync(bundlePath)).toBe(true);
+
+    const fixture = await startFixture();
+    // The fixture is an in-process HTTP server, so the bundle must run as an
+    // async child (not spawnSync, which would block this process's event loop
+    // and starve the server).
+    let child: ChildProcess | undefined;
+    let stdout = '';
+    let stderr = '';
+    let exited = false;
+    try {
+      child = spawn(
+        bunExecutable,
+        [
+          bundlePath,
+          '--provider',
+          'openai',
+          '--model',
+          'gpt-5.5',
+          '--baseurl',
+          `http://127.0.0.1:${fixture.port}/v1`,
+          '--prompt',
+          'Reply with exactly: haiku',
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: bundleSpawnEnv(),
+        },
+      );
+      child.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+      child.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      // Track the real exit so cleanup only terminates a still-running child
+      // and the success path can await a bounded clean completion. Spawn
+      // failures (e.g. ENOENT) emit 'error' with no following 'exit'; route
+      // them through this same lifecycle so the test fails with the real
+      // error instead of crashing on an unhandled EventEmitter emission. The
+      // handler is attached inside the executor, where rejectExit is already
+      // bound (attaching it earlier would reference it before assignment).
+      const exitInfo = new Promise<{
+        code: number | null;
+        signal: NodeJS.Signals | null;
+      }>((resolveExit, rejectExit) => {
+        child!.once('exit', (code, signal) => {
+          exited = true;
+          resolveExit({ code, signal });
         });
-        child.stderr?.on('data', (data: Buffer) => {
-          stderr += data.toString();
+        child!.once('error', (error: Error) => {
+          exited = true;
+          rejectExit(error);
         });
+      });
 
-        // Track the real exit so cleanup only terminates a still-running child
-        // and the success path can await a bounded clean completion. Spawn
-        // failures (e.g. ENOENT) emit 'error' with no following 'exit'; route
-        // them through this same lifecycle so the test fails with the real
-        // error instead of crashing on an unhandled EventEmitter emission. The
-        // handler is attached inside the executor, where rejectExit is already
-        // bound (attaching it earlier would reference it before assignment).
-        const exitInfo = new Promise<{
+      // Phase 1: prove the provider activated and reached the endpoint. If the
+      // child exits before the first chat-completion request, that is a
+      // failure; bound it so a hang cannot stall CI.
+      const reachedEndpoint = await Promise.race([
+        fixture.awaitChatHit().then(() => true),
+        exitInfo.then(() => false),
+        new Promise<boolean>((resolveTimeout) =>
+          setTimeout(() => resolveTimeout(false), 60_000),
+        ),
+      ]);
+      expect(reachedEndpoint).toBe(true);
+
+      // Give stdout a tick to flush after the hit.
+      await new Promise((done) => setTimeout(done, 500));
+
+      const combined = `${stdout}${stderr}`;
+      // Activation proof #1: no missing-provider failure.
+      expect(combined).not.toContain("Provider 'openai' not found");
+      // Activation proof #2: the provider made a real chat-completion request.
+      expect(fixture.chatHits()).toBeGreaterThan(0);
+      // The streamed fixture response reaches the prompt output.
+      expect(combined).toContain('haiku');
+
+      // Phase 2: the bundled CLI must complete cleanly at the CI command
+      // boundary. Independent execution produces the response and exits 0; a
+      // hang, signal, or non-zero exit is a regression.
+      const cleanExit = await Promise.race([
+        exitInfo,
+        new Promise<{
           code: number | null;
           signal: NodeJS.Signals | null;
-        }>((resolveExit, rejectExit) => {
-          child!.once('exit', (code, signal) => {
-            exited = true;
-            resolveExit({ code, signal });
-          });
-          child!.once('error', (error: Error) => {
-            exited = true;
-            rejectExit(error);
+        }>((resolveTimeout) =>
+          setTimeout(
+            () => resolveTimeout({ code: null, signal: null }),
+            60_000,
+          ),
+        ),
+      ]);
+      expect(cleanExit.code).toBe(0);
+      expect(cleanExit.signal).toBeNull();
+    } finally {
+      // Exact-child cleanup: terminate only the spawned child (never a
+      // pattern-based kill) and await its bounded exit so no zombie lingers.
+      // A child that already settled (clean exit or spawn error, both set
+      // `exited`) is left alone; no speculative SIGKILL escalation. The exit
+      // listener is attached before signalling so the reap is never missed.
+      if (!exited && child) {
+        const reaped = new Promise<void>((resolveReap) => {
+          const timer = setTimeout(resolveReap, 10_000);
+          child!.once('exit', () => {
+            clearTimeout(timer);
+            resolveReap();
           });
         });
-
-        // Phase 1: prove the provider activated and reached the endpoint. If the
-        // child exits before the first chat-completion request, that is a
-        // failure; bound it so a hang cannot stall CI.
-        const reachedEndpoint = await Promise.race([
-          fixture.awaitChatHit().then(() => true),
-          exitInfo.then(() => false),
-          new Promise<boolean>((resolveTimeout) =>
-            setTimeout(() => resolveTimeout(false), 60_000),
-          ),
-        ]);
-        expect(reachedEndpoint).toBe(true);
-
-        // Give stdout a tick to flush after the hit.
-        await new Promise((done) => setTimeout(done, 500));
-
-        const combined = `${stdout}${stderr}`;
-        // Activation proof #1: no missing-provider failure.
-        expect(combined).not.toContain("Provider 'openai' not found");
-        // Activation proof #2: the provider made a real chat-completion request.
-        expect(fixture.chatHits()).toBeGreaterThan(0);
-        // The streamed fixture response reaches the prompt output.
-        expect(combined).toContain('haiku');
-
-        // Phase 2: the bundled CLI must complete cleanly at the CI command
-        // boundary. Independent execution produces the response and exits 0; a
-        // hang, signal, or non-zero exit is a regression.
-        const cleanExit = await Promise.race([
-          exitInfo,
-          new Promise<{
-            code: number | null;
-            signal: NodeJS.Signals | null;
-          }>((resolveTimeout) =>
-            setTimeout(
-              () => resolveTimeout({ code: null, signal: null }),
-              60_000,
-            ),
-          ),
-        ]);
-        expect(cleanExit.code).toBe(0);
-        expect(cleanExit.signal).toBeNull();
-      } finally {
-        // Exact-child cleanup: terminate only the spawned child (never a
-        // pattern-based kill) and await its bounded exit so no zombie lingers.
-        // A child that already settled (clean exit or spawn error, both set
-        // `exited`) is left alone; no speculative SIGKILL escalation. The exit
-        // listener is attached before signalling so the reap is never missed.
-        if (!exited && child) {
-          const reaped = new Promise<void>((resolveReap) => {
-            const timer = setTimeout(resolveReap, 10_000);
-            child!.once('exit', () => {
-              clearTimeout(timer);
-              resolveReap();
-            });
-          });
-          child.kill('SIGTERM');
-          await reaped;
-        }
-        await new Promise<void>((done) => fixture.server.close(() => done()));
+        child.kill('SIGTERM');
+        await reaped;
       }
-    }, 180_000);
-  },
-);
+      await new Promise<void>((done) => fixture.server.close(() => done()));
+    }
+  }, 180_000);
+});
 
 /**
  * Issue #3062 (build-input guard) — `buildCliBundle()` must fail fast rather

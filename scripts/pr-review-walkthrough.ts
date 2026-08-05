@@ -229,10 +229,12 @@ function spawnCapturingStdout(
         maxBuffer: 10 * 1024 * 1024,
         env: childEnv,
       },
-      (error, stdout) => {
+      (error, stdout, stderr) => {
         cleanup();
         if (error) {
-          reject(sanitizeErrorMessage(error));
+          reject(
+            buildSafeSubprocessError(error, stderr, extraEnv.OPENAI_API_KEY),
+          );
         } else {
           resolve(stdout);
         }
@@ -255,9 +257,104 @@ function spawnCapturingStdout(
     process.on('SIGTERM', terminate);
     child.on('error', (error) => {
       cleanup();
-      reject(sanitizeErrorMessage(error));
+      reject(buildSafeSubprocessError(error, '', extraEnv.OPENAI_API_KEY));
     });
   });
+}
+
+/**
+ * Build a safe diagnostic Error from a rejected `execFile` result WITHOUT
+ * serializing the command/argv. Node's `ExecError.message` is
+ * `Command failed: <command>
+<stderr>`, which embeds the full `--prompt`
+ * value (untrusted diff/PR data) and the process command line — neither may
+ * reach stderr or the public walkthrough comment.
+ *
+ * Preserved safe diagnostics: exit code / signal, the `killed` flag, and the
+ * provider's own stderr (redacted of any secret value). The provider stderr is
+ * what retry classification (`isRetryableLlxprtError`) inspects for HTTP status
+ * patterns, so surfacing it keeps transient-failure retries working without
+ * leaking the command. The `code`, `signal`, and `killed` metadata is copied as
+ * own properties so retry/timeout classification behaves as before.
+ */
+function buildSafeSubprocessError(
+  error: unknown,
+  providerStderr: string,
+  secret: string | undefined,
+): Error {
+  const code = errorProperty(error, 'code');
+  const signal = errorProperty(error, 'signal');
+  const killed = errorProperty(error, 'killed');
+  const safe = new Error(
+    describeSafeSubprocessFailure(code, signal, killed, providerStderr, secret),
+  );
+  defineOwnPropertyIfDefined(safe, 'code', code);
+  defineOwnPropertyIfDefined(safe, 'signal', signal);
+  defineOwnPropertyIfDefined(safe, 'killed', killed);
+  return safe;
+}
+
+function errorProperty(error: unknown, key: PropertyKey): unknown {
+  if (error === null || typeof error !== 'object') {
+    return undefined;
+  }
+  return Reflect.get(error, key);
+}
+
+function defineOwnPropertyIfDefined(
+  target: Error,
+  key: PropertyKey,
+  value: unknown,
+): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
+function describeSafeSubprocessFailure(
+  code: unknown,
+  signal: unknown,
+  killed: unknown,
+  providerStderr: string,
+  secret: string | undefined,
+): string {
+  const detail: string[] = [];
+  if (typeof code === 'number') {
+    detail.push(`exit code ${code}`);
+  } else if (typeof code === 'string' && code.length > 0) {
+    detail.push(`code ${code}`);
+  }
+  if (typeof signal === 'string' && signal.length > 0) {
+    detail.push(`signal ${signal}`);
+  }
+  if (killed === true) {
+    detail.push('killed');
+  }
+  const descriptor = detail.length > 0 ? ` (${detail.join(', ')})` : '';
+  const sanitizedStderr =
+    typeof providerStderr === 'string' && providerStderr.length > 0
+      ? redactSecret(providerStderr, secret).trim()
+      : '';
+  return sanitizedStderr.length > 0
+    ? `LLM subprocess failed${descriptor}: ${sanitizedStderr}`
+    : `LLM subprocess failed${descriptor}`;
+}
+
+function redactSecret(text: string, secret: string | undefined): string {
+  if (
+    typeof secret !== 'string' ||
+    secret.length === 0 ||
+    !text.includes(secret)
+  ) {
+    return text;
+  }
+  return text.split(secret).join('[REDACTED]');
 }
 
 /**

@@ -47,18 +47,24 @@ const walkthroughScript = join(repoRoot, 'scripts', 'pr-review-walkthrough.ts');
 // is platform-specific and absent on some dev machines).
 const bunExecutable = process.execPath;
 
-// A unique marker planted inside review artifacts. It flows into the map
+// Unique markers planted inside review artifacts. They flow into the map
 // prompt (buildMapPrompt embeds the diff and PR body), so a leaked command
-// error would carry it into the public comment. The generic summary must not.
+// error would carry them into the public comment or onto stderr. They must
+// appear in neither: the subprocess boundary must redact the command/argv and
+// --prompt value rather than logging them.
 const DIFF_SENTINEL = 'LEAKSENTINEL_DIFF_3062';
 const PR_SENTINEL = 'LEAKSENTINEL_PR_3062';
 const UNTRUSTED_MARKER = 'UNTRUSTED DATA (JSON)';
-// Unique marker planted in the diff so it flows through the map prompt into the
-// rejected command diagnostic that the walkthrough logs on stderr. It must never
-// reach the public comment. (The failing executable's own stdio is captured and
-// discarded by execFile, so the prompt is the only propagation path into the
-// logged diagnostic.)
+// A second prompt-borne marker planted in the diff. It reaches the rejected
+// command diagnostic only via the prompt (the failing executable's own stdio
+// is captured and discarded by execFile), so its absence from stderr proves
+// the prompt value itself was not serialized.
 const FAILED_SENTINEL = 'LLXPRT-FAKE-3062-FAILED';
+// A SAFE diagnostic the failing executable writes to its OWN stderr. It must
+// survive onto the script's stderr (after secret redaction) so workflow logs
+// keep a useful provider-side failure reason — proving diagnostics are redacted
+// of the command/prompt, not silenced entirely.
+const PROVIDER_DIAG_SENTINEL = 'PROVIDERDIAG_3062';
 
 const isPosix = process.platform !== 'win32';
 
@@ -118,15 +124,19 @@ describe.skipIf(!isPosix)(
         const binDir = join(sandbox, 'bin');
         mkdirSync(binDir, { recursive: true });
 
-        // Failing `llxprt` executable on PATH. It exits non-zero so execFile
-        // rejects with a message equal to the full command + args, including the
-        // `--prompt` value (which carries the diff, its sentinels, and the
-        // UNTRUSTED DATA payload). That rejected message is the diagnostic the
-        // walkthrough logs on stderr and which must never be published.
-        // execFile captures and discards the child's own stdio, so the sentinels
-        // reach the logged diagnostic solely via the prompt.
+        // Failing `llxprt` executable on PATH. It writes a SAFE provider-side
+        // diagnostic to its own stderr, then exits non-zero. execFile captures
+        // the child's stdio, so that diagnostic reaches the parent only through
+        // the rejected error object. The boundary must surface the provider
+        // stderr (secret-redacted) and the exit code on the script's stderr,
+        // while never serializing the command/argv or the `--prompt` value
+        // (which carries the diff, its sentinels, and the UNTRUSTED DATA
+        // payload).
         const fakeLlxprt = join(binDir, 'llxprt');
-        writeFileSync(fakeLlxprt, '#!/bin/sh\nexit 1\n');
+        writeFileSync(
+          fakeLlxprt,
+          `#!/bin/sh\necho "${PROVIDER_DIAG_SENTINEL}: upstream connection refused" 1>&2\nexit 7\n`,
+        );
         chmodSync(fakeLlxprt, 0o755);
 
         const childEnv = {
@@ -173,23 +183,33 @@ describe.skipIf(!isPosix)(
         expect(comment).toMatch(/per-file summary unavailable/i);
 
         // The public comment must NOT leak any internal diagnostic, including
-        // the unique failing-executable marker and the prompt's sentinels.
+        // the unique failing-executable marker, the prompt's sentinels, or the
+        // safe provider diagnostic (which belongs on stderr only).
         expect(comment).not.toContain(FAILED_SENTINEL);
         expect(comment).not.toContain(DIFF_SENTINEL);
         expect(comment).not.toContain(PR_SENTINEL);
         expect(comment).not.toContain(UNTRUSTED_MARKER);
+        expect(comment).not.toContain(PROVIDER_DIAG_SENTINEL);
         expect(comment).not.toContain('--prompt');
-        expect(comment).not.toContain('Command failed: llxprt');
+        expect(comment).not.toContain('Command failed:');
 
-        // Internal diagnostics remain available on stderr itself (not stdout)
-        // for workflow logs: the rejected command error carries the failing-
-        // executable marker, the prompt, and its UNTRUSTED DATA payload —
-        // proving diagnostics are logged rather than swallowed or published.
-        expect(stderr).toContain(FAILED_SENTINEL);
-        expect(stderr).toContain(UNTRUSTED_MARKER);
-        expect(stderr).toContain(DIFF_SENTINEL);
-        expect(stderr).toContain('--prompt');
-        expect(stderr).toContain('Command failed: llxprt');
+        // SAFE diagnostics must remain on stderr (not stdout) for workflow
+        // logs: the provider-side failure reason the executable wrote to its
+        // own stderr, plus process-exit metadata. This proves diagnostics are
+        // REDACTED of the command/prompt, not silenced entirely.
+        expect(stderr).toContain(PROVIDER_DIAG_SENTINEL);
+        expect(stderr).toMatch(/exit code/i);
+
+        // The command/argv and the --prompt value must NEVER reach stderr: the
+        // subprocess boundary redacts them at the source rather than logging the
+        // rejected ExecError verbatim. Their prompt-borne sentinels must
+        // therefore be absent as well.
+        expect(stderr).not.toContain(FAILED_SENTINEL);
+        expect(stderr).not.toContain(UNTRUSTED_MARKER);
+        expect(stderr).not.toContain(DIFF_SENTINEL);
+        expect(stderr).not.toContain(PR_SENTINEL);
+        expect(stderr).not.toContain('--prompt');
+        expect(stderr).not.toContain('Command failed:');
       } finally {
         rmSync(sandbox, { recursive: true, force: true });
       }
