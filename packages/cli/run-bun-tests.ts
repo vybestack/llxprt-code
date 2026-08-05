@@ -27,6 +27,7 @@ import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
 const PER_FILE_TIMEOUT_MS = 120_000;
+const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**
  * Per-test timeout, matching the testTimeout the removed vitest.config.ts set.
  * Bun defaults to 5s, which the tests that spawn the real CLI exceed once the
@@ -64,6 +65,19 @@ export function timeoutForFile(file: string): number {
   return INTEGRATION_FILE_PATTERN.test(file)
     ? PER_INTEGRATION_TEST_TIMEOUT_MS
     : PER_TEST_TIMEOUT_MS;
+}
+
+/**
+ * Whole-file budget. An integration file runs many cases that each spawn the
+ * CLI, and on CI a single spawn costs roughly ten seconds against well under a
+ * second locally — so a file that finishes in seconds on a developer machine
+ * needs minutes there. The budget is a hang guard, so it is sized to admit a
+ * slow-but-progressing file rather than to bound total runtime.
+ */
+export function fileTimeoutForFile(file: string): number {
+  return INTEGRATION_FILE_PATTERN.test(file)
+    ? PER_INTEGRATION_FILE_TIMEOUT_MS
+    : PER_FILE_TIMEOUT_MS;
 }
 
 function parseConcurrency(): number {
@@ -149,7 +163,7 @@ function runTestFile(file: string): Promise<TestResult> {
       settled = true;
       killProcessTree(child);
       resolve({ file, passed: false, exitCode: null, timedOut: true, output });
-    }, PER_FILE_TIMEOUT_MS);
+    }, fileTimeoutForFile(file));
 
     child.on('exit', (code) => {
       if (settled) return;
@@ -264,7 +278,7 @@ export function generateJUnit(results: readonly TestResult[]): string {
         ? ''
         : result.timedOut
           ? `<failure message="Timed out after ${
-              PER_FILE_TIMEOUT_MS / 1000
+              fileTimeoutForFile(result.file) / 1000
             }s">TIMEOUT</failure>`
           : `<failure message="Exit code ${
               result.exitCode ?? -1

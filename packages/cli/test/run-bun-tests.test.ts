@@ -19,6 +19,7 @@ import {
   discoverTestFiles,
   escapeXml,
   isTestFile,
+  fileTimeoutForFile,
   parseCaseCounts,
   timeoutForFile,
 } from '../run-bun-tests.js';
@@ -171,5 +172,21 @@ describe('timeoutForFile', () => {
     expect(timeoutForFile('src/integrationWiring.test.ts')).toBe(
       timeoutForFile('src/plain.test.ts'),
     );
+  });
+});
+
+describe('fileTimeoutForFile', () => {
+  it('gives an integration file a larger whole-file budget', () => {
+    expect(
+      fileTimeoutForFile('src/integration-tests/cli-args.integration.test.ts'),
+    ).toBeGreaterThan(fileTimeoutForFile('src/ui/hooks/useKeypress.test.tsx'));
+  });
+
+  it('admits a file whose cases each cost a CI-speed CLI spawn', () => {
+    // 20 cases at roughly ten seconds per spawn is the observed CI shape.
+    const observedCiCost = 20 * 10_000;
+    expect(
+      fileTimeoutForFile('src/integration-tests/cli-args.integration.test.ts'),
+    ).toBeGreaterThan(observedCiCost);
   });
 });
