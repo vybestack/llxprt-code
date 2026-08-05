@@ -10,7 +10,7 @@
  * These tests verify the four timestamp scenarios: stale, future, exact, omitted.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -138,5 +138,37 @@ describe('ast_edit last_modified: omitted timestamp skips check', () => {
 
     expect(result.error).toBeUndefined();
     expect(readFileSync(filePath, 'utf-8')).toBe('const x = 2;\n');
+  });
+});
+
+describe('ast_edit last_modified: stale error is actionable plain text (REQ-3035-9)', () => {
+  const ctx = useTempDir();
+
+  it('emits a plain human-readable message (not JSON) with both timestamps and a retry instruction', async () => {
+    const filePath = join(ctx.tempDir, 'stale-plain.ts');
+    const actualMtime = 1700000005000;
+    const providedMtime = actualMtime - 2000;
+    writeFileWithMtime(filePath, 'const x = 1;\n', actualMtime);
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
+
+    const result = await executeApply(tool, {
+      file_path: filePath,
+      old_string: 'const x = 1;',
+      new_string: 'const x = 2;',
+      last_modified: providedMtime,
+    });
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe('file_modified_conflict');
+    const raw = String(result.llmContent);
+    // Both timestamps must be present so the caller can diagnose the mismatch.
+    expect(raw).toContain(String(actualMtime));
+    expect(raw).toContain(String(providedMtime));
+    // Must instruct the caller how to recover.
+    expect(raw.toLowerCase()).toMatch(/re-read/);
+    expect(raw.toLowerCase()).toMatch(/retry/);
+    // Must not be encoded JSON.
+    expect(raw).not.toMatch(/^\s*{/);
+    expect(raw).not.toContain('"current_mtime"');
   });
 });

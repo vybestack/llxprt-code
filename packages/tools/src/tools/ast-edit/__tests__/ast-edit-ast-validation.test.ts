@@ -11,13 +11,14 @@
  * writing to disk.
  */
 
-import { describe, it, expect } from 'vitest';
-import { writeFileSync } from 'node:fs';
+import { describe, it, expect } from 'bun:test';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   useTempDir,
   createFakeToolHost,
   executePreview,
+  executeApply,
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
 
@@ -147,10 +148,10 @@ describe('ast_edit AST validation: Python', () => {
   });
 });
 
-describe('ast_edit AST validation: unknown file extension', () => {
+describe('ast_edit AST validation: unknown file extension (REQ-3035-5)', () => {
   const ctx = useTempDir();
 
-  it('reports AST PASSED for a .txt file (unknown extension)', async () => {
+  it('reports AST SKIPPED (unsupported file type) for a .txt file', async () => {
     const filePath = join(ctx.tempDir, 'readme.txt');
     writeFileSync(filePath, 'Hello World\n', 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
@@ -162,22 +163,35 @@ describe('ast_edit AST validation: unknown file extension', () => {
     });
 
     expect(result.error).toBeUndefined();
-    expect(String(result.llmContent)).toContain('AST validation: PASSED');
+    const output = String(result.llmContent);
+    expect(output).toContain('AST validation: SKIPPED (unsupported file type)');
+    expect(output).not.toContain('AST validation: PASSED');
   });
 
-  it('reports AST PASSED for a .md file with broken syntax', async () => {
+  it('reports AST SKIPPED for a .md file and remains writable', async () => {
     const filePath = join(ctx.tempDir, 'doc.md');
     writeFileSync(filePath, '# Title\n\nSome text.\n', 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
-    const result = await executePreview(tool, {
+    const previewResult = await executePreview(tool, {
       file_path: filePath,
       old_string: 'Some text.',
-      new_string: '} broken { syntax :',
+      new_string: 'More text.',
     });
 
-    expect(result.error).toBeUndefined();
-    expect(String(result.llmContent)).toContain('AST validation: PASSED');
+    expect(previewResult.error).toBeUndefined();
+    expect(String(previewResult.llmContent)).toContain(
+      'AST validation: SKIPPED (unsupported file type)',
+    );
+
+    // Unsupported types must remain editable.
+    const applyResult = await executeApply(tool, {
+      file_path: filePath,
+      old_string: 'Some text.',
+      new_string: 'More text.',
+    });
+    expect(applyResult.error).toBeUndefined();
+    expect(readFileSync(filePath, 'utf-8')).toBe('# Title\n\nMore text.\n');
   });
 });
 

@@ -105,7 +105,9 @@ export class ASTContextCollector {
     targetFilePath: string,
     content: string,
     workspaceRoot: string,
+    options?: { collectWorkingSet?: boolean },
   ): Promise<EnhancedASTContext> {
+    const collectWorkingSet = options?.collectWorkingSet ?? true;
     const startTime = Date.now();
     const startMemory = process.memoryUsage().heapUsed;
 
@@ -115,7 +117,6 @@ export class ASTContextCollector {
     const enhancedContext: EnhancedASTContext = {
       ...baseContext,
       declarations: baseContext.declarations as EnhancedDeclaration[],
-      connectedFiles: [],
     };
 
     // Context optimization
@@ -125,14 +126,17 @@ export class ASTContextCollector {
       workspaceRoot,
     );
 
-    // Phase 2: Working Set Context (Git-based)
-    const connectedFiles = await enrichWithWorkingSetContext(
-      targetFilePath,
-      workspaceRoot,
-      this.repoProvider,
-      this.astExtractor,
-    );
-    enhancedContext.connectedFiles = connectedFiles;
+    // Phase 2: Working Set Context (Git-based). Suppressed only for callers
+    // (ast_edit preview) that opt out; ast_read_file keeps the working set.
+    if (collectWorkingSet) {
+      const connectedFiles = await enrichWithWorkingSetContext(
+        targetFilePath,
+        workspaceRoot,
+        this.repoProvider,
+        this.astExtractor,
+      );
+      enhancedContext.connectedFiles = connectedFiles;
+    }
 
     // Phase 3: Repository context and Cross-file Relationships
     const repoContext =

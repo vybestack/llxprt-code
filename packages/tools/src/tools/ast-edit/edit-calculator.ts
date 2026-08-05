@@ -15,6 +15,19 @@ import { ToolErrorType } from '../../types/tool-error.js';
 import { isNodeError } from '../../utils/errors.js';
 import { parse, LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
 import { applyReplacement } from './edit-helpers.js';
+import {
+  findEditStartLine,
+  type AstValidationResult,
+  type AstDiagnostic,
+} from './validation-categorizer.js';
+
+/**
+ * Optional edit region used to refine whole-file tree-sitter recovery
+ * locations so they point at the edited area instead of line 1.
+ */
+export interface EditRegion {
+  startLine: number;
+}
 
 /**
  * Result of edit calculation, including validation and freshness checks.
@@ -25,8 +38,8 @@ export interface CalculatedEdit {
   occurrences: number;
   error?: { display: string; raw: string; type: ToolErrorType };
   isNewFile: boolean;
-  astValidation?: { valid: boolean; errors: string[] };
-  preEditValidation?: { valid: boolean; errors: string[] };
+  astValidation?: AstValidationResult;
+  preEditValidation?: AstValidationResult;
   fileFreshness?: number | null;
 }
 
@@ -95,9 +108,11 @@ export async function calculateEdit(
       ? validateASTSyntax(params.file_path, currentContent)
       : undefined;
 
-  let astValidation: { valid: boolean; errors: string[] } | undefined;
+  let astValidation: AstValidationResult | undefined;
   if (!noChangeError) {
-    astValidation = validateASTSyntax(params.file_path, newContent);
+    // Refine whole-file recovery locations using the edited region.
+    const editRegion = buildEditRegion(currentContent, normalizedOldString);
+    astValidation = validateASTSyntax(params.file_path, newContent, editRegion);
   }
 
   return {
@@ -164,12 +179,8 @@ function checkFreshness(
       newContent: currentContent ?? '',
       occurrences: 0,
       error: {
-        display: `File has been modified since it was last read. Please read the file again to get the latest content.`,
-        raw: JSON.stringify({
-          message: `File ${params.file_path} mismatch. Expected mtime <= ${params.last_modified}, but found ${currentMtime}.`,
-          current_mtime: currentMtime,
-          your_mtime: params.last_modified,
-        }),
+        display: `File has been modified since it was last read (expected last_modified ${params.last_modified}, current mtime ${currentMtime}). Re-read the file then retry.`,
+        raw: `FILE_MODIFIED_CONFLICT: ${params.file_path} was modified since it was last read. Expected last_modified ${params.last_modified}, but the current mtime is ${currentMtime}. Re-read the file then retry.`,
         type: ToolErrorType.FILE_MODIFIED_CONFLICT,
       },
       isNewFile: false,
@@ -251,6 +262,20 @@ function checkNoChange(
 }
 
 /**
+ * Derives the edited region's start line so whole-file tree-sitter recovery
+ * can report a useful location. Returns undefined for new files or when the
+ * edit position cannot be determined.
+ */
+function buildEditRegion(
+  currentContent: string | null,
+  oldString: string,
+): EditRegion | undefined {
+  if (!currentContent || !oldString) return undefined;
+  const startLine = findEditStartLine(currentContent, oldString);
+  return startLine === null ? undefined : { startLine };
+}
+
+/**
  * Returns the true number of occurrences of searchString in content.
  *
  * @param content - File content
@@ -279,78 +304,118 @@ export function countOccurrences(
  * relying on thrown exceptions (tree-sitter is error-recovering and
  * never throws on syntax errors).
  *
+ * Collects EVERY relevant diagnostic in stable source order (not only the
+ * first ERROR node) so a pre-existing early error cannot mask a newly
+ * introduced later error. Descends through ERROR nodes to retain both enclosing
+ * recovery identity and more precise nested diagnostics, then deduplicates true
+ * equivalents.
+ *
  * @param filePath - File path (used to detect language)
  * @param content - File content to validate
- * @returns Validation result
+ * @param editRegion - When provided, whole-file recovery ERROR nodes are
+ *   re-attributed to the edited region instead of the misleading line 1.
+ * @returns Validation result; `supported` is false for unsupported extensions.
  */
 export function validateASTSyntax(
   filePath: string,
   content: string,
-): { valid: boolean; errors: string[] } {
+  editRegion?: EditRegion,
+): AstValidationResult {
   const extension = path.extname(filePath).substring(1).toLowerCase();
   const lang = LANGUAGE_MAP[extension];
   if (!lang) {
-    return { valid: true, errors: [] };
+    return { valid: true, errors: [], supported: false };
   }
 
   try {
-    const tree = parse(lang, content);
-    const root = tree.root();
-
-    // Check for explicit ERROR nodes (garbled/unparseable tokens)
-    const errorNode = root.find({ rule: { kind: 'ERROR' } });
-    if (errorNode) {
-      const pos = errorNode.range().start;
-      return {
-        valid: false,
-        errors: [
-          `Syntax error at line ${pos.line + 1}, column ${pos.column + 1}`,
-        ],
-      };
+    const root = parse(lang, content).root();
+    const diagnostics = collectDiagnostics(root, content, editRegion);
+    if (diagnostics.length === 0) {
+      return { valid: true, errors: [], supported: true, diagnostics };
     }
-
-    // Check for zero-width phantom nodes (MISSING tokens from error recovery).
-    // Tree-sitter inserts these when expected delimiters are absent (e.g., missing }).
-    // ast-grep doesn't expose isMissing() or kind:'MISSING', but zero-width leaf
-    // nodes in non-empty content reliably indicate recovered syntax errors.
-    if (content.length > 0) {
-      const missingNode = findZeroWidthNode(root);
-      if (missingNode) {
-        return {
-          valid: false,
-          errors: [
-            `Syntax error at line ${missingNode.line + 1}, column ${missingNode.column + 1}`,
-          ],
-        };
-      }
-    }
-
-    return { valid: true, errors: [] };
+    return {
+      valid: false,
+      errors: diagnostics.map((d) => d.message),
+      supported: true,
+      diagnostics,
+    };
   } catch (error) {
     return {
       valid: false,
       errors: [error instanceof Error ? error.message : String(error)],
+      supported: true,
     };
   }
 }
 
 /**
- * Walks the parse tree to find zero-width leaf nodes, which indicate
- * MISSING tokens inserted by tree-sitter's error recovery (e.g., a phantom
- * closing brace). Skips the root node to avoid false positives on empty content.
+ * Builds a single diagnostic from a raw parser range, preserving the raw
+ * coordinates and whole-file-recovery identity while refining only the display
+ * location to the edited region.
  */
-function findZeroWidthNode(
-  node: ReturnType<ReturnType<typeof parse>['root']>,
-): { line: number; column: number } | null {
-  for (const child of node.children()) {
-    const range = child.range();
-    if (range.start.index === range.end.index && child.isLeaf()) {
-      return { line: range.start.line, column: range.start.column };
-    }
-    const found = findZeroWidthNode(child);
-    if (found) return found;
+function toDiagnostic(
+  range: { start: { line: number; column: number }; end: { line: number } },
+  editRegion: EditRegion | undefined,
+): AstDiagnostic {
+  const line = range.start.line;
+  const column = range.start.column;
+  const endLine = range.end.line;
+  const wholeFileRecovery = line === 0 && column === 0 && endLine > line;
+  let message: string;
+  if (wholeFileRecovery && editRegion && editRegion.startLine > 1) {
+    message = `Syntax error near line ${editRegion.startLine} (whole-file recovery; location approximate)`;
+  } else if (wholeFileRecovery) {
+    message = `Syntax error at line ${line + 1}, column ${column + 1} (whole-file recovery)`;
+  } else {
+    message = `Syntax error at line ${line + 1}, column ${column + 1}`;
   }
-  return null;
+  return { line, column, endLine, wholeFileRecovery, message };
+}
+
+/**
+ * Collects every ERROR/MISSING diagnostic by walking the parse tree in source
+ * order, descending through ERROR nodes to find more specific nested
+ * diagnostics. Every relevant diagnostic is retained so the classification
+ * can compare the whole-file recovery identity AND any nested precise
+ * locations — suppressing an enclosing recovery when a child exists would
+ * lose damage that the child does not capture. True equivalents (identical
+ * span) are deduplicated, preserving stable source order.
+ */
+function collectDiagnostics(
+  root: ReturnType<ReturnType<typeof parse>['root']>,
+  content: string,
+  editRegion: EditRegion | undefined,
+): AstDiagnostic[] {
+  const collected: AstDiagnostic[] = [];
+  const visit = (node: typeof root): void => {
+    const kind = node.kind();
+    const range = node.range();
+    const isZeroWidthMissing =
+      content.length > 0 &&
+      range.start.index === range.end.index &&
+      node.isLeaf();
+    if (kind === 'ERROR' || isZeroWidthMissing) {
+      collected.push(toDiagnostic(range, editRegion));
+      // Continue descending into ERROR nodes to find more specific nested
+      // diagnostics — the enclosing recovery must not mask distinct damage.
+    }
+    for (const child of node.children()) {
+      visit(child);
+    }
+  };
+  visit(root);
+
+  // Deduplicate true equivalents (identical span) preserving source order.
+  const seen = new Set<string>();
+  const result: AstDiagnostic[] = [];
+  for (const d of collected) {
+    const key = `${d.line}:${d.column}:${d.endLine}:${d.wholeFileRecovery}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(d);
+    }
+  }
+  return result;
 }
 
 /**

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -286,9 +286,10 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
     );
   });
 
-  it('categorizes a newly-introduced error in apply (force) output', async () => {
+  it('refuses a newly-introduced error in apply (force) output and leaves the file unchanged (REQ-3035-2)', async () => {
     const filePath = join(tempDir, 'apply-new-error.ts');
-    writeFileSync(filePath, 'const greeting = "hello";' + NL, 'utf-8');
+    const original = 'const greeting = "hello";' + NL;
+    writeFileSync(filePath, original, 'utf-8');
 
     const tool = new ASTEditTool(createFakeToolHost(tempDir));
     const result = await tool
@@ -300,12 +301,13 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
       })
       .execute(new AbortController().signal);
 
-    expect(result.error).toBeUndefined();
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe('ast_syntax_error');
     const content = String(result.llmContent);
-    expect(content).toContain('new error introduced by this edit');
-    expect(content).not.toContain('Pre-existing syntax errors: Yes');
-    // Verify the file was actually written with the (broken) new content.
-    expect(readFileSync(filePath, 'utf-8')).toContain('@@@');
+    expect(content).not.toContain('Successfully applied edit');
+    expect(content).not.toContain('Successfully created file');
+    // The file must remain byte-for-byte unchanged.
+    expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 
   it('reports mixed pre-existing and newly-introduced errors in preview', async () => {
@@ -333,7 +335,7 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
 
     expect(result.error).toBeUndefined();
     const content = String(result.llmContent);
-    expect(content).toContain('Pre-existing syntax errors: Yes');
+    expect(content).not.toContain('Pre-existing syntax errors: Yes');
     expect(content).toMatch(
       /AST validation: FAILED \(file had pre-existing errors? at line \d+; post-edit error at line \d+ may be newly introduced\)/,
     );

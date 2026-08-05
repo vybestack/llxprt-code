@@ -36,6 +36,8 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/tools/generate-image/GenerateImageTool.test.ts',
     'src/tools/generate-image/GenerateImageTool.surface.test.ts',
     'src/tools/ast-edit/__tests__/ast-edit-issue-1756.test.ts',
+    'src/tools/ast-edit/__tests__/ast-edit-issue-3035.test.ts',
+    'src/tools/ast-edit/__tests__/ast-edit-issue-3035-review.test.ts',
     'src/tools/ast-edit/__tests__/ast-edit-summary-counts.test.ts',
     'src/tools/ast-edit/__tests__/ast-edit-rust-validation.test.ts',
     'src/tools/ast-edit/__tests__/validation-categorizer.test.ts',

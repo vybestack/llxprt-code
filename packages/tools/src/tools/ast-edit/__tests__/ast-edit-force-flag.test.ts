@@ -7,11 +7,11 @@
  *
  * force: true triggers the apply/execution phase. These tests verify
  * that force does NOT override hard errors (missing old_string,
- * file not found, stale last_modified) but DOES apply edits even
- * when AST validation fails.
+ * file not found, stale last_modified) or newly introduced AST
+ * syntax errors.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -22,12 +22,13 @@ import {
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
 
-describe('ast_edit force flag: applies edit with AST validation failure', () => {
+describe('ast_edit force flag: refuses a newly-introduced AST syntax error (REQ-3035-2)', () => {
   const ctx = useTempDir();
 
-  it('writes the file and reports AST FAILED when the replacement produces invalid syntax', async () => {
+  it('refuses the apply and leaves the file byte-for-byte unchanged when the edit breaks syntax', async () => {
     const filePath = join(ctx.tempDir, 'force-broken-ast.ts');
-    writeFileSync(filePath, 'const obj = { a: 1 };\n', 'utf-8');
+    const original = 'const obj = { a: 1 };\n';
+    writeFileSync(filePath, original, 'utf-8');
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
     const result = await executeApply(tool, {
@@ -36,11 +37,28 @@ describe('ast_edit force flag: applies edit with AST validation failure', () => 
       new_string: 'const obj = { a: 1 ',
     });
 
-    expect(result.error).toBeUndefined();
-    expect(String(result.llmContent)).toContain('Successfully applied edit');
-    expect(String(result.llmContent)).toContain('AST validation: FAILED');
-    const fileContent = readFileSync(filePath, 'utf-8');
-    expect(fileContent).toBe('const obj = { a: 1 \n');
+    // Typed failure, no success-leading output, file untouched.
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe('ast_syntax_error');
+    const output = String(result.llmContent);
+    expect(output).not.toContain('Successfully applied edit');
+    expect(output).not.toContain('Successfully created file');
+    expect(readFileSync(filePath, 'utf-8')).toBe(original);
+  });
+
+  it('does not create a new file whose content has a syntax error', async () => {
+    const filePath = join(ctx.tempDir, 'invalid-new-file.ts');
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
+
+    const result = await executeApply(tool, {
+      file_path: filePath,
+      old_string: '',
+      new_string: 'const broken = {{{ 2;\n',
+    });
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(() => readFileSync(filePath, 'utf-8')).toThrow();
   });
 });
 
@@ -130,10 +148,10 @@ describe('ast_edit force flag: does NOT override stale last_modified', () => {
   });
 });
 
-describe('ast_edit force flag: applies new file creation', () => {
+describe('ast_edit force flag: applies new file creation (REQ-3035-8)', () => {
   const ctx = useTempDir();
 
-  it('creates a new file with force: true when old_string is empty and file does not exist', async () => {
+  it('creates a new file and reports creation (not zero replacements) with force: true', async () => {
     const filePath = join(ctx.tempDir, 'force-new-file.ts');
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
 
@@ -144,8 +162,26 @@ describe('ast_edit force flag: applies new file creation', () => {
     });
 
     expect(result.error).toBeUndefined();
-    expect(String(result.llmContent)).toContain('Successfully applied edit');
-    expect(String(result.llmContent)).toContain('AST validation: PASSED');
+    const output = String(result.llmContent);
+    expect(output).toContain('Successfully created file:');
+    expect(output).toContain('AST validation: PASSED');
+    // Creation must not be reported as a replacement count.
+    expect(output).not.toContain('0 replacement');
     expect(readFileSync(filePath, 'utf-8')).toBe('export const NEW = 42;\n');
+  });
+
+  it('reports replacement counts for edits to an existing file', async () => {
+    const filePath = join(ctx.tempDir, 'force-existing-edit.ts');
+    writeFileSync(filePath, 'const greeting = "hello";\n', 'utf-8');
+    const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
+
+    const result = await executeApply(tool, {
+      file_path: filePath,
+      old_string: 'const greeting = "hello";',
+      new_string: 'const greeting = "world";',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(String(result.llmContent)).toContain('replacement(s) applied');
   });
 });

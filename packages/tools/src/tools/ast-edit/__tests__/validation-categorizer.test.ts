@@ -4,14 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   summarizeAstValidation,
   computeLineDelta,
+  deriveCandidateMapping,
   findEditStartLine,
   extractErrorLineNumber,
   formatValidationLineLabel,
+  type CandidateMapping,
 } from '../validation-categorizer.js';
+
+/**
+ * Constructs a CandidateMapping simulating a single-line edit at
+ * `editStartLine` (replacing exactly one line) where everything below is
+ * unchanged suffix. This mirrors the old editStartLine + lineDelta semantics
+ * for unit-test scenarios.
+ */
+function singleLineEditMapping(
+  editStartLine: number,
+  lineDelta: number,
+  origLineCount = 200,
+): CandidateMapping {
+  const prefixLines = editStartLine - 1;
+  const suffixLines = origLineCount - editStartLine;
+  return { prefixLines, suffixLines, origLineCount, lineDelta };
+}
 
 describe('summarizeAstValidation', () => {
   it('reports PASSED when both pre- and post-edit are valid', () => {
@@ -59,7 +77,6 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
-      0,
     );
     expect(summary.status).toBe('FAILED');
     expect(summary.preExisting).toBe(true);
@@ -73,8 +90,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 183, column 5'] },
-      10,
-      1,
+      singleLineEditMapping(1, 10),
     );
     expect(summary.status).toBe('FAILED');
     expect(summary.preExisting).toBe(true);
@@ -86,7 +102,6 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 4977, column 1'] },
-      0,
     );
     expect(summary.status).toBe('FAILED');
     expect(summary.preExisting).toBe(false);
@@ -110,8 +125,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 184, column 5'] },
-      10,
-      1,
+      singleLineEditMapping(1, 10),
     );
     expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
@@ -121,7 +135,6 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 173, column 5'] },
       { valid: false, errors: ['Syntax error at line 173, column 9'] },
-      0,
     );
     expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
@@ -134,8 +147,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 50, column 5'] },
       { valid: false, errors: ['Syntax error at line 53, column 5'] },
-      10,
-      1,
+      singleLineEditMapping(1, 10, 50),
     );
     expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
@@ -147,8 +159,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 100, column 5'] },
       { valid: false, errors: ['Syntax error at line 110, column 5'] },
-      10,
-      50,
+      singleLineEditMapping(50, 10, 100),
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(false);
@@ -160,8 +171,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 10, column 5'] },
       { valid: false, errors: ['Syntax error at line 10, column 5'] },
-      10,
-      50,
+      singleLineEditMapping(50, 10),
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(false);
@@ -171,8 +181,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 50, column 5'] },
       { valid: false, errors: ['Syntax error at line 60, column 5'] },
-      10,
-      50,
+      singleLineEditMapping(50, 10, 100),
     );
     expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
@@ -182,7 +191,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 50, column 5'] },
       { valid: false, errors: ['Syntax error at line 60, column 5'] },
-      10,
+      // No mapping → everything is unchanged prefix → same-line-only matching.
     );
     expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
@@ -204,8 +213,7 @@ describe('summarizeAstValidation', () => {
           'Syntax error at line 110, column 1',
         ],
       },
-      10,
-      5,
+      singleLineEditMapping(5, 10),
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(false);
@@ -225,8 +233,7 @@ describe('summarizeAstValidation', () => {
           'Syntax error at line 500, column 1',
         ],
       },
-      10,
-      50,
+      singleLineEditMapping(50, 10, 100),
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(true);
@@ -239,8 +246,7 @@ describe('summarizeAstValidation', () => {
     const summary = summarizeAstValidation(
       { valid: false, errors: ['Syntax error at line 5, column 1'] },
       { valid: false, errors: ['Syntax error at line 15, column 1'] },
-      10,
-      10,
+      singleLineEditMapping(10, 10),
     );
     expect(summary.preExisting).toBe(false);
     expect(summary.newlyIntroduced).toBe(true);
@@ -255,7 +261,6 @@ describe('summarizeAstValidation', () => {
         valid: false,
         errors: ['Syntax error at line 173, column 5', 'unknown parse failure'],
       },
-      0,
     );
     expect(summary.preExisting).toBe(true);
     expect(summary.newlyIntroduced).toBe(true);
@@ -372,5 +377,182 @@ describe('formatValidationLineLabel', () => {
 
   it('returns empty string for an empty error list', () => {
     expect(formatValidationLineLabel([])).toBe('');
+  });
+});
+
+describe('summarizeAstValidation: unsupported file types (REQ-3035-5)', () => {
+  it('reports SKIPPED (unsupported file type) when the post-edit file is unsupported', () => {
+    const summary = summarizeAstValidation(
+      { valid: true, errors: [], supported: false },
+      { valid: true, errors: [], supported: false },
+    );
+    expect(summary.status).toBe('SKIPPED');
+    expect(summary.label).toContain('unsupported file type');
+    expect(summary.newlyIntroduced).toBe(false);
+  });
+
+  it('keeps unsupported files writable by not flagging a newly-introduced error', () => {
+    // Even when the post-edit content is non-empty, an unsupported type never
+    // becomes a syntax failure the apply gate would refuse.
+    const summary = summarizeAstValidation(undefined, {
+      valid: true,
+      errors: [],
+      supported: false,
+    });
+    expect(summary.status).toBe('SKIPPED');
+    expect(summary.newlyIntroduced).toBe(false);
+  });
+
+  it('still validates supported files normally', () => {
+    const summary = summarizeAstValidation(
+      { valid: true, errors: [], supported: true },
+      {
+        valid: false,
+        errors: ['Syntax error at line 5, column 1'],
+        supported: true,
+      },
+    );
+    expect(summary.status).toBe('FAILED');
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+});
+
+describe('summarizeAstValidation: whole-file recovery locations (REQ-3035-3)', () => {
+  const wholeRecovery = (line: number): string =>
+    `Syntax error near line ${line} (whole-file recovery; location approximate)`;
+  const wholeRecoveryBaseline = (line: number): string =>
+    `Syntax error at line ${line}, column 1 (whole-file recovery)`;
+
+  it('flags a whole-file recovery error as newly-introduced when the file was clean', () => {
+    const summary = summarizeAstValidation(
+      { valid: true, errors: [] },
+      { valid: false, errors: [wholeRecovery(3)] },
+    );
+    expect(summary.status).toBe('FAILED');
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
+  it('fails closed when a post whole-file recovery is not equivalent to a precise baseline', () => {
+    // A precise baseline error (not a whole-file recovery) cannot be proven
+    // equivalent to a post-edit whole-file recovery → classified as newly
+    // introduced (fail closed), not blindly accepted.
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 1, column 16'] },
+      { valid: false, errors: [wholeRecovery(10)] },
+    );
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
+  it('treats a whole-file recovery as pre-existing when the baseline was also a whole-file recovery', () => {
+    // An unchanged baseline whole-file recovery that remains after a harmless
+    // edit must stay writable (equivalent identity).
+    const summary = summarizeAstValidation(
+      { valid: false, errors: [wholeRecoveryBaseline(1)] },
+      { valid: false, errors: [wholeRecovery(10)] },
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(false);
+  });
+
+  it('fails closed when a baseline whole-file recovery ends in the changed middle', () => {
+    const summary = summarizeAstValidation(
+      {
+        valid: false,
+        errors: [wholeRecoveryBaseline(1)],
+        diagnostics: [
+          {
+            line: 0,
+            column: 0,
+            endLine: 5,
+            wholeFileRecovery: true,
+            message: wholeRecoveryBaseline(1),
+          },
+        ],
+      },
+      {
+        valid: false,
+        errors: [wholeRecovery(4)],
+        diagnostics: [
+          {
+            line: 0,
+            column: 0,
+            endLine: 6,
+            wholeFileRecovery: true,
+            message: wholeRecovery(4),
+          },
+        ],
+      },
+      {
+        prefixLines: 2,
+        suffixLines: 2,
+        origLineCount: 10,
+        lineDelta: 1,
+      },
+    );
+
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+});
+
+describe('summarizeAstValidation: compares every diagnostic (Finding 1)', () => {
+  it('detects a newly introduced later error even when an earlier pre-existing error matches', () => {
+    // Two post-edit errors: line 2 matches the pre-existing baseline, but line
+    // 10 is new. The first-match-only flaw must not mask line 10.
+    const summary = summarizeAstValidation(
+      { valid: false, errors: ['Syntax error at line 2, column 14'] },
+      {
+        valid: false,
+        errors: [
+          'Syntax error at line 2, column 14',
+          'Syntax error at line 10, column 9',
+        ],
+      },
+    );
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
+  it('classifies all-matching post errors as pre-existing', () => {
+    const summary = summarizeAstValidation(
+      {
+        valid: false,
+        errors: [
+          'Syntax error at line 2, column 14',
+          'Syntax error at line 10, column 9',
+        ],
+      },
+      {
+        valid: false,
+        errors: [
+          'Syntax error at line 2, column 14',
+          'Syntax error at line 10, column 9',
+        ],
+      },
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(false);
+  });
+});
+
+describe('deriveCandidateMapping: original-to-candidate line diff (Finding 3)', () => {
+  it('derives a shifted prefix and positive delta for an inserted line', () => {
+    const mapping = deriveCandidateMapping(
+      'const keep = 1;\nconst broken = @@@;\n',
+      'const keep = 2;\nconst newLine = 3;\nconst broken = @@@;\n',
+    );
+    expect(mapping.lineDelta).toBe(1);
+    expect(mapping.prefixLines).toBe(0);
+  });
+
+  it('returns full-prefix mapping and zero delta when candidate equals original', () => {
+    const mapping = deriveCandidateMapping('a\nb\n', 'a\nb\n');
+    expect(mapping.lineDelta).toBe(0);
+    expect(mapping.prefixLines).toBe(3); // all lines are prefix
+    expect(mapping.suffixLines).toBe(0);
+  });
+
+  it('handles a new file (null original) with no reliable mapping', () => {
+    const mapping = deriveCandidateMapping(null, 'const x = 1;\n');
+    expect(mapping.lineDelta).toBe(0);
+    expect(mapping.prefixLines).toBe(Number.MAX_SAFE_INTEGER);
   });
 });
