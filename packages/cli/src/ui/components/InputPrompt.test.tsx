@@ -115,9 +115,16 @@ describe('InputPrompt', () => {
       text: '',
       cursor: [0, 0],
       lines: [''],
+      // inputPromptRender indexes transformationsByLine and treats
+      // visualToTransformedMap as a number; without both the component throws
+      // while rendering.
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       setText: vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
+        mockBuffer.transformationsByLine = [[]];
+        mockBuffer.visualToTransformedMap = [0];
         mockBuffer.cursor = [0, newText.length];
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
