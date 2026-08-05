@@ -8,7 +8,15 @@ import type { BunTestWorkspaceEntry } from './bun-test-manifest.ts';
 
 export const STORAGE_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
   workspace: 'storage',
-  preload: 'test-setup-storage-isolation.ts',
+  // Both preloads must be listed here: run_bun_tests.ts passes these as
+  // explicit --preload args and does NOT read packages/storage/bunfig.toml, so
+  // a preload declared only there would be silently dropped in manifest-driven
+  // runs (which is what `npm test` uses) and the process-wide keyring latch
+  // would leak between test files.
+  preload: [
+    'test-setup-storage-isolation.ts',
+    'test-setup-bun-session-reset.ts',
+  ],
   files: [
     'test-bun/credential-write-lock.bun.ts',
     'test-bun/keyring-delete-verification.bun.ts',

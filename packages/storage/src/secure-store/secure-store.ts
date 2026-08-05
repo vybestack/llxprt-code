@@ -204,16 +204,6 @@ export class SecureStore {
     });
 
   /**
-   * Read-only machine-secret resolution for the decrypt path (R3.5). Never
-   * mints a new secret as a side effect of a read: when the default loader is
-   * in use, resolve via getMachineSecret with generateIfMissing:false so a
-   * missing secret fails closed instead of orphaning existing v:2 envelopes.
-   * An injected loader is honored as-is (the injection contract governs it).
-   *
-   * @plan PLAN-20260805-ISSUE2928
-   * @requirement R3.5
-   */
-  /**
    * Machine-secret resolution for the fallback WRITE path.
    *
    * While the OS keyring is disabled (latched or opted out) a keychain-resident
@@ -264,6 +254,16 @@ export class SecureStore {
     return false;
   }
 
+  /**
+   * Read-only machine-secret resolution for the decrypt path (R3.5). Never
+   * mints a new secret as a side effect of a read: when the default loader is
+   * in use, resolve via getMachineSecret with generateIfMissing:false so a
+   * missing secret fails closed instead of orphaning existing v:2 envelopes.
+   * An injected loader is honored as-is (the injection contract governs it).
+   *
+   * @plan PLAN-20260805-ISSUE2928
+   * @requirement R3.5
+   */
   private async loadMachineSecretForRead(): Promise<Buffer | null> {
     if (this.machineSecretLoaderInjected) {
       return this.machineSecretLoaderFn();
