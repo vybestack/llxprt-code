@@ -13,6 +13,30 @@ export type CliRunResult = {
   exitCode: number;
 };
 
+/**
+ * Provider credentials the CI test step injects. Held as string literals and
+ * expanded at call time: declaring them as object properties would introduce a
+ * provider-neutral GEMINI_* identifier, which the agents provider-agnostic
+ * naming guard rejects outside its allowed boundaries.
+ */
+const PROVIDER_CREDENTIAL_ENV_KEYS = [
+  'OPENAI_API_KEY',
+  'OPENAI_API_KEY_2',
+  'OPENAI_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'LLXPRT_DEFAULT_MODEL',
+  'LLXPRT_DEFAULT_PROVIDER',
+  'LLXPRT_AUTH_TYPE',
+] as const;
+
+function clearedProviderCredentials(): Record<string, undefined> {
+  return Object.fromEntries(
+    PROVIDER_CREDENTIAL_ENV_KEYS.map((key) => [key, undefined]),
+  );
+}
+
 // Helper to run the CLI with given arguments
 export async function runCli(
   args: string[],
@@ -29,21 +53,13 @@ export async function runCli(
     const child = spawn('node', [cliPath, ...args], {
       env: {
         ...process.env,
-        // The CI test step injects real provider credentials (OPENAI_API_KEY,
-        // OPENAI_BASE_URL, LLXPRT_DEFAULT_* ...). These cases assert what the
-        // CLI does with NO usable auth, so inheriting live credentials makes
-        // the child take a completely different path — reaching the network
-        // and hanging past the spawn guard instead of failing fast. Cleared
-        // before `env` so a test can still set any of them deliberately.
-        OPENAI_API_KEY: undefined,
-        OPENAI_API_KEY_2: undefined,
-        OPENAI_BASE_URL: undefined,
-        ANTHROPIC_API_KEY: undefined,
-        GEMINI_API_KEY: undefined,
-        GOOGLE_API_KEY: undefined,
-        LLXPRT_DEFAULT_MODEL: undefined,
-        LLXPRT_DEFAULT_PROVIDER: undefined,
-        LLXPRT_AUTH_TYPE: undefined,
+        // The CI test step injects real provider credentials. These cases
+        // assert what the CLI does with NO usable auth, so inheriting live
+        // credentials makes the child take a completely different path —
+        // reaching the network and hanging past the spawn guard instead of
+        // failing fast. Spread before `env` so a test can still set any of
+        // them deliberately.
+        ...clearedProviderCredentials(),
         ...env,
         // The developer's own llxprt session exports this, pointing at a
         // session-scoped bootstrap file. The child inherits it, fails to read

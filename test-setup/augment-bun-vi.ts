@@ -558,7 +558,7 @@ const clearModuleMockCalls = (): void => {
     visited.add(value);
 
     if (isMockFunction(value)) {
-      (value as { mockClear: () => void }).mockClear();
+      value.mockClear?.();
     }
 
     for (const key of Reflect.ownKeys(value as object)) {
