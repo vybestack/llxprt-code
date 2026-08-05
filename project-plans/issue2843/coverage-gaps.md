@@ -555,3 +555,31 @@ emitted escape sequences are deliberately *not* asserted: `mouse.ts` writes them
 through core's `writeToStdout`, which bypasses `process.stdout` so they survive
 `patchStdio`, and a `process.stdout.write` spy captures nothing — verified by
 trying it.
+
+## Review finding rejected with evidence: `showLineNumbers` default
+
+Review raised that renaming "shows line numbers by default" to "…when
+showLineNumbers is true" dropped coverage of the default branch, citing
+`CodeColorizer.tsx`:
+
+    const showLineNumbers = hideLineNumbers
+      ? false
+      : (settings?.merged.ui.showLineNumbers ?? true);
+
+That reads as though an unset setting yields `true`. It does not. A probe
+constructing a `LoadedSettings` with four empty layers reports:
+
+    showLineNumbers = false
+
+`merged.ui.showLineNumbers` resolves to an explicit `false`, so `?? true` is
+unreachable whenever real settings are supplied — it can only fire when
+`settings` itself is `undefined`. Line numbers are therefore **off** by default,
+and a test asserting they appear by default would assert behaviour the product
+does not have. Adding one was tried and failed on exactly that.
+
+The rename was correct and stands. Two incidental findings for #3046:
+
+- the `?? true` fallback in `CodeColorizer` is effectively dead for callers that
+  pass real settings, and is misleading to read;
+- the original test name claimed a default that had already changed, so it had
+  been describing the wrong behaviour before this migration touched it.
