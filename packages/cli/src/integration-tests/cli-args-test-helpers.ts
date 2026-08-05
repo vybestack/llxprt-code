@@ -30,6 +30,12 @@ export async function runCli(
       env: {
         ...process.env,
         ...env,
+        // The developer's own llxprt session exports this, pointing at a
+        // session-scoped bootstrap file. The child inherits it, fails to read
+        // it, and dies with "JSP bootstrap file could not be read" — which
+        // looks exactly like a product failure. Spawned CLIs must not pick up
+        // the host session's observation wiring.
+        LLXPRT_JSP_BOOTSTRAP_FILE: undefined,
         // Disable telemetry and other features that might interfere
         LLXPRT_TELEMETRY: 'false',
         LLXPRT_CLI_NO_RELAUNCH: 'true',
