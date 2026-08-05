@@ -62,9 +62,17 @@ export type OpenTransportSocket = (
 interface WebSocketTransportConfig {
   readonly logger?: TransportLogger;
   readonly openSocket?: OpenTransportSocket;
+  /**
+   * Per-connection handshake (open) timeout. Defaults to
+   * {@link HANDSHAKE_TIMEOUT_MS}. Exposed so tests can exercise the timeout
+   * path without waiting the full production duration.
+   */
+  readonly handshakeTimeoutMs?: number;
 }
 
-const HANDSHAKE_TIMEOUT_MS = 10_000;
+// Matches the Codex client's default WebSocket connect timeout
+// (websocket_connect_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
+const HANDSHAKE_TIMEOUT_MS = 15_000;
 // The parser yields terminal-metadata IContent for these, so a later close
 // must not replace them with a generic interruption error.
 const ACCEPTED_TERMINAL_EVENT_TYPES = new Set([
@@ -421,9 +429,11 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
   private requestQueue: Promise<void> = Promise.resolve();
 
   private readonly openSocket: OpenTransportSocket;
+  private readonly handshakeTimeoutMs: number;
 
   constructor(private readonly config: WebSocketTransportConfig) {
     this.openSocket = config.openSocket ?? openUndiciSocket;
+    this.handshakeTimeoutMs = config.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
   }
 
   async *streamResponse(
@@ -559,7 +569,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
               'Codex Responses WebSocket handshake timed out',
             ),
           ),
-        HANDSHAKE_TIMEOUT_MS,
+        this.handshakeTimeoutMs,
       );
       const onAbort = (): void => fail(createAbortError(abortSignal?.reason));
       removers.push(socket.onOpen(() => finish({ socket })));
@@ -627,6 +637,7 @@ export async function* streamOverWebSocketOrFallback(
   fallbackStream: () => AsyncIterableIterator<IContent>,
   onFallback: (() => void) | undefined,
   logger: TransportLogger | undefined,
+  onSuccess: (() => void) | undefined = undefined,
 ): AsyncIterableIterator<IContent> {
   // The only safe recovery boundary is the point at which an IContent is
   // yielded downstream.
@@ -639,6 +650,10 @@ export async function* streamOverWebSocketOrFallback(
       contentYielded = true;
       yield message;
     }
+    // A clean completion means the WebSocket served the whole response, so the
+    // provider can reset its consecutive-failure counter (mirrors the Codex
+    // client treating a successful stream as proof the transport is healthy).
+    onSuccess?.();
   } catch (error) {
     // Abort always wins and never falls back, regardless of yielded content.
     if (error instanceof Error && error.name === 'AbortError') {

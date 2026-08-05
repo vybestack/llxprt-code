@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   createCodexResponsesWebSocketTransport,
   streamOverWebSocketOrFallback,
@@ -224,14 +224,15 @@ describe('Codex Responses WebSocket transport', () => {
     const harness = new SocketHarness([() => undefined]);
     const transport = createCodexResponsesWebSocketTransport({
       openSocket: harness.openSocket,
+      handshakeTimeoutMs: 50,
     });
     const result = drain(transport.streamResponse(request(), options()));
     const assertion = result.then(
       () => 'completed',
       (error: unknown) => (error instanceof Error ? error.name : 'unknown'),
     );
-    // Wait for the handshake timeout (HANDSHAKE_TIMEOUT_MS = 10s) to fire
-    await new Promise((resolve) => setTimeout(resolve, 10_500));
+    // Wait for the injected handshake timeout to fire.
+    await new Promise((resolve) => setTimeout(resolve, 120));
     expect(await assertion).toBe('StreamInterruptionError');
     expect(harness.sockets[0].closedByClient).toBe(true);
   });

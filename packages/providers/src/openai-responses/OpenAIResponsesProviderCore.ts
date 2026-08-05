@@ -35,8 +35,18 @@ import {
 export { toOpenAIResponsesWireEffort } from '../openai/openaiModelPolicy.js';
 
 export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
+  // Codex (codex-rs/core/src/responses_retry.rs) only switches to a sticky HTTP
+  // fallback after exhausting its WebSocket stream-retry budget (default
+  // `stream_max_retries` = 5). We rely on the outer RetryOrchestrator to retry
+  // the whole request — each attempt reuses a fresh socket because the
+  // transport invalidates its socket on failure — so a single pre-output
+  // WebSocket blip must NOT permanently demote the session. A small threshold
+  // of consecutive failures mirrors that intent without introducing nested
+  // retry multiplication.
+  static readonly WEBSOCKET_STICKY_FALLBACK_THRESHOLD = 3;
   private webSocketTransport: WebSocketTransport | undefined;
   private webSocketStickToHttp = false;
+  private webSocketConsecutiveFallbacks = 0;
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
@@ -57,7 +67,18 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       getGlobalConfig: () => this.globalConfig,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
       onWebSocketFallback: () => {
-        this.webSocketStickToHttp = true;
+        // One pre-output failure still serves THIS request over HTTP (an
+        // invisible in-turn recovery); only a sustained run of them sticks.
+        this.webSocketConsecutiveFallbacks += 1;
+        if (
+          this.webSocketConsecutiveFallbacks >=
+          OpenAIResponsesProvider.WEBSOCKET_STICKY_FALLBACK_THRESHOLD
+        ) {
+          this.webSocketStickToHttp = true;
+        }
+      },
+      onWebSocketSuccess: () => {
+        this.webSocketConsecutiveFallbacks = 0;
       },
     };
   }
@@ -69,10 +90,18 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       return undefined;
     }
     if (this.webSocketStickToHttp) return undefined;
-    this.webSocketTransport ??= createCodexResponsesWebSocketTransport({
+    this.webSocketTransport ??= this.createWebSocketTransport();
+    return this.webSocketTransport;
+  }
+
+  /**
+   * Builds the Codex WebSocket transport. Overridable so tests can inject a
+   * deterministic transport double without standing up a real WebSocket server.
+   */
+  protected createWebSocketTransport(): WebSocketTransport {
+    return createCodexResponsesWebSocketTransport({
       logger: this.logger,
     });
-    return this.webSocketTransport;
   }
 
   override clearState(): void {
@@ -80,6 +109,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.webSocketTransport?.close();
     this.webSocketTransport = undefined;
     this.webSocketStickToHttp = false;
+    this.webSocketConsecutiveFallbacks = 0;
   }
 
   protected override async *generateChatCompletionWithOptions(
