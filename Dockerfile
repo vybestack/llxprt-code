@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   less \
   jq \
   bc \
-  gh \
   git \
   unzip \
   rsync \
