@@ -20,6 +20,7 @@ import {
   escapeXml,
   isTestFile,
   parseCaseCounts,
+  timeoutForFile,
 } from '../run-bun-tests.js';
 
 describe('isTestFile', () => {
@@ -148,5 +149,27 @@ describe('escapeXml', () => {
 
   it('keeps tab, newline and carriage return', () => {
     expect(escapeXml('a\tb\nc\rd')).toBe('a\tb\nc\rd');
+  });
+});
+
+describe('timeoutForFile', () => {
+  it('gives an integration test a larger budget than a unit test', () => {
+    const unit = timeoutForFile('src/ui/hooks/useKeypress.test.tsx');
+    const integration = timeoutForFile(
+      'src/integration-tests/cli-args.integration.test.ts',
+    );
+    expect(integration).toBeGreaterThan(unit);
+  });
+
+  it('applies the integration budget to a .spec integration file too', () => {
+    expect(timeoutForFile('src/foo.integration.spec.ts')).toBe(
+      timeoutForFile('src/bar.integration.test.ts'),
+    );
+  });
+
+  it('does not treat a file merely mentioning integration as one', () => {
+    expect(timeoutForFile('src/integrationWiring.test.ts')).toBe(
+      timeoutForFile('src/plain.test.ts'),
+    );
   });
 });

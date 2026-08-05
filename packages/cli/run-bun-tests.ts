@@ -34,6 +34,15 @@ const PER_FILE_TIMEOUT_MS = 120_000;
  * not picked up for a single-file invocation.
  */
 const PER_TEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Integration tests spawn the built CLI, which cold-starts from TypeScript
+ * source and is far slower than an in-process test — especially on a loaded CI
+ * runner. They get a larger per-test budget so a slow boot is not reported as a
+ * failure.
+ */
+const PER_INTEGRATION_TEST_TIMEOUT_MS = 120_000;
+
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
   'dist',
@@ -43,6 +52,19 @@ const SKIPPED_DIRECTORIES = new Set([
 ]);
 const TEST_ROOTS = ['src', 'test', 'test-bun', 'test-utils'];
 const TEST_FILE_PATTERN = /\.(test|spec)\.(ts|tsx)$/;
+
+/**
+ * Matches the `*.integration.test.*` / `*.integration.spec.*` naming used by
+ * tests that drive the CLI as a subprocess. These files are still discovered
+ * and run; the pattern only selects the larger per-test budget.
+ */
+const INTEGRATION_FILE_PATTERN = /\.integration\.(test|spec)\.(ts|tsx)$/;
+
+export function timeoutForFile(file: string): number {
+  return INTEGRATION_FILE_PATTERN.test(file)
+    ? PER_INTEGRATION_TEST_TIMEOUT_MS
+    : PER_TEST_TIMEOUT_MS;
+}
 
 function parseConcurrency(): number {
   const flagIndex = process.argv.indexOf('--concurrency');
@@ -103,7 +125,7 @@ function runTestFile(file: string): Promise<TestResult> {
     let output = '';
     const child = spawn(
       process.execPath,
-      ['test', '--timeout', String(PER_TEST_TIMEOUT_MS), file],
+      ['test', '--timeout', String(timeoutForFile(file)), file],
       {
         cwd: process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe'],
