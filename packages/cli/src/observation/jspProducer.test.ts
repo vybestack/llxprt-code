@@ -133,10 +133,12 @@ describe('heartbeat cadence', () => {
       expect(heartbeats).toBeGreaterThanOrEqual(3);
       expect(interval * 3).toBeLessThanOrEqual(OBSERVER_LEASE_MS);
     } finally {
-      // Stop in the finally: a failed assertion must not leave the interval
-      // armed for the rest of the file.
-      producer?.stop();
+      // Restore real timers before stopping: restoration discards the fake
+      // interval outright, so it cannot be skipped by anything stop() does,
+      // and a failed assertion still cannot leave fake timers installed for
+      // the rest of the file. stop() then releases the producer itself.
       vi.useRealTimers();
+      producer?.stop();
     }
   });
 });
