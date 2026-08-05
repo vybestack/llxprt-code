@@ -206,6 +206,7 @@ const SHARED_STUBS = [
   isCliStatelessProviderModeEnabledMock,
   isCliRuntimeStatelessReadyMock,
   keyStorageStub.getKey,
+  mockProfileManager.loadProfile,
 ];
 
 function clearSharedStubHistory(): void {

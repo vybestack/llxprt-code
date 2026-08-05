@@ -31,13 +31,23 @@ import {
 
 const localRequire = createRequire(import.meta.url);
 
-const mockReadFile = mock(
-  localRequire('node:fs/promises').readFile as typeof FsPromises.readFile,
-);
+const actualReadFile = localRequire('node:fs/promises')
+  .readFile as typeof FsPromises.readFile;
+
+const mockReadFile = mock(actualReadFile);
 
 await mock.module('node:fs/promises', () => {
   const actual = localRequire('node:fs/promises') as typeof FsPromises;
   return { ...actual, readFile: mockReadFile };
+});
+
+// mockReadFile is module-scoped and individual tests override its resolved
+// value, which otherwise persists into every later test in the file. Restoring
+// the real implementation and dropping recorded calls before each test keeps
+// those overrides from leaking and making the suite order-dependent.
+beforeEach(() => {
+  mockReadFile.mockReset();
+  mockReadFile.mockImplementation(actualReadFile);
 });
 
 async function expectRejection(

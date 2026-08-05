@@ -79,6 +79,7 @@ async function runCli(
 
   let exitCode: number | null = null;
   let timedOut = false;
+  let unreapable = false;
   try {
     const outcome = await Promise.race([
       proc.exited.then<number | null>((code) => code),
@@ -113,9 +114,24 @@ async function runCli(
         } catch {
           // The child exited during the grace period.
         }
-        await proc.exited;
+        // Bound this wait too. SIGKILL cannot be caught, but a process stuck
+        // in an uninterruptible wait still will not be reaped, and an
+        // unbounded await here would hang the runner rather than fail it.
+        const killed = await Promise.race([
+          proc.exited.then(() => true),
+          Bun.sleep(SIGKILL_GRACE_MS).then(() => false),
+        ]);
+        // Recorded rather than thrown here: a throw inside finally would
+        // discard whatever exception was already propagating.
+        unreapable = !killed;
       }
     }
+  }
+
+  if (unreapable) {
+    throw new Error(
+      `CLI subprocess (pid ${proc.pid}) survived SIGKILL and could not be reaped.`,
+    );
   }
 
   const [stdout, stderr] = await Promise.all([stdoutDone, stderrDone]);
