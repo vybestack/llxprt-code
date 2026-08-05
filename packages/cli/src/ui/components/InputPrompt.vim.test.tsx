@@ -114,9 +114,16 @@ describe('InputPrompt', () => {
       text: '',
       cursor: [0, 0],
       lines: [''],
+      // inputPromptRender indexes transformationsByLine and treats
+      // visualToTransformedMap as a number; without both the component throws
+      // while rendering and no keypress subscription is ever created.
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       setText: vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
+        mockBuffer.transformationsByLine = [[]];
+        mockBuffer.visualToTransformedMap = [0];
         mockBuffer.cursor = [0, newText.length];
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
@@ -245,7 +252,11 @@ describe('InputPrompt', () => {
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
       );
-      await waitFor(() => expect(stdout.lastFrame()).toMatchSnapshot());
+      // Wait for a frame first, then snapshot ONCE. Calling toMatchSnapshot
+      // inside waitFor records a new snapshot per poll attempt, so the stored
+      // index depends on retry timing and the file grows without bound.
+      await waitFor(() => expect(stdout.lastFrame()).toBeTruthy());
+      expect(stdout.lastFrame()).toMatchSnapshot();
       unmount();
     });
 
@@ -254,7 +265,11 @@ describe('InputPrompt', () => {
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
       );
-      await waitFor(() => expect(stdout.lastFrame()).toMatchSnapshot());
+      // Wait for a frame first, then snapshot ONCE. Calling toMatchSnapshot
+      // inside waitFor records a new snapshot per poll attempt, so the stored
+      // index depends on retry timing and the file grows without bound.
+      await waitFor(() => expect(stdout.lastFrame()).toBeTruthy());
+      expect(stdout.lastFrame()).toMatchSnapshot();
       unmount();
     });
 
@@ -263,7 +278,11 @@ describe('InputPrompt', () => {
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
       );
-      await waitFor(() => expect(stdout.lastFrame()).toMatchSnapshot());
+      // Wait for a frame first, then snapshot ONCE. Calling toMatchSnapshot
+      // inside waitFor records a new snapshot per poll attempt, so the stored
+      // index depends on retry timing and the file grows without bound.
+      await waitFor(() => expect(stdout.lastFrame()).toBeTruthy());
+      expect(stdout.lastFrame()).toMatchSnapshot();
       unmount();
     });
 
@@ -325,7 +344,7 @@ describe('InputPrompt', () => {
         errorMessage: 'Shell commands cannot be queued',
       },
     ])('$name', async ({ bufferText, shellMode, errorMessage }) => {
-      props.buffer.text = bufferText;
+      props.buffer.setText(bufferText);
       props.shellModeActive = shellMode;
 
       const { stdin, unmount } = renderWithProviders(
@@ -343,7 +362,7 @@ describe('InputPrompt', () => {
 
     it('should allow regular messages', async () => {
       const bufferText = 'regular message';
-      props.buffer.text = bufferText;
+      props.buffer.setText(bufferText);
       props.shellModeActive = false;
 
       const { stdin, unmount } = renderWithProviders(
