@@ -63,9 +63,18 @@ vi.mock('./ui/utils/mouse.js', () => ({
   DISABLE_MOUSE_EVENTS: '',
 }));
 
-vi.mock('ink', () => ({
-  render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
-}));
+// interactiveUI exposes __setRenderForTesting precisely because 'ink' is
+// redirected to a stub by a Bun plugin in the workspace preload, which resolves
+// before any module mock for the 'ink' specifier could apply. Injecting through
+// that seam is the supported way to capture render calls.
+async function injectRenderSpy() {
+  const renderSpy = vi.fn().mockReturnValue({ unmount: vi.fn() });
+  const { __setRenderForTesting } = await import('./session/interactiveUI.js');
+  __setRenderForTesting(
+    renderSpy as unknown as Parameters<typeof __setRenderForTesting>[0],
+  );
+  return renderSpy;
+}
 
 describe('validateDnsResolutionOrder', () => {
   let debugWarnSpy: ReturnType<typeof vi.spyOn>;
@@ -141,8 +150,7 @@ describe('startInteractiveUI', () => {
   });
 
   it('should render the UI with proper React context and exitOnCtrlC disabled', async () => {
-    const { render } = await import('ink');
-    const renderSpy = vi.mocked(render);
+    const renderSpy = await injectRenderSpy();
 
     await startInteractiveUI(
       mockConfig,
@@ -246,12 +254,11 @@ describe('startInteractiveUI', () => {
   });
 
   it('should restore terminal protocols when Ink render throws synchronously', async () => {
-    const { render } = await import('ink');
     const { restoreTerminalProtocolsSync } = await import(
       './ui/utils/terminalProtocolCleanup.js'
     );
     const { disableMouseEvents } = await import('./ui/utils/mouse.js');
-    const renderSpy = vi.mocked(render);
+    const renderSpy = await injectRenderSpy();
     const processOffSpy = vi.spyOn(process, 'off');
     const renderError = new Error('render failed');
     renderSpy.mockImplementationOnce(() => {
