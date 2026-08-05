@@ -185,6 +185,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
+      // Issue #2980: Zed terminal command correlation. Migrated to bun:test
+      // and excluded from the Vitest selection below; the strict wrapper
+      // matcher is exercised here while keeping the lifecycle guard intact.
+      'src/zed-integration/zedIntegration.terminal.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',

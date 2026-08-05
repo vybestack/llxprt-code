@@ -344,15 +344,19 @@ function registerPtyExitHandler(
 
   state.activePtyEntry.onExitDisposable = state.ptyProcess.onExit(
     ({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+      // node-pty reports a signal value of 0 for clean exits; normalize it to
+      // null exactly once at this boundary so downstream formatting treats it
+      // as "no signal" (preserving undefined/null and all nonzero signals).
+      const normalizedSignal = signal === 0 ? null : (signal ?? null);
       state.exitedGuard.markExited();
       state.abortSignal.removeEventListener('abort', abortHandler);
 
       if (state.abortSignal.aborted) {
-        finalizeResult(exitCode, signal ?? null);
+        finalizeResult(exitCode, normalizedSignal);
         return;
       }
 
-      ptyExitRace(state, exitCode, signal, finalizeResult);
+      ptyExitRace(state, exitCode, normalizedSignal, finalizeResult);
     },
   );
 }
@@ -360,7 +364,7 @@ function registerPtyExitHandler(
 function ptyExitRace(
   state: PtyExecState,
   exitCode: number,
-  signal: number | undefined,
+  signal: number | null,
   finalizeResult: (exitCode: number, signal?: number | null) => void,
 ): void {
   const processingComplete = state.processingChain.then(() => 'processed');

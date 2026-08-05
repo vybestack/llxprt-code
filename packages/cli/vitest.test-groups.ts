@@ -78,6 +78,10 @@ const baseExclude: readonly string[] = [
   // Claude Code login-bucket characterization is Bun-native for the same
   // reason (issue #2891).
   '**/src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
+  // Zed terminal correlation tests migrated to bun:test (issue #2980) and
+  // registered in scripts/bun-test-manifest.ts; they must not also be
+  // discovered by Vitest (bun:test does not resolve under the Vitest runner).
+  '**/src/zed-integration/zedIntegration.terminal.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
@@ -492,4 +496,4 @@ export function buildTestGroups(
  * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 531;
+export const SELECTED_FILE_COUNT: number = 530;
