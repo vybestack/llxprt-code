@@ -424,14 +424,20 @@ async function runMapPhase(
       JSON.stringify(result, null, 2),
     );
   }
-  return results.map((result) =>
-    'error' in result && typeof result.error === 'string'
-      ? placeholderSummary(
-          String(result.filePath),
-          `(per-file summary failed: ${result.error})`,
-        )
-      : result,
-  );
+  return results.map((result) => {
+    if (!('error' in result) || typeof result.error !== 'string') {
+      return result;
+    }
+    // The rejection message carries the prompt and untrusted payload; keep it
+    // on stderr/logs only and render a fixed label into the public comment.
+    console.error(
+      `[walkthrough] per-file summary failed for ${result.filePath}: ${result.error}`,
+    );
+    return placeholderSummary(
+      String(result.filePath),
+      PER_FILE_SUMMARY_UNAVAILABLE,
+    );
+  });
 }
 
 interface MapItem {
@@ -468,6 +474,16 @@ const magnitudeInputSchema = z.object({
 const MAP_MODEL = process.env.LLXPRT_DEFAULT_MODEL;
 const STRONG_MODEL =
   process.env.LLXPRT_STRONG_MODEL || process.env.LLXPRT_DEFAULT_MODEL;
+
+/**
+ * Public placeholder shown when a single file's summary could not be produced.
+ *
+ * The underlying failure message (from the model subprocess) embeds the full
+ * prompt, including untrusted diff/PR data and the exact command line, so it
+ * must never be rendered into the published comment. The real diagnostic is
+ * written to stderr/logs instead; the comment gets only this fixed label.
+ */
+const PER_FILE_SUMMARY_UNAVAILABLE = '(per-file summary unavailable)';
 
 function placeholderSummary(
   filePath: string,
