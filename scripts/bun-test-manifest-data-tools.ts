@@ -76,6 +76,7 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/__tests__/todo-tools.test.ts',
     'src/__tests__/export-surface-helpers.test.ts',
     'src/__tests__/apply-patch.test.ts',
+    'src/__tests__/apply-patch-ax.bun.test.ts',
     'src/__tests__/glob-filtering.test.ts',
     'src/__tests__/ls-filtering-behavior.test.ts',
     'src/__tests__/neutral-types.test.ts',
