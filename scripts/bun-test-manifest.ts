@@ -207,6 +207,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/steerKey.darwin.bun.ts',
       'test-bun/resolveKeyBindings.bun.ts',
       'test-bun/keypressLineFeed.bun.ts',
+      'test-bun/profileAuthKeyNameIssue2916.bun.ts',
     ],
   },
   {

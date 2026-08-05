@@ -180,36 +180,55 @@ interface AuthWiringResult {
   authKeyNameApplied: boolean;
 }
 
+interface NamedAuthResolution {
+  authKey: string | undefined;
+  authKeyNameApplied: boolean;
+  trimmedKeyName: string;
+}
+
+/**
+ * Resolves a named key from secure storage without mutating any application
+ * state. Used as a fail-fast preflight: callers run this BEFORE clearing prior
+ * profile state so an unresolved name rejects before any mutation (issue
+ * #2916). The resolved name is returned so the caller can install the
+ * `auth-key-name` reference only after the prior state is cleared.
+ */
 async function resolveNamedAuthKey(
   authKeyName: unknown,
-  warnings: string[],
-): Promise<{ authKey: string | undefined; authKeyNameApplied: boolean }> {
+): Promise<NamedAuthResolution> {
   if (typeof authKeyName !== 'string' || authKeyName.trim() === '') {
-    return { authKey: undefined, authKeyNameApplied: false };
+    return {
+      authKey: undefined,
+      authKeyNameApplied: false,
+      trimmedKeyName: '',
+    };
   }
   const trimmedKeyName = authKeyName.trim();
-  setEphemeralSetting('auth-key-name', trimmedKeyName);
+  let resolvedAuthKey: string | null;
   try {
-    const resolvedAuthKey =
-      await createProviderKeyStorage().getKey(trimmedKeyName);
-    if (resolvedAuthKey && resolvedAuthKey.trim() !== '') {
-      logger.debug(
-        () =>
-          `[profile] resolved auth-key-name '${trimmedKeyName}' before switch`,
-      );
-      return { authKey: resolvedAuthKey.trim(), authKeyNameApplied: true };
-    }
-    warnings.push(
-      `Key '${trimmedKeyName}' not found in secure storage; falling back to existing credentials.`,
-    );
+    resolvedAuthKey = await createProviderKeyStorage().getKey(trimmedKeyName);
   } catch (error) {
-    warnings.push(
+    throw new Error(
       `Failed to resolve auth-key-name '${trimmedKeyName}': ${
         error instanceof Error ? error.message : String(error)
-      }`,
+      }. Use '/key save ${trimmedKeyName} <key>' to store it.`,
+      { cause: error },
     );
   }
-  return { authKey: undefined, authKeyNameApplied: false };
+  if (resolvedAuthKey && resolvedAuthKey.trim() !== '') {
+    logger.debug(
+      () =>
+        `[profile] resolved auth-key-name '${trimmedKeyName}' before switch`,
+    );
+    return {
+      authKey: resolvedAuthKey.trim(),
+      authKeyNameApplied: true,
+      trimmedKeyName,
+    };
+  }
+  throw new Error(
+    `Named key '${trimmedKeyName}' not found. Use '/key save ${trimmedKeyName} <key>' to store it.`,
+  );
 }
 
 async function loadAuthKeyfile(
@@ -256,20 +275,20 @@ function applyAuthKeyfilePath(filePath: string, deps: AuthWiringDeps): void {
 async function wireAuthBeforeSwitch(
   sanitizedProfile: Profile,
   deps: AuthWiringDeps,
+  namedAuth: NamedAuthResolution,
 ): Promise<AuthWiringResult> {
   const { targetProviderName, warnings, settingsService, setProviderBaseUrl } =
     deps;
   const ephemeralSettings = getProfileEphemeralSettings(sanitizedProfile);
-  const namedAuth = await resolveNamedAuthKey(
-    ephemeralSettings['auth-key-name'],
-    warnings,
-  );
   let authKeyApplied = namedAuth.authKey !== undefined;
   const authKeyNameApplied = namedAuth.authKeyNameApplied;
   let resolvedAuthKeyfilePath: string | null = null;
 
   if (namedAuth.authKey !== undefined) {
     applyResolvedAuthKey(namedAuth.authKey, deps);
+  }
+  if (namedAuth.authKeyNameApplied) {
+    setEphemeralSetting('auth-key-name', namedAuth.trimmedKeyName);
   }
 
   const keyfileAuth = await loadAuthKeyfile(
@@ -568,6 +587,7 @@ function clearProfileEphemerals(
 function buildProfileApplicationContext(
   profileInput: Profile,
   runtimeServices: ReturnType<typeof getCliRuntimeServices>,
+  profileName: string | undefined,
 ): ProfileApplicationContext {
   const { providerManager, settingsService } = runtimeServices;
   const actualProfile = profileInput;
@@ -601,6 +621,19 @@ function buildProfileApplicationContext(
   }
   const sanitizedProfile = createSanitizedProfile(actualProfile);
   sanitizeSensitiveModelParams(sanitizedProfile);
+  // Advisory only: report values whose type the registry already knows to be
+  // wrong, so a malformed profile is attributed to the profile rather than to
+  // the provider that rejects it (issue #2896). Unknown keys never warn and
+  // nothing is dropped or refused.
+  warnings.push(
+    ...formatProfileValueWarnings(
+      profileName ?? actualProfile.provider,
+      collectProfileValueWarnings(
+        getProfileModelParams(actualProfile),
+        getProfileEphemeralSettings(actualProfile),
+      ),
+    ),
+  );
   return {
     actualProfile,
     sanitizedProfile,
@@ -822,6 +855,7 @@ export async function applyProfileWithGuards(
   const context = buildProfileApplicationContext(
     profileInput,
     servicesForProfileApplication,
+    options.profileName,
   );
   const {
     actualProfile,
@@ -834,22 +868,19 @@ export async function applyProfileWithGuards(
     authDeps,
   } = context;
 
-  // Advisory only: report values whose type the registry already knows to be
-  // wrong, so a malformed profile is attributed to the profile rather than to
-  // the provider that rejects it (issue #2896). Unknown keys never warn and
-  // nothing is dropped or refused.
-  warnings.push(
-    ...formatProfileValueWarnings(
-      options.profileName ?? actualProfile.provider,
-      collectProfileValueWarnings(
-        getProfileModelParams(actualProfile),
-        getProfileEphemeralSettings(actualProfile),
-      ),
-    ),
+  // Preflight the named-key resolution BEFORE clearing prior state so an
+  // unresolved name fails fast without destroying the previous application
+  // (issue #2916). The resolved result is reused during auth wiring below so
+  // there is no duplicate storage lookup.
+  const namedAuth = await resolveNamedAuthKey(
+    getProfileEphemeralSettings(sanitizedProfile)['auth-key-name'],
   );
-
   clearProfileEphemerals(config, sanitizedProfile);
-  const authResult = await wireAuthBeforeSwitch(sanitizedProfile, authDeps);
+  const authResult = await wireAuthBeforeSwitch(
+    sanitizedProfile,
+    authDeps,
+    namedAuth,
+  );
   const providerSwitch = await switchProviderForProfile(targetProviderName);
   const infoMessages = providerSwitch.infoMessages;
   const { appliedBaseUrl } = await applyProviderAuthUpdates(

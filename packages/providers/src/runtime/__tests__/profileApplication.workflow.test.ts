@@ -3,8 +3,9 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { createRequire } from 'node:module';
+import type * as FsPromises from 'node:fs/promises';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProviderMock,
@@ -28,18 +29,32 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('node:fs/promises', () => {
-  const actual =
-    importActualSync<typeof import('node:fs/promises')>('node:fs/promises');
-  return {
-    ...actual,
-    readFile: vi.fn(),
-  };
+const localRequire = createRequire(import.meta.url);
+
+const mockReadFile = mock(
+  localRequire('node:fs/promises').readFile as typeof FsPromises.readFile,
+);
+
+await mock.module('node:fs/promises', () => {
+  const actual = localRequire('node:fs/promises') as typeof FsPromises;
+  return { ...actual, readFile: mockReadFile };
 });
 
-const mockFs = await import('node:fs/promises');
+async function expectRejection(
+  promise: Promise<unknown>,
+  pattern: RegExp,
+): Promise<void> {
+  let thrown: unknown;
+  try {
+    await promise;
+  } catch (error) {
+    thrown = error;
+  }
+  expect(thrown).toBeInstanceOf(Error);
+  expect((thrown as Error).message).toMatch(pattern);
+}
 
-vi.mock('../runtimeSettings.js', () => ({
+await mock.module('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
@@ -68,10 +83,10 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
 
   afterEach(() => {
     restoreGcpEnvVars(savedGcpProject, savedGcpLocation);
-    vi.clearAllMocks();
+    mock.clearAllMocks();
   });
   it('sets auth-keyfile ephemeral and provider setting from keyfile before switch', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-api-key');
+    mockReadFile.mockResolvedValue('keyfile-api-key');
 
     providerManagerStub.available = ['anthropic'];
     providerManagerStub.providerLookup = new Map([
@@ -189,36 +204,6 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     expect(setActiveModelMock).not.toHaveBeenCalledWith('gemini-2.5-pro');
   });
 
-  it('adds warning when auth-key-name is missing from secure storage', async () => {
-    keyStorageStub.getKey.mockResolvedValueOnce(null);
-
-    providerManagerStub.available = ['Chutes.ai'];
-    providerManagerStub.providerLookup = new Map([
-      ['Chutes.ai', { name: 'Chutes.ai' }],
-    ]);
-
-    const profile: Profile = {
-      version: 1,
-      provider: 'Chutes.ai',
-      model: 'MiniMaxAI/MiniMax-M2.1-TEE',
-      modelParams: {},
-      ephemeralSettings: {
-        'auth-key-name': 'missing-key',
-      },
-    };
-
-    const result = await applyProfileWithGuards(profile);
-
-    expect(result.warnings).toStrictEqual(
-      expect.arrayContaining([
-        expect.stringContaining(
-          "Key 'missing-key' not found in secure storage",
-        ),
-      ]),
-    );
-    expect(updateActiveProviderApiKeyMock).not.toHaveBeenCalled();
-  });
-
   it('sets GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION as ephemerals and env vars', async () => {
     providerManagerStub.available = ['gemini'];
     providerManagerStub.providerLookup = new Map([
@@ -250,7 +235,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
   });
 
   it('falls back to direct auth-key when keyfile read returns empty content', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('   ');
+    mockReadFile.mockResolvedValue('   ');
 
     providerManagerStub.available = ['openai'];
     providerManagerStub.providerLookup = new Map([
@@ -288,7 +273,7 @@ describe('STEP 5 workflow: non-auth ephemerals', () => {
 
   afterEach(() => {
     restoreGcpEnvVars(savedGcpProject, savedGcpLocation);
-    vi.clearAllMocks();
+    mock.clearAllMocks();
   });
   it('applies non-auth ephemeral settings after provider switch', async () => {
     providerManagerStub.available = ['openai'];
@@ -438,7 +423,7 @@ describe('STEP 6 workflow: model and modelParams application', () => {
 
   afterEach(() => {
     restoreGcpEnvVars(savedGcpProject, savedGcpLocation);
-    vi.clearAllMocks();
+    mock.clearAllMocks();
   });
   it('sets the requested model and returns it in result', async () => {
     providerManagerStub.available = ['openai'];
@@ -503,7 +488,8 @@ describe('STEP 6 workflow: model and modelParams application', () => {
       ephemeralSettings: {},
     };
 
-    await expect(applyProfileWithGuards(profile)).rejects.toThrow(
+    await expectRejection(
+      applyProfileWithGuards(profile),
       /does not specify a model/,
     );
   });
@@ -583,7 +569,8 @@ describe('STEP 6 workflow: model and modelParams application', () => {
       ephemeralSettings: {},
     };
 
-    await expect(applyProfileWithGuards(profile)).rejects.toThrow(
+    await expectRejection(
+      applyProfileWithGuards(profile),
       /Active provider.*is not registered/,
     );
     providerManagerStub.getActiveProvider = origGetActiveProvider;
