@@ -219,27 +219,39 @@ function stringifyToolResponseForTokens(
   block: ToolResponseBlock,
   logger: DebugLogger,
 ): string {
-  if (typeof block.result === 'string') {
-    return block.result;
-  }
+  // The top-level `error` marker and the `result` payload are independent
+  // channels that both travel to the provider. A failed block carries the
+  // terse marker in `error` AND the model-facing remedy in `result`, so the
+  // estimate must account for both rather than treating them as alternatives
+  // (issue #3063).
+  const parts: string[] = [];
   if (block.error) {
-    return typeof block.error === 'string'
-      ? block.error
-      : JSON.stringify(block.error);
-  }
-  try {
-    return JSON.stringify(block.result ?? '');
-  } catch (error) {
-    logger.debug(
-      'Error stringifying tool_response result, using string conversion:',
-      error,
+    parts.push(
+      typeof block.error === 'string'
+        ? block.error
+        : JSON.stringify(block.error),
     );
+  }
+  if (typeof block.result === 'string') {
+    parts.push(block.result);
+  } else if (block.result !== undefined) {
     try {
-      return String(block.result);
-    } catch {
-      return `[tool_response: ${block.toolName || 'unknown'} - content too large or complex to stringify]`;
+      parts.push(JSON.stringify(block.result));
+    } catch (error) {
+      logger.debug(
+        'Error stringifying tool_response result, using string conversion:',
+        error,
+      );
+      try {
+        parts.push(String(block.result));
+      } catch {
+        parts.push(
+          `[tool_response: ${block.toolName || 'unknown'} - content too large or complex to stringify]`,
+        );
+      }
     }
   }
+  return parts.join('\n');
 }
 
 /**

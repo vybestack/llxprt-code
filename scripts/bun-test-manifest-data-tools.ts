@@ -89,6 +89,8 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/__tests__/neutral-types.test.ts',
     'src/__tests__/package-metadata.test.ts',
     'src/__tests__/filesystem-tools.test.ts',
+    // Issue #3063: ReadFileTool.execute() must keep both halves of its error.
+    'src/tools/__tests__/read-file-direct-api.test.ts',
     'src/__tests__/boundary-scan.test.ts',
     'src/__tests__/ripGrep-args.test.ts',
     'src/__tests__/wire-types.test.ts',

@@ -159,6 +159,12 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'agents',
     files: [
       'src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
+      // Issue #3063: explicit failure producers must mark the top-level error
+      // marker (AC17) and cancellation must be marked at its real source (AC18).
+      'src/core/subagentToolProcessing.toolFailure.test.ts',
+      'src/scheduler/status-transitions.toolFailure.test.ts',
+      // Issue #3063: compression must keep both the marker and the remedy (AC14).
+      'src/compression/utils.toolFailureFidelity.test.ts',
       'test-bun/generatingModelStamp.issue2511.bun.ts',
       'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
       'test-bun/taskTimeoutBounds.issue3031.bun.ts',
@@ -193,6 +199,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // from the Vitest selection.
       'src/launcher/process-memory-hardening.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
+      // Issue #3063: Zed replay must display the model-facing remedy for a
+      // failed tool call, not the terse marker (AC16).
+      'src/zed-integration/zed-session-replay.toolFailure.test.ts',
       // Issue #2980: Zed terminal command correlation. Migrated to bun:test
       // and excluded from the Vitest selection below; the strict wrapper
       // matcher is exercised here while keeping the lifecycle guard intact.
@@ -229,6 +238,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/tools/tool-key-storage.test.ts',
       'src/tools-adapters/CoreSubagentServiceAdapter.timeout.test.ts',
       'src/tools-adapters/CoreSubagentServiceAdapter.cancellation.cr3031.test.ts',
+      // Issue #3063: a failed tool call must stay failed on the way out —
+      // createErrorResponse sets the top-level ToolResponseBlock.error marker.
+      'src/utils/generateContentResponseUtilities.toolErrorRemedy.test.ts',
     ],
   },
   PROVIDERS_MANIFEST_ENTRY,
