@@ -29,6 +29,21 @@ export async function runCli(
     const child = spawn('node', [cliPath, ...args], {
       env: {
         ...process.env,
+        // The CI test step injects real provider credentials (OPENAI_API_KEY,
+        // OPENAI_BASE_URL, LLXPRT_DEFAULT_* ...). These cases assert what the
+        // CLI does with NO usable auth, so inheriting live credentials makes
+        // the child take a completely different path — reaching the network
+        // and hanging past the spawn guard instead of failing fast. Cleared
+        // before `env` so a test can still set any of them deliberately.
+        OPENAI_API_KEY: undefined,
+        OPENAI_API_KEY_2: undefined,
+        OPENAI_BASE_URL: undefined,
+        ANTHROPIC_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_API_KEY: undefined,
+        LLXPRT_DEFAULT_MODEL: undefined,
+        LLXPRT_DEFAULT_PROVIDER: undefined,
+        LLXPRT_AUTH_TYPE: undefined,
         ...env,
         // The developer's own llxprt session exports this, pointing at a
         // session-scoped bootstrap file. The child inherits it, fails to read
