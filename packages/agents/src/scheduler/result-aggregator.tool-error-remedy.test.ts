@@ -143,12 +143,10 @@ describe('ResultAggregator — real tool error remedy (issue #3037, AC6)', () =>
       );
 
       // Sanity: the real tool produced the expected remedial llmContent.
+      // Only the remedy clause is pinned — the tool owns its exact wording.
       expect(realResult.error).toBeDefined();
       expect(realResult.llmContent).toContain(
         'Use line_number <= 9 to append.',
-      );
-      expect(realResult.error?.message).toBe(
-        'line_number 999 exceeds file length (8)',
       );
 
       const { callbacks, lastError } = makeCallbacks();
@@ -164,9 +162,9 @@ describe('ResultAggregator — real tool error remedy (issue #3037, AC6)', () =>
       expect(toolResponseErrorText(response!.responseParts[0])).toContain(
         'Use line_number <= 9 to append.',
       );
-      expect(response!.error?.message).toBe(
-        'line_number 999 exceeds file length (8)',
-      );
+      // The terse half is passed through from the tool untouched.
+      expect(response!.error?.message).toBe(realResult.error!.message);
+      expect(response!.resultDisplay).toBe(realResult.error!.message);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

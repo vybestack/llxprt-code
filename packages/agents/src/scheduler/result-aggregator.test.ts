@@ -445,6 +445,10 @@ describe('ResultAggregator', () => {
       );
     });
 
+    // The fallback hands back error.message verbatim, without token limiting.
+    // That is the pre-existing behaviour of every createErrorResponse call
+    // site and is deliberately left alone here; AC4's limiting applies to the
+    // llmContent this change newly lifts through the boundary.
     it('falls back to error.message when llmContent is empty (AC3)', async () => {
       agg.beginBatch(1);
       const call = makeScheduledCall('c-empty', 'insert_at_line');
