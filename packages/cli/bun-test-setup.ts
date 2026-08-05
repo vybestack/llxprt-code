@@ -89,6 +89,15 @@ for (const [name, value] of Object.entries(testGlobals)) {
 // Environment
 // ---------------------------------------------------------------------------
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+
+// Clear credential-proxy env vars so unit tests do not inherit the host
+// process's proxy configuration, which would skip proactive renewal
+// scheduling, alter token-store behaviour, and change sandbox paths. The
+// runner passes the parent environment to every child, so without this a
+// developer's live capability material reaches the tests.
+delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+delete process.env.LLXPRT_CAPABILITY_TOKEN;
+delete process.env.LLXPRT_CAPABILITY_FD;
 if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
@@ -367,7 +376,16 @@ function restoreProcessListeners(eventName: ManagedProcessEvent): void {
   }
 }
 
+// Ink teardown must run before the shared process and runtime state below are
+// reset, so it is invoked at the top of the same hook rather than registered
+// separately. Without this, a component mounted in one test stays mounted for
+// the rest of the file, leaking effects, timers and the global active stdin.
+const { cleanup: cleanupInkRenders } = await import(
+  './test-utils/ink-testing-library.js'
+);
+
 afterEach(async () => {
+  cleanupInkRenders();
   // Code under test (for example the extension commands) signals failure with
   // `process.exitCode = 1`. Under Vitest that happens inside a worker, but a
   // Bun test file IS the process, so a leftover exit code would fail the file

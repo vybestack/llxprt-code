@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   discoverTestFiles,
+  escapeXml,
   isTestFile,
   parseCaseCounts,
 } from '../run-bun-tests.js';
@@ -124,5 +125,28 @@ describe('discoverTestFiles', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('escapeXml', () => {
+  it('escapes XML metacharacters', () => {
+    expect(escapeXml('<a href="x">&</a>')).toBe(
+      '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;',
+    );
+  });
+
+  it('strips control characters that XML 1.0 forbids', () => {
+    const withControls = `before${String.fromCharCode(1)}mid${String.fromCharCode(
+      0x1b,
+    )}[31mafter`;
+    const escaped = escapeXml(withControls);
+    expect(escaped).not.toContain(String.fromCharCode(1));
+    expect(escaped).not.toContain(String.fromCharCode(0x1b));
+    expect(escaped).toContain('before');
+    expect(escaped).toContain('after');
+  });
+
+  it('keeps tab, newline and carriage return', () => {
+    expect(escapeXml('a\tb\nc\rd')).toBe('a\tb\nc\rd');
   });
 });

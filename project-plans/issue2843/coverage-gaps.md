@@ -97,7 +97,8 @@ error and straight into the second: the CLI runtime scope introduced by
 PLAN-20251023-STATELESS-HARDENING, which requires `setCliRuntimeContext()` and
 `registerCliProviderInfrastructure()` to be established around every render.
 
-Deleted (`App.e2e.test.tsx` is kept — it passes, 3 cases):
+Deleted (`App.e2e.test.tsx` was also deleted later, in the mock-theater
+sweep — its three cases were explicit placeholders; see that section):
 
 - `src/ui/App.test.tsx` (10 cases) — auto-updater behaviour (skips when running
   from git, success/failure messaging, spawn failure, the

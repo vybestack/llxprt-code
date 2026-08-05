@@ -649,8 +649,20 @@ const registerModuleMock = (
       applyModuleMock(mockId, resolvedId, toNamespace(exports));
       mock.module(resolvedId, () => toNamespace(exports));
     })
-    .catch(() => {
-      // Factory error — leave the real module in place
+    .catch((error: unknown) => {
+      // Never leave the real module silently installed in place of a mock the
+      // test asked for: that turns a broken factory into a passing test.
+      const reason = error instanceof Error ? error.message : String(error);
+      const failure = new Error(
+        `vi.mock factory for "${mockId}" rejected, so the real module is still ` +
+          `installed and this test would run unmocked: ${reason}`,
+        { cause: error },
+      );
+      // Surface asynchronously as an unhandled rejection so the test process
+      // fails rather than reporting success.
+      queueMicrotask(() => {
+        throw failure;
+      });
     });
   return undefined;
 };

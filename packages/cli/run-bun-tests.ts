@@ -153,8 +153,30 @@ function runTestFile(file: string): Promise<TestResult> {
   });
 }
 
-function escapeXml(value: string): string {
-  return value
+/**
+ * XML 1.0 forbids most C0 control characters outright, and Bun test output
+ * routinely contains ANSI escapes (U+001B). Emitting them produces a document
+ * that a strict parser rejects, which matters because CI feeds this file to a
+ * test reporter. Strip the disallowed code points before escaping.
+ */
+function stripInvalidXmlChars(value: string): string {
+  // Filtered by code point rather than a regex so no control-character escape
+  // appears in a pattern literal. Allowed C0 characters are tab (0x09), line
+  // feed (0x0A) and carriage return (0x0D).
+  let out = '';
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    const isAllowedControl = code === 0x09 || code === 0x0a || code === 0x0d;
+    const isForbidden = code < 0x20 || code === 0x7f;
+    if (!isForbidden || isAllowedControl) {
+      out += char;
+    }
+  }
+  return out;
+}
+
+export function escapeXml(value: string): string {
+  return stripInvalidXmlChars(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

@@ -5,11 +5,20 @@
 The `cli` workspace must execute its entire unit-test suite with Bun's native
 test runner instead of Vitest.
 
-1. `packages/cli/package.json` `test` and `test:ci` run Bun; `test:vitest`
-   remains as the transitional fallback.
-2. Every non-integration test file under `packages/cli/` is discovered and
-   executed. No manifest, allow-list, or exclusion list filters the run.
-3. No test is dropped, filtered, or newly skipped relative to the Vitest run.
+1. `packages/cli/package.json` `test` and `test:ci` run Bun. Vitest is removed
+   from this workspace entirely — there is no `test:vitest` fallback. (Revised
+   from the original plan on explicit direction: a fallback would leave two
+   runners to keep green.)
+2. EVERY test file under `packages/cli/` is discovered and executed, including
+   the `*.integration.*` files. No manifest, allow-list, or exclusion list
+   filters the run. (Revised: the original plan left integration files to a
+   separate `test:integration` script, but no CI job ever invoked it, so those
+   24 files had not run at all. `test:integration` has been removed and they
+   now run in the main suite.)
+3. No test is dropped, filtered, or newly skipped for runner reasons. Tests
+   removed because the behaviour they assert no longer exists, or because they
+   were placeholders, are enumerated in `coverage-gaps.md` and tracked in
+   issue #3046.
 4. Vitest-only APIs that Bun cannot support are refactored in the affected
    test files rather than silenced.
 5. CI runs the CLI workspace under Bun on the required platforms.
@@ -18,11 +27,11 @@ test runner instead of Vitest.
 
 - **Discovery root**: `src/`, `test/`, `test-bun/`, `test-utils/`.
 - **Selected**: `*.test.ts`, `*.test.tsx`, `*.spec.ts`, `*.spec.tsx`.
-- **Excluded**: `*.integration.test.*` / `*.integration.spec.*`. These remain
-  owned by `test:integration`, exactly as under `vitest.config.ts`.
+- **Excluded**: nothing. The `*.integration.*` files are included; the separate
+  `test:integration` script has been removed because no CI job called it.
 - **Isolation**: one `bun test` process per file. Bun's `mock.module` registry
   is process-wide, so a shared process would leak module mocks between files.
-- **Discovered count**: 650 unit test files.
+- **Discovered count**: 654 test files (including 24 integration files).
 
 ## Runner
 
