@@ -46,6 +46,9 @@ describe('Bun native test manifest', () => {
       files: [
         'test-setup/augment-bun-vi.test.ts',
         'test-setup/stub-helpers.bun.test.ts',
+        // Vitest-parity guarantees relied on by every migrated workspace
+        // (issue #2843).
+        'test-setup/vitest-parity.test.ts',
       ],
     });
   });

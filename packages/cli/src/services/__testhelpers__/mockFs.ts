@@ -79,6 +79,19 @@ function writeNode(targetPath: string, node: StructureNode): void {
  * Manages a real temporary directory that backs the virtual file structures
  * used by FileCommandLoader tests.
  */
+/** Instance shape the code under test uses from a constructed Storage. */
+interface MockStorageInstance {
+  getProjectCommandsDir(): string;
+}
+
+/** Constructor plus the statics the code under test calls on Storage itself. */
+interface MockStorageConstructor {
+  new (projectRoot?: string): MockStorageInstance;
+  getUserCommandsDir(): string;
+  getUserSkillsDir(): string;
+  getGlobalSettingsPath(): string;
+}
+
 export class FsMockContext {
   readonly root: string;
   readonly userCommandsDir: string;
@@ -184,46 +197,35 @@ export class FsMockContext {
    * the `Storage` constructor signature so the code under test can still
    * `new Storage(projectRoot)`.
    */
-  settingsMock(): {
-    Storage: new (projectRoot?: string) => {
-      getProjectCommandsDir: () => string;
-    } & {
-      getUserCommandsDir: () => string;
-      getUserSkillsDir: () => string;
-      getGlobalSettingsPath: () => string;
-    };
-  } {
+  settingsMock(): { Storage: MockStorageConstructor } {
     // Captured as plain values so the class below closes over strings rather
     // than aliasing `this`, which the lint rules forbid.
     const { userCommandsDir, projectCommandsDir, root } = this;
-    return {
-      Storage: class MockStorage {
-        constructor(public projectRoot?: string) {}
 
-        static getUserCommandsDir(): string {
-          return userCommandsDir;
-        }
+    // Declared to satisfy MockStorageConstructor directly. The command-dir
+    // lookups are STATIC on the real Storage, so describing them as instance
+    // members previously forced a double type assertion that the CLI policy
+    // guard rightly rejects.
+    const MockStorage: MockStorageConstructor = class {
+      constructor(public projectRoot?: string) {}
 
-        static getUserSkillsDir(): string {
-          return path.join(root, 'skills');
-        }
+      static getUserCommandsDir(): string {
+        return userCommandsDir;
+      }
 
-        static getGlobalSettingsPath(): string {
-          return path.join(root, 'settings.json');
-        }
+      static getUserSkillsDir(): string {
+        return path.join(root, 'skills');
+      }
 
-        getProjectCommandsDir(): string {
-          return projectCommandsDir;
-        }
-      } as unknown as {
-        Storage: new (projectRoot?: string) => {
-          getProjectCommandsDir: () => string;
-        } & {
-          getUserCommandsDir: () => string;
-          getUserSkillsDir: () => string;
-          getGlobalSettingsPath: () => string;
-        };
-      }['Storage'],
+      static getGlobalSettingsPath(): string {
+        return path.join(root, 'settings.json');
+      }
+
+      getProjectCommandsDir(): string {
+        return projectCommandsDir;
+      }
     };
+
+    return { Storage: MockStorage };
   }
 }
