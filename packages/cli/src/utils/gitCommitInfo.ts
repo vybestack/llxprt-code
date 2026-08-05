@@ -53,8 +53,12 @@ function candidatePaths(): string[] {
   // (dist/src/utils -> dist/src/generated, since copy_files.ts mirrors the JSON
   // into dist). No separate dist candidate is needed.
   add(path.join(loaderDir, '..', 'generated', INFO_FILENAME));
-  // Bundled runtime: the JSON is copied to the bundle root (parity with the
-  // bundle candidate in core's manifest-loader.ts).
+  // Bundled runtime: the JSON is copied to the bundle root beside the loader
+  // (parity with the bundle candidate in core's manifest-loader.ts). When
+  // bundled, loaderDir IS the bundle root, so this resolves regardless of the
+  // caller's cwd. The earlier cwd-relative candidate below only matched when
+  // the CLI was launched from the package root.
+  add(path.join(loaderDir, INFO_FILENAME));
   add(path.join(process.cwd(), 'bundle', INFO_FILENAME));
 
   return Array.from(candidates);
