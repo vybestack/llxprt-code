@@ -191,15 +191,15 @@ These prevent a single tool call from flooding the context. This matters more th
 
 ### Timeouts
 
-| Setting                         | Description                             | Default         |
-| ------------------------------- | --------------------------------------- | --------------- |
-| `shell-default-timeout-seconds` | Default shell command timeout           | `300` (5 min)   |
-| `shell-max-timeout-seconds`     | Maximum shell command timeout           | `900` (15 min)  |
-| `task-default-timeout-seconds`  | Default subagent task timeout           | `900` (15 min)  |
-| `task-max-timeout-seconds`      | Maximum subagent task timeout           | `1800` (30 min) |
-| `socket-timeout`                | HTTP request timeout for API calls (ms) | —               |
+| Setting                         | Description                                                 | Default         |
+| ------------------------------- | ----------------------------------------------------------- | --------------- |
+| `shell-default-timeout-seconds` | Default shell command timeout                               | `300` (5 min)   |
+| `shell-max-timeout-seconds`     | Ceiling for shell command timeout (set `-1` for no ceiling) | `900` (15 min)  |
+| `task-default-timeout-seconds`  | Default subagent task timeout                               | `900` (15 min)  |
+| `task-max-timeout-seconds`      | Ceiling for subagent task timeout (set `-1` for no ceiling) | `1800` (30 min) |
+| `socket-timeout`                | HTTP request timeout for API calls (ms)                     | —               |
 
-Some models will kick off commands that wait for user interaction (like an interactive installer or a server that doesn't exit) and then hang indefinitely. The timeouts prevent this from blocking your session forever. If you're running long builds or test suites, increase `shell-max-timeout-seconds`. For subagent-heavy workflows, increase `task-max-timeout-seconds`.
+Some models will kick off commands that wait for user interaction (like an interactive installer or a server that doesn't exit) and then hang indefinitely. The timeouts prevent this from blocking your session forever. The `*-max-timeout-seconds` settings are **ceilings only**: they bound a request upward but never override a shorter one, so a model can always ask for a shorter run. A request above the ceiling — including a `-1` "unlimited" request — is clamped to the ceiling and the result tells the model its request was reduced. To remove a ceiling entirely (genuinely unbounded), set the corresponding `*-max-timeout-seconds` to `-1`. If you're running long builds or test suites, increase `shell-max-timeout-seconds`. For subagent-heavy workflows, increase `task-max-timeout-seconds`.
 
 ### Prompt and Caching
 

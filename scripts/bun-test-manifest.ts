@@ -161,6 +161,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
       'test-bun/generatingModelStamp.issue2511.bun.ts',
       'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
+      'test-bun/taskTimeoutBounds.issue3031.bun.ts',
+      'test-bun/taskTimeoutDescription.issue3031.bun.ts',
+      'test-bun/taskAsyncTimeout.issue3031.bun.ts',
     ],
   },
   {
@@ -215,6 +218,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // encrypted .key file when SecureStore.delete() surfaces a keyring
       // failure.
       'src/tools/tool-key-storage.test.ts',
+      'src/tools-adapters/CoreSubagentServiceAdapter.timeout.test.ts',
     ],
   },
   PROVIDERS_MANIFEST_ENTRY,

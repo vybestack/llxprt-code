@@ -7,12 +7,21 @@
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import type { SubagentLaunchRequest } from '../core/subagentOrchestrator.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import {
+  resolveTimeout as resolveSharedTimeout,
+  describeTimeoutTermination,
+  type TimeoutResolution,
+} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
 const abortLogger = new DebugLogger('llxprt:task');
 
 // Tool timeout settings (Issue #1049)
 export const DEFAULT_TASK_TIMEOUT_SECONDS = 900;
 export const MAX_TASK_TIMEOUT_SECONDS = 1800;
+
+/** Setting names surfaced to the model and to clamp/timeout notices. */
+export const TASK_TIMEOUT_DEFAULT_SETTING = 'task-default-timeout-seconds';
+export const TASK_TIMEOUT_MAX_SETTING = 'task-max-timeout-seconds';
 
 /**
  * Reads ephemeral settings from the config using boundary-validation.
@@ -32,28 +41,47 @@ export function readEphemeralSettings(config: {
 
 /**
  * Resolves the effective timeout (seconds) from the requested value, the
- * configured default, and the configured maximum. Returns `undefined` when
- * timeouts are disabled (-1).
+ * configured default, and the configured maximum. Thin re-export of the
+ * canonical shared helper so the ceiling semantics cannot drift between the
+ * task, core-subagent, and shell tools (Issue #3031). Returns `undefined`
+ * when the resolved timeout is unbounded (a maximum of -1/absent with an
+ * unbounded ask).
  */
 export function resolveTimeoutSeconds(
   requestedTimeoutSeconds: number | undefined,
   defaultTimeoutSeconds: number,
   maxTimeoutSeconds: number,
 ): number | undefined {
-  if (requestedTimeoutSeconds === -1 || defaultTimeoutSeconds === -1) {
-    return undefined;
-  }
+  return resolveSharedTimeout(
+    requestedTimeoutSeconds,
+    defaultTimeoutSeconds,
+    maxTimeoutSeconds,
+  ).effectiveTimeoutSeconds;
+}
 
-  const effectiveTimeout = requestedTimeoutSeconds ?? defaultTimeoutSeconds;
-  if (maxTimeoutSeconds === -1) {
-    return effectiveTimeout;
-  }
-
-  if (effectiveTimeout > maxTimeoutSeconds) {
-    return maxTimeoutSeconds;
-  }
-
-  return effectiveTimeout;
+/**
+ * Resolves the full timeout outcome (effective seconds + clamping flag) from
+ * the config's ephemeral settings. Used by the task tool so it can surface
+ * clamping in the result and message.
+ */
+export function resolveTimeoutResolutionFromConfig(
+  config: {
+    getEphemeralSettings?: () => Record<string, unknown> | undefined;
+  },
+  requestedTimeoutSeconds: number | undefined,
+): TimeoutResolution {
+  const settings = readEphemeralSettings(config);
+  const defaultTimeoutSeconds =
+    (settings[TASK_TIMEOUT_DEFAULT_SETTING] as number | undefined) ??
+    DEFAULT_TASK_TIMEOUT_SECONDS;
+  const maxTimeoutSeconds =
+    (settings[TASK_TIMEOUT_MAX_SETTING] as number | undefined) ??
+    MAX_TASK_TIMEOUT_SECONDS;
+  return resolveSharedTimeout(
+    requestedTimeoutSeconds,
+    defaultTimeoutSeconds,
+    maxTimeoutSeconds,
+  );
 }
 
 /**
@@ -66,24 +94,15 @@ export function resolveTimeoutFromConfig(
   },
   requestedTimeoutSeconds: number | undefined,
 ): number | undefined {
-  const settings = readEphemeralSettings(config);
-  const defaultTimeoutSeconds =
-    (settings['task-default-timeout-seconds'] as number | undefined) ??
-    DEFAULT_TASK_TIMEOUT_SECONDS;
-  const maxTimeoutSeconds =
-    (settings['task-max-timeout-seconds'] as number | undefined) ??
-    MAX_TASK_TIMEOUT_SECONDS;
-
-  return resolveTimeoutSeconds(
-    requestedTimeoutSeconds,
-    defaultTimeoutSeconds,
-    maxTimeoutSeconds,
-  );
+  return resolveTimeoutResolutionFromConfig(config, requestedTimeoutSeconds)
+    .effectiveTimeoutSeconds;
 }
 
 export interface TimeoutControllers {
   timeoutMs?: number;
   timeoutSeconds?: number;
+  /** Full resolution outcome, used to surface clamping in results (Issue #3031). */
+  resolution: TimeoutResolution;
   timeoutController: AbortController;
   timeoutId: ReturnType<typeof setTimeout> | null;
   onUserAbort: () => void;
@@ -101,10 +120,11 @@ export function createTimeoutControllers(
   signal: AbortSignal,
   requestedTimeoutSeconds: number | undefined,
 ): TimeoutControllers {
-  const timeoutSeconds = resolveTimeoutFromConfig(
+  const resolution = resolveTimeoutResolutionFromConfig(
     config,
     requestedTimeoutSeconds,
   );
+  const timeoutSeconds = resolution.effectiveTimeoutSeconds;
   const timeoutMs =
     timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
   const timeoutController = new AbortController();
@@ -125,6 +145,7 @@ export function createTimeoutControllers(
   return {
     timeoutMs,
     timeoutSeconds,
+    resolution,
     timeoutController,
     timeoutId,
     onUserAbort,
@@ -232,11 +253,18 @@ export function handleBackgroundAbort(
   },
   agentId: string,
   timedOut: boolean,
+  resolution: TimeoutResolution,
 ): void {
   const task = asyncTaskManager.getTask(agentId);
   if (task?.status !== 'running') return;
   if (timedOut) {
-    asyncTaskManager.failTask(agentId, 'Async task timed out');
+    asyncTaskManager.failTask(
+      agentId,
+      describeTimeoutTermination(resolution.effectiveTimeoutSeconds, {
+        defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+        maxSetting: TASK_TIMEOUT_MAX_SETTING,
+      }),
+    );
   } else {
     asyncTaskManager.cancelTask(agentId);
   }
@@ -256,13 +284,16 @@ export function setupAsyncTimeout(
   timedOut: { value: boolean },
 ): {
   timeoutId: NodeJS.Timeout | null;
+  resolution: TimeoutResolution;
 } {
-  const timeoutSeconds = resolveTimeoutFromConfig(
+  const resolution = resolveTimeoutResolutionFromConfig(
     config,
     requestedTimeoutSeconds,
   );
   const timeoutMs =
-    timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+    resolution.effectiveTimeoutSeconds === undefined
+      ? undefined
+      : resolution.effectiveTimeoutSeconds * 1000;
   const timeoutId =
     timeoutMs === undefined
       ? null
@@ -271,7 +302,7 @@ export function setupAsyncTimeout(
           asyncAbortController.abort();
         }, timeoutMs);
 
-  return { timeoutId };
+  return { timeoutId, resolution };
 }
 
 /**

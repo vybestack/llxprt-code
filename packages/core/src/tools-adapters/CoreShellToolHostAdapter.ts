@@ -6,13 +6,18 @@
 
 import type {
   IShellToolHost,
+  ShellTimeoutConfig,
   ShellExecutionResult as ToolsShellExecutionResult,
   ShellOutputEvent as ToolsShellOutputEvent,
   HostShellJobInfo as ToolsShellJobInfo,
   HostShellJobTailResult as ToolsShellJobTailResult,
   BackgroundPromotionResult,
 } from '@vybestack/llxprt-code-tools';
-import { ShellTool } from '@vybestack/llxprt-code-tools';
+import {
+  ShellTool,
+  DEFAULT_SHELL_TIMEOUT_SECONDS,
+  MAX_SHELL_TIMEOUT_SECONDS,
+} from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import { ShellExecutionService } from '../services/shellExecutionService.js';
@@ -30,9 +35,6 @@ import type { AnyToolInvocation } from '../index.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import { limitOutputTokens } from '../utils/toolOutputLimiter.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
-
-const DEFAULT_SHELL_TIMEOUT_SECONDS = 300;
-const MAX_SHELL_TIMEOUT_SECONDS = 900;
 
 export class CoreShellToolHostAdapter implements IShellToolHost {
   constructor(private readonly config: Config) {}
@@ -93,10 +95,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     };
   }
 
-  getTimeoutConfig(): {
-    timeoutSeconds: number | undefined;
-    defaultTimeoutSeconds: number;
-  } {
+  getTimeoutConfig(): ShellTimeoutConfig {
     const ephemeralSettings = this.config.getEphemeralSettings();
     const defaultTimeoutSeconds =
       (ephemeralSettings['shell-default-timeout-seconds'] as

@@ -35,14 +35,26 @@ import {
   canonicalizeToolName,
   createCancelledResult,
   createErrorResult,
+  DEFAULT_TASK_TIMEOUT_SECONDS,
   formatSuccessContent,
   formatSuccessDisplay,
   getToolNameCandidates,
   isExcludedToolName,
   isToolBlocked,
-  resolveTimeoutSeconds,
+  attachTimeoutMetadataToResult,
+  createTimeoutSubagentResult,
+  MAX_TASK_TIMEOUT_SECONDS,
+  resolveTimeoutResolution,
   stringifySubagentOutput,
+  TASK_TIMEOUT_DEFAULT_SETTING,
+  TASK_TIMEOUT_MAX_SETTING,
   toToolsSubagentConfig,
+  createAsyncNotConfiguredResult,
+  createSlotFullResult,
+  handleAsyncLaunchFailure,
+  type TimeoutResolution,
+  type CoreTimeoutSetup,
+  failTaskIfTimeout,
 } from './coreSubagentServiceHelpers.js';
 
 export interface CoreSubagentLaunchRequest {
@@ -144,32 +156,42 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       return this.executeAsyncSubagent(request, options);
     }
 
+    let timeout: CoreTimeoutSetup | undefined;
     try {
       const { orchestrator, config } = this.createExecutionServices();
-      const { timeoutMs, timeoutSeconds, timeoutController, timeoutId } =
-        this.createTimeout(request, options.signal);
+      timeout = this.createTimeout(request, options.signal);
 
       const launchResult = await orchestrator.launch(
-        this.buildLaunchRequest(request, timeoutMs),
-        timeoutController.signal,
+        this.buildLaunchRequest(request, timeout.timeoutMs),
+        timeout.timeoutController.signal,
       );
 
       try {
-        return await this.runSubagentWithTimeout(
+        const result = await this.runSubagentWithTimeout(
           request,
           launchResult,
           config,
-          timeoutController,
-          timeoutSeconds,
+          timeout,
           options,
         );
+        return attachTimeoutMetadataToResult(result, timeout.resolution);
       } finally {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
+        if (timeout.timeoutId !== null) {
+          clearTimeout(timeout.timeoutId);
         }
         await launchResult.dispose();
       }
     } catch (error) {
+      // A timeout-controller abort that reaches this catch (e.g. during
+      // orchestrator.launch) is a TIMEOUT, not a user cancellation. This is
+      // now reachable because a requested -1 under a finite maximum arms a
+      // timer where previously it did not (Issue #3031).
+      if (timeout?.timeoutController.signal.aborted === true) {
+        return attachTimeoutMetadataToResult(
+          createTimeoutSubagentResult(timeout.resolution),
+          timeout.resolution,
+        );
+      }
       return this.createExecutionErrorResult(
         error,
         options.signal,
@@ -182,8 +204,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     request: SubagentRequest,
     launchResult: CoreSubagentLaunchResult,
     config: Config,
-    timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    timeout: CoreTimeoutSetup,
     options: SubagentExecutionOptions,
   ): Promise<SubagentResult> {
     try {
@@ -194,10 +215,10 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
         options.updateOutput,
       );
 
-      if (timeoutController.signal.aborted) {
+      if (timeout.timeoutController.signal.aborted) {
         return this.resolveAbortedResult(
           options.signal,
-          timeoutSeconds,
+          timeout.resolution,
           output,
           launchResult,
         );
@@ -212,8 +233,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       return this.resolveCaughtError(
         error,
         options.signal,
-        timeoutController,
-        timeoutSeconds,
+        timeout,
         launchResult,
       );
     }
@@ -221,7 +241,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
   private resolveAbortedResult(
     parentSignal: AbortSignal | undefined,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     output: OutputObject,
     launchResult: CoreSubagentLaunchResult,
   ): SubagentResult {
@@ -232,8 +252,8 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
         output,
       );
     }
-    return this.createTimeoutResult(
-      timeoutSeconds,
+    return createTimeoutSubagentResult(
+      resolution,
       output,
       launchResult.agentId,
     );
@@ -242,8 +262,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private resolveCaughtError(
     error: unknown,
     parentSignal: AbortSignal | undefined,
-    timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    timeout: CoreTimeoutSetup,
     launchResult: CoreSubagentLaunchResult,
   ): SubagentResult {
     if (this.isAbortError(error)) {
@@ -254,9 +273,9 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
           launchResult.scope.output,
         );
       }
-      if (timeoutController.signal.aborted) {
-        return this.createTimeoutResult(
-          timeoutSeconds,
+      if (timeout.timeoutController.signal.aborted) {
+        return createTimeoutSubagentResult(
+          timeout.resolution,
           launchResult.scope.output,
           launchResult.agentId,
         );
@@ -536,24 +555,23 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private createTimeout(
     request: SubagentRequest,
     parentSignal?: AbortSignal,
-  ): {
-    timeoutMs?: number;
-    timeoutSeconds?: number;
-    timeoutController: AbortController;
-    timeoutId: ReturnType<typeof setTimeout> | null;
-  } {
+  ): CoreTimeoutSetup {
     const settings = this.requireConfig().getEphemeralSettings();
     const defaultTimeoutSeconds =
-      (settings['task-default-timeout-seconds'] as number | undefined) ?? 900;
+      (settings[TASK_TIMEOUT_DEFAULT_SETTING] as number | undefined) ??
+      DEFAULT_TASK_TIMEOUT_SECONDS;
     const maxTimeoutSeconds =
-      (settings['task-max-timeout-seconds'] as number | undefined) ?? 1800;
-    const timeoutSeconds = resolveTimeoutSeconds(
+      (settings[TASK_TIMEOUT_MAX_SETTING] as number | undefined) ??
+      MAX_TASK_TIMEOUT_SECONDS;
+    const resolution = resolveTimeoutResolution(
       request.timeoutSeconds,
       defaultTimeoutSeconds,
       maxTimeoutSeconds,
     );
     const timeoutMs =
-      timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+      resolution.effectiveTimeoutSeconds === undefined
+        ? undefined
+        : resolution.effectiveTimeoutSeconds * 1000;
     const timeoutController = new AbortController();
     const timeoutId =
       timeoutMs === undefined
@@ -572,7 +590,12 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       );
     }
 
-    return { timeoutMs, timeoutSeconds, timeoutController, timeoutId };
+    return {
+      timeoutMs,
+      resolution,
+      timeoutController,
+      timeoutId,
+    };
   }
 
   private async runScope(
@@ -672,31 +695,6 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     };
   }
 
-  private createTimeoutResult(
-    timeoutSeconds: number | undefined,
-    output?: OutputObject,
-    agentId?: string,
-  ): SubagentResult {
-    const message = `Task timed out after ${timeoutSeconds ?? 900}s (timeout_seconds).`;
-    return {
-      output: message,
-      success: false,
-      error: message,
-      llmContent: message,
-      returnDisplay: message,
-      metadata: {
-        agentId,
-        terminateReason: output?.terminate_reason,
-        emittedVars: output?.emitted_vars ?? {},
-        ...(output?.final_message
-          ? { finalMessage: output.final_message }
-          : {}),
-        timedOut: true,
-      },
-      errorType: ToolErrorType.TIMEOUT,
-    };
-  }
-
   private createExecutionErrorResult(
     error: unknown,
     signal?: AbortSignal,
@@ -735,77 +733,87 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
     const asyncTaskManager = this.getAsyncTaskManager?.();
     if (asyncTaskManager === undefined) {
-      return {
-        output: 'Async mode requires AsyncTaskManager to be configured.',
-        success: false,
-        error: 'AsyncTaskManager not configured',
-        llmContent: 'Async mode requires AsyncTaskManager to be configured.',
-        returnDisplay: 'Error: Async mode not available.',
-        errorType: ToolErrorType.EXECUTION_FAILED,
-      };
+      return createAsyncNotConfiguredResult();
     }
 
     const bookingId = asyncTaskManager.tryReserveAsyncSlot();
     if (!bookingId) {
-      const canLaunch = asyncTaskManager.canLaunchAsync();
-      const baseReason = canLaunch.reason ?? 'Async task limit reached';
-      const guidance =
-        'You can: (1) wait for running async tasks to complete using check_async_tasks, ' +
-        '(2) launch this subagent synchronously (without async: true), or ' +
-        '(3) try again later when a slot is available.';
-      return {
-        output: `${baseReason}. ${guidance}`,
-        success: false,
-        error: baseReason,
-        llmContent: `${baseReason}. ${guidance}`,
-        returnDisplay: baseReason,
-        errorType: ToolErrorType.EXECUTION_FAILED,
-      };
+      return createSlotFullResult(asyncTaskManager);
     }
 
+    let timeout: CoreTimeoutSetup | undefined;
+    let launchResult: CoreSubagentLaunchResult | undefined;
     try {
       const { orchestrator, config } = this.createExecutionServices();
-      const { timeoutController, timeoutId } = this.createTimeout(request);
-      const launchResult = await orchestrator.launch(
-        this.buildLaunchRequest(request),
-        undefined,
+      timeout = this.createTimeout(request, options.signal);
+      launchResult = await orchestrator.launch(
+        this.buildLaunchRequest(request, timeout.timeoutMs),
+        timeout.timeoutController.signal,
       );
-      const { agentId } = launchResult;
-      asyncTaskManager.registerTask(
-        {
-          id: agentId,
-          subagentName: request.name,
-          goalPrompt: request.prompt,
-          abortController: timeoutController,
-        },
-        bookingId,
-      );
-
-      this.executeInBackground(
+      return this.registerAndLaunchAsync(
         request,
         launchResult,
         config,
         asyncTaskManager,
-        timeoutController,
-        timeoutId,
-        options.updateOutput,
+        timeout,
+        bookingId,
+        options,
       );
+    } catch (error) {
+      return handleAsyncLaunchFailure(
+        error,
+        timeout,
+        launchResult,
+        bookingId,
+        asyncTaskManager,
+        options.signal,
+      );
+    }
+  }
 
-      const message =
-        `Async task launched: subagent '${request.name}' (ID: ${agentId}). ` +
-        `Task is running in background. Use 'check_async_tasks' to monitor progress.`;
-      return {
+  private registerAndLaunchAsync(
+    request: SubagentRequest,
+    launchResult: CoreSubagentLaunchResult,
+    config: Config,
+    asyncTaskManager: AsyncTaskManager,
+    timeout: CoreTimeoutSetup,
+    bookingId: string,
+    options: SubagentExecutionOptions,
+  ): SubagentResult {
+    const { agentId } = launchResult;
+    asyncTaskManager.registerTask(
+      {
+        id: agentId,
+        subagentName: request.name,
+        goalPrompt: request.prompt,
+        abortController: timeout.timeoutController,
+      },
+      bookingId,
+    );
+
+    this.executeInBackground(
+      request,
+      launchResult,
+      config,
+      asyncTaskManager,
+      timeout,
+      options.updateOutput,
+    );
+
+    const message =
+      `Async task launched: subagent '${request.name}' (ID: ${agentId}). ` +
+      `Task is running in background. Use 'check_async_tasks' to monitor progress.`;
+    return attachTimeoutMetadataToResult(
+      {
         output: message,
         success: true,
         agentId,
         llmContent: message,
         returnDisplay: `Async task started: **${request.name}** (\`${agentId}\`)`,
         metadata: { agentId, async: true, status: 'running' },
-      };
-    } catch (error) {
-      asyncTaskManager.cancelReservation(bookingId);
-      return this.createExecutionErrorResult(error, options.signal);
-    }
+      },
+      timeout.resolution,
+    );
   }
 
   private checkAsyncSettings(): SubagentResult | undefined {
@@ -849,8 +857,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     launchResult: CoreSubagentLaunchResult,
     config: Config,
     asyncTaskManager: AsyncTaskManager,
-    timeoutController: AbortController,
-    timeoutId: ReturnType<typeof setTimeout> | null,
+    timeout: CoreTimeoutSetup,
     updateOutput?: (output: string) => void,
   ): void {
     void (async () => {
@@ -861,25 +868,31 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
           config,
           updateOutput,
         );
-        if (timeoutController.signal.aborted) {
-          const task = asyncTaskManager.getTask(launchResult.agentId);
-          if (task?.status === 'running') {
-            asyncTaskManager.failTask(
-              launchResult.agentId,
-              'Async task timed out',
-            );
-          }
+        if (timeout.timeoutController.signal.aborted) {
+          failTaskIfTimeout(
+            asyncTaskManager,
+            launchResult.agentId,
+            timeout.resolution,
+          );
           return;
         }
         asyncTaskManager.completeTask(launchResult.agentId, output);
       } catch (error) {
+        if (timeout.timeoutController.signal.aborted) {
+          failTaskIfTimeout(
+            asyncTaskManager,
+            launchResult.agentId,
+            timeout.resolution,
+          );
+          return;
+        }
         asyncTaskManager.failTask(
           launchResult.agentId,
           error instanceof Error ? error.message : String(error),
         );
       } finally {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
+        if (timeout.timeoutId !== null) {
+          clearTimeout(timeout.timeoutId);
         }
         try {
           await launchResult.dispose();

@@ -24,6 +24,11 @@ import type {
   IShellToolHost,
   ShellExecutionResult,
 } from '../interfaces/IShellToolHost.js';
+import {
+  describeTimeoutClamp,
+  type TimeoutResolution,
+} from '../utils/timeoutResolution.js';
+import type { ToolResult } from './tools.js';
 
 /** Type for shell tool parameters (used by filter helpers). */
 export interface ShellFilterParams {
@@ -31,6 +36,98 @@ export interface ShellFilterParams {
   grep_flags?: string[];
   head_lines?: number;
   tail_lines?: number;
+}
+
+/** Ephemeral setting name for the shell tool's default timeout (seconds). */
+export const SHELL_TIMEOUT_DEFAULT_SETTING = 'shell-default-timeout-seconds';
+
+/** Ephemeral setting name for the shell tool's maximum timeout ceiling (seconds). */
+export const SHELL_TIMEOUT_MAX_SETTING = 'shell-max-timeout-seconds';
+
+/**
+ * Shipped default shell timeout (seconds). Both the legacy execution-service
+ * host adapter and the core `CoreShellToolHostAdapter` share these so the
+ * ceiling numbers cannot drift between the two host implementations
+ * (Issue #3031).
+ */
+export const DEFAULT_SHELL_TIMEOUT_SECONDS = 300;
+
+/**
+ * Shipped maximum shell timeout ceiling (seconds). `-1` would mean the operator
+ * declined a ceiling, but the shipped configuration is a finite ceiling so that
+ * a runaway command is bounded.
+ */
+export const MAX_SHELL_TIMEOUT_SECONDS = 900;
+
+/**
+ * Appends the timeout-clamp notice to `content` when the requested/default
+ * timeout was reduced to the ceiling, otherwise returns `content` unchanged.
+ * Used so a caller that ignores metadata still learns its request was not
+ * honoured (Issue #3031).
+ */
+export function appendShellClampNotice(
+  content: string,
+  resolution: TimeoutResolution,
+): string {
+  const clamp = describeTimeoutClamp(resolution, {
+    defaultSetting: SHELL_TIMEOUT_DEFAULT_SETTING,
+    maxSetting: SHELL_TIMEOUT_MAX_SETTING,
+  });
+  return clamp === undefined
+    ? content
+    : `${content}
+
+${clamp}`;
+}
+
+/**
+ * Builds the timeout message naming the termination reason, the effective
+ * timeout that was applied, and the parameter + settings that would raise it
+ * (Issue #3031).
+ */
+export function formatShellTimeoutMessage(
+  resolution: TimeoutResolution,
+): string {
+  const effective = resolution.effectiveTimeoutSeconds;
+  return (
+    `Command timed out after ${effective}s. ` +
+    `The effective timeout is bounded by the timeout_seconds parameter and the ` +
+    `${SHELL_TIMEOUT_MAX_SETTING} / ${SHELL_TIMEOUT_DEFAULT_SETTING} settings; ` +
+    `raise them to allow a longer run.`
+  );
+}
+
+/**
+ * Appends the durable clamp notice to BOTH `llmContent` and `returnDisplay`
+ * of a foreground shell `ToolResult`. This is applied AFTER all lossy
+ * processing (summarization and token limiting) so the notice survives even
+ * when the underlying content is replaced or truncated (Issue #3031).
+ */
+export function appendClampNoticeToResult(
+  result: ToolResult,
+  resolution: TimeoutResolution,
+): ToolResult {
+  const clamp = describeTimeoutClamp(resolution, {
+    defaultSetting: SHELL_TIMEOUT_DEFAULT_SETTING,
+    maxSetting: SHELL_TIMEOUT_MAX_SETTING,
+  });
+  if (clamp === undefined) {
+    return result;
+  }
+  const suffix = `
+
+${clamp}`;
+  return {
+    ...result,
+    llmContent:
+      typeof result.llmContent === 'string'
+        ? `${result.llmContent}${suffix}`
+        : result.llmContent,
+    returnDisplay:
+      typeof result.returnDisplay === 'string'
+        ? `${result.returnDisplay}${suffix}`
+        : result.returnDisplay,
+  };
 }
 
 export function isShellToolHost(
@@ -128,7 +225,7 @@ export function createShellToolHostFromExecutionService(
       executionOptions: {},
     }),
     getTimeoutConfig: () => ({
-      timeoutSeconds: undefined,
+      timeoutSeconds: MAX_SHELL_TIMEOUT_SECONDS,
       defaultTimeoutSeconds: 60,
     }),
     getOutputLimits: () => ({}),
@@ -396,7 +493,7 @@ export function getCommandDescription(): string {
 
 /** Description for the `is_background` schema property (non-Windows only). */
 export function getBackgroundParamDescription(): string {
-  return 'When true, the command is launched as a managed background job and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. A background job runs until it exits on its own — timeout_seconds bounds only the launch, not the job lifetime.';
+  return 'When true, the command is launched as a managed background job and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. A background job runs until it exits on its own — timeout_seconds is NOT applied to background jobs (neither to the launch nor to the job lifetime).';
 }
 
 /** JSON Schema for the run_shell_command tool parameters. */
@@ -428,7 +525,18 @@ export function buildShellSchema(): {
     timeout_seconds: {
       type: 'number',
       description:
-        '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
+        '(OPTIONAL) Maximum time the command may run, in seconds. ' +
+        'Precedence: this explicit value, then the shell-default-timeout-seconds ' +
+        'setting, bounded upward by the shell-max-timeout-seconds setting (both are ' +
+        'overridable ephemeral settings, so do not assume fixed numbers). A value at ' +
+        'or below the maximum is honoured exactly, however small. -1 means "as long as ' +
+        'the configured maximum allows" — it resolves to the maximum and is NOT ' +
+        'unbounded unless the maximum itself is -1. A request above the maximum (or a ' +
+        'request of -1 under a finite maximum) is clamped to the maximum, and the ' +
+        'result will state that clamping occurred. Give long-running work (full test ' +
+        'suites, builds, installs) an explicit timeout rather than relying on the ' +
+        'default. For background jobs (is_background or a trailing &), ' +
+        'timeout_seconds is NOT applied — the job runs until it exits on its own.',
     },
   };
   if (os.platform() !== 'win32') {
