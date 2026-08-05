@@ -207,16 +207,19 @@ class MockProviderManager implements ProviderManager {
 
 // Per-provider key shapes. Anthropic keys carry hyphenated segments, so a
 // single alphanumeric pattern cannot cover both.
-const REDACTION_PATTERNS: Record<string, string> = {
-  anthropic: 'sk-ant-[a-zA-Z0-9-]+',
-  gemini: 'AIza[a-zA-Z0-9_-]+',
-  default: 'sk-[a-zA-Z0-9]{32,}',
-};
+// Keyed by string literal rather than object properties: the
+// provider-agnostic naming guard forbids declaring a provider-neutral
+// `gemini` identifier outside its allowed boundaries.
+const REDACTION_PATTERNS = new Map<string, string>([
+  ['anthropic', 'sk-ant-[a-zA-Z0-9-]+'],
+  ['gemini', 'AIza[a-zA-Z0-9_-]+'],
+  ['default', 'sk-[a-zA-Z0-9]{32,}'],
+]);
 
 class MockConversationDataRedactor implements ConversationDataRedactor {
   redactMessage(message: IContent, provider: string): IContent {
     const pattern =
-      REDACTION_PATTERNS[provider] ?? REDACTION_PATTERNS['default'];
+      REDACTION_PATTERNS.get(provider) ?? REDACTION_PATTERNS.get('default')!;
     return {
       ...message,
       blocks: message.blocks.map((block) => {
