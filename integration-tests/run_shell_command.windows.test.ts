@@ -6,6 +6,7 @@
 
 import { it } from 'vitest';
 import { strict as assert } from 'node:assert';
+import { execSync } from 'node:child_process';
 
 const isWin = process.platform === 'win32';
 
@@ -19,6 +20,16 @@ it.skipIf(!isWin)(
     rig.setup(
       'run_shell_command windows placeholder (CP932 decoding & PowerShell path)',
     );
+
+    // The rig workspace lives under <repo>/.integration-tests/<run-id>/, which
+    // the repo-root .gitignore excludes. The agent's file-discovery resolves
+    // the enclosing git root (the repo root) and applies its .gitignore,
+    // hiding every workspace file from list_directory/glob. Initializing the
+    // workspace as its own git repository scopes ignore-rule evaluation to the
+    // workspace root so the agent can see the files it is asked to operate on.
+    const workspaceDir = rig.testDir;
+    assert.ok(workspaceDir, 'rig.setup() must establish a test directory');
+    execSync('git init', { cwd: workspaceDir, stdio: 'ignore' });
 
     // Test 1: Verify PowerShell UTF-8 path handling
     const utf8Path = 'テスト.txt';
@@ -34,7 +45,7 @@ if (Test-Path '${utf8Path}') {
     rig.createFile(utf8Path, 'test content');
     rig.sync();
 
-    const prompt = `Use the run_shell_command tool to execute: powershell -ExecutionPolicy Bypass -File check-utf8-path.ps1`;
+    const prompt = `Run this exact command using the run_shell_command tool: powershell -ExecutionPolicy Bypass -File check-utf8-path.ps1`;
     const result = await rig.run({ args: prompt });
 
     assert.ok(
@@ -43,7 +54,7 @@ if (Test-Path '${utf8Path}') {
     );
 
     // Test 2: Verify stderr encoding from cmd.exe
-    const errorPrompt = `Use the run_shell_command tool to execute: cmd /c "dir /invalid-flag 2>&1"`;
+    const errorPrompt = `Run this exact command using the run_shell_command tool: cmd /c "dir /invalid-flag 2>&1"`;
     const errorResult = await rig.run({ args: errorPrompt });
 
     // Should contain some error message (exact text varies by Windows locale)

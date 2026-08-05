@@ -42,16 +42,45 @@ function asSecureStoreError(error: unknown): SecureStoreError {
 }
 
 /**
- * Reads the canonical process start time (epoch ms) via `ps -o lstart=`, the
- * same mechanism production's `readProcessStartTimeMs` uses. A fabricated
- * owner record carrying `startTimeSource: 'canonical'` must use this value —
+ * Platforms that have a canonical process start-time source (`ps -o lstart=`).
+ * This MUST mirror production's gate in `readProcessStartTimeMs`
+ * (credential-write-lock.ts:256) exactly: the canonical mechanism exists only
+ * here, and on every other platform production returns `null` and builds the
+ * owner record with `startTimeSource: 'approximate'`.
+ */
+const CANONICAL_START_TIME_PLATFORMS = ['darwin', 'linux', 'freebsd'];
+
+/**
+ * Builds the start-time fields for a fabricated "stall" owner record, using the
+ * canonical `ps -o lstart=` value where it exists (the same mechanism
+ * production's `readProcessStartTimeMs` uses) and an approximate value
+ * everywhere else.
+ *
+ * On canonical platforms a `'canonical'` record must use the real `ps` value —
  * not the approximate `Date.now() - process.uptime() * 1000` — otherwise the
  * record is internally inconsistent: `probeOwnerLiveness` trusts the
  * `'canonical'` claim, re-reads the real `ps` value, and the quantization
  * error (lstart is rounded to the whole second) plus uptime drift can exceed
  * the 2000 ms tolerance, causing a live owner to be misjudged dead.
+ *
+ * On Windows there is no `ps`, so production returns `null` and never produces a
+ * `'canonical'` record. A fabricated `'canonical'` record would be
+ * unverifiable-but-harmless, but we cannot even compute its `startTimeMs`, so
+ * we mirror production: emit an `'approximate'` record instead. Such an owner is
+ * still judged `'unverifiable'` (never `'dead'`) by `probeOwnerLiveness`, so a
+ * live process's lock is still never reclaimed — the TIMEOUT this test asserts
+ * still holds.
  */
-function readCanonicalProcessStartTimeMs(): number {
+function buildStallOwnerStartTime(): {
+  startTimeMs: number;
+  startTimeSource: 'canonical' | 'approximate';
+} {
+  if (!CANONICAL_START_TIME_PLATFORMS.includes(process.platform)) {
+    return {
+      startTimeMs: Date.now() - process.uptime() * 1000,
+      startTimeSource: 'approximate',
+    };
+  }
   const raw = execFileSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], {
     encoding: 'utf8',
     env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
@@ -60,7 +89,7 @@ function readCanonicalProcessStartTimeMs(): number {
   if (!Number.isFinite(value)) {
     throw new Error(`Could not parse canonical process start time: ${raw}`);
   }
-  return value;
+  return { startTimeMs: value, startTimeSource: 'canonical' };
 }
 
 // ─── Shared temp-dir lifecycle helper (DRY-setup per dev-docs/RULES.md) ──────
@@ -535,15 +564,17 @@ describe('CredentialWriteLock', () => {
     const ld = lockDir();
     await fs.mkdir(ld, { recursive: true });
     // Place a lock owned by a live process (this process) so it will never
-    // be reclaimable as dead.
-    const startTimeMs = readCanonicalProcessStartTimeMs();
+    // be reclaimable as dead. Use the canonical start time where `ps` exists
+    // and an approximate one on platforms without it; in both cases the owner
+    // is judged live/unverifiable and never reclaimed, so acquisition times out.
+    const { startTimeMs, startTimeSource } = buildStallOwnerStartTime();
     const stallPayload = {
       version: 1,
       ownerToken: 'perpetual-owner',
       pid: process.pid,
       hostname: os.hostname(),
       startTimeMs,
-      startTimeSource: 'canonical',
+      startTimeSource,
     };
     const lockPath = new CredentialWriteLock({
       lockDir: ld,
@@ -589,11 +620,18 @@ describe('CredentialWriteLock', () => {
     const opError = new Error('operation-blew-up');
     const result = await lock
       .withLock('svc', 'acct', async () => {
-        // Sabotage the lock directory AFTER acquisition so that release()'s
-        // readOwner → fs.readFile fails with ENOTDIR (a non-ENOENT error),
-        // genuinely exercising the M4 catch-and-warn path.
-        await fs.rm(lockDir(), { recursive: true, force: true });
-        await fs.writeFile(lockDir(), 'now-a-file');
+        // Sabotage the lock AFTER acquisition so that release()'s
+        // readOwner → fs.readFile fails with a non-ENOENT error, genuinely
+        // exercising the M4 catch-and-warn path. Replacing the lock file with
+        // a directory yields EISDIR on every platform; the previous
+        // "remove the lock dir and put a file in its place" approach produced
+        // ENOTDIR on POSIX but ENOENT on Windows (libuv maps a path that
+        // traverses a non-directory component to ENOENT there), so readOwner
+        // swallowed it as "absent" and no warning was logged — silently hiding
+        // the release failure on Windows.
+        const lockPath = lock.lockFilePath('svc', 'acct');
+        await fs.rm(lockPath, { force: true });
+        await fs.mkdir(lockPath);
         throw opError;
       })
       .catch((e: unknown) => e);

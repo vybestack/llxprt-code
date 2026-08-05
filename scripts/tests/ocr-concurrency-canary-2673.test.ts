@@ -500,8 +500,14 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         request.on('end', () => {
           response.writeHead(200, { 'content-type': 'application/json' });
           response.write('{"partial":');
-          setImmediate(() =>
-            response.destroy(new Error('upstream mid-stream crash')),
+          // Give the monitor (a separate process) enough wall-clock time to
+          // receive the 200, call writeHead, and flush the status line to the
+          // client over the loopback socket before the mid-stream crash
+          // propagates. With a near-zero delay the client's socket 'error' can
+          // preempt its HTTP parser, hiding an already-forwarded 200.
+          setTimeout(
+            () => response.destroy(new Error('upstream mid-stream crash')),
+            50,
           );
         });
       });
@@ -514,6 +520,22 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         statusCode: number | undefined;
         body: string;
       }>((resolve) => {
+        // The monitor forwards the upstream 200 status line before the
+        // mid-stream crash. Capture it the instant the response object is
+        // delivered so that a post-header connection reset — which can emit
+        // 'error' on both the response and the request — cannot overwrite the
+        // already-observed status with the sentinel 0.
+        let resolved = false;
+        let observedStatus: number | undefined;
+        const settle = (value: {
+          statusCode: number | undefined;
+          body: string;
+        }) => {
+          if (!resolved) {
+            resolved = true;
+            resolve(value);
+          }
+        };
         const proxyRequest = http.request(
           new URL(asString(resource.ready.proxy_url)),
           {
@@ -524,24 +546,34 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
             },
           },
           (response) => {
+            observedStatus = response.statusCode;
             const chunks: Buffer[] = [];
             response.on('data', (chunk) => chunks.push(chunk));
             response.on('end', () =>
-              resolve({
-                statusCode: response.statusCode,
+              settle({
+                statusCode: observedStatus,
                 body: Buffer.concat(chunks).toString('utf8'),
               }),
             );
             response.on('error', () =>
-              resolve({
-                statusCode: response.statusCode,
+              settle({
+                statusCode: observedStatus,
                 body: Buffer.concat(chunks).toString('utf8'),
               }),
             );
           },
         );
+        // A request-level error is authoritative only when no status line has
+        // been delivered; once the monitor has forwarded the 200 a subsequent
+        // reset must not erase it.
         proxyRequest.once('error', () =>
-          resolve({ statusCode: 0, body: 'connection error' }),
+          settle({
+            statusCode: observedStatus ?? 0,
+            body:
+              observedStatus === undefined
+                ? 'connection error'
+                : 'connection reset after headers',
+          }),
         );
         proxyRequest.end('{"test":true}');
       });

@@ -17,7 +17,7 @@ import {
 } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SENTINEL_FILENAME } from './quota-guard.js';
 
@@ -63,6 +63,48 @@ function resolveVitestEntry(): string {
     );
   }
 }
+
+/**
+ * Absolute path to the Node executable the nested vitest run must use.
+ *
+ * `process.execPath` is whatever runs THIS file, and this package's suites run
+ * under Bun. Vitest is a Node tool: its forks pool spawns workers expecting a
+ * Node runtime, which holds under Bun on POSIX but not on Windows, where the
+ * nested run dies outright — publishing no sentinel and exiting non-zero for a
+ * reason that has nothing to do with the quota guard (issue #3061). Pinning the
+ * child to Node removes the host runtime from what these tests measure.
+ *
+ * Throws descriptively rather than letting a later spawn fail with an opaque
+ * ENOENT, matching how the vitest entry is resolved above.
+ */
+function resolveNodeExecutable(): string {
+  const fromNpm = process.env['npm_node_execpath'];
+  if (fromNpm !== undefined && fromNpm !== '' && existsSync(fromNpm)) {
+    return fromNpm;
+  }
+  const names =
+    process.platform === 'win32' ? ['node.exe', 'node.cmd'] : ['node'];
+  const searchPath = process.env['PATH'] ?? '';
+  for (const dir of searchPath.split(delimiter)) {
+    if (dir === '') {
+      continue;
+    }
+    for (const name of names) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  throw new Error(
+    'Unable to locate a Node executable to run the nested vitest with. ' +
+      'These tests spawn a real vitest run, which requires Node (the host ' +
+      'runtime here is ' +
+      `${process.execPath}). Checked npm_node_execpath and PATH.`,
+  );
+}
+
+const NODE_EXECUTABLE = resolveNodeExecutable();
 
 /**
  * Absolute path to the node_modules directory that actually provides vitest.
@@ -399,6 +441,23 @@ function removeFixtureRoot(root: string): void {
   }
 }
 
+/**
+ * Assert a property of the nested run, reporting the child's OWN output when it
+ * does not hold. A nested run that dies for an unrelated reason (a runtime that
+ * cannot host vitest, a missing fixture) is otherwise indistinguishable in CI
+ * from one that failed for the reason under test — that ambiguity is what made
+ * the Windows failures in issue #3061 unreadable from the log.
+ */
+function requireOrReport(
+  condition: boolean,
+  message: string,
+  childOutput: string,
+): void {
+  if (!condition) {
+    throw new Error(`${message}. Child output:\n${childOutput}`);
+  }
+}
+
 describe('quota guard vitest acceptance semantics', () => {
   afterEach(() => {
     for (const root of fixtureRoots) {
@@ -411,7 +470,7 @@ describe('quota guard vitest acceptance semantics', () => {
     const { root, stateDir } = createFixture();
 
     const result = spawnSync(
-      process.execPath,
+      NODE_EXECUTABLE,
       [VITEST_ENTRY, 'run', '--root', root],
       {
         cwd: root,
@@ -436,8 +495,14 @@ describe('quota guard vitest acceptance semantics', () => {
     const combinedOutput = `${result.stdout}\n${result.stderr}`;
 
     // (c) The overall run must exit non-zero — the outage is surfaced as a
-    // failure, never masked as success.
-    expect(result.status).not.toBe(0);
+    // failure, never masked as success. Report the child's own output on a
+    // miss: a nested run that dies for an unrelated reason is otherwise
+    // indistinguishable from one that failed for the intended reason.
+    requireOrReport(
+      result.status !== 0,
+      'expected the nested vitest run to exit non-zero, got 0',
+      combinedOutput,
+    );
 
     // (a) Test two's body never executed: its marker file was never written,
     // proving `ctx.skip` short-circuited before the API-touching body.
@@ -445,7 +510,11 @@ describe('quota guard vitest acceptance semantics', () => {
 
     // The sentinel was actually tripped inside the child (real cross-process
     // file handshake, not a simulation).
-    expect(existsSync(join(stateDir, SENTINEL_FILENAME))).toBe(true);
+    requireOrReport(
+      existsSync(join(stateDir, SENTINEL_FILENAME)),
+      'the nested run published no sentinel',
+      combinedOutput,
+    );
 
     // The reporter surfaced the quota skip note for the skipped test...
     expect(combinedOutput).toContain(SKIP_NOTE);
@@ -461,7 +530,7 @@ describe('quota guard vitest acceptance semantics', () => {
     // simultaneously, so publication is genuinely contended across real OS
     // processes rather than a lucky serial order.
     const result = spawnSync(
-      process.execPath,
+      NODE_EXECUTABLE,
       [VITEST_ENTRY, 'run', '--root', root],
       {
         cwd: root,
@@ -479,7 +548,11 @@ describe('quota guard vitest acceptance semantics', () => {
     // suite-abort acceptance scenario above.
     const combinedOutput = `${result.stdout}
 ${result.stderr}`;
-    expect(result.status).toBe(0);
+    requireOrReport(
+      result.status === 0,
+      `expected the nested vitest run to exit 0, got ${result.status}`,
+      combinedOutput,
+    );
 
     // All workers actually reached the barrier — i.e. we really did have
     // RACE_WORKER_COUNT concurrent processes contending, not a degenerate one.

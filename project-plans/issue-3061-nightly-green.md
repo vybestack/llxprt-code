@@ -65,7 +65,8 @@ Chronic since 2026-08-01.
 | `packages/core/src/utils/getPty.test.ts:49` (2 tests) | `vi.doMock('node-pty', ...)` does not take effect on Windows: the assertion receives the real `Module {}` instead of the stub, i.e. the mock is bypassed and the genuine module loads. |
 | `packages/providers/src/auth/proxy/__tests__/e2e-credential-flow.test.ts` Scenario 7 | "throws connection error after proxy stops" times out at 30 s. Named-pipe teardown does not surface the connection error the way a Unix socket does. |
 | `packages/test-utils/src/process-run.test.ts:283` | Asserts `/ENOENT/`; Bun on Windows reports `Executable not found in $PATH: "..."`. |
-| `packages/test-utils/src/quota-guard-vitest-integration.test.ts:448` (2 tests) | Cross-process sentinel file never observed — the atomic-publish handshake races on Windows. |
+| `packages/test-utils/src/quota-guard-vitest-integration.test.ts` (2 tests) | Both tests spawn a real nested vitest run with `process.execPath`, which under this package's Bun-hosted suite is Bun. Vitest is a Node tool whose forks pool assumes a Node runtime; on Windows the nested run dies, so no sentinel is published and the second test's run exits 1 where 0 was expected. |
+| `packages/tools/src/__tests__/shell-timeout-bounds.test.ts:252` | Not present in the failing nightly — it arrived with #3050 after that run and was caught by dispatching the nightly on this branch. The test builds a `is_background: true` invocation unconditionally, but `ShellTool.validateToolParams` rejects background jobs on win32 outright (`BACKGROUND_WINDOWS_ERROR`), so `build()` throws before the clamp behaviour is ever exercised. |
 
 ## 3. `macos_ci` — one racy test
 
@@ -92,6 +93,20 @@ and the model refuses to run a script it believes is absent.
 Two problems: the assertion depends on the model not looking before leaping
 (which is why it passed 2026-08-01..03), and underneath it an agent cannot see
 its own workspace files when the workspace sits inside an ignored directory.
+
+## Baseline evidence
+
+Dispatching the nightly on this branch (run 31031274495) after the
+`cli_bundle_launch` fix confirmed:
+
+- `CLI bundle builds and launches` — **green**, so section 1 is proven on CI,
+  not merely locally.
+- `macOS CI` — the canary test was the only failure.
+- `Windows CI` — the six defects above plus the newly-landed #3050 regression.
+- `E2E Full (windows)` — the `run_shell_command` test, all three retries.
+
+Every dispatch of a failing nightly comments on this issue via the
+`notify_failure` job; that is expected while iterating on the branch.
 
 ## Verification
 

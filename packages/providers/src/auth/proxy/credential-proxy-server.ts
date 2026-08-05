@@ -180,9 +180,15 @@ export class CredentialProxyServer {
   }
 
   async stop(): Promise<void> {
-    // First destroy all active connections so server.close() can complete
+    // Gracefully half-close connections rather than abruptly destroying them.
+    // On POSIX an abrupt `destroy()` suffices, but on Windows named pipes
+    // `destroy()` does NOT reliably deliver an EOF/close to the client, so the
+    // peer's connection-loss detection never fires and its next request hangs
+    // to a timeout instead of rejecting. endAndDestroyAfter sends EOF via
+    // `socket.end()` (which a named-pipe peer reliably observes as 'close'),
+    // then force-destroys on a timer so teardown still completes.
     for (const socket of this.connections) {
-      socket.destroy();
+      this.endAndDestroyAfter(socket, Buffer.alloc(0));
     }
     this.connections.clear();
 

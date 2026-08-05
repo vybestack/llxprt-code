@@ -280,7 +280,13 @@ describe('process run capture', () => {
       },
     );
 
-    await expect(run).rejects.toThrow(/ENOENT/);
+    // The intent is "a spawn failure for a missing executable rejects". Node
+    // reports this as an ENOENT errno error; Bun (used as the test runner for
+    // this workspace) reports "Executable not found in $PATH: ..." instead.
+    // Matching both keeps the assertion strict — it still rejects only for a
+    // missing-executable spawn failure and still fails if the rejection stops
+    // happening or changes to a different error class (timeout/exit code).
+    await expect(run).rejects.toThrow(/ENOENT|Executable not found/i);
     expect(capture).toStrictEqual({
       stdout: '',
       stderr: '',
