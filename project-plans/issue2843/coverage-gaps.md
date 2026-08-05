@@ -584,46 +584,50 @@ The rename was correct and stands. Two incidental findings for #3046:
 - the original test name claimed a default that had already changed, so it had
   been describing the wrong behaviour before this migration touched it.
 
-## Stale `dist/` masked two real failures after merging main
 
-Merging `origin/main` (34 commits, including #3043 and the agents Bun migration
-#2989) left `packages/cli/dist` and `bundle/llxprt.js` built from the pre-merge
-tree. Three files were newly failing, and the cause was not any source change:
+## A stale June bundle produced two false findings — corrected
 
-- `zedIntegration.terminal.test.ts` failed 6/14 and was **unaffected by
-  reverting every differing file individually** — the zed sources are byte
-  identical to main. Rebuilding fixed it outright (14/14). The test exercises
-  the shell wrapper that #3043 changed, against a stale build artefact.
+Merging `origin/main` appeared to break `zedIntegration.terminal.test.ts` and to
+show the CLI resolving profiles from `$HOME/.llxprt`. Both conclusions were
+wrong, and the cause was a build artefact, not the code.
 
-The rebuild then exposed a second, opposite problem.
+`packages/cli/dist/index.js` delegates through `runBunLaunch`, which walks
+ancestor directories for `bundle/llxprt.js`. This checkout had a **repo-root
+`bundle/llxprt.js` dated 26 June** — an obsolete layout, six weeks stale and
+gitignored, so invisible to `git status`. Every test that spawns the built CLI
+was executing June code.
 
-### Spawned-CLI profile tests were passing against a stale bundle
+Consequences, both of which I initially misread:
 
-`cli-args.integration.test.ts` and `cli-args.profile-flag.integration.test.ts`
-spawn the built CLI. An earlier fix in this branch made them write profiles to
-`Storage.getGlobalConfigDir()` and pass `LLXPRT_CONFIG_HOME` to the child. That
-made them pass — against the **old** bundle. With a current build they fail.
+1. `zedIntegration.terminal.test.ts` "failed" 6/14. It was unaffected by
+   reverting each differing file in turn, because no source file was involved.
+   With a current build it passes **14/14**. It was never broken.
+2. The CLI appeared to read profiles from `$HOME/.llxprt/profiles` and ignore
+   `LLXPRT_CONFIG_HOME`. That is pre-0.10.0 behaviour, from before config moved
+   to OS-standard directories. With a current bundle `LLXPRT_CONFIG_HOME` is
+   honoured correctly, so the earlier fix that seeds profiles under
+   `Storage.getGlobalConfigDir()` was right all along.
 
-Reproduced with no test harness at all:
+`npm run bundle` writes only `packages/cli/bundle/llxprt.js`; the root `bundle/`
+is not part of the current layout and has been deleted locally.
 
-    LLXPRT_CONFIG_HOME=/tmp/probe-config node packages/cli/dist/index.js \
-      --profile-load probe --prompt hi
-    -> Error: Profile 'probe' not found
+**Method note:** any test that spawns the built CLI is only meaningful after
+`npm run bundle`, and `npm run build` alone does not regenerate it. Verifying
+such a test without rebuilding gives an answer about whatever build happens to
+be on disk — which is how a six-week-old artefact silently drove two wrong
+conclusions here.
 
-    HOME=/tmp/probe-home node packages/cli/dist/index.js \
-      --profile-load probe --prompt hi
-    -> Error: Profile 'probe' is invalid: missing required fields
+### `cli-args` integration tests: never executed before this PR
 
-The second error is later in the flow, so the profile **was** found. The bundled
-CLI resolves profiles from `HOME/.llxprt/profiles` and ignores
-`LLXPRT_CONFIG_HOME`, even though `Storage.getGlobalConfigDir()` in-process
-honours it.
+With a correct bundle these still fail, on `Provider 'gemini' not found` when the
+spawned CLI runs against an isolated `LLXPRT_CONFIG_HOME`. This is not a
+regression:
 
-Either the tests must seed `HOME/.llxprt/profiles` and pass `HOME`, or the
-bundled CLI should honour `LLXPRT_CONFIG_HOME` the way in-process storage does.
-The second reading is the more likely product bug: two entry points into the
-same storage disagree about where configuration lives.
+- not present in `main`'s `scripts/bun-test-manifest.ts`
+- excluded from `main`'s Vitest selection by the integration pattern
+- no CI workflow invokes the CLI's `test:integration`
 
-**Method note:** these tests validate against a build artefact, so they are only
-meaningful after `npm run build`. Verifying them without rebuilding gives a
-false pass — the same class of error as recording a snapshot of an error frame.
+They are part of the never-run integration set this migration executes for the
+first time. The in-process suites mock provider aliases in the preload; a
+spawned CLI gets no such mock and needs real builtin aliases resolvable under an
+isolated config root. Tracked in #3046 rather than blocking the migration.
