@@ -105,6 +105,26 @@ describe('toolContentRejection', () => {
       expect(isToolContentRejection(400, message)).toBe(false);
     });
 
+    // Accepted precision/recall trade-off (AC8). A parameter-validation error
+    // whose parameter name IS a standalone content word is indistinguishable
+    // from a real content rejection by message text alone, so it over-matches.
+    // Recall is preferred: the issue requires that "any similar error should
+    // recover", and narrowing the vocabulary to exclude these would drop real
+    // provider rejections. The cost is bounded elsewhere — recovery also
+    // requires the failing request to carry tool evidence, and the shared
+    // one-shot guard allows at most one advice injection per round-trip, so
+    // the worst case is a single wasted round-trip.
+    it.each([
+      ['document', 'Invalid parameter: document is required'],
+      ['audio', 'Invalid parameter: audio is required'],
+      ['video', 'Invalid parameter: video is required'],
+    ])(
+      'deliberately over-matches a parameter error whose parameter name is the standalone content word %s',
+      (_name, message) => {
+        expect(isToolContentRejection(400, message)).toBe(true);
+      },
+    );
+
     it.each([
       ['413', 413],
       ['429', 429],
