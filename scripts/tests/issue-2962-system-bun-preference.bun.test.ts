@@ -143,6 +143,17 @@ const DR_OVEN_IDENTITY =
   'certificate leaf[subject.OU] = "7FRXF46ZSN"';
 
 /**
+ * A successful designated requirement that carries a team-identity clause but
+ * for a non-Oven OU. The Keychain ACL the launcher relies on stores Oven's
+ * exact OU (7FRXF46ZSN), so a binary signed by a different team cannot satisfy
+ * it and must still warn — only Oven's signed Bun can hold the persistent
+ * grant. See issue #3021.
+ */
+const DR_NON_OVEN_OU =
+  'designated => identifier "other" and anchor apple generic and ' +
+  'certificate leaf[subject.OU] = "ABCDE12345"';
+
+/**
  * Options for the codesign stub. The stub always proves it received exactly
  * the launcher's four-argument invocation (`-d --requirements - <target>`),
  * recording an invocation marker so non-Darwin branches can be shown to never
@@ -595,6 +606,43 @@ describeDarwinOnly(
         expect(result.stdout).toContain(STUB_MARKER);
         expect(result.stdout).not.toContain(BUNDLED_MARKER);
         expect(result.stderr).not.toContain(WARNING_NEEDLE);
+      },
+      LAUNCHER_TEST_TIMEOUT_MS,
+    );
+
+    it(
+      'warns exactly once and still execs the PATH Bun when a successful requirement carries a non-Oven team-identity clause',
+      () => {
+        // Regression: codesign succeeds and its output carries a
+        // `certificate leaf[subject.OU]` clause, but the OU is not Oven's
+        // (7FRXF46ZSN). The Keychain ACL stored on each credential item
+        // matches the exact Oven OU, so a binary signed by any other team
+        // cannot satisfy it and must still warn. Only the literal Oven OU
+        // should suppress the warning.
+        const { pkgRoot, launcherTarget } = makePinnedLayout(
+          tempDir,
+          BUNDLED_ENTRY_CODE,
+        );
+        const bunDir = makeStubBunDir(tempDir, bumpPatch(realBunVersion()));
+        const codesign = makeCodesignStubDir(tempDir, {
+          requirement: DR_NON_OVEN_OU,
+          expectedTarget: join(bunDir, 'bun'),
+        });
+        const result = runLauncher(
+          launcherTarget,
+          pkgRoot,
+          makePath(bunDir, codesign.binDir),
+        );
+        expectNoSpawnError(result);
+        expectExitOk(result);
+        expect(existsSync(codesign.markerPath)).toBe(true);
+        // The selected PATH Bun must still run; the warning is advisory.
+        expect(result.stdout).toContain(STUB_MARKER);
+        expect(result.stdout).not.toContain(BUNDLED_MARKER);
+        expect(result.stderr).toContain(WARNING_NEEDLE);
+        expect(result.stderr).toContain(REMEDY_BREW);
+        expect(result.stderr).toContain(REMEDY_CURL);
+        expect(countOccurrences(result.stderr, WARNING_NEEDLE)).toBe(1);
       },
       LAUNCHER_TEST_TIMEOUT_MS,
     );

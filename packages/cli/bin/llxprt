@@ -329,20 +329,24 @@ if [ "$_llxprt_kernel" = "Darwin" ] && [ -n "$_llxprt_bun_pin" ]; then
     # identity-based macOS Keychain ACL, so every credential read degrades to a
     # login-password prompt that "Always Allow" cannot persist (#3020 sealed
     # change_acl with an empty application list). Inspect the designated
-    # requirement of the exact binary selected and warn once when it carries no
-    # team-identity clause (certificate leaf[subject.OU]). The warning is
-    # advisory: a Bun that is ad-hoc signed or has no team identity runs llxprt
-    # correctly except for Keychain access, and skipping it would silently
-    # restore the npm-unlink failure mode #2962 exists to prevent.
+    # requirement of the exact binary selected and warn once unless it carries
+    # Oven's exact team-identity clause (certificate leaf[subject.OU] =
+    # "7FRXF46ZSN"), which is the OU stored in the existing Keychain ACL. The
+    # warning is advisory: a Bun that is ad-hoc signed or has no team identity
+    # runs llxprt correctly except for Keychain access, and skipping it would
+    # silently restore the npm-unlink failure mode #2962 exists to prevent.
     if _llxprt_path_bun_exe=$(command -v bun 2>/dev/null) && \
        [ -n "$_llxprt_path_bun_exe" ]; then
       # Suppress the warning only when codesign succeeds AND its output carries
-      # the team-identity clause. A failing codesign (unsigned binary, or an
-      # error whose diagnostic merely echoes the clause) must still warn.
+      # Oven's exact team-identity clause. A failing codesign (unsigned binary,
+      # or an error whose diagnostic merely echoes the clause), or a successful
+      # inspection signed by any other team, must still warn — the Keychain ACL
+      # stores Oven's OU (7FRXF46ZSN) and only a binary signed by that exact
+      # team can satisfy it.
       _llxprt_has_team_id=0
       if _llxprt_dr=$(codesign -d --requirements - "$_llxprt_path_bun_exe" 2>&1); then
         case "$_llxprt_dr" in
-          *certificate\ leaf\[subject.OU]*) _llxprt_has_team_id=1 ;;
+          *certificate\ leaf\[subject.OU]\ =\ \"7FRXF46ZSN\"*) _llxprt_has_team_id=1 ;;
           *) ;;
         esac
       fi

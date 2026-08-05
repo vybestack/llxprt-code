@@ -133,9 +133,9 @@ llxprt --provider xai --key-name xai-prod
 
 On macOS, the launcher prefers a Bun already on `PATH` when it meets the pinned version floor (so npm re-installs do not unlink a running session — see [#2962](https://github.com/vybestack/llxprt-code/issues/2962)). But on macOS the **code signature** of that binary decides whether it can hold a durable Keychain grant, and a Bun that is ad-hoc signed or otherwise lacks a stable team identity (for example the Homebrew `homebrew/core` formula, which compiles from source and discards Oven's Developer ID) cannot.
 
-The launcher inspects the selected Bun's designated code-signing requirement on startup and prints a single advisory warning to stderr when a successful inspection carries no team-identity clause (`certificate leaf[subject.OU]`), for example:
+The launcher inspects the selected Bun's designated code-signing requirement on startup and prints a single advisory warning to stderr when codesign inspection fails OR when a successful inspection lacks Oven's required team identity (`certificate leaf[subject.OU] = "7FRXF46ZSN"`), for example:
 
-```
+```text
 LLxprt Code: the Bun on your PATH is ad-hoc signed or otherwise
 lacks a stable team identity, so it cannot hold a persistent macOS
 Keychain grant. You will be prompted for your login password on every
