@@ -156,7 +156,7 @@ export interface AgentClientContract {
     prompt_id: string,
     turns?: number,
     isInvalidStreamRetry?: boolean,
-    is413Retry?: boolean,
+    isPayloadRecoveryRetry?: boolean,
   ): AsyncGenerator<ServerAgentStreamEvent, unknown>;
   getUserTier(): UserTierId | undefined;
   getCurrentSequenceModel(): string | null;

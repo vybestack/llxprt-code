@@ -271,7 +271,7 @@ describe('Task-list Continuation Integration Tests', () => {
         prompt_id: string,
         turns?: number,
         isInvalidStreamRetry?: boolean,
-        is413Retry?: boolean,
+        isPayloadRecoveryRetry?: boolean,
       ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
         capturedMessage =
           typeof request === 'string' ? request : JSON.stringify(request);
@@ -280,7 +280,7 @@ describe('Task-list Continuation Integration Tests', () => {
           prompt_id,
           turns,
           isInvalidStreamRetry,
-          is413Retry,
+          isPayloadRecoveryRetry,
         };
         // Yield a mock stream event
         yield {
@@ -307,7 +307,7 @@ describe('Task-list Continuation Integration Tests', () => {
         prompt_id: 'test-prompt-id',
         turns: undefined,
         isInvalidStreamRetry: undefined,
-        is413Retry: undefined,
+        isPayloadRecoveryRetry: undefined,
       });
 
       // Restore original method
