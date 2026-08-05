@@ -15,7 +15,7 @@ import {
   extractModelFacingErrorText,
 } from './generateContentResponseUtilities.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
-import type { ToolErrorType } from '../index.js';
+import { ToolErrorType } from '../index.js';
 import type { ToolOutputSettingsProvider } from './toolOutputLimiter.js';
 import type { ContentBlock } from '../services/history/IContent.js';
 
@@ -65,7 +65,7 @@ describe('createErrorResponse — model-facing content (issue #3037)', () => {
     const response = createErrorResponse(
       makeRequest(),
       error,
-      'EXECUTION_FAILED' as ToolErrorType,
+      ToolErrorType.EXECUTION_FAILED,
     );
 
     const block = response.responseParts[0];
@@ -77,14 +77,14 @@ describe('createErrorResponse — model-facing content (issue #3037)', () => {
     const response = createErrorResponse(
       makeRequest(),
       error,
-      'INVALID_TOOL_PARAMS' as ToolErrorType,
+      ToolErrorType.INVALID_TOOL_PARAMS,
       REMEDY,
     );
 
     expect(response.error).toBe(error);
     expect(response.error?.message).toBe(TERSE);
     expect(response.resultDisplay).toBe(TERSE);
-    expect(response.errorType).toBe('INVALID_TOOL_PARAMS');
+    expect(response.errorType).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
 
     const block = response.responseParts[0];
     expect(toolResponseErrorText(block)).toBe(REMEDY);
@@ -201,5 +201,82 @@ describe('extractModelFacingErrorText (issue #3037)', () => {
         lowConfig,
       ),
     ).toBeUndefined();
+  });
+});
+
+/**
+ * Reads the top-level `error` marker off a tool_response block via real type
+ * guards, failing loudly if the block shape is unexpected.
+ */
+function toolResponseMarker(block: ContentBlock): string | undefined {
+  if (block.type !== 'tool_response') {
+    throw new Error(
+      `expected a tool_response block but got ${String(block.type)}`,
+    );
+  }
+  if (block.error === undefined) {
+    return undefined;
+  }
+  if (typeof block.error !== 'string') {
+    throw new Error('tool_response block error marker is not a string');
+  }
+  return block.error;
+}
+
+describe('createErrorResponse — top-level failure marker (issue #3063)', () => {
+  it('sets the top-level error marker to error.message for a normal failure (AC1)', () => {
+    const error = new Error(TERSE);
+    const response = createErrorResponse(
+      makeRequest(),
+      error,
+      ToolErrorType.EXECUTION_FAILED,
+    );
+
+    expect(toolResponseMarker(response.responseParts[0])).toBe(TERSE);
+  });
+
+  it('keeps result carrying the model-facing payload and leaves other fields unchanged (AC2)', () => {
+    const request = makeRequest('call-3063', 'failingTool');
+    const error = new Error(TERSE);
+    const response = createErrorResponse(
+      request,
+      error,
+      ToolErrorType.INVALID_TOOL_PARAMS,
+      REMEDY,
+    );
+
+    // The model-facing remedy still travels in result, NOT duplicated into the
+    // terse marker.
+    expect(toolResponseErrorText(response.responseParts[0])).toBe(REMEDY);
+    expect(toolResponseMarker(response.responseParts[0])).toBe(TERSE);
+
+    // Surrounding fields are unchanged from #3037.
+    expect(response.callId).toBe('call-3063');
+    expect(response.error).toBe(error);
+    expect(response.resultDisplay).toBe(TERSE);
+    expect(response.errorType).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+    expect(response.agentId).toBeDefined();
+  });
+
+  it('falls back to "Tool call failed" when error.message is empty (AC3)', () => {
+    const response = createErrorResponse(
+      makeRequest(),
+      new Error(''),
+      undefined,
+    );
+    expect(toolResponseMarker(response.responseParts[0])).toBe(
+      'Tool call failed',
+    );
+  });
+
+  it('falls back to "Tool call failed" when error.message is whitespace-only (AC3)', () => {
+    const response = createErrorResponse(
+      makeRequest(),
+      new Error('    '),
+      undefined,
+    );
+    expect(toolResponseMarker(response.responseParts[0])).toBe(
+      'Tool call failed',
+    );
   });
 });

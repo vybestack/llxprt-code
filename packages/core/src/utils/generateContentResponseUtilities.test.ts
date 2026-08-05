@@ -612,11 +612,14 @@ describe('generateContentResponseUtilities', () => {
       expect(result.resultDisplay).toBe('Something went wrong');
       // Only a tool_response block (no functionCall) — orphan tool_use protection (#244)
       expect(result.responseParts).toHaveLength(1);
+      // Issue #3063: a failed tool call now carries a top-level `error` marker
+      // (the terse error.message) so the provider layer reports it as failed.
       expect(result.responseParts[0]).toStrictEqual({
         type: 'tool_response',
         callId: 'call-err',
         toolName: 'failingTool',
         result: { error: 'Something went wrong' },
+        error: 'Something went wrong',
       });
     });
   });
