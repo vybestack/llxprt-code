@@ -174,6 +174,19 @@ describe('codesearch Exa MCP endpoint (issue #3038, AC7)', () => {
     expect(result.error?.type).toBe(ToolErrorType.SEARCH_ERROR);
   });
 
+  it('does not interpolate undefined when error fields are missing (review)', async () => {
+    queuedOk = true;
+    queuedText = 'data: {"error":{},"jsonrpc":"2.0","id":1}' + '\n';
+
+    const result = await tool
+      .build({ query: 'shapeless error' })
+      .execute(new AbortController().signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.SEARCH_ERROR);
+    expect(result.llmContent).not.toContain('undefined');
+    expect(result.error?.message).not.toContain('undefined');
+  });
+
   it('returns SEARCH_ERROR when isError is true with empty content (FIX-1)', async () => {
     queuedOk = true;
     queuedText =

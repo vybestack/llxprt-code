@@ -24,10 +24,76 @@ function stripQuotes(text: string): string {
 
 /**
  * Returns the string child of an import_statement (the module source), or
- * null if the statement has no source string (malformed input).
+ * null if the statement has no source string among its direct children.
  */
 function findImportSource(children: SgNode[]): SgNode | null {
   return children.find((c: SgNode) => String(c.kind()) === 'string') ?? null;
+}
+
+/**
+ * Resolves the module source string for a given import statement node.
+ *
+ * For static imports the string is a direct child, but for
+ * `import x = require('...')` (and `import type x = require(...)`) the
+ * specifier lives inside the `import_require_clause` rather than as a
+ * direct child of the import_statement. This helper traverses into that
+ * clause to extract the source when the direct-child scan finds nothing.
+ *
+ * Returns the unquoted source text, or null when no source can be resolved.
+ */
+function resolveImportSource(stmt: SgNode): string | null {
+  const children = stmt.children();
+  const directSource = findImportSource(children);
+  if (directSource !== null) {
+    return stripQuotes(directSource.text());
+  }
+
+  const requireClause = children.find(
+    (c: SgNode) => String(c.kind()) === 'import_require_clause',
+  );
+  if (requireClause !== undefined) {
+    const stringNode = requireClause
+      .children()
+      .find((c: SgNode) => String(c.kind()) === 'string');
+    if (stringNode !== undefined) {
+      return stripQuotes(stringNode.text());
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Determines whether every import_specifier inside a named_imports clause
+ * carries an inline `type` modifier (e.g. `import { type A, type B }`).
+ * Returns true only when the clause is non-empty and every specifier is
+ * type-only.
+ */
+function isNamedImportsAllType(namedImports: SgNode): boolean {
+  const specifiers = namedImports
+    .children()
+    .filter((c: SgNode) => String(c.kind()) === 'import_specifier');
+  if (specifiers.length === 0) {
+    return false;
+  }
+  return specifiers.every((spec: SgNode) =>
+    spec.children().some((c: SgNode) => String(c.kind()) === 'type'),
+  );
+}
+
+/**
+ * Finds a named_imports clause among the clause's children and determines
+ * whether it is fully type-only (every specifier carries inline `type`).
+ * Returns true when the named_imports clause exists and is all-type.
+ */
+function namedImportsAreAllType(clauseChildren: SgNode[]): boolean {
+  const namedImports = clauseChildren.find(
+    (c: SgNode) => String(c.kind()) === 'named_imports',
+  );
+  if (namedImports === undefined) {
+    return false;
+  }
+  return isNamedImportsAllType(namedImports);
 }
 
 /**
@@ -44,14 +110,25 @@ function classifyImportStatement(
 ): void {
   const children = stmt.children();
   const line = stmt.range().start.line + 1;
-  const sourceNode = findImportSource(children);
-  const source = sourceNode ? stripQuotes(sourceNode.text()) : '';
+  const source = resolveImportSource(stmt);
 
   const hasTypeKeyword = children.some(
     (c: SgNode) => String(c.kind()) === 'type',
   );
   if (hasTypeKeyword) {
-    imports.push({ file: relPath, line, source, kind: 'type' });
+    if (source !== null) {
+      imports.push({ file: relPath, line, source, kind: 'type' });
+    }
+    return;
+  }
+
+  const requireClause = children.find(
+    (c: SgNode) => String(c.kind()) === 'import_require_clause',
+  );
+  if (requireClause !== undefined) {
+    if (source !== null) {
+      imports.push({ file: relPath, line, source, kind: 'require' });
+    }
     return;
   }
 
@@ -59,7 +136,14 @@ function classifyImportStatement(
     (c: SgNode) => String(c.kind()) === 'import_clause',
   );
   if (!clause) {
-    imports.push({ file: relPath, line, source, kind: 'side-effect' });
+    if (source !== null) {
+      imports.push({ file: relPath, line, source, kind: 'side-effect' });
+    }
+    return;
+  }
+
+  // A record asserting a dependency on '' is worse than no record at all.
+  if (source === null) {
     return;
   }
 
@@ -70,7 +154,11 @@ function classifyImportStatement(
   if (
     clauseChildren.some((c: SgNode) => String(c.kind()) === 'named_imports')
   ) {
-    imports.push({ file: relPath, line, source, kind: 'named' });
+    if (namedImportsAreAllType(clauseChildren)) {
+      imports.push({ file: relPath, line, source, kind: 'type' });
+    } else {
+      imports.push({ file: relPath, line, source, kind: 'named' });
+    }
   }
   if (
     clauseChildren.some((c: SgNode) => String(c.kind()) === 'namespace_import')

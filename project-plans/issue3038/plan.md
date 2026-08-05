@@ -78,6 +78,11 @@ calls distinct leaf functions:
 - `definitions` for a `class`, an `interface`, and a `type` alias still returns
   their existing entries (no regression).
 - No `(file, line)` pair is reported more than once.
+- `definitions` finds variable-bound function-like declarations — an arrow
+  function (`const f = () => {}`), a type-annotated arrow (`const f: () => void
+  = () => {}`), a plain function expression (`const f = function () {}`), and a
+  generator function expression (`const f = function* () {}`) — each returning
+  exactly one entry with `kind: 'function'` and the declarator's line.
 
 ### AC3 — `dependencies` requires an explicit target
 - `dependencies` with neither `target` nor `path` returns
@@ -97,18 +102,31 @@ For a file containing:
     import def2, { e } from './e.js';
     import * as ns from './ns.js';
     import './side.js';
+    import qux = require('qux-module');
+    import type quux = require('quux-module');
 
 - `./c.js` appears exactly once, `kind: 'named'`, and no `default` record for it.
 - `./def.js` appears exactly once, `kind: 'default'`.
 - `./e.js` appears exactly twice: once `default`, once `named` (same line).
 - `./ns.js` appears exactly once, `kind: 'namespace'`.
 - `./side.js` appears exactly once, `kind: 'side-effect'`.
+- `qux-module` appears exactly once, `kind: 'require'` (TypeScript
+  import-equals `import x = require(...)`).
+- `quux-module` appears exactly once, `kind: 'type'` (the `import type x =
+  require(...)` form is routed as type-only with the correct source).
 - No two records share the same `(file, line, source, kind)`.
 - `source` is the module specifier with quotes stripped, for every static import.
+- No emitted record has an empty `source`.
 
 ### AC5 — type-only imports are reported
 - `import type { A, B } from './types.js'` yields exactly one record with
   `kind: 'type'` and `source: './types.js'`.
+- `import { type A } from './only-type.js'` yields exactly one record with
+  `kind: 'type'` — every `import_specifier` inside `named_imports` carries an
+  inline `type` modifier, so the statement is type-only.
+- `import { type B, C } from './mixed.js'` yields exactly one record with
+  `kind: 'named'` — the specifiers are mixed (one inline `type`, one value), so
+  the statement genuinely imports at least one value and is NOT type-only.
 
 ### AC6 — the tool description documents the per-mode parameter matrix
 - The `structural_analysis` description contains one worked example call per

@@ -180,7 +180,7 @@ function tryCollectCallee(
     return null;
   }
   const callText = node.text().substring(0, 200);
-  const key = `${callText}@${relPath}`;
+  const key = `${callText}@${relPath}@${node.range().start.index}`;
   if (visited.has(key)) {
     return null;
   }

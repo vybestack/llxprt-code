@@ -61,6 +61,22 @@ function asTextResults(value: unknown): Array<{ text: string }> {
   });
 }
 
+/** Narrows to an array of { text: string; line: number }, throwing on wrong shape. */
+function asTextLineResults(
+  value: unknown,
+): Array<{ text: string; line: number }> {
+  if (!Array.isArray(value)) throw new Error('Expected array');
+  return value.map((item): { text: string; line: number } => {
+    if (item === null || typeof item !== 'object')
+      throw new Error(`Expected object, got ${JSON.stringify(item)}`);
+    if (!('text' in item) || typeof item.text !== 'string')
+      throw new Error(`Expected text: string`);
+    if (!('line' in item) || typeof item.line !== 'number')
+      throw new Error(`Expected line: number`);
+    return { text: item.text, line: item.line };
+  });
+}
+
 /** Narrows to an array of { kind: string; line: number }, throwing on wrong shape. */
 function asKindResults(value: unknown): Array<{ kind: string; line: number }> {
   if (!Array.isArray(value)) {
@@ -442,6 +458,38 @@ const outerArrow = (): void => {
     });
   });
 
+  describe('FIX-4 — callees dedup key includes call position (review)', () => {
+    let dedupFilePath: string;
+
+    beforeAll(() => {
+      dedupFilePath = join(tempDir, 'dedup-callees-fixture.ts');
+      writeFileSync(
+        dedupFilePath,
+        'function leaf(): void {}\n\nfunction callerTwice(): void {\n  leaf();\n  leaf();\n}\n',
+        'utf-8',
+      );
+    });
+
+    const baseParams = (symbol: string): Record<string, unknown> => ({
+      mode: 'callees',
+      language: 'typescript',
+      path: dedupFilePath,
+      symbol,
+    });
+
+    it('reports both call sites of the same function on different lines', async () => {
+      const results = asTextLineResults(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), baseParams('callerTwice')),
+        ),
+      );
+      expect(results.length).toBe(2);
+      expect(results[0].text).toBe('leaf()');
+      expect(results[1].text).toBe('leaf()');
+      expect(results[0].line).not.toBe(results[1].line);
+    });
+  });
+
   describe('AC2 — definitions finds return-typed declarations', () => {
     let filePath: string;
 
@@ -449,26 +497,7 @@ const outerArrow = (): void => {
       filePath = join(tempDir, 'definitions-fixture.ts');
       writeFileSync(
         filePath,
-        `export function withReturnType(x: number): number {
-  return x;
-}
-
-function withoutReturnType(x: number) {
-  return x;
-}
-
-class SomeClass {
-  methodWithType(): void {
-    return;
-  }
-}
-
-interface SomeInterface {
-  foo: string;
-}
-
-type SomeType = string;
-`,
+        'export function withReturnType(x: number): number {\n  return x;\n}\n\nfunction withoutReturnType(x: number) {\n  return x;\n}\n\nclass SomeClass {\n  methodWithType(): void {\n    return;\n  }\n}\n\ninterface SomeInterface {\n  foo: string;\n}\n\ntype SomeType = string;\n',
         'utf-8',
       );
     });
@@ -523,19 +552,16 @@ type SomeType = string;
 
     it('finds class, interface, and type alias declarations with correct kind (no regression)', async () => {
       const host = createFakeToolHost(tempDir);
-
       const classResults = asKindResults(
         extractResults(await runTool(host, baseParams('SomeClass'))),
       );
       expect(classResults.length).toBe(1);
       expect(classResults[0].kind).toBe('class');
-
       const ifaceResults = asKindResults(
         extractResults(await runTool(host, baseParams('SomeInterface'))),
       );
       expect(ifaceResults.length).toBe(1);
       expect(ifaceResults[0].kind).toBe('interface');
-
       const typeResults = asKindResults(
         extractResults(await runTool(host, baseParams('SomeType'))),
       );
@@ -544,12 +570,81 @@ type SomeType = string;
     });
   });
 
+  describe('AC2 (review) — definitions finds variable-bound functions', () => {
+    let varFnFilePath: string;
+
+    beforeAll(() => {
+      varFnFilePath = join(tempDir, 'var-bound-defs-fixture.ts');
+      writeFileSync(
+        varFnFilePath,
+        'const arrowBound = (): void => {\n  return;\n};\n\nconst typedArrow: () => void = (): void => {\n  return;\n};\n\nconst funcExprBound = function (): void {\n  return;\n};\n\nconst genExprBound = function* (): Generator<number> {\n  yield 1;\n};\n',
+        'utf-8',
+      );
+    });
+
+    const baseParams = (symbol: string): Record<string, unknown> => ({
+      mode: 'definitions',
+      language: 'typescript',
+      path: varFnFilePath,
+      symbol,
+    });
+
+    it('finds an arrow function bound to a const', async () => {
+      const results = asKindResults(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), baseParams('arrowBound')),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].kind).toBe('function');
+      expect(results[0].line).toBe(1);
+    });
+
+    it('finds a type-annotated arrow function bound to a const', async () => {
+      const results = asKindResults(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), baseParams('typedArrow')),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].kind).toBe('function');
+      expect(results[0].line).toBe(5);
+    });
+
+    it('finds a plain function expression bound to a const', async () => {
+      const results = asKindResults(
+        extractResults(
+          await runTool(
+            createFakeToolHost(tempDir),
+            baseParams('funcExprBound'),
+          ),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].kind).toBe('function');
+      expect(results[0].line).toBe(9);
+    });
+
+    it('finds a generator function expression bound to a const', async () => {
+      const results = asKindResults(
+        extractResults(
+          await runTool(
+            createFakeToolHost(tempDir),
+            baseParams('genExprBound'),
+          ),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].kind).toBe('function');
+      expect(results[0].line).toBe(13);
+    });
+  });
+
   describe('AC3 — dependencies requires an explicit target', () => {
     beforeAll(() => {
       writeFileSync(
         join(tempDir, 'dep-fixture.ts'),
-        `import { something } from './mod.js';
-`,
+        "import { something } from './mod.js';\n",
         'utf-8',
       );
     });
@@ -603,13 +698,7 @@ type SomeType = string;
       importFilePath = join(tempDir, 'imports-fixture.ts');
       writeFileSync(
         importFilePath,
-        `import type { A, B } from './types.js';
-import { c } from './c.js';
-import def from './def.js';
-import def2, { e } from './e.js';
-import * as ns from './ns.js';
-import './side.js';
-`,
+        "import type { A, B } from './types.js';\nimport { c } from './c.js';\nimport def from './def.js';\nimport def2, { e } from './e.js';\nimport * as ns from './ns.js';\nimport './side.js';\n",
         'utf-8',
       );
     });
@@ -694,9 +783,7 @@ import './side.js';
       const colonFilePath = join(tempDir, 'colon-specifier-fixture.ts');
       writeFileSync(
         colonFilePath,
-        `import protoThing from 'proto:thing';
-import { named } from 'other:spec';
-`,
+        "import protoThing from 'proto:thing';\nimport { named } from 'other:spec';\n",
         'utf-8',
       );
       const imports = asImportsWrapper(
@@ -714,6 +801,65 @@ import { named } from 'other:spec';
       const otherImports = imports.filter((i) => i.source === 'other:spec');
       expect(otherImports.length).toBe(1);
       expect(otherImports[0].kind).toBe('named');
+    });
+  });
+
+  describe('AC4/AC5 (review) — inline type-only specifiers and import-equals', () => {
+    let reviewFilePath: string;
+
+    beforeAll(() => {
+      reviewFilePath = join(tempDir, 'imports-review-fixture.ts');
+      writeFileSync(
+        reviewFilePath,
+        "import { type A } from './only-type.js';\nimport { type B, C } from './mixed.js';\nimport qux = require('qux-module');\nimport type quux = require('quux-module');\n",
+        'utf-8',
+      );
+    });
+
+    async function collectReviewImports(): Promise<ImportRecord[]> {
+      const results = extractResults(
+        await runTool(createFakeToolHost(tempDir), {
+          mode: 'dependencies',
+          language: 'typescript',
+          target: reviewFilePath,
+        }),
+      );
+      return asImportsWrapper(results).imports;
+    }
+
+    it('classifies an inline type-only specifier as type (D)', async () => {
+      const imports = await collectReviewImports();
+      const onlyType = imports.filter((i) => i.source === './only-type.js');
+      expect(onlyType.length).toBe(1);
+      expect(onlyType[0].kind).toBe('type');
+    });
+
+    it('classifies a mixed inline type + value import as named (D)', async () => {
+      const imports = await collectReviewImports();
+      const mixed = imports.filter((i) => i.source === './mixed.js');
+      expect(mixed.length).toBe(1);
+      expect(mixed[0].kind).toBe('named');
+    });
+
+    it('classifies import-equals require as require (E)', async () => {
+      const imports = await collectReviewImports();
+      const qux = imports.filter((i) => i.source === 'qux-module');
+      expect(qux.length).toBe(1);
+      expect(qux[0].kind).toBe('require');
+    });
+
+    it('classifies import type = require(...) as type with correct source (E)', async () => {
+      const imports = await collectReviewImports();
+      const quux = imports.filter((i) => i.source === 'quux-module');
+      expect(quux.length).toBe(1);
+      expect(quux[0].kind).toBe('type');
+    });
+
+    it('no emitted record has an empty source (E)', async () => {
+      const imports = await collectReviewImports();
+      for (const imp of imports) {
+        expect(imp.source.length).toBeGreaterThan(0);
+      }
     });
   });
 

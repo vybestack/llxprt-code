@@ -47,6 +47,73 @@ function searchFunctionAndMethodDefinitions(
       definitions,
     );
   }
+
+  collectVariableBoundFunctionDefinitions(
+    parsed,
+    escaped,
+    relPath,
+    definitions,
+  );
+}
+
+/**
+ * Kinds that, when they appear as a direct child of a variable_declarator,
+ * mean the declarator binds a function-like expression.
+ */
+const VARIABLE_BOUND_FUNCTION_KINDS = [
+  'arrow_function',
+  'function_expression',
+  'generator_function',
+] as const;
+
+/**
+ * Finds variable_declarator nodes that bind a function-like expression
+ * (arrow_function, function_expression, or generator_function) whose
+ * identifier matches `escapedSymbol`, and reports them with kind 'function'.
+ *
+ * Only DIRECT children are inspected — the function node is always a direct
+ * child of the declarator, even for type-annotated bindings (e.g.
+ * `const f: () => void = () => {}`); a descendant search would wrongly match
+ * functions nested inside the initialiser.
+ */
+function collectVariableBoundFunctionDefinitions(
+  parsed: ParsedFile,
+  escapedSymbol: string,
+  relPath: string,
+  definitions: DefinitionEntry[],
+): void {
+  try {
+    const declarators = parsed.root.findAll({
+      rule: {
+        kind: 'variable_declarator',
+        has: { kind: 'identifier', regex: `^${escapedSymbol}$` },
+      },
+    } as NapiConfig);
+    for (const d of declarators) {
+      const fn = d
+        .children()
+        .find((c: SgNode) =>
+          (VARIABLE_BOUND_FUNCTION_KINDS as readonly string[]).includes(
+            String(c.kind()),
+          ),
+        );
+      if (fn === undefined) continue;
+      const line = d.range().start.line + 1;
+      const exists = definitions.some(
+        (def) => def.file === relPath && def.line === line,
+      );
+      if (!exists) {
+        definitions.push({
+          file: relPath,
+          line,
+          kind: 'function',
+          text: d.text().substring(0, 200),
+        });
+      }
+    }
+  } catch {
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
+  }
 }
 
 /**

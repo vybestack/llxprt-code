@@ -249,9 +249,17 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
     }
 
     if (data.error) {
+      const code =
+        typeof data.error.code === 'number'
+          ? String(data.error.code)
+          : 'unknown';
+      const message =
+        typeof data.error.message === 'string' && data.error.message.length > 0
+          ? data.error.message
+          : 'no message provided by upstream server';
       return {
         ok: false,
-        errorText: `MCP error ${data.error.code}: ${data.error.message}`,
+        errorText: `MCP error ${code}: ${message}`,
       };
     }
     if (data.result?.isError === true) {
