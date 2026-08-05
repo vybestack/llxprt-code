@@ -33,6 +33,7 @@ import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import { SubagentTerminateMode } from '../core/subagentTypes.js';
 import { resolveTimeout } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { withBoundedGuard } from '@vybestack/llxprt-code-test-utils';
 import type { Config } from '../config/config.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -117,16 +118,6 @@ function abortingLaunchResult(signal: AbortSignal): CoreSubagentLaunchResult {
     },
     dispose: async () => {},
   } as unknown as CoreSubagentLaunchResult;
-}
-
-function withBoundedGuard<T>(promise: Promise<T>): Promise<T> {
-  const guard = new Promise<T>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('run was not bounded — hung past the guard')),
-      5000,
-    ),
-  );
-  return Promise.race([promise, guard]);
 }
 
 describe('CodeRabbit #3031 — cancellation vs timeout classification', () => {

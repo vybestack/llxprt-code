@@ -23,6 +23,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { withBoundedGuard } from '@vybestack/llxprt-code-test-utils';
 
 const REAL_AGENT_ID = 'agent-postrun-cr3031';
 
@@ -85,16 +86,6 @@ function makeResolvingOnAbortOrchestrator(): {
   } as unknown as SubagentOrchestrator;
 
   return { orchestrator, resolved };
-}
-
-function withBoundedGuard<T>(promise: Promise<T>): Promise<T> {
-  const guard = new Promise<T>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('run was not bounded — hung past the guard')),
-      5000,
-    ),
-  );
-  return Promise.race([promise, guard]);
 }
 
 describe('CodeRabbit #3031 — post-run timeout result carries the real agentId', () => {

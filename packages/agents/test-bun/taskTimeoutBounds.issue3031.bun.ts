@@ -23,6 +23,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { withBoundedGuard } from '@vybestack/llxprt-code-test-utils';
 
 interface StubMode {
   /** 'hang' = reject only on abort; 'complete' = resolve immediately. */
@@ -101,17 +102,6 @@ function makeStubOrchestrator(mode: StubMode): StubHandles {
   } as unknown as SubagentOrchestrator;
 
   return { orchestrator, aborted };
-}
-
-/** Guards against a regression that leaves the run unbounded (hanging). */
-function withBoundedGuard<T>(promise: Promise<T>): Promise<T> {
-  const guard = new Promise<T>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('run was not bounded — hung past the guard')),
-      5000,
-    ),
-  );
-  return Promise.race([promise, guard]);
 }
 
 describe('Issue #3031 — task tool timeout ceiling semantics', () => {

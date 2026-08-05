@@ -18,6 +18,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { withBoundedGuard } from '@vybestack/llxprt-code-test-utils';
 import { ShellTool } from '../index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import type {
@@ -119,22 +120,6 @@ async function runShell(
   const tool = new ShellTool(host);
   const invocation = tool.build(params);
   return invocation.execute(new AbortController().signal);
-}
-
-/** Guards against a regression that leaves the command unbounded (hanging). */
-function withBoundedGuard<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const guard = new Promise<T>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error('command was not bounded — hung past the guard')),
-      5000,
-    );
-  });
-  return Promise.race([promise, guard]).finally(() => {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  });
 }
 
 describe('Issue #3031 — shell tool timeout ceiling semantics', () => {

@@ -27,6 +27,7 @@ import type { Config } from '../config/config.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { withBoundedGuard } from '@vybestack/llxprt-code-test-utils';
 
 function makeLaunchResult(opts?: { runBehavior?: 'complete' | 'hang' }): {
   launchResult: CoreSubagentLaunchResult;
@@ -235,13 +236,3 @@ describe('Issue #3031 — CoreSubagentServiceAdapter timeout parity', () => {
     expect(String(result.llmContent)).toContain('0.05s');
   });
 });
-
-function withBoundedGuard<T>(promise: Promise<T>): Promise<T> {
-  const guard = new Promise<T>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('run was not bounded — hung past the guard')),
-      5000,
-    ),
-  );
-  return Promise.race([promise, guard]);
-}
