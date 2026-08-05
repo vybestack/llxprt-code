@@ -530,16 +530,32 @@ const reapplyModuleMocks = (): void => {
  * implementations a test configured at module scope are left alone.
  */
 const clearModuleMockCalls = (): void => {
-  const cleared = new Set<unknown>();
-  for (const namespace of registeredModuleMocks.values()) {
-    for (const key of Reflect.ownKeys(namespace)) {
-      const descriptor = Object.getOwnPropertyDescriptor(namespace, key);
-      if (!descriptor || !('value' in descriptor)) continue;
-      const value: unknown = descriptor.value;
-      if (cleared.has(value) || !isMockFunction(value)) continue;
-      cleared.add(value);
+  const visited = new Set<unknown>();
+
+  // Mock functions are routinely nested — `{ default: { thing: vi.fn() } }` is
+  // a common shape — so clearing only the direct exports leaves call history
+  // from a previous test visible to the next one. Walk the namespace with
+  // cycle protection instead. Accessor properties are skipped rather than
+  // read, since invoking a getter here could have side effects.
+  const clearWithin = (value: unknown): void => {
+    if (value === null || visited.has(value)) return;
+    const kind = typeof value;
+    if (kind !== 'object' && kind !== 'function') return;
+    visited.add(value);
+
+    if (isMockFunction(value)) {
       (value as { mockClear: () => void }).mockClear();
     }
+
+    for (const key of Reflect.ownKeys(value as object)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value as object, key);
+      if (!descriptor || !('value' in descriptor)) continue;
+      clearWithin(descriptor.value);
+    }
+  };
+
+  for (const namespace of registeredModuleMocks.values()) {
+    clearWithin(namespace);
   }
 };
 

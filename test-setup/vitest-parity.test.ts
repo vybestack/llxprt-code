@@ -124,3 +124,22 @@ describe('fake timers', () => {
     expect(order).toEqual(['first', 'second']);
   });
 });
+
+describe('nested module mock cleanup', () => {
+  it('clears call history on mocks nested inside an export', async () => {
+    const nested = vi.fn(() => 'mocked');
+    vi.mock('./nested-mock-fixture.js', () => ({
+      default: { nested },
+    }));
+
+    const mod = await import('./nested-mock-fixture.js');
+    mod.default.nested();
+    expect(nested).toHaveBeenCalledTimes(1);
+
+    // Vitest clears every mock function reachable from the module, not just
+    // the direct exports; a nested one must not carry history into the next
+    // test.
+    vi.restoreAllMocks();
+    expect(nested).toHaveBeenCalledTimes(0);
+  });
+});

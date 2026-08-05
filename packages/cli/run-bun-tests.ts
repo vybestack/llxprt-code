@@ -108,6 +108,10 @@ function runTestFile(file: string): Promise<TestResult> {
         cwd: process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe'],
         env: process.env,
+        // Own process group so a timeout can take down the whole tree. Tests
+        // that spawn the real CLI leave grandchildren which would otherwise
+        // survive the kill and hold pipes open into later files.
+        detached: process.platform !== 'win32',
       },
     );
 
@@ -121,7 +125,7 @@ function runTestFile(file: string): Promise<TestResult> {
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill('SIGKILL');
+      killProcessTree(child);
       resolve({ file, passed: false, exitCode: null, timedOut: true, output });
     }, PER_FILE_TIMEOUT_MS);
 
@@ -173,6 +177,26 @@ function stripInvalidXmlChars(value: string): string {
     }
   }
   return out;
+}
+
+/**
+ * Kills a timed-out child and anything it spawned. On POSIX the child leads its
+ * own process group, so a negative PID signals the whole group; killing only
+ * the direct child would strand grandchildren such as a spawned CLI.
+ */
+function killProcessTree(child: {
+  pid?: number;
+  kill: (s: NodeJS.Signals) => boolean;
+}): void {
+  if (process.platform !== 'win32' && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+      return;
+    } catch {
+      // Group already gone, or the child never became a group leader.
+    }
+  }
+  child.kill('SIGKILL');
 }
 
 export function escapeXml(value: string): string {
