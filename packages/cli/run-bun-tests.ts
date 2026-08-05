@@ -235,6 +235,10 @@ function stripInvalidXmlChars(value: string): string {
  * Kills a timed-out child and anything it spawned. On POSIX the child leads its
  * own process group, so a negative PID signals the whole group; killing only
  * the direct child would strand grandchildren such as a spawned CLI.
+ *
+ * On Windows there is no process group to signal, so the fallback kills only
+ * the direct child and grandchildren can survive the timeout. The suite runs
+ * on Linux in CI, so this is a documented limitation rather than a silent one.
  */
 function killProcessTree(child: {
   pid?: number;
@@ -264,15 +268,31 @@ export function escapeXml(value: string): string {
  * " 12 pass", " 1 fail", " 2 skip". Reported so the migration's test-count
  * parity with Vitest can be checked mechanically rather than by eye.
  */
+/**
+ * Removes CSI escape sequences so summary parsing does not depend on whether
+ * the runner decided to emit colour.
+ */
+export function stripAnsi(value: string): string {
+  // Built from a char code rather than written as a regex literal: an escape
+  // character in a literal trips no-control-regex, and suppressing a lint rule
+  // is not an acceptable way to pass it.
+  const csi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
+  return value.replace(csi, '');
+}
+
 export function parseCaseCounts(output: string): {
   pass: number;
   fail: number;
   skip: number;
   todo: number;
 } {
+  // Bun disables colour when stdout is a pipe, but FORCE_COLOR (or a future
+  // default) would wrap these summary lines in escape sequences and every
+  // count would silently read zero — the worst outcome for a parity check.
+  const plain = stripAnsi(output);
   const read = (label: string): number => {
     const pattern = ['^[ \\t]*(\\d+)[ \\t]+', label, '[ \\t]*$'].join('');
-    const match = output.match(new RegExp(pattern, 'm'));
+    const match = plain.match(new RegExp(pattern, 'm'));
     return match ? Number.parseInt(match[1], 10) : 0;
   };
   return {
@@ -382,7 +402,17 @@ async function main(): Promise<void> {
       `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
   );
 
-  writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
+  // A write failure must not replace the run's verdict with an unhandled
+  // exception: CI still needs the exit code even when the artifact is lost.
+  try {
+    writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
+  } catch (error) {
+    console.error(
+      `Failed to write junit.xml: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
   process.exit(failed.length > 0 ? 1 : 0);
 }
 

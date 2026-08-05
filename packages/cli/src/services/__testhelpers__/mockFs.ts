@@ -131,8 +131,13 @@ export class FsMockContext {
     rmSync(basePath, { recursive: true, force: true });
     try {
       mkdirSync(basePath, { recursive: true });
-    } catch {
-      /* rmSync already removed it */
+    } catch (error) {
+      // Only an existing directory is expected here. Swallowing everything
+      // hides permission and invalid-path failures, which then resurface as
+      // confusing ENOENT errors from writeNode further down.
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error;
+      }
     }
     for (const [key, node] of Object.entries(structure)) {
       writeNode(path.join(basePath, key), node);

@@ -21,6 +21,7 @@ import {
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
+  stripAnsi,
   timeoutForFile,
   toPathArgument,
 } from '../run-bun-tests.js';
@@ -219,5 +220,29 @@ describe('toPathArgument', () => {
 
   it('leaves an absolute path alone', () => {
     expect(toPathArgument('/tmp/a.test.ts')).toBe('/tmp/a.test.ts');
+  });
+});
+
+describe('parseCaseCounts', () => {
+  it('reads counts from output that carries colour codes', () => {
+    const esc = String.fromCharCode(27);
+    const coloured = [
+      `${esc}[32m 6 pass${esc}[0m`,
+      `${esc}[31m 2 fail${esc}[0m`,
+      ' 1 skip',
+      ' 0 todo',
+    ].join('\n');
+
+    expect(parseCaseCounts(coloured)).toEqual({
+      pass: 6,
+      fail: 2,
+      skip: 1,
+      todo: 0,
+    });
+  });
+
+  it('strips CSI sequences', () => {
+    const esc = String.fromCharCode(27);
+    expect(stripAnsi(`${esc}[32mgreen${esc}[0m`)).toBe('green');
   });
 });

@@ -28,6 +28,20 @@ describe('async vi.mock factories', () => {
   });
 });
 
+describe('vi.restoreAllMocks over a module mock', () => {
+  it('leaves the module mocked and clears its call history', () => {
+    // Vitest's restoreAllMocks only restores spies; Bun's also reverts module
+    // mocks. The shim re-registers them afterwards, so a module mocked with
+    // vi.mock must still be a mock function here — with its calls cleared.
+    const mocked = fixtureValue;
+    expect(mocked).toBe('mocked-by-async-factory');
+
+    vi.restoreAllMocks();
+
+    expect(fixtureValue).toBe('mocked-by-async-factory');
+  });
+});
+
 describe('vi.spyOn over an existing mock', () => {
   it('starts with an empty call history, as Vitest does', () => {
     const target = { method: vi.fn(() => 'real') };
