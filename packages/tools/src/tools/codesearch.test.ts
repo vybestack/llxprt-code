@@ -48,7 +48,8 @@ describe('CodeSearchTool', () => {
 
     const callArgs = mockedFetch.mock.calls[0];
     const requestBody = JSON.parse(callArgs[1].body);
-    expect(callArgs[0]).toBe('https://mcp.exa.ai/mcp');
+    const url = new URL(callArgs[0]);
+    expect(url.searchParams.get('tools')).toBe('get_code_context_exa');
     expect(requestBody.params.arguments.tokensNum).toBe(5000);
     expect(result.llmContent).toBe('Here is some React hooks documentation...');
   });
@@ -79,9 +80,9 @@ describe('CodeSearchTool', () => {
       .build({ query: 'test query' })
       .execute(new AbortController().signal);
 
-    expect(mockedFetch.mock.calls[0][0]).toBe(
-      'https://mcp.exa.ai/mcp?exaApiKey=sk-test-key',
-    );
+    const url = new URL(mockedFetch.mock.calls[0][0]);
+    expect(url.searchParams.get('tools')).toBe('get_code_context_exa');
+    expect(url.searchParams.get('exaApiKey')).toBe('sk-test-key');
   });
 
   it('handles API errors', async () => {
