@@ -660,14 +660,12 @@ describe('InputPrompt', () => {
         showSuggestions: false,
         ghostText: '',
         suggestions: [],
-        expectedFocusToggle: true,
       },
       {
         name: 'should accept ghost text and NOT toggle focus on Tab',
         showSuggestions: false,
         ghostText: 'ghost text',
         suggestions: [],
-        expectedFocusToggle: false,
         expectedAcceptCall: true,
       },
       {
@@ -675,7 +673,6 @@ describe('InputPrompt', () => {
         showSuggestions: true,
         ghostText: '',
         suggestions: [{ label: 'test', value: 'test' }],
-        expectedFocusToggle: false,
       },
     ])(
       '$name',
@@ -683,7 +680,6 @@ describe('InputPrompt', () => {
         showSuggestions,
         ghostText,
         suggestions,
-        expectedFocusToggle,
         expectedAcceptCall,
       }) => {
         const mockAccept = vi.fn();
@@ -704,7 +700,6 @@ describe('InputPrompt', () => {
         const { stdin, unmount } = renderWithProviders(
           <InputPrompt {...props} />,
           {
-            uiActions,
             uiState: { activePtyId: 1 },
           },
         );
@@ -714,12 +709,12 @@ describe('InputPrompt', () => {
         });
 
         await waitFor(() => {
-          // When focus toggles, the action is invoked exactly once with `true`;
-          // otherwise it must not be called at all.
-          expect(uiActions.setEmbeddedShellFocused.mock.calls).toStrictEqual(
-            expectedFocusToggle ? [[true]] : [],
-          );
-
+          // The embedded-shell focus toggle is owned by useKeybindings in
+          // AppContainer, not by InputPrompt — InputPrompt only receives
+          // isEmbeddedShellFocused as a prop and never reads UIActions. That
+          // behaviour is asserted in useKeybindings.test.ts and
+          // useShellFocusAutoReset.test.ts. What belongs here is whether Tab
+          // consumes the ghost text, which is InputPrompt's own decision.
           expect(mockAccept).toHaveBeenCalledTimes(
             expectedAcceptCall === true ? 1 : 0,
           );

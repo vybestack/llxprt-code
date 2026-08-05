@@ -7,12 +7,9 @@
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
 // Mock ink before any imports
-// Mock chalk
-vi.mock('chalk', () => ({
-  default: {
-    inverse: (text: string) => text,
-  },
-}));
+// chalk is deliberately NOT mocked. Ink's colorize calls chalk.hex for hex
+// colours, and a stub exposing only `inverse` made every render in this file
+// throw before the component could register its keypress handler.
 
 // Mock string-width
 vi.mock('string-width', () => ({
