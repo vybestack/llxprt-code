@@ -309,6 +309,36 @@ describe('github result rendering', () => {
   });
 
   /**
+   * The upstream query fetches up to 100 comments per thread, so a single
+   * thread must not be allowed to swallow the pane. Comments are capped per
+   * thread the way the view renderer caps an issue's comment list, and a tail
+   * names what was cut.
+   *
+   * @plan PLAN-20260731-GHBROKER.P15
+   * @requirement REQ-013
+   */
+  it('pr.reviews caps comments per thread and shows a more-comments tail', () => {
+    const comments = Array.from({ length: 50 }, (_, i) => ({
+      author: `user${i}`,
+      body: `comment ${i}`,
+    }));
+    const out = renderGithubResult(
+      'pr.reviews',
+      { number: 1 },
+      {
+        threads: [{ path: 'src/a.ts', line: 10, comments }],
+        truncated: false,
+      },
+    );
+    // The cap is MAX_VIEW_COMMENTS (3): the 4th comment body must not appear.
+    expect(out).toContain('comment 0');
+    expect(out).toContain('comment 1');
+    expect(out).toContain('comment 2');
+    expect(out).not.toContain('comment 3');
+    expect(out).toContain('… and 47 more comments');
+  });
+
+  /**
    * @plan PLAN-20260731-GHBROKER.P15
    * @requirement REQ-013
    */
@@ -381,5 +411,27 @@ describe('github result rendering', () => {
     const out = renderGithubResult('label.list', {}, { labels });
     expect(out).toContain('100 labels');
     expect(out).toContain('more');
+  });
+
+  /**
+   * A label object with an absent or non-string `name` renders nothing, so
+   * the header, the shown slice and the "… and N more" tail must all derive
+   * from the filtered (named) count. Mixing the raw count into the header
+   * made the header and tail disagree.
+   *
+   * @plan PLAN-20260731-GHBROKER.P15
+   * @requirement REQ-013
+   */
+  it('label.list counts only named labels so header and tail agree', () => {
+    const labels = [
+      ...Array.from({ length: 12 }, (_, i) => ({ name: `label-${i}` })),
+      { name: '' },
+    ];
+    const out = renderGithubResult('label.list', {}, { labels });
+    // 13 raw items, but only 12 carry a name: the header must say 12, not 13,
+    // and the tail must reflect 12 - 10 shown = 2.
+    expect(out).toContain('12 labels');
+    expect(out).not.toContain('13 labels');
+    expect(out).toContain('… and 2 more');
   });
 });

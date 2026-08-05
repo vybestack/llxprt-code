@@ -15,13 +15,18 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractNumber,
   extractString,
   assertListShape,
 } from './github-broker-shaping.js';
+
+const RUN_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['run.list'];
 
 /**
  * Validates parameters for run.list.
@@ -33,7 +38,7 @@ import {
 export function validateRunListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['run.list'].params, params);
+  return validateParams(RUN_LIST_SPEC.params, params);
 }
 
 /**
@@ -106,9 +111,9 @@ export function shapeRunList(rawJson: unknown): readonly ShapedRunListItem[] {
  */
 export const runListDescriptor: OpDescriptor = {
   name: 'run.list',
-  requiredParams: GITHUB_OP_SPECS['run.list'].required,
-  mutating: GITHUB_OP_SPECS['run.list'].mutating,
-  params: GITHUB_OP_SPECS['run.list'].params,
+  requiredParams: RUN_LIST_SPEC.required,
+  mutating: RUN_LIST_SPEC.mutating,
+  params: RUN_LIST_SPEC.params,
   buildArgv: (params) => buildRunListArgv(params),
   shape: (rawJson) => ({ runs: shapeRunList(rawJson) }),
 };

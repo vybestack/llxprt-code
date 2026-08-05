@@ -15,13 +15,19 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractNumber,
   extractString,
   assertListShape,
 } from './github-broker-shaping.js';
+
+const SEARCH_ISSUES_SPEC: GithubOpSpec = GITHUB_OP_SPECS['search.issues'];
+const SEARCH_PRS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['search.prs'];
 
 /**
  * Validates parameters for search.issues.
@@ -33,7 +39,7 @@ import {
 export function validateSearchIssuesParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['search.issues'].params, params);
+  return validateParams(SEARCH_ISSUES_SPEC.params, params);
 }
 
 /**
@@ -145,9 +151,9 @@ function appendSearchQuery(
  */
 export const searchIssuesDescriptor: OpDescriptor = {
   name: 'search.issues',
-  requiredParams: GITHUB_OP_SPECS['search.issues'].required,
-  mutating: GITHUB_OP_SPECS['search.issues'].mutating,
-  params: GITHUB_OP_SPECS['search.issues'].params,
+  requiredParams: SEARCH_ISSUES_SPEC.required,
+  mutating: SEARCH_ISSUES_SPEC.mutating,
+  params: SEARCH_ISSUES_SPEC.params,
   buildArgv: (params) => buildSearchIssuesArgv(params),
   shape: (rawJson) => ({ issues: shapeSearchResults(rawJson) }),
 };
@@ -164,7 +170,7 @@ export const searchIssuesDescriptor: OpDescriptor = {
 export function validateSearchPrsParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['search.prs'].params, params);
+  return validateParams(SEARCH_PRS_SPEC.params, params);
 }
 
 /**
@@ -198,9 +204,9 @@ export function buildSearchPrsArgv(params: Record<string, unknown>): string[] {
  */
 export const searchPrsDescriptor: OpDescriptor = {
   name: 'search.prs',
-  requiredParams: GITHUB_OP_SPECS['search.prs'].required,
-  mutating: GITHUB_OP_SPECS['search.prs'].mutating,
-  params: GITHUB_OP_SPECS['search.prs'].params,
+  requiredParams: SEARCH_PRS_SPEC.required,
+  mutating: SEARCH_PRS_SPEC.mutating,
+  params: SEARCH_PRS_SPEC.params,
   buildArgv: (params) => buildSearchPrsArgv(params),
   shape: (rawJson) => ({ prs: shapeSearchResults(rawJson) }),
 };

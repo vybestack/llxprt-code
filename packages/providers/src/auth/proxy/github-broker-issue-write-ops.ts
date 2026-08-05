@@ -19,9 +19,16 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { extractString } from './github-broker-shaping.js';
 import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
+
+const ISSUE_CREATE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.create'];
+const ISSUE_COMMENT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.comment'];
+const ISSUE_CLOSE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.close'];
 
 /**
  * Extracts the trimmed URL that gh create commands print on stdout, and the
@@ -56,7 +63,7 @@ export function shapeCreatedUrl(rawText: unknown): {
 export function validateIssueCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['issue.create'].params, params);
+  return validateParams(ISSUE_CREATE_SPEC.params, params);
 }
 
 /**
@@ -83,9 +90,9 @@ export function buildIssueCreateArgv(
 /** The issue.create operation descriptor. */
 export const issueCreateDescriptor: OpDescriptor = {
   name: 'issue.create',
-  requiredParams: GITHUB_OP_SPECS['issue.create'].required,
-  mutating: GITHUB_OP_SPECS['issue.create'].mutating,
-  params: GITHUB_OP_SPECS['issue.create'].params,
+  requiredParams: ISSUE_CREATE_SPEC.required,
+  mutating: ISSUE_CREATE_SPEC.mutating,
+  params: ISSUE_CREATE_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildIssueCreateArgv(params),
@@ -103,7 +110,7 @@ export const issueCreateDescriptor: OpDescriptor = {
 export function validateIssueCommentParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['issue.comment'].params, params);
+  return validateParams(ISSUE_COMMENT_SPEC.params, params);
 }
 
 /**
@@ -124,9 +131,9 @@ export function buildIssueCommentArgv(
 /** The issue.comment operation descriptor. */
 export const issueCommentDescriptor: OpDescriptor = {
   name: 'issue.comment',
-  requiredParams: GITHUB_OP_SPECS['issue.comment'].required,
-  mutating: GITHUB_OP_SPECS['issue.comment'].mutating,
-  params: GITHUB_OP_SPECS['issue.comment'].params,
+  requiredParams: ISSUE_COMMENT_SPEC.required,
+  mutating: ISSUE_COMMENT_SPEC.mutating,
+  params: ISSUE_COMMENT_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildIssueCommentArgv(params),
@@ -144,7 +151,7 @@ export const issueCommentDescriptor: OpDescriptor = {
 export function validateIssueCloseParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['issue.close'].params, params);
+  return validateParams(ISSUE_CLOSE_SPEC.params, params);
 }
 
 /**
@@ -163,9 +170,9 @@ export function buildIssueCloseArgv(params: Record<string, unknown>): string[] {
 /** The issue.close operation descriptor. */
 export const issueCloseDescriptor: OpDescriptor = {
   name: 'issue.close',
-  requiredParams: GITHUB_OP_SPECS['issue.close'].required,
-  mutating: GITHUB_OP_SPECS['issue.close'].mutating,
-  params: GITHUB_OP_SPECS['issue.close'].params,
+  requiredParams: ISSUE_CLOSE_SPEC.required,
+  mutating: ISSUE_CLOSE_SPEC.mutating,
+  params: ISSUE_CLOSE_SPEC.params,
   rawOutput: true,
   buildArgv: (params) => buildIssueCloseArgv(params),
   shape: (_rawText, params) => ({

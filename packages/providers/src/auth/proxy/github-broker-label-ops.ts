@@ -14,12 +14,17 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractString,
   assertListShape,
 } from './github-broker-shaping.js';
+
+const LABEL_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['label.list'];
 
 /**
  * Validates parameters for label.list.
@@ -31,7 +36,7 @@ import {
 export function validateLabelListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['label.list'].params, params);
+  return validateParams(LABEL_LIST_SPEC.params, params);
 }
 
 /**
@@ -92,9 +97,9 @@ export function shapeLabelList(
  */
 export const labelListDescriptor: OpDescriptor = {
   name: 'label.list',
-  requiredParams: GITHUB_OP_SPECS['label.list'].required,
-  mutating: GITHUB_OP_SPECS['label.list'].mutating,
-  params: GITHUB_OP_SPECS['label.list'].params,
+  requiredParams: LABEL_LIST_SPEC.required,
+  mutating: LABEL_LIST_SPEC.mutating,
+  params: LABEL_LIST_SPEC.params,
   buildArgv: (params) => buildLabelListArgv(params),
   shape: (rawJson) => ({ labels: shapeLabelList(rawJson) }),
 };

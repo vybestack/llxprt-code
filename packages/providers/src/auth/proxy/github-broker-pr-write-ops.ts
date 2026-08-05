@@ -19,10 +19,19 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { extractString } from './github-broker-shaping.js';
 import { shapeCreatedUrl } from './github-broker-issue-write-ops.js';
 import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
+
+const PR_CREATE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.create'];
+const PR_COMMENT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.comment'];
+const PR_EDIT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.edit'];
+const PR_READY_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.ready'];
+const LABEL_CREATE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['label.create'];
 
 /**
  * Shapes a response carrying only the operated-on number.
@@ -47,7 +56,7 @@ function shapeNumberOnly(params: Record<string, unknown>): {
 export function validatePrCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['pr.create'].params, params);
+  return validateParams(PR_CREATE_SPEC.params, params);
 }
 
 /**
@@ -70,9 +79,9 @@ export function buildPrCreateArgv(params: Record<string, unknown>): string[] {
 /** The pr.create operation descriptor. */
 export const prCreateDescriptor: OpDescriptor = {
   name: 'pr.create',
-  requiredParams: GITHUB_OP_SPECS['pr.create'].required,
-  mutating: GITHUB_OP_SPECS['pr.create'].mutating,
-  params: GITHUB_OP_SPECS['pr.create'].params,
+  requiredParams: PR_CREATE_SPEC.required,
+  mutating: PR_CREATE_SPEC.mutating,
+  params: PR_CREATE_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildPrCreateArgv(params),
@@ -90,7 +99,7 @@ export const prCreateDescriptor: OpDescriptor = {
 export function validatePrCommentParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['pr.comment'].params, params);
+  return validateParams(PR_COMMENT_SPEC.params, params);
 }
 
 /**
@@ -109,9 +118,9 @@ export function buildPrCommentArgv(params: Record<string, unknown>): string[] {
 /** The pr.comment operation descriptor. */
 export const prCommentDescriptor: OpDescriptor = {
   name: 'pr.comment',
-  requiredParams: GITHUB_OP_SPECS['pr.comment'].required,
-  mutating: GITHUB_OP_SPECS['pr.comment'].mutating,
-  params: GITHUB_OP_SPECS['pr.comment'].params,
+  requiredParams: PR_COMMENT_SPEC.required,
+  mutating: PR_COMMENT_SPEC.mutating,
+  params: PR_COMMENT_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildPrCommentArgv(params),
@@ -129,7 +138,7 @@ export const prCommentDescriptor: OpDescriptor = {
 export function validatePrEditParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['pr.edit'].params, params);
+  return validateParams(PR_EDIT_SPEC.params, params);
 }
 
 /**
@@ -153,9 +162,9 @@ export function buildPrEditArgv(params: Record<string, unknown>): string[] {
 /** The pr.edit operation descriptor. */
 export const prEditDescriptor: OpDescriptor = {
   name: 'pr.edit',
-  requiredParams: GITHUB_OP_SPECS['pr.edit'].required,
-  mutating: GITHUB_OP_SPECS['pr.edit'].mutating,
-  params: GITHUB_OP_SPECS['pr.edit'].params,
+  requiredParams: PR_EDIT_SPEC.required,
+  mutating: PR_EDIT_SPEC.mutating,
+  params: PR_EDIT_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildPrEditArgv(params),
@@ -173,7 +182,7 @@ export const prEditDescriptor: OpDescriptor = {
 export function validatePrReadyParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['pr.ready'].params, params);
+  return validateParams(PR_READY_SPEC.params, params);
 }
 
 /**
@@ -191,9 +200,9 @@ export function buildPrReadyArgv(params: Record<string, unknown>): string[] {
 /** The pr.ready operation descriptor. */
 export const prReadyDescriptor: OpDescriptor = {
   name: 'pr.ready',
-  requiredParams: GITHUB_OP_SPECS['pr.ready'].required,
-  mutating: GITHUB_OP_SPECS['pr.ready'].mutating,
-  params: GITHUB_OP_SPECS['pr.ready'].params,
+  requiredParams: PR_READY_SPEC.required,
+  mutating: PR_READY_SPEC.mutating,
+  params: PR_READY_SPEC.params,
   rawOutput: true,
   buildArgv: (params) => buildPrReadyArgv(params),
   shape: (_rawText, params) => shapeNumberOnly(params),
@@ -210,7 +219,7 @@ export const prReadyDescriptor: OpDescriptor = {
 export function validateLabelCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['label.create'].params, params);
+  return validateParams(LABEL_CREATE_SPEC.params, params);
 }
 
 /**
@@ -233,9 +242,9 @@ export function buildLabelCreateArgv(
 /** The label.create operation descriptor. */
 export const labelCreateDescriptor: OpDescriptor = {
   name: 'label.create',
-  requiredParams: GITHUB_OP_SPECS['label.create'].required,
-  mutating: GITHUB_OP_SPECS['label.create'].mutating,
-  params: GITHUB_OP_SPECS['label.create'].params,
+  requiredParams: LABEL_CREATE_SPEC.required,
+  mutating: LABEL_CREATE_SPEC.mutating,
+  params: LABEL_CREATE_SPEC.params,
   rawOutput: true,
   buildArgv: (params) => buildLabelCreateArgv(params),
   shape: (_rawText, params) => ({

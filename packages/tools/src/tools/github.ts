@@ -191,6 +191,13 @@ const BOUNDED_PARAMS: Readonly<
 const ENUM_PARAMS: Readonly<
   Record<string, { enum: readonly string[]; description: string }>
 > = {
+  // The schema enum is deliberately the UNION of values across operations:
+  // pr.list accepts 'merged', issue.list does not. A single JSON schema is
+  // shared by every operation (it cannot vary an enum by `op`), so the
+  // superset is published here for discoverability and validateGithubOpParams
+  // narrows it per operation (via the per-kind `state` vs `stateIssue`
+  // validators) before the call is made. issue.list uses the `stateIssue`
+  // kind, which rejects 'merged' at the tool boundary.
   state: {
     enum: ['open', 'closed', 'merged', 'all'],
     description:
@@ -421,11 +428,18 @@ export class GithubToolInvocation extends BaseToolInvocation<
         returnDisplay: this.render(data),
       };
     } catch (err) {
+      // Every other tool in this package prefixes its error so the model can
+      // tell where a bare message like "404 Not Found" came from.
+      // `validateBuildAndExecute` only re-wraps exceptions that escape
+      // `execute()`, so a returned result must carry its own prefix. Guard the
+      // empty-message case so the display is never blanked entirely.
       const message = err instanceof Error ? err.message : String(err);
+      const detail = message === '' ? 'Unknown error' : message;
+      const prefixed = `GitHub operation failed: ${detail}`;
       return {
-        llmContent: message,
-        returnDisplay: message,
-        error: { message },
+        llmContent: prefixed,
+        returnDisplay: prefixed,
+        error: { message: prefixed },
       };
     } finally {
       stopProgress?.();

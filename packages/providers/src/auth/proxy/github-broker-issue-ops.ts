@@ -15,7 +15,10 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractAuthor,
@@ -27,6 +30,9 @@ import {
   assertListShape,
 } from './github-broker-shaping.js';
 import { resolveLimit } from './github-broker-validation.js';
+
+const ISSUE_VIEW_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.view'];
+const ISSUE_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.list'];
 
 // ─── issue.view ──────────────────────────────────────────────────────────────
 
@@ -46,7 +52,7 @@ export function validateIssueViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(GITHUB_OP_SPECS['issue.view'].params, params);
+  return validateParams(ISSUE_VIEW_SPEC.params, params);
 }
 
 /**
@@ -121,9 +127,9 @@ export function shapeIssueView(rawJson: unknown): ShapedIssueView {
  */
 export const issueViewDescriptor: OpDescriptor = {
   name: 'issue.view',
-  requiredParams: GITHUB_OP_SPECS['issue.view'].required,
-  mutating: GITHUB_OP_SPECS['issue.view'].mutating,
-  params: GITHUB_OP_SPECS['issue.view'].params,
+  requiredParams: ISSUE_VIEW_SPEC.required,
+  mutating: ISSUE_VIEW_SPEC.mutating,
+  params: ISSUE_VIEW_SPEC.params,
   buildArgv: (params) => {
     const comments = params.comments === true;
     return buildIssueViewArgv(params, comments);
@@ -143,7 +149,7 @@ export const issueViewDescriptor: OpDescriptor = {
 export function validateIssueListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['issue.list'].params, params);
+  return validateParams(ISSUE_LIST_SPEC.params, params);
 }
 
 /**
@@ -248,9 +254,9 @@ export function shapeIssueList(
  */
 export const issueListDescriptor: OpDescriptor = {
   name: 'issue.list',
-  requiredParams: GITHUB_OP_SPECS['issue.list'].required,
-  mutating: GITHUB_OP_SPECS['issue.list'].mutating,
-  params: GITHUB_OP_SPECS['issue.list'].params,
+  requiredParams: ISSUE_LIST_SPEC.required,
+  mutating: ISSUE_LIST_SPEC.mutating,
+  params: ISSUE_LIST_SPEC.params,
   buildArgv: (params) => buildIssueListArgv(params),
   shape: (rawJson) => ({ issues: shapeIssueList(rawJson) }),
 };

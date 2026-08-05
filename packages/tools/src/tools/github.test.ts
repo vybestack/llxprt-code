@@ -24,7 +24,7 @@ import {
   renderChecks,
   type GitHubBrokerClient,
 } from './github.js';
-import { GITHUB_OP_SPECS } from './github-ops.js';
+import { GITHUB_OP_SPECS, type GithubParamKind } from './github-ops.js';
 
 /** Records the operations dispatched to the broker. */
 function stubClient(
@@ -41,33 +41,44 @@ function stubClient(
 }
 
 /**
+ * A valid sample value for every parameter kind. Typed as
+ * `Record<GithubParamKind, unknown>` so adding a kind to the catalog without
+ * supplying a sample here is a compile error — the fixture can no longer go
+ * stale the way a hand-maintained switch with a `default` case can.
+ */
+const VALID_SAMPLE_BY_KIND: Record<GithubParamKind, unknown> = {
+  repo: 'o/n',
+  number: 1,
+  boolean: true,
+  state: 'open',
+  stateIssue: 'open',
+  label: ['x'],
+  threadId: 'PRRT_kwDOabc',
+  body: 'x',
+  freetext: 'x',
+  limit: 5,
+  closeReason: 'completed',
+  color: '#ff0000',
+  assignee: ['x'],
+  milestone: 'x',
+  project: 'x',
+  branch: 'x',
+};
+
+/**
  * Minimal valid parameters for an operation: each op's required parameters
- * supplied, nothing else. Used wherever a test needs a call that passes the
- * op-specific validation introduced by issue #3030.
+ * supplied with a kind-appropriate sample, nothing else. Derived from the
+ * catalog's `required` list, so a new op or a changed required set is picked
+ * up automatically — there is no hand-maintained `default` case to mask a
+ * missing op or supply the wrong shape.
  */
 function validParamsFor(op: string): Record<string, unknown> {
-  switch (op) {
-    case 'issue.create':
-    case 'pr.create':
-      return { title: 't' };
-    case 'issue.comment':
-    case 'pr.comment':
-      return { number: 1, body: 'b' };
-    case 'pr.resolve-thread':
-      return { threadId: 'PRRT_kwDOabc' };
-    case 'label.create':
-      return { name: 'bug' };
-    case 'search.issues':
-    case 'search.prs':
-      return { query: 'q' };
-    case 'issue.list':
-    case 'pr.list':
-    case 'run.list':
-    case 'label.list':
-      return {};
-    default:
-      return { number: 1 };
+  const spec = GITHUB_OP_SPECS[op];
+  const params: Record<string, unknown> = {};
+  for (const name of spec.required) {
+    params[name] = VALID_SAMPLE_BY_KIND[spec.params[name]];
   }
+  return params;
 }
 
 describe('github tool', () => {
@@ -111,6 +122,25 @@ describe('github tool', () => {
           tool.validateToolParams({ op, ...validParamsFor(op) }),
           `${op} must validate`,
         ).toBeNull();
+      }
+    });
+
+    /**
+     * The fixture must derive straight from the catalog so it cannot go stale:
+     * it returns exactly each op's required parameters (no more, no less) with
+     * kind-appropriate samples. A future op or a changed required set is picked
+     * up automatically; there is no `default` case to mask a missing op.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('validParamsFor returns exactly each op catalog required set', () => {
+      for (const op of SUPPORTED_OPS) {
+        const required = GITHUB_OP_SPECS[op].required;
+        expect(
+          Object.keys(validParamsFor(op)).sort(),
+          `${op} fixture must equal its required set`,
+        ).toStrictEqual([...required].sort());
       }
     });
   });
@@ -267,6 +297,31 @@ describe('github tool', () => {
       expect(result.error?.message).toContain('NOT_FOUND');
       expect(String(result.llmContent)).toContain('NOT_FOUND');
     });
+
+    /**
+     * A bare broker message like "404 Not Found" gives the model no clue it
+     * came from a GitHub operation, so the failure path must prefix it like
+     * every other tool in the package. An empty message must not blank the
+     * display — it falls back to a non-empty "Unknown error" detail.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-013
+     */
+    it('prefixes a failure with the github context and guards an empty message', async () => {
+      const empty: GitHubBrokerClient = {
+        async runOperation() {
+          throw new Error('');
+        },
+      };
+      const tool = new GithubTool(empty);
+      const result = await tool
+        .build({ op: 'issue.view', number: 1 })
+        .execute(new AbortController().signal);
+      expect(result.returnDisplay).not.toBe('');
+      expect(result.returnDisplay).toContain('GitHub operation failed');
+      expect(result.error?.message ?? '').not.toBe('');
+      expect(result.error?.message).toContain('Unknown error');
+    });
   });
 
   describe('watch presentation', () => {
@@ -339,8 +394,8 @@ describe('github tool', () => {
 
     /**
      * @plan PLAN-20260731-GHBROKER.P14
-          if (u.mode === 'append') updates.push(u.data);
-        });
+     * @requirement REQ-011
+     */
     it('emits no progress for a non-watch operation', async () => {
       const updates: string[] = [];
       const tool = new GithubTool(stubClient({ number: 1 }));

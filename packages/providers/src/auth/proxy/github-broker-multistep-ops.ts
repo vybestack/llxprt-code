@@ -19,12 +19,19 @@
 
 import type { GhRunner, OpDescriptor } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   brokerError,
   type BrokerErrorException,
 } from './github-broker-errors.js';
 import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
+
+const ISSUE_EDIT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.edit'];
+const PR_RESOLVE_THREAD_SPEC: GithubOpSpec =
+  GITHUB_OP_SPECS['pr.resolve-thread'];
 
 /**
  * Raises an INVALID_PARAM failure for a caller-supplied value that cannot be
@@ -249,9 +256,9 @@ export async function executeIssueEdit(
 /** The issue.edit operation descriptor. */
 export const issueEditDescriptor: OpDescriptor = {
   name: 'issue.edit',
-  requiredParams: GITHUB_OP_SPECS['issue.edit'].required,
-  mutating: GITHUB_OP_SPECS['issue.edit'].mutating,
-  params: GITHUB_OP_SPECS['issue.edit'].params,
+  requiredParams: ISSUE_EDIT_SPEC.required,
+  mutating: ISSUE_EDIT_SPEC.mutating,
+  params: ISSUE_EDIT_SPEC.params,
   bodyParams: ['body'],
   buildArgv: (params) => buildIssueEditArgv(params),
   shape: (_raw, params) => ({
@@ -309,9 +316,9 @@ export async function executeResolveThread(
 /** The pr.resolve-thread operation descriptor. */
 export const prResolveThreadDescriptor: OpDescriptor = {
   name: 'pr.resolve-thread',
-  requiredParams: GITHUB_OP_SPECS['pr.resolve-thread'].required,
-  mutating: GITHUB_OP_SPECS['pr.resolve-thread'].mutating,
-  params: GITHUB_OP_SPECS['pr.resolve-thread'].params,
+  requiredParams: PR_RESOLVE_THREAD_SPEC.required,
+  mutating: PR_RESOLVE_THREAD_SPEC.mutating,
+  params: PR_RESOLVE_THREAD_SPEC.params,
   buildArgv: () => ['api', 'graphql'],
   shape: (_raw, params) => ({ threadId: String(params.threadId) }),
   execute: (params, run) => executeResolveThread(params, run),
@@ -325,9 +332,9 @@ export const prResolveThreadDescriptor: OpDescriptor = {
  */
 export function validateIssueEditParams(params: Record<string, unknown>) {
   return validateParams(
-    GITHUB_OP_SPECS['issue.edit'].params,
+    ISSUE_EDIT_SPEC.params,
     params,
-    GITHUB_OP_SPECS['issue.edit'].required,
+    ISSUE_EDIT_SPEC.required,
   );
 }
 
@@ -339,8 +346,8 @@ export function validateIssueEditParams(params: Record<string, unknown>) {
  */
 export function validateResolveThreadParams(params: Record<string, unknown>) {
   return validateParams(
-    GITHUB_OP_SPECS['pr.resolve-thread'].params,
+    PR_RESOLVE_THREAD_SPEC.params,
     params,
-    GITHUB_OP_SPECS['pr.resolve-thread'].required,
+    PR_RESOLVE_THREAD_SPEC.required,
   );
 }

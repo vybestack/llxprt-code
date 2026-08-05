@@ -274,8 +274,11 @@ function renderRunList(data: Data): string {
 /** Renders label.list. */
 function renderLabelList(data: Data): string {
   const items = asDataArray(data.labels);
+  // Filter to labels that carry a non-empty string name: a label object with
+  // an absent or non-string `name` renders nothing, so the header, slice and
+  // tail must all use the filtered `names` count to stay consistent.
   const names = items.map((item) => asStr(item.name)).filter((n) => n);
-  const lines = [`${items.length} labels`];
+  const lines = [`${names.length} labels`];
   const shown = names.slice(0, MAX_SUMMARY_LINES);
   if (shown.length > 0) lines.push(shown.join(', '));
   const tail = moreTail(names.length);
@@ -310,11 +313,20 @@ function renderPrReviews(data: Data): string {
     const location = line !== null ? `${path}:${line}` : path;
     lines.push(location);
     const comments = asDataArray(thread.comments);
-    for (const c of comments) {
+    // The upstream query fetches up to 100 comments per thread, so a single
+    // thread could otherwise swallow the whole pane. Cap per thread the same
+    // way the view renderer caps an issue/PR's comment list.
+    const shown = comments.slice(0, MAX_VIEW_COMMENTS);
+    for (const c of shown) {
       const author = asStr(c.author);
       const who = author !== '' ? `${author}: ` : '';
       const body = capText(asStr(c.body), MAX_REVIEW_COMMENT_LINES);
-      lines.push(`${who}${body}`);
+      lines.push(`  ${who}${body}`);
+    }
+    if (comments.length > MAX_VIEW_COMMENTS) {
+      lines.push(
+        `  … and ${comments.length - MAX_VIEW_COMMENTS} more comments`,
+      );
     }
   }
   const tail = moreTail(threads.length);

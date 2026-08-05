@@ -15,7 +15,10 @@
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
-import { GITHUB_OP_SPECS } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { watchChecks } from './github-broker-watch.js';
 import { resolveOwnerName } from './github-broker-multistep-ops.js';
 import {
@@ -30,6 +33,12 @@ import {
   assertListShape,
 } from './github-broker-shaping.js';
 
+const PR_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.list'];
+const PR_VIEW_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.view'];
+const PR_DIFF_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.diff'];
+const PR_CHECKS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.checks'];
+const PR_REVIEWS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.reviews'];
+
 // ─── pr.list ─────────────────────────────────────────────────────────────────
 
 /**
@@ -42,7 +51,7 @@ import {
 export function validatePrListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(GITHUB_OP_SPECS['pr.list'].params, params);
+  return validateParams(PR_LIST_SPEC.params, params);
 }
 
 /**
@@ -116,9 +125,9 @@ export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
  */
 export const prListDescriptor: OpDescriptor = {
   name: 'pr.list',
-  requiredParams: GITHUB_OP_SPECS['pr.list'].required,
-  mutating: GITHUB_OP_SPECS['pr.list'].mutating,
-  params: GITHUB_OP_SPECS['pr.list'].params,
+  requiredParams: PR_LIST_SPEC.required,
+  mutating: PR_LIST_SPEC.mutating,
+  params: PR_LIST_SPEC.params,
   buildArgv: (params) => buildPrListArgv(params),
   shape: (rawJson) => ({ prs: shapePrList(rawJson) }),
 };
@@ -141,7 +150,7 @@ export function validatePrViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(GITHUB_OP_SPECS['pr.view'].params, params);
+  return validateParams(PR_VIEW_SPEC.params, params);
 }
 
 /**
@@ -224,9 +233,9 @@ export function shapePrView(rawJson: unknown): ShapedPrView {
  */
 export const prViewDescriptor: OpDescriptor = {
   name: 'pr.view',
-  requiredParams: GITHUB_OP_SPECS['pr.view'].required,
-  mutating: GITHUB_OP_SPECS['pr.view'].mutating,
-  params: GITHUB_OP_SPECS['pr.view'].params,
+  requiredParams: PR_VIEW_SPEC.required,
+  mutating: PR_VIEW_SPEC.mutating,
+  params: PR_VIEW_SPEC.params,
   buildArgv: (params) => {
     const comments = params.comments === true;
     return buildPrViewArgv(params, comments);
@@ -252,7 +261,7 @@ export function validatePrDiffParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(GITHUB_OP_SPECS['pr.diff'].params, params);
+  return validateParams(PR_DIFF_SPEC.params, params);
 }
 
 /**
@@ -308,9 +317,9 @@ export function shapePrDiff(rawText: unknown): ShapedPrDiff {
  */
 export const prDiffDescriptor: OpDescriptor = {
   name: 'pr.diff',
-  requiredParams: GITHUB_OP_SPECS['pr.diff'].required,
-  mutating: GITHUB_OP_SPECS['pr.diff'].mutating,
-  params: GITHUB_OP_SPECS['pr.diff'].params,
+  requiredParams: PR_DIFF_SPEC.required,
+  mutating: PR_DIFF_SPEC.mutating,
+  params: PR_DIFF_SPEC.params,
   buildArgv: (params) => buildPrDiffArgv(params),
   shape: (rawText) => shapePrDiff(rawText),
   rawOutput: true,
@@ -334,7 +343,7 @@ export function validatePrChecksParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(GITHUB_OP_SPECS['pr.checks'].params, params);
+  return validateParams(PR_CHECKS_SPEC.params, params);
 }
 
 /**
@@ -445,9 +454,9 @@ function countByBucket(checks: readonly ShapedCheck[]): {
  */
 export const prChecksDescriptor: OpDescriptor = {
   name: 'pr.checks',
-  requiredParams: GITHUB_OP_SPECS['pr.checks'].required,
-  mutating: GITHUB_OP_SPECS['pr.checks'].mutating,
-  params: GITHUB_OP_SPECS['pr.checks'].params,
+  requiredParams: PR_CHECKS_SPEC.required,
+  mutating: PR_CHECKS_SPEC.mutating,
+  params: PR_CHECKS_SPEC.params,
   buildArgv: (params) => buildPrChecksArgv(params),
   shape: (rawJson) => shapePrChecks(rawJson),
   tolerateNonZeroExit: true,
@@ -486,7 +495,7 @@ export function validatePrReviewsParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(GITHUB_OP_SPECS['pr.reviews'].params, params);
+  return validateParams(PR_REVIEWS_SPEC.params, params);
 }
 
 /**
@@ -731,9 +740,9 @@ function extractReviewComments(value: unknown): readonly ShapedReviewComment[] {
  */
 export const prReviewsDescriptor: OpDescriptor = {
   name: 'pr.reviews',
-  requiredParams: GITHUB_OP_SPECS['pr.reviews'].required,
-  mutating: GITHUB_OP_SPECS['pr.reviews'].mutating,
-  params: GITHUB_OP_SPECS['pr.reviews'].params,
+  requiredParams: PR_REVIEWS_SPEC.required,
+  mutating: PR_REVIEWS_SPEC.mutating,
+  params: PR_REVIEWS_SPEC.params,
   buildArgv: (params) => buildPrReviewsArgv(params),
   shape: (rawJson, params) =>
     shapePrReviews(rawJson, params.actionable === true),
