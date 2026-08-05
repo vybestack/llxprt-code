@@ -18,6 +18,7 @@ import {
   DEFAULT_SHELL_TIMEOUT_SECONDS,
   MAX_SHELL_TIMEOUT_SECONDS,
 } from '@vybestack/llxprt-code-tools';
+import { readConfiguredTimeoutSeconds } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import { ShellExecutionService } from '../services/shellExecutionService.js';
@@ -97,13 +98,19 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
 
   getTimeoutConfig(): ShellTimeoutConfig {
     const ephemeralSettings = this.config.getEphemeralSettings();
-    const defaultTimeoutSeconds =
-      (ephemeralSettings['shell-default-timeout-seconds'] as
-        | number
-        | undefined) ?? DEFAULT_SHELL_TIMEOUT_SECONDS;
-    const maxTimeoutSeconds =
-      (ephemeralSettings['shell-max-timeout-seconds'] as number | undefined) ??
-      MAX_SHELL_TIMEOUT_SECONDS;
+    // Configured default/maximum are validated at the resolution boundary so a
+    // bad profile value (0, -2, Infinity, non-numeric) is rejected here rather
+    // than flowing unchecked to setTimeout (Finding 2).
+    const defaultTimeoutSeconds = readConfiguredTimeoutSeconds(
+      ephemeralSettings,
+      'shell-default-timeout-seconds',
+      DEFAULT_SHELL_TIMEOUT_SECONDS,
+    );
+    const maxTimeoutSeconds = readConfiguredTimeoutSeconds(
+      ephemeralSettings,
+      'shell-max-timeout-seconds',
+      MAX_SHELL_TIMEOUT_SECONDS,
+    );
 
     return {
       timeoutSeconds: maxTimeoutSeconds,

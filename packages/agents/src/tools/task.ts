@@ -659,6 +659,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       return createTimeoutResult(
         requireEffectiveTimeoutSeconds(resolution),
         scope.output,
+        agentId,
       );
     }
     const output = scope.output;

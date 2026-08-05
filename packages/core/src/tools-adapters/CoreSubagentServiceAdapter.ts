@@ -26,21 +26,16 @@ import {
   type RunConfig,
   type ToolConfig,
 } from '../core/subagentTypes.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import {
   buildContextState,
-  buildExcludedToolNames,
-  buildToolGovernance,
-  canonicalizeToolName,
+  buildEffectiveToolWhitelist,
+  hasExplicitToolWhitelist,
   createCancelledResult,
   createErrorResult,
   DEFAULT_TASK_TIMEOUT_SECONDS,
   formatSuccessContent,
   formatSuccessDisplay,
-  getToolNameCandidates,
-  isExcludedToolName,
-  isToolBlocked,
   attachTimeoutMetadataToResult,
   createTimeoutSubagentResult,
   MAX_TASK_TIMEOUT_SECONDS,
@@ -55,6 +50,8 @@ import {
   type TimeoutResolution,
   type CoreTimeoutSetup,
   failTaskIfTimeout,
+  isTimeoutAbort,
+  readConfiguredTimeoutSeconds,
 } from './coreSubagentServiceHelpers.js';
 
 export interface CoreSubagentLaunchRequest {
@@ -183,10 +180,19 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       }
     } catch (error) {
       // A timeout-controller abort that reaches this catch (e.g. during
-      // orchestrator.launch) is a TIMEOUT, not a user cancellation. This is
-      // now reachable because a requested -1 under a finite maximum arms a
-      // timer where previously it did not (Issue #3031).
-      if (timeout?.timeoutController.signal.aborted === true) {
+      // orchestrator.launch) is a TIMEOUT only when the timer fired — NOT when
+      // the parent (user) signal aborted, because createTimeout relays a
+      // parent abort onto the timeout controller. isTimeoutAbort makes that
+      // distinction and also rules out an unbounded resolution (which arms no
+      // timer), preventing describeTaskTimeout from throwing (Finding 1).
+      if (
+        timeout !== undefined &&
+        isTimeoutAbort(
+          timeout.timeoutController,
+          options.signal,
+          timeout.resolution,
+        )
+      ) {
         return attachTimeoutMetadataToResult(
           createTimeoutSubagentResult(timeout.resolution),
           timeout.resolution,
@@ -367,13 +373,10 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     }
 
     const config = this.requireConfig();
-    const effectiveWhitelist = this.buildEffectiveToolWhitelist(
-      request,
-      config,
-    );
+    const effectiveWhitelist = buildEffectiveToolWhitelist(request, config);
     if (effectiveWhitelist !== undefined && effectiveWhitelist.length > 0) {
       launchRequest.toolConfig = { tools: effectiveWhitelist };
-    } else if (this.hasExplicitWhitelist(request)) {
+    } else if (hasExplicitToolWhitelist(request)) {
       // Explicit empty or fully-filtered-to-zero whitelist must remain fail-closed.
       // toolConfig: { tools: [] } tells the runtime to expose no normal tools.
       // Omitting toolConfig entirely (the else case) means runtime/profile defaults.
@@ -394,175 +397,24 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     return launchRequest;
   }
 
-  /**
-   * Centralized explicit-whitelist detection (Issue #2069).
-   *
-   * The Task tool always sets hasExplicitToolWhitelist based on whether an
-   * array was passed, but ISubagentService.executeSubagent is a public
-   * interface and direct callers may pass toolWhitelist without the flag.
-   * Treat an Array toolWhitelist as explicit regardless of the flag so that
-   * empty/fully-filtered whitelists fail closed to { tools: [] }.
-   */
-  private hasExplicitWhitelist(request: SubagentRequest): boolean {
-    return (
-      request.hasExplicitToolWhitelist === true ||
-      Array.isArray(request.toolWhitelist)
-    );
-  }
-
-  private buildEffectiveToolWhitelist(
-    request: SubagentRequest,
-    config: Config,
-  ): string[] | undefined {
-    // Issue #2069: no explicit whitelist must preserve omitted toolConfig so
-    // the subagent runtime/profile default tools apply. Do NOT synthesize a
-    // whitelist from the parent registry regardless of registry availability.
-    // Explicitness is inferred from Array.isArray(request.toolWhitelist) so
-    // direct ISubagentService callers (which may omit hasExplicitToolWhitelist)
-    // are treated consistently with the Task tool.
-    if (!this.hasExplicitWhitelist(request)) {
-      return undefined;
-    }
-
-    const registryProvider = (
-      config as Partial<Pick<Config, 'getToolRegistry'>>
-    ).getToolRegistry;
-    const registry =
-      typeof registryProvider === 'function'
-        ? registryProvider.call(config)
-        : undefined;
-
-    let effectiveWhitelist = request.toolWhitelist;
-    if (
-      registry !== undefined &&
-      effectiveWhitelist !== undefined &&
-      effectiveWhitelist.length > 0
-    ) {
-      effectiveWhitelist = this.buildGovernedToolWhitelist(
-        effectiveWhitelist,
-        registry,
-        config,
-      );
-    } else {
-      // No registry available: still filter excluded tools (task/list_subagents)
-      // so they can never be exposed to a subagent runtime. Non-excluded entries
-      // pass through unchanged (no registry validation possible).
-      effectiveWhitelist = this.filterExcludedFromWhitelist(effectiveWhitelist);
-    }
-
-    return effectiveWhitelist;
-  }
-
-  /**
-   * Filters excluded tools (task/list_subagents) from a whitelist when no
-   * registry is available to perform full governance validation. Non-excluded
-   * entries pass through unchanged. Returns undefined if the result is empty
-   * so the caller can apply fail-closed semantics for explicit whitelists.
-   */
-  private filterExcludedFromWhitelist(
-    candidateTools: string[] | undefined,
-  ): string[] | undefined {
-    if (!candidateTools || candidateTools.length === 0) {
-      return undefined;
-    }
-
-    const excluded = buildExcludedToolNames();
-    const filtered = candidateTools.filter((name) => {
-      if (typeof name !== 'string') {
-        return false;
-      }
-
-      const candidates = getToolNameCandidates(name);
-      return (
-        candidates.length > 0 &&
-        !candidates.some((canonical) => excluded.has(canonical))
-      );
-    });
-
-    return filtered.length > 0 ? filtered : undefined;
-  }
-
-  private buildGovernedToolWhitelist(
-    candidateTools: string[] | undefined,
-    registry: ToolRegistry,
-    config: Config,
-  ): string[] | undefined {
-    if (!candidateTools || candidateTools.length === 0) {
-      return undefined;
-    }
-
-    const excluded = buildExcludedToolNames();
-    const governance = buildToolGovernance(config);
-    const allowedRegistryTools = registry
-      .getEnabledTools()
-      .map((tool) => tool.name)
-      .filter(
-        (name): name is string => !!name && !isExcludedToolName(name, excluded),
-      );
-
-    const allowedByCanonical = new Map<string, string>();
-    for (const toolName of allowedRegistryTools) {
-      for (const canonical of getToolNameCandidates(toolName)) {
-        if (canonical && !allowedByCanonical.has(canonical)) {
-          allowedByCanonical.set(canonical, toolName);
-        }
-      }
-    }
-
-    const validTools = candidateTools
-      .map((name) => {
-        if (!name) {
-          return undefined;
-        }
-
-        const candidates = getToolNameCandidates(name);
-        if (candidates.some((canonical) => excluded.has(canonical))) {
-          return undefined;
-        }
-        if (
-          candidates.some((canonical) => governance.disabled.has(canonical))
-        ) {
-          return undefined;
-        }
-
-        for (const canonical of candidates) {
-          const resolved = allowedByCanonical.get(canonical);
-          if (resolved && !isToolBlocked(resolved, governance)) {
-            return resolved;
-          }
-        }
-
-        return undefined;
-      })
-      .filter(
-        (name): name is string => typeof name === 'string' && name.length > 0,
-      );
-
-    const uniqueByCanonical = new Set<string>();
-    const deduped: string[] = [];
-    for (const tool of validTools) {
-      const canonical = canonicalizeToolName(tool);
-      if (!canonical || uniqueByCanonical.has(canonical)) {
-        continue;
-      }
-      uniqueByCanonical.add(canonical);
-      deduped.push(tool);
-    }
-
-    return deduped.length > 0 ? deduped : undefined;
-  }
-
   private createTimeout(
     request: SubagentRequest,
     parentSignal?: AbortSignal,
   ): CoreTimeoutSetup {
     const settings = this.requireConfig().getEphemeralSettings();
-    const defaultTimeoutSeconds =
-      (settings[TASK_TIMEOUT_DEFAULT_SETTING] as number | undefined) ??
-      DEFAULT_TASK_TIMEOUT_SECONDS;
-    const maxTimeoutSeconds =
-      (settings[TASK_TIMEOUT_MAX_SETTING] as number | undefined) ??
-      MAX_TASK_TIMEOUT_SECONDS;
+    // Configured default/maximum are validated at the resolution boundary so a
+    // bad profile value (0, -2, Infinity, non-numeric) is rejected here rather
+    // than flowing unchecked to setTimeout (Finding 2).
+    const defaultTimeoutSeconds = readConfiguredTimeoutSeconds(
+      settings,
+      TASK_TIMEOUT_DEFAULT_SETTING,
+      DEFAULT_TASK_TIMEOUT_SECONDS,
+    );
+    const maxTimeoutSeconds = readConfiguredTimeoutSeconds(
+      settings,
+      TASK_TIMEOUT_MAX_SETTING,
+      MAX_TASK_TIMEOUT_SECONDS,
+    );
     const resolution = resolveTimeoutResolution(
       request.timeoutSeconds,
       defaultTimeoutSeconds,
@@ -798,6 +650,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       asyncTaskManager,
       timeout,
       options.updateOutput,
+      options.signal,
     );
 
     const message =
@@ -859,6 +712,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     asyncTaskManager: AsyncTaskManager,
     timeout: CoreTimeoutSetup,
     updateOutput?: (output: string) => void,
+    parentSignal?: AbortSignal,
   ): void {
     void (async () => {
       try {
@@ -868,7 +722,13 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
           config,
           updateOutput,
         );
-        if (timeout.timeoutController.signal.aborted) {
+        if (
+          isTimeoutAbort(
+            timeout.timeoutController,
+            parentSignal,
+            timeout.resolution,
+          )
+        ) {
           failTaskIfTimeout(
             asyncTaskManager,
             launchResult.agentId,
@@ -876,14 +736,32 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
           );
           return;
         }
+        // The controller aborted but it was a parent (user) cancellation, not
+        // a timeout: cancel the task so it does not sit in 'running' forever.
+        // This is especially important under an unbounded resolution, where
+        // failTaskIfTimeout would throw (Finding 1).
+        if (timeout.timeoutController.signal.aborted) {
+          asyncTaskManager.cancelTask(launchResult.agentId);
+          return;
+        }
         asyncTaskManager.completeTask(launchResult.agentId, output);
       } catch (error) {
-        if (timeout.timeoutController.signal.aborted) {
+        if (
+          isTimeoutAbort(
+            timeout.timeoutController,
+            parentSignal,
+            timeout.resolution,
+          )
+        ) {
           failTaskIfTimeout(
             asyncTaskManager,
             launchResult.agentId,
             timeout.resolution,
           );
+          return;
+        }
+        if (timeout.timeoutController.signal.aborted) {
+          asyncTaskManager.cancelTask(launchResult.agentId);
           return;
         }
         asyncTaskManager.failTask(

@@ -12,6 +12,8 @@ import {
   describeTimeoutTermination,
   requireEffectiveTimeoutSeconds,
   validateTimeoutSeconds,
+  validateConfiguredTimeoutSeconds,
+  readConfiguredTimeoutSeconds,
 } from './timeoutResolution.js';
 
 describe('resolveTimeout ceiling semantics (issue #3031)', () => {
@@ -233,4 +235,73 @@ describe('validateTimeoutSeconds (issue #3031)', () => {
   it('rejects Infinity', () => {
     expect(validateTimeoutSeconds(Number.POSITIVE_INFINITY)).not.toBeNull();
   });
+});
+
+describe('validateConfiguredTimeoutSeconds (CodeRabbit #3031)', () => {
+  it('returns the value for -1', () => {
+    expect(
+      validateConfiguredTimeoutSeconds(-1, 'task-max-timeout-seconds'),
+    ).toBe(-1);
+  });
+
+  it('returns the value for a finite number greater than zero', () => {
+    expect(validateConfiguredTimeoutSeconds(300, 'a-setting')).toBe(300);
+    expect(validateConfiguredTimeoutSeconds(0.5, 'a-setting')).toBe(0.5);
+  });
+
+  it.each([0, -2, Number.POSITIVE_INFINITY, Number.NaN] as const)(
+    'throws for an invalid configured value (%s) naming the setting',
+    (bad) => {
+      expect(() =>
+        validateConfiguredTimeoutSeconds(bad, 'task-max-timeout-seconds'),
+      ).toThrow(/task-max-timeout-seconds/);
+    },
+  );
+
+  it('rejects a non-numeric configured value naming the setting', () => {
+    expect(() =>
+      validateConfiguredTimeoutSeconds('abc', 'shell-default-timeout-seconds'),
+    ).toThrow(/shell-default-timeout-seconds/);
+  });
+});
+
+describe('readConfiguredTimeoutSeconds (CodeRabbit #3031)', () => {
+  it('returns the shipped default when the setting is absent', () => {
+    expect(
+      readConfiguredTimeoutSeconds({}, 'task-max-timeout-seconds', 1800),
+    ).toBe(1800);
+  });
+
+  it('returns the configured value when valid', () => {
+    expect(
+      readConfiguredTimeoutSeconds(
+        { 'task-max-timeout-seconds': 600 },
+        'task-max-timeout-seconds',
+        1800,
+      ),
+    ).toBe(600);
+  });
+
+  it('returns -1 when the configured value is -1', () => {
+    expect(
+      readConfiguredTimeoutSeconds(
+        { 'task-max-timeout-seconds': -1 },
+        'task-max-timeout-seconds',
+        1800,
+      ),
+    ).toBe(-1);
+  });
+
+  it.each([0, -2, Number.POSITIVE_INFINITY] as const)(
+    'throws naming the setting for an invalid configured value (%s)',
+    (bad) => {
+      expect(() =>
+        readConfiguredTimeoutSeconds(
+          { 'shell-max-timeout-seconds': bad },
+          'shell-max-timeout-seconds',
+          900,
+        ),
+      ).toThrow(/shell-max-timeout-seconds/);
+    },
+  );
 });

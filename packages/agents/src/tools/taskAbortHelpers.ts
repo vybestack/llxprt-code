@@ -10,6 +10,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   resolveTimeout as resolveSharedTimeout,
   describeTimeoutTermination,
+  readConfiguredTimeoutSeconds,
   requireEffectiveTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
@@ -72,12 +73,19 @@ export function resolveTimeoutResolutionFromConfig(
   requestedTimeoutSeconds: number | undefined,
 ): TimeoutResolution {
   const settings = readEphemeralSettings(config);
-  const defaultTimeoutSeconds =
-    (settings[TASK_TIMEOUT_DEFAULT_SETTING] as number | undefined) ??
-    DEFAULT_TASK_TIMEOUT_SECONDS;
-  const maxTimeoutSeconds =
-    (settings[TASK_TIMEOUT_MAX_SETTING] as number | undefined) ??
-    MAX_TASK_TIMEOUT_SECONDS;
+  // Configured default/maximum are validated at the resolution boundary so a
+  // bad profile value (0, -2, Infinity, non-numeric) is rejected here rather
+  // than flowing unchecked to setTimeout (Finding 2).
+  const defaultTimeoutSeconds = readConfiguredTimeoutSeconds(
+    settings,
+    TASK_TIMEOUT_DEFAULT_SETTING,
+    DEFAULT_TASK_TIMEOUT_SECONDS,
+  );
+  const maxTimeoutSeconds = readConfiguredTimeoutSeconds(
+    settings,
+    TASK_TIMEOUT_MAX_SETTING,
+    MAX_TASK_TIMEOUT_SECONDS,
+  );
   return resolveSharedTimeout(
     requestedTimeoutSeconds,
     defaultTimeoutSeconds,

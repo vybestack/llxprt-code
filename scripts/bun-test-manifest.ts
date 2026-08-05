@@ -164,6 +164,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-bun/taskTimeoutBounds.issue3031.bun.ts',
       'test-bun/taskTimeoutDescription.issue3031.bun.ts',
       'test-bun/taskAsyncTimeout.issue3031.bun.ts',
+      'test-bun/taskTimeoutResultAgentId.cr3031.bun.ts',
     ],
   },
   {
@@ -219,6 +220,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // failure.
       'src/tools/tool-key-storage.test.ts',
       'src/tools-adapters/CoreSubagentServiceAdapter.timeout.test.ts',
+      'src/tools-adapters/CoreSubagentServiceAdapter.cancellation.cr3031.test.ts',
     ],
   },
   PROVIDERS_MANIFEST_ENTRY,

@@ -17,6 +17,7 @@ import {
   type SubagentRequest,
   type SubagentResult,
   type ToolGovernance,
+  type ToolRegistry,
 } from '@vybestack/llxprt-code-tools';
 import {
   resolveTimeout as sharedResolveTimeout,
@@ -32,6 +33,7 @@ import { ContextState, type OutputObject } from '../core/subagentTypes.js';
 // Re-exported so CoreSubagentServiceAdapter can reference the canonical
 // TimeoutResolution type without a separate import (Issue #3031).
 export type { TimeoutResolution } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+export { readConfiguredTimeoutSeconds } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
 export {
   buildSubagentExcludedToolNames,
@@ -308,9 +310,45 @@ export interface CoreTimeoutSetup {
 }
 
 /**
+ * Classifies whether an abort of the timeout controller is genuinely a
+ * timeout, distinct from a user/parent cancellation.
+ *
+ * `createTimeout` relays a parent-signal abort onto the timeout controller
+ * (so a user cancellation also aborts the subagent), which means
+ * `timeoutController.signal.aborted` alone is NOT proof of a timeout — it is
+ * equally true for a plain cancellation. A timeout is only real when:
+ *
+ *   1. the timeout controller aborted,
+ *   2. the parent signal did NOT abort (it was the timer, not the user), and
+ *   3. the resolution is bounded (`effectiveTimeoutSeconds` is defined) — an
+ *      unbounded resolution arms no timer, so an abort under it cannot be a
+ *      timeout.
+ *
+ * This mirrors the agents-package `isTimeoutError`
+ * (`timeoutController.signal.aborted && !signal.aborted`) plus the
+ * bounded-resolution clause, so there is one shared convention across both
+ * packages rather than a third ad-hoc check (CodeRabbit Finding 1, #3031).
+ */
+export function isTimeoutAbort(
+  timeoutController: AbortController,
+  parentSignal: AbortSignal | undefined,
+  resolution: TimeoutResolution,
+): boolean {
+  return (
+    timeoutController.signal.aborted &&
+    parentSignal?.aborted !== true &&
+    resolution.effectiveTimeoutSeconds !== undefined
+  );
+}
+
+/**
  * Fails a running async task with a legible timeout reason when the timeout
  * controller has aborted. Extracted to eliminate duplication between the
  * try and catch branches of background execution (Issue #3031).
+ *
+ * Callers MUST gate this on {@link isTimeoutAbort}: an unbounded resolution
+ * reaching this path would throw inside `describeTaskTimeout`, and a parent
+ * cancellation is not a timeout.
  */
 export function failTaskIfTimeout(
   asyncTaskManager: {
@@ -391,7 +429,10 @@ export async function handleAsyncLaunchFailure(
       // Disposal errors are non-actionable on a failure path.
     }
   }
-  if (timeout?.timeoutController.signal.aborted === true) {
+  if (
+    timeout !== undefined &&
+    isTimeoutAbort(timeout.timeoutController, parentSignal, timeout.resolution)
+  ) {
     return attachTimeoutMetadataToResult(
       createTimeoutSubagentResult(timeout.resolution),
       timeout.resolution,
@@ -402,5 +443,159 @@ export async function handleAsyncLaunchFailure(
     return createCancelledResult('Task execution aborted before completion.');
   }
   return createErrorResult(error, 'Subagent execution failed.');
+}
+
+/**
+ * Returns true when the request carries an explicit tool whitelist. Direct
+ * ISubagentService callers may omit `hasExplicitToolWhitelist`, so an actual
+ * `toolWhitelist` array is also treated as explicit (Issue #2069).
+ */
+export function hasExplicitToolWhitelist(request: SubagentRequest): boolean {
+  return (
+    request.hasExplicitToolWhitelist === true ||
+    Array.isArray(request.toolWhitelist)
+  );
+}
+
+/**
+ * Filters excluded tools (task/list_subagents) from a whitelist when no
+ * registry is available for full governance validation. Non-excluded entries
+ * pass through unchanged; returns undefined for an empty result so the caller
+ * can apply fail-closed semantics for explicit whitelists.
+ */
+export function filterExcludedFromWhitelist(
+  candidateTools: string[] | undefined,
+): string[] | undefined {
+  if (!candidateTools || candidateTools.length === 0) {
+    return undefined;
+  }
+
+  const excluded = buildExcludedToolNames();
+  const filtered = candidateTools.filter((name) => {
+    if (typeof name !== 'string') {
+      return false;
+    }
+
+    const candidates = getToolNameCandidates(name);
+    return (
+      candidates.length > 0 &&
+      !candidates.some((canonical) => excluded.has(canonical))
+    );
+  });
+
+  return filtered.length > 0 ? filtered : undefined;
+}
+
+/**
+ * Validates a requested whitelist against the parent tool registry and the
+ * configured governance (disabled/blocked tools), excluding task and
+ * list_subagents unconditionally. Returns the deduplicated, canonicalised,
+ * registry-resolved tool names, or undefined when nothing remains.
+ */
+export function buildGovernedToolWhitelist(
+  candidateTools: string[] | undefined,
+  registry: ToolRegistry,
+  config: Config,
+): string[] | undefined {
+  if (!candidateTools || candidateTools.length === 0) {
+    return undefined;
+  }
+
+  const excluded = buildExcludedToolNames();
+  const governance = buildToolGovernance(config);
+  const allowedRegistryTools = registry
+    .getEnabledTools()
+    .map((tool) => tool.name)
+    .filter(
+      (name): name is string => !!name && !isExcludedToolName(name, excluded),
+    );
+
+  const allowedByCanonical = new Map<string, string>();
+  for (const toolName of allowedRegistryTools) {
+    for (const canonical of getToolNameCandidates(toolName)) {
+      if (canonical && !allowedByCanonical.has(canonical)) {
+        allowedByCanonical.set(canonical, toolName);
+      }
+    }
+  }
+
+  const validTools = candidateTools
+    .map((name) => {
+      if (!name) {
+        return undefined;
+      }
+
+      const candidates = getToolNameCandidates(name);
+      if (candidates.some((canonical) => excluded.has(canonical))) {
+        return undefined;
+      }
+      if (candidates.some((canonical) => governance.disabled.has(canonical))) {
+        return undefined;
+      }
+
+      for (const canonical of candidates) {
+        const resolved = allowedByCanonical.get(canonical);
+        if (resolved && !isToolBlocked(resolved, governance)) {
+          return resolved;
+        }
+      }
+
+      return undefined;
+    })
+    .filter(
+      (name): name is string => typeof name === 'string' && name.length > 0,
+    );
+
+  const uniqueByCanonical = new Set<string>();
+  const deduped: string[] = [];
+  for (const tool of validTools) {
+    const canonical = canonicalizeToolName(tool);
+    if (!canonical || uniqueByCanonical.has(canonical)) {
+      continue;
+    }
+    uniqueByCanonical.add(canonical);
+    deduped.push(tool);
+  }
+
+  return deduped.length > 0 ? deduped : undefined;
+}
+
+/**
+ * Resolves the effective tool whitelist for a subagent request. With no
+ * explicit whitelist this returns undefined so the subagent runtime/profile
+ * defaults apply (Issue #2069). With one, it is validated against the parent
+ * registry when available, otherwise filtered for excluded tools only.
+ */
+export function buildEffectiveToolWhitelist(
+  request: SubagentRequest,
+  config: Config,
+): string[] | undefined {
+  if (!hasExplicitToolWhitelist(request)) {
+    return undefined;
+  }
+
+  const registryProvider = (config as Partial<Pick<Config, 'getToolRegistry'>>)
+    .getToolRegistry;
+  const registry =
+    typeof registryProvider === 'function'
+      ? registryProvider.call(config)
+      : undefined;
+
+  let effectiveWhitelist = request.toolWhitelist;
+  if (
+    registry !== undefined &&
+    effectiveWhitelist !== undefined &&
+    effectiveWhitelist.length > 0
+  ) {
+    effectiveWhitelist = buildGovernedToolWhitelist(
+      effectiveWhitelist,
+      registry,
+      config,
+    );
+  } else {
+    effectiveWhitelist = filterExcludedFromWhitelist(effectiveWhitelist);
+  }
+
+  return effectiveWhitelist;
 }
 export const isExcludedToolName = isSubagentExcludedToolName;

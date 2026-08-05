@@ -104,6 +104,56 @@ export function validateTimeoutSeconds(
   );
 }
 
+/**
+ * Validates a CONFIGURED timeout setting (the default or the maximum) at the
+ * resolution boundary. Profile-supplied ephemeral settings are not checked by
+ * {@link validateTimeoutSeconds} (which only covers the caller's request), so
+ * without this a profile value of `0`, `-2`, `Infinity`, or a non-numeric
+ * value would flow straight through to `setTimeout` and terminate a command
+ * almost immediately.
+ *
+ * Acceptable: `-1` (the operator declining a ceiling / unlimited default) or
+ * a finite number greater than zero. Rejects anything else by THROWING an
+ * error naming the setting and what is allowed — fail fast, no silent coerce,
+ * no default substitution. Returns the validated value narrowed to `number`
+ * (CodeRabbit Finding 2, #3031).
+ */
+export function validateConfiguredTimeoutSeconds(
+  value: unknown,
+  settingName: string,
+): number {
+  if (
+    typeof value === 'number' &&
+    (value === -1 || (Number.isFinite(value) && value > 0))
+  ) {
+    return value;
+  }
+  throw new Error(
+    `Invalid value for ${settingName}: ${String(value)}. ` +
+      `Allowed values are -1 (no ceiling / unlimited) or a finite number of ` +
+      `seconds greater than zero.`,
+  );
+}
+
+/**
+ * Reads a configured timeout setting from a raw settings record and validates
+ * it at the resolution boundary. When the setting is absent, the shipped
+ * `fallback` (always a valid finite positive number) is used. When present,
+ * it is validated by {@link validateConfiguredTimeoutSeconds} so a bad
+ * profile value (0, -2, Infinity, non-numeric) is rejected here rather than
+ * flowing unchecked to `setTimeout` (CodeRabbit Finding 2, #3031).
+ */
+export function readConfiguredTimeoutSeconds(
+  settings: Record<string, unknown>,
+  settingName: string,
+  fallback: number,
+): number {
+  const raw = settings[settingName];
+  return raw === undefined
+    ? fallback
+    : validateConfiguredTimeoutSeconds(raw, settingName);
+}
+
 export function describeTimeoutClamp(
   resolution: TimeoutResolution,
   settings: { readonly defaultSetting: string; readonly maxSetting: string },
