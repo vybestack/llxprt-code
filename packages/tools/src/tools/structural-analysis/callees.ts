@@ -74,11 +74,17 @@ function collectCalleeRefs(
 
 /**
  * Finds function-like container nodes whose declared name matches `sym`.
- * Covers function_declaration, generator_function_declaration, method_definition,
- * and arrow_function (matched via its variable_declarator binding so the const
- * name is the lookup key). The returned node is searched for call expressions:
- * for arrows this is the variable_declarator, which fully contains the function
- * body, so the call search is correct.
+ * Covers function_declaration, generator_function_declaration,
+ * method_definition, and arrow_function (the latter is matched via its
+ * variable_declarator binding so the const name is the lookup key, but the
+ * arrow_function node itself is returned — NOT the declarator). Returning the
+ * arrow_function is deliberate: collectCalleesFromContainer keeps a call only
+ * when its nearest enclosing function-container (per findFunctionContainer)
+ * IS the container node. findFunctionContainer recognises arrow_function as a
+ * function-container kind but not variable_declarator, so returning the
+ * declarator would make every call inside an arrow body vanish (its nearest
+ * function container would be the arrow_function, whose range never matches the
+ * declarator's). Do not "simplify" this back to returning the declarator.
  */
 function findNamedContainers(parsed: ParsedFile, sym: string): SgNode[] {
   const escaped = escapeRegex(sym);
@@ -134,8 +140,9 @@ function findNamedContainers(parsed: ParsedFile, sym: string): SgNode[] {
 /**
  * Checks a single call-expression node and returns a CalleeRef if it belongs
  * directly to the target container (its nearest function-like container),
- * or null if it should be skipped (nested in a different function, already
- * visited, or at the traversal limit).
+ * or null if it should be skipped (nested in a different function or already
+ * visited). The maxNodes traversal limit is enforced upstream in
+ * findCalleesOfFile, not in this function.
  *
  * Extracted so the caller loop uses zero `continue` statements.
  */

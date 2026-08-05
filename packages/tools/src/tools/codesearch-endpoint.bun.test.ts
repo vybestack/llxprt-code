@@ -54,7 +54,46 @@ interface CapturedCall {
 function lastCall(): CapturedCall {
   const calls = fetchStub.mock.calls;
   const last = calls[calls.length - 1];
+  if (last === undefined) {
+    throw new Error('fetch was never called');
+  }
   return { url: String(last[0]), body: last[1] };
+}
+
+/**
+ * Narrows the captured fetch init to the upstream tool name and query carried
+ * in the JSON-RPC request body. Every level is checked — no type assertions.
+ */
+function extractRequestBody(init: unknown): { name: string; query: string } {
+  if (typeof init !== 'object' || init === null) {
+    throw new Error(`Expected fetch init object, got ${typeof init}`);
+  }
+  if (!('body' in init) || typeof init.body !== 'string') {
+    throw new Error('Expected fetch init to carry a string body');
+  }
+  const parsed: unknown = JSON.parse(init.body);
+  if (typeof parsed !== 'object' || parsed === null || !('params' in parsed)) {
+    throw new Error('Expected JSON-RPC params in request body');
+  }
+  const params: unknown = parsed.params;
+  if (typeof params !== 'object' || params === null) {
+    throw new Error('Expected params object in request body');
+  }
+  if (!('name' in params) || typeof params.name !== 'string') {
+    throw new Error('Expected params.name string');
+  }
+  if (
+    !('arguments' in params) ||
+    typeof params.arguments !== 'object' ||
+    params.arguments === null
+  ) {
+    throw new Error('Expected params.arguments object');
+  }
+  const args: unknown = params.arguments;
+  if (!('query' in args) || typeof args.query !== 'string') {
+    throw new Error('Expected params.arguments.query string');
+  }
+  return { name: params.name, query: args.query };
 }
 
 describe('codesearch Exa MCP endpoint (issue #3038, AC7)', () => {
@@ -86,9 +125,13 @@ describe('codesearch Exa MCP endpoint (issue #3038, AC7)', () => {
       .build({ query: 'react hooks' })
       .execute(new AbortController().signal);
 
-    const { url } = lastCall();
+    const { url, body } = lastCall();
     const parsed = new URL(url);
     expect(parsed.searchParams.get('tools')).toBe('get_code_context_exa');
+
+    const requestBody = extractRequestBody(body);
+    expect(requestBody.name).toBe('get_code_context_exa');
+    expect(requestBody.query).toBe('react hooks');
   });
 
   it('carries both tools and exaApiKey when a key resolves', async () => {

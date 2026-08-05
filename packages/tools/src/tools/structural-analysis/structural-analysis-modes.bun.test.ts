@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { IToolHost } from '../../interfaces/index.js';
 import { StructuralAnalysisTool } from '../structural-analysis.js';
+import { createFakeToolHost } from '../ast-edit/__tests__/test-helpers.js';
 import type { ToolResult } from '../tools.js';
 
 interface ImportRecord {
@@ -141,18 +142,6 @@ async function runTool(
 ): Promise<ToolResult> {
   const tool = new StructuralAnalysisTool(host);
   return tool.build(params).execute(new AbortController().signal);
-}
-
-function createFakeToolHost(targetDir: string): IToolHost {
-  return {
-    getTargetDir: () => targetDir,
-    getWorkspaceRoots: () => [targetDir],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getEphemeralSettings: () => ({}),
-  };
 }
 
 describe('structural_analysis modes (issue #3038)', () => {
@@ -487,27 +476,39 @@ type SomeType = string;
         language: 'typescript',
       });
       expect(result.llmContent).toBe(
-        'Error: `target` parameter is required for "dependencies" mode.',
+        'Error: `target` (or `path`) parameter is required for "dependencies" mode.',
       );
       expect(result.llmContent).not.toContain('"imports"');
     });
 
     it('succeeds when target is supplied', async () => {
-      const result = await runTool(createFakeToolHost(tempDir), {
-        mode: 'dependencies',
-        language: 'typescript',
-        target: join(tempDir, 'dep-fixture.ts'),
-      });
-      expect(result.llmContent).not.toContain('Error:');
+      const imports = asImportsWrapper(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), {
+            mode: 'dependencies',
+            language: 'typescript',
+            target: join(tempDir, 'dep-fixture.ts'),
+          }),
+        ),
+      ).imports;
+      const modImports = imports.filter((i) => i.source === './mod.js');
+      expect(modImports).toHaveLength(1);
+      expect(modImports[0].kind).toBe('named');
     });
 
     it('succeeds when path is supplied (alias for the search root)', async () => {
-      const result = await runTool(createFakeToolHost(tempDir), {
-        mode: 'dependencies',
-        language: 'typescript',
-        path: join(tempDir, 'dep-fixture.ts'),
-      });
-      expect(result.llmContent).not.toContain('Error:');
+      const imports = asImportsWrapper(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), {
+            mode: 'dependencies',
+            language: 'typescript',
+            path: join(tempDir, 'dep-fixture.ts'),
+          }),
+        ),
+      ).imports;
+      const modImports = imports.filter((i) => i.source === './mod.js');
+      expect(modImports).toHaveLength(1);
+      expect(modImports[0].kind).toBe('named');
     });
   });
 
@@ -633,8 +634,12 @@ import { named } from 'other:spec';
   });
 
   describe('AC6 — description documents the per-mode parameter matrix', () => {
-    const description = new StructuralAnalysisTool(createFakeToolHost(tempDir))
-      .description;
+    let description: string;
+
+    beforeAll(() => {
+      description = new StructuralAnalysisTool(createFakeToolHost(tempDir))
+        .description;
+    });
 
     it('states that the five symbol modes require symbol', () => {
       expect(description).toContain(
@@ -642,8 +647,9 @@ import { named } from 'other:spec';
       );
     });
 
-    it('states that dependencies and exports require target', () => {
-      expect(description).toContain('dependencies, exports: "target"');
+    it('states that dependencies requires an explicit target and exports is optional', () => {
+      expect(description).toContain('dependencies: "target" (or "path")');
+      expect(description).toContain('exports: optional "target"');
     });
 
     it('includes one worked example per mode with its required parameter', () => {

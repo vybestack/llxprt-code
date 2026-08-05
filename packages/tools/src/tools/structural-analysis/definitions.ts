@@ -4,7 +4,7 @@
  * @plan PLAN-20260211-ASTGREP.P07
  */
 
-import type { NapiConfig } from '@ast-grep/napi';
+import type { NapiConfig, SgNode } from '@ast-grep/napi';
 import type {
   ParsedFile,
   AnalysisResult,
@@ -60,7 +60,7 @@ function collectRuleDefinitions(
   relPath: string,
   definitions: DefinitionEntry[],
 ): void {
-  let matches;
+  let matches: SgNode[];
   try {
     matches = parsed.root.findAll({
       rule: {

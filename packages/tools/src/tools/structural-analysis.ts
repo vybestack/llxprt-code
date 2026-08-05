@@ -137,7 +137,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
     if ((mode as Mode) === 'dependencies' && !target && !this.params.path) {
       return this.makeError(
-        'Error: `target` parameter is required for "dependencies" mode.',
+        'Error: `target` (or `path`) parameter is required for "dependencies" mode.',
       );
     }
 
@@ -257,7 +257,8 @@ across files.
 
 Required parameters by mode:
 - callers, callees, definitions, hierarchy, references: "symbol" (plus "language").
-- dependencies, exports: "target" (plus "language").
+- dependencies: "target" (or "path") — an explicit search root (plus "language").
+- exports: optional "target", defaults to the workspace root (plus "language").
 - depth and maxNodes apply only to callers/callees.
 
 Examples:
@@ -316,7 +317,7 @@ export class StructuralAnalysisTool extends BaseDeclarativeTool<
           },
           target: {
             description:
-              'File/directory to analyze. Required for dependencies and exports modes.',
+              'File/directory to analyze. Required for dependencies; optional for exports.',
             type: 'string',
           },
           reverse: {

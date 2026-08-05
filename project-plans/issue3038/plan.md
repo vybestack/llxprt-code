@@ -68,7 +68,7 @@ calls two distinct leaf functions:
 
 ### AC3 — `dependencies` requires an explicit target
 - `dependencies` with neither `target` nor `path` returns
-  ``Error: `target` parameter is required for "dependencies" mode.`` and
+  ``Error: `target` (or `path`) parameter is required for "dependencies" mode.`` and
   performs no scan (no `imports` payload).
 - `dependencies` with `target` set succeeds.
 - `dependencies` with `path` set (the documented alias for the search root)
@@ -100,9 +100,10 @@ For a file containing:
 ### AC6 — the tool description documents the per-mode parameter matrix
 - The `structural_analysis` description contains one worked example call per
   mode for all seven modes.
-- The description states which parameters are required for which mode,
-  including that `dependencies`/`exports` take `target` and the symbol modes
-  take `symbol`.
+- The description states which parameters are required for which mode:
+  `dependencies` requires an explicit search root (`target`, or `path`),
+  `exports` takes an optional `target` (defaulting to the workspace root), and
+  the symbol modes take `symbol`.
 
 ### AC7 — `codesearch` reaches the Exa code-context tool and fails loudly
 - The request URL carries `tools=get_code_context_exa`.
