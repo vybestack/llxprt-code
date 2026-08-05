@@ -242,7 +242,10 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     expect(thrownError?.cause).toBeInstanceOf(Error);
     expect(message).toContain("'prod-key'");
     expect(message).toContain('keyring backend unavailable');
-    expect(message).toContain('/key save prod-key');
+    // A retrieval fault must not advertise the '/key save' remedy: the key may
+    // already be stored and re-saving would overwrite it while leaving the
+    // real fault (locked or unreadable keychain) in place.
+    expect(message).not.toContain('/key save');
   });
 
   it('does not apply an inline auth-key when the named key is unresolved', async () => {

@@ -208,10 +208,14 @@ async function resolveNamedAuthKey(
   try {
     resolvedAuthKey = await createProviderKeyStorage().getKey(trimmedKeyName);
   } catch (error) {
+    // A retrieval fault is not a missing key: the key may well be stored and
+    // the keychain merely locked or unreadable. Suggesting '/key save' here
+    // would invite the user to overwrite a good key and leave the real fault
+    // unaddressed, so the remedy hint belongs only on the not-found path.
     throw new Error(
       `Failed to resolve auth-key-name '${trimmedKeyName}': ${
         error instanceof Error ? error.message : String(error)
-      }. Use '/key save ${trimmedKeyName} <key>' to store it.`,
+      }`,
       { cause: error },
     );
   }

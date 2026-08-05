@@ -24,6 +24,9 @@ const ENV_PROVIDER_KEY = 'issue2916-env-provider-secret';
 const INLINE_AUTH_KEY = 'issue2916-inline-fallback-secret';
 const KEYFILE_SECRET = 'issue2916-keyfile-fallback-secret';
 
+/** Grace period allowed for a SIGTERM to land before escalating to SIGKILL. */
+const SIGKILL_GRACE_MS = 5_000;
+
 // Essential executable/platform variables, copied individually (never spread
 // from process.env) so no ambient keyring, proxy, provider credential,
 // dotenv/config path, or unrelated LLXPRT_* variable leaks into the child.
@@ -96,7 +99,22 @@ async function runCli(
       } catch {
         // The child exited between the timeout firing and termination.
       }
-      await proc.exited;
+      // A child that ignores SIGTERM would leave `proc.exited` pending
+      // forever, and awaiting it here outlives the enclosing test timeout —
+      // the run would hang rather than fail. Escalate to SIGKILL, which
+      // cannot be caught, after a short grace period.
+      const reaped = await Promise.race([
+        proc.exited.then(() => true),
+        Bun.sleep(SIGKILL_GRACE_MS).then(() => false),
+      ]);
+      if (!reaped) {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          // The child exited during the grace period.
+        }
+        await proc.exited;
+      }
     }
   }
 

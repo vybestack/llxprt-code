@@ -45,10 +45,19 @@ async function expectRejection(
   pattern: RegExp,
 ): Promise<void> {
   let thrown: unknown;
+  let rejected = false;
   try {
     await promise;
   } catch (error) {
     thrown = error;
+    rejected = true;
+  }
+  // Without this guard a promise that stops rejecting reports "expected
+  // undefined to be an instance of Error", which hides the actual regression.
+  if (!rejected) {
+    throw new Error(
+      `Expected the promise to reject with a message matching ${pattern}, but it resolved.`,
+    );
   }
   expect(thrown).toBeInstanceOf(Error);
   expect((thrown as Error).message).toMatch(pattern);
