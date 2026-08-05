@@ -65,6 +65,7 @@ function transitiveNeeds(
 
 interface TestAggregateResults {
   shouldSkip: string;
+  docsOnly: string;
   selector: string;
   hasTests: string;
   shards: string;
@@ -78,11 +79,12 @@ function runTestAggregate(
 ): SpawnSyncReturns<string> {
   const substitutions = [
     ["'${{ needs.skip_check.outputs.should_skip }}'", '"$1"'],
-    ["'${{ needs.shard_selector.result }}'", '"$2"'],
-    ["'${{ needs.shard_selector.outputs.has_tests }}'", '"$3"'],
-    ["'${{ needs.test_shard.result }}'", '"$4"'],
-    ["'${{ needs.node_consumer_smoke.result }}'", '"$5"'],
-    ["'${{ needs.acp_conformance.result }}'", '"$6"'],
+    ["'${{ needs.doc_change_filter.outputs.docs_only }}'", '"$2"'],
+    ["'${{ needs.shard_selector.result }}'", '"$3"'],
+    ["'${{ needs.shard_selector.outputs.has_tests }}'", '"$4"'],
+    ["'${{ needs.test_shard.result }}'", '"$5"'],
+    ["'${{ needs.node_consumer_smoke.result }}'", '"$6"'],
+    ["'${{ needs.acp_conformance.result }}'", '"$7"'],
   ] as const;
   let script = runText;
   for (const [expression, parameter] of substitutions) {
@@ -95,6 +97,7 @@ function runTestAggregate(
       script,
       '--',
       results.shouldSkip,
+      results.docsOnly,
       results.selector,
       results.hasTests,
       results.shards,
@@ -409,7 +412,7 @@ describe('Issue #2877: test matrix scheduling', () => {
     ).toEqual([]);
   });
 
-  it('lint aggregator needs exactly the four linters plus node_consumer_smoke', () => {
+  it('lint aggregator needs the four linters plus node_consumer_smoke, doc_change_filter, and skip_check', () => {
     const needs = jobNeeds(lintJob);
     expect(needs).toEqual([
       'lint_github_actions',
@@ -417,12 +420,14 @@ describe('Issue #2877: test matrix scheduling', () => {
       'lint_shell',
       'lint_yaml',
       'node_consumer_smoke',
+      'doc_change_filter',
+      'skip_check',
     ]);
   });
 
-  it('node_consumer_smoke needs only skip_check', () => {
+  it('node_consumer_smoke needs doc_change_filter and skip_check', () => {
     const needs = jobNeeds(nodeConsumerSmokeJob);
-    expect(needs).toEqual(['skip_check']);
+    expect(needs).toEqual(['doc_change_filter', 'skip_check']);
   });
 
   it('node_consumer_smoke preserves its skip condition', () => {
@@ -447,6 +452,7 @@ describe('Issue #2877: test matrix scheduling', () => {
       'skip_check',
       'node_consumer_smoke',
       'acp_conformance',
+      'doc_change_filter',
     ]);
     expect(runText).toContain("shard_result='${{ needs.test_shard.result }}'");
     expect(runText).toContain(`if [ "$shard_result" != "success" ]; then
@@ -459,6 +465,7 @@ describe('Issue #2877: test matrix scheduling', () => {
     const checkStep = stepNamed(testJob, 'Check shard results');
     const result = runTestAggregate(checkStep.run ?? '', {
       shouldSkip: 'false',
+      docsOnly: 'false',
       selector: 'success',
       hasTests: 'false',
       shards: 'skipped',
@@ -477,6 +484,7 @@ describe('Issue #2877: test matrix scheduling', () => {
     const nodeConsumerSmoke = `failure'; printf '${sentinel}' >&2; #`;
     const result = runTestAggregate(checkStep.run ?? '', {
       shouldSkip: 'false',
+      docsOnly: 'false',
       selector: 'success',
       hasTests: 'false',
       shards: 'skipped',

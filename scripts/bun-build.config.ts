@@ -25,7 +25,14 @@
  * a2a-server build. Top-level execution is guarded by `import.meta.main`.
  */
 
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -177,6 +184,26 @@ export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
 };
 
 /**
+ * Built-in provider alias data (issue #3062).
+ *
+ * The bundled `providerAliases` loader computes its built-in directory as
+ * `<bundleDir>/providers/aliases` (resolved from the bundle's own `__dirname`
+ * at runtime). When the bundle was the only emitted artifact that directory did
+ * not exist, so no built-in aliases registered and `--provider openai` failed
+ * with "Provider 'openai' not found". The alias assets live as raw
+ * `.config`/`.json` files in the providers package source; emit them verbatim
+ * next to the bundle so the loader finds them exactly as in development.
+ */
+const providerAliasSourceDir = join(
+  root,
+  'packages/providers/src/composition/aliases',
+);
+const providerAliasBundleDir = join(
+  root,
+  'packages/cli/bundle/providers/aliases',
+);
+
+/**
  * Runs a Bun.build target and exits non-zero on any failure (rejected promise
  * or `success === false`), surfacing diagnostics. Stale artifacts must never be
  * shipped downstream, so both failure modes are fatal.
@@ -222,6 +249,30 @@ async function buildA2aServer(): Promise<readonly string[]> {
 }
 
 /**
+ * Collects built-in provider alias asset names (`.config`/`.json`) from `dir`,
+ * failing fast when none are found.
+ *
+ * An empty result is a build-input error, not a silent no-op: the bundled
+ * `providerAliases` loader would then register zero built-in providers and
+ * `--provider openai` would fail at launch (issue #3062 regression). Surfacing
+ * this at build time prevents shipping a bundle that silently dropped every
+ * built-in alias.
+ */
+export function collectAliasAssets(dir: string): string[] {
+  const assets = readdirSync(dir).filter(
+    (name) => name.endsWith('.config') || name.endsWith('.json'),
+  );
+  if (assets.length === 0) {
+    throw new Error(
+      `cli-bundle build produced no built-in provider alias assets: ${dir} ` +
+        `contains no .config/.json files; the bundled providerAliases loader ` +
+        `would register no built-in providers.`,
+    );
+  }
+  return assets;
+}
+
+/**
  * Builds the prebuilt CLI bundle only (issue #2999).
  *
  * Kept separately invocable so `prepack` can produce the shipped bundle
@@ -248,7 +299,24 @@ export async function buildCliBundle(): Promise<readonly string[]> {
       `cli-bundle build completed with errors: ${detail || '(no details)'}`,
     );
   }
-  return cliResult.outputs.map((o) => `${o.path}=${o.size}`);
+
+  // Emit the built-in provider alias data next to the bundle (issue #3062).
+  // Replace any stale copy wholesale so removed/renamed alias files never leak
+  // into a publish artifact.
+  rmSync(providerAliasBundleDir, { recursive: true, force: true });
+  mkdirSync(providerAliasBundleDir, { recursive: true });
+  const aliasAssets = collectAliasAssets(providerAliasSourceDir);
+  for (const name of aliasAssets) {
+    copyFileSync(
+      join(providerAliasSourceDir, name),
+      join(providerAliasBundleDir, name),
+    );
+  }
+
+  return [
+    ...cliResult.outputs.map((o) => `${o.path}=${o.size}`),
+    ...aliasAssets.map((name) => join(providerAliasBundleDir, name)),
+  ];
 }
 
 /**

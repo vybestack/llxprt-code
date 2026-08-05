@@ -206,6 +206,11 @@ async function releaseResumedResources(
  */
 function setupObservation(config: Config): void {
   const projectRoot = config.getProjectRoot();
+  // loadBootstrapFromEnv fails fast (FatalConfigError, exit 52) on an
+  // explicitly misconfigured observation bootstrap. This is intentional: the
+  // non-blocking guarantee covers the post-startup path, while startup
+  // configuration validation is deliberately fail-fast. Recording cleanup is
+  // already registered above, so the process exits cleanly on the way out.
   initializeObservationProducer({
     repository: basename(projectRoot),
     path: projectRoot,
