@@ -75,15 +75,16 @@ function collectCalleeRefs(
 /**
  * Finds function-like container nodes whose declared name matches `sym`.
  * Covers function_declaration, generator_function_declaration,
- * method_definition, and arrow_function (the latter is matched via its
+ * method_definition, and variable-bound function expressions — arrow_function,
+ * function_expression and generator_function — each matched via its
  * variable_declarator binding so the const name is the lookup key, but the
- * arrow_function node itself is returned — NOT the declarator). Returning the
- * arrow_function is deliberate: collectCalleesFromContainer keeps a call only
- * when its nearest enclosing function-container (per findFunctionContainer)
- * IS the container node. findFunctionContainer recognises arrow_function as a
- * function-container kind but not variable_declarator, so returning the
- * declarator would make every call inside an arrow body vanish (its nearest
- * function container would be the arrow_function, whose range never matches the
+ * inner function node itself is returned — NOT the declarator. Returning the
+ * inner node is deliberate: collectCalleesFromContainer keeps a call only when
+ * its nearest enclosing function-container (per findFunctionContainer) IS the
+ * container node. findFunctionContainer recognises those function kinds as
+ * function-container kinds but not variable_declarator, so returning the
+ * declarator would make every call inside the body vanish (its nearest function
+ * container would be the inner function node, whose range never matches the
  * declarator's). Do not "simplify" this back to returning the declarator.
  */
 function findNamedContainers(parsed: ParsedFile, sym: string): SgNode[] {
@@ -105,33 +106,47 @@ function findNamedContainers(parsed: ParsedFile, sym: string): SgNode[] {
       } as NapiConfig);
       for (const m of matches) containers.push(m);
     } catch {
-      /* skip unsupported kinds */
+      // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
     }
   }
 
-  // Arrow functions: match the variable_declarator that binds them so the
-  // const name is the lookup key. Return the arrow_function node itself (not
+  // Variable-bound function expressions (arrow_function, function_expression,
+  // generator_function): match the variable_declarator that binds them so the
+  // const name is the lookup key. Return the inner function node itself (not
   // the declarator) so the nearest-enclosing-container comparison in
   // collectCalleesFromContainer lines up: the nearest function container of a
-  // call inside the arrow body is the arrow_function, not the declarator.
+  // call inside the body is the inner function node, not the declarator.
+  const declaratorFunctionKinds = [
+    'arrow_function',
+    'function_expression',
+    'generator_function',
+  ] as const;
   try {
     const declarators = parsed.root.findAll({
       rule: {
         kind: 'variable_declarator',
         all: [
           { has: { kind: 'identifier', regex: `^${escaped}$` } },
-          { has: { kind: 'arrow_function' } },
+          {
+            has: {
+              any: declaratorFunctionKinds.map((k) => ({ kind: k })),
+            },
+          },
         ],
       },
     } as NapiConfig);
     for (const d of declarators) {
-      const arrow = d
+      const fn = d
         .children()
-        .find((c: SgNode) => String(c.kind()) === 'arrow_function');
-      if (arrow) containers.push(arrow);
+        .find((c: SgNode) =>
+          (declaratorFunctionKinds as readonly string[]).includes(
+            String(c.kind()),
+          ),
+        );
+      if (fn) containers.push(fn);
     }
   } catch {
-    /* skip */
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
   }
 
   return containers;

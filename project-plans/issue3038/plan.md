@@ -44,16 +44,29 @@ on 3038 and ships as its own commit in the same PR.
 
 ### AC1 — `callees` resolves callees of every function-like container
 Given a TypeScript file containing a standalone function, an arrow function
-bound to a `const`, a generator function, and a class method, each of which
-calls two distinct leaf functions:
+bound to a `const`, a generator function, a class method, and function
+expressions bound to a `const` (plain, generator, and named), each of which
+calls distinct leaf functions:
 
 - `callees` for the standalone function returns both of its call sites.
 - `callees` for the arrow function returns its call site.
 - `callees` for the generator function returns its call site.
 - `callees` for the class method returns its call site (no regression).
+- `callees` for a `const` bound to a plain function expression (`const fn =
+  function () { ... }`) returns its call site.
+- `callees` for a `const` bound to a generator function expression (`const gen =
+  function* () { ... }`) returns its call site.
+- `callees` for a `const` bound to a named function expression, looked up by the
+  const name, returns its call site.
+- The nested-container rule holds for function expressions: a call inside a
+  nested function declared within a function expression is NOT reported as a
+  callee of the function expression.
 - The `callers`/`callees` directionality agrees: for the same edge,
   `callers(leaf)` naming the enclosing function and `callees(enclosing)`
   naming the leaf both return a non-empty result.
+- `callers` attributes a call made inside a variable-bound function expression
+  (arrow, plain, or generator) to that binding's name, instead of walking up to
+  whatever encloses it.
 
 ### AC2 — `definitions` finds declarations that carry return type annotations
 - `definitions` for `export function withReturnType(x: number): number { ... }`

@@ -69,6 +69,7 @@ function collectRuleDefinitions(
       },
     } as NapiConfig);
   } catch {
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
     return;
   }
   for (const m of matches) {
@@ -147,7 +148,7 @@ function searchDeclarationRules(
       }
     }
   } catch {
-    // Rule may not apply
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
   }
 }
 

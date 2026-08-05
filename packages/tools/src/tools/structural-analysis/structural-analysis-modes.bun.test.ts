@@ -145,14 +145,19 @@ async function runTool(
 }
 
 describe('structural_analysis modes (issue #3038)', () => {
-  let tempDir: string;
+  let tempDir = '';
 
   beforeAll(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'llxprt-sa-3038-'));
   });
 
   afterAll(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    // Only clean up if the temp dir was actually created: if mkdtempSync
+    // threw in beforeAll, tempDir stays '' and rmSync on an empty path would
+    // mask the real filesystem error.
+    if (tempDir !== '') {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   describe('AC1 — callees resolves every function-like container', () => {
@@ -174,6 +179,25 @@ const arrowFn = (): void => {
 function* generatorFunc(): void {
   leafA();
 }
+
+const fnExpr = function (): void {
+  leafA();
+};
+
+const genExpr = function* (): Generator<number> {
+  leafB();
+};
+
+const namedFnExpr = function inner(): void {
+  leafA();
+};
+
+const fnExprWithNested = function (): void {
+  leafA();
+  function innerInFnExpr(): void {
+    leafB();
+  }
+};
 
 class Ship {
   ship(): void {
@@ -273,6 +297,66 @@ class Ship {
         ),
       ).map((r) => r.method);
       expect(callersNames).toContain('generatorFunc');
+    });
+
+    it('finds the callee of a const-bound plain function expression', async () => {
+      const results = asTextResults(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), baseParams('fnExpr')),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].text).toBe('leafA()');
+    });
+
+    it('finds the callee of a const-bound generator function expression', async () => {
+      const results = asTextResults(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), baseParams('genExpr')),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].text).toBe('leafB()');
+    });
+
+    it('finds the callee of a const-bound named function expression by its const name', async () => {
+      const results = asTextResults(
+        extractResults(
+          await runTool(createFakeToolHost(tempDir), baseParams('namedFnExpr')),
+        ),
+      );
+      expect(results.length).toBe(1);
+      expect(results[0].text).toBe('leafA()');
+    });
+
+    it('does not attribute a nested-function call as a callee of a function expression', async () => {
+      const results = asTextResults(
+        extractResults(
+          await runTool(
+            createFakeToolHost(tempDir),
+            baseParams('fnExprWithNested'),
+          ),
+        ),
+      );
+      // fnExprWithNested directly calls leafA only; the nested
+      // innerInFnExpr's call to leafB must NOT be counted as a callee.
+      expect(results.length).toBe(1);
+      expect(results[0].text).toBe('leafA()');
+    });
+
+    it('attributes a call inside a variable-bound function expression to its binding (callers)', async () => {
+      const host = createFakeToolHost(tempDir);
+      const callersNames = asMethodResults(
+        extractResults(
+          await runTool(host, {
+            mode: 'callers',
+            language: 'typescript',
+            path: join(tempDir, 'callees-fixture.ts'),
+            symbol: 'leafB',
+          }),
+        ),
+      ).map((r) => r.method);
+      expect(callersNames).toContain('genExpr');
     });
   });
 
