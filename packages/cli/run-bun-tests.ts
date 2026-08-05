@@ -68,6 +68,15 @@ const TEST_FILE_PATTERN = /\.(test|spec|bun)\.(ts|tsx)$/;
  */
 const INTEGRATION_FILE_PATTERN = /\.integration\.(test|spec)\.(ts|tsx)$/;
 
+/**
+ * Bun treats a bare argument as a name *filter* and only as a path when it is
+ * explicitly relative. A `.bun.ts` suite contains neither `.test` nor `.spec`,
+ * so passing it bare matched nothing and the file silently did not run.
+ */
+export function toPathArgument(file: string): string {
+  return file.startsWith('./') || file.startsWith('/') ? file : `./${file}`;
+}
+
 export function timeoutForFile(file: string): number {
   return INTEGRATION_FILE_PATTERN.test(file)
     ? PER_INTEGRATION_TEST_TIMEOUT_MS
@@ -146,7 +155,7 @@ function runTestFile(file: string): Promise<TestResult> {
     let output = '';
     const child = spawn(
       process.execPath,
-      ['test', '--timeout', String(timeoutForFile(file)), file],
+      ['test', '--timeout', String(timeoutForFile(file)), toPathArgument(file)],
       {
         cwd: process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe'],

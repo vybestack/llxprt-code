@@ -165,6 +165,11 @@ function applyInlineProfile(
     argv,
     settings,
   );
+  // Mirrors applyFileProfile: an inline profile is just as worth tracing, and
+  // without this the two paths disagree about what --profile did.
+  debugLogger.debug(
+    `Loaded profile 'inline': provider=${profile.provider}, model=${profile.model}`,
+  );
   return {
     profileMergedSettings: prepared.profileMergedSettings,
     profileModel: prepared.profileModel,

@@ -16,7 +16,11 @@ import {
 } from './settingsIntegration.js';
 import type { ExtensionSetting } from './extensionSettings.js';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+// The code under test logs through the telemetry singleton. Spying on a
+// DebugLogger prototype imported from another package only works while both
+// resolve to the same class, which stops being true once telemetry resolves
+// to its build output — so spy on the exact instance the source uses.
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
   const actual =
@@ -289,7 +293,7 @@ describe('settingsIntegration', () => {
       const mockPrompt = vi.fn().mockResolvedValue('new-value');
 
       const debugErrorSpy = vi
-        .spyOn(DebugLogger.prototype, 'error')
+        .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
       const result = await updateSetting(

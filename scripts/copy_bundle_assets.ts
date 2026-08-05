@@ -25,7 +25,11 @@ import { glob } from 'glob';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
-const bundleDir = join(root, 'bundle');
+// The CLI bundle is emitted to packages/cli/bundle (issue #2999), and
+// providerAliases.ts resolves builtin aliases relative to the bundle it is
+// running from. Assets must therefore land beside llxprt.js, not at the
+// pre-#2999 repository-root path, or the bundled CLI resolves no providers.
+const bundleDir = join(root, 'packages', 'cli', 'bundle');
 const require = createRequire(import.meta.url);
 
 // Remove verbose logging

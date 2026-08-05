@@ -167,6 +167,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -215,6 +219,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -260,6 +268,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -331,6 +343,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -348,6 +364,10 @@ describe('LoadBalancer Integration Tests', () => {
         ['--profile', invalidJson, '--prompt', 'test'],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -407,6 +427,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -485,6 +509,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 

@@ -22,6 +22,7 @@ import {
   fileTimeoutForFile,
   parseCaseCounts,
   timeoutForFile,
+  toPathArgument,
 } from '../run-bun-tests.js';
 
 describe('isTestFile', () => {
@@ -202,5 +203,21 @@ describe('bun-suffixed test discovery', () => {
 
   it('does not treat the workspace preload as a test file', () => {
     expect(isTestFile('bun-test-setup.ts')).toBe(false);
+  });
+});
+
+describe('toPathArgument', () => {
+  it('makes a workspace-relative file explicit so bun treats it as a path', () => {
+    expect(toPathArgument('test-bun/settingsStorage.bun.ts')).toBe(
+      './test-bun/settingsStorage.bun.ts',
+    );
+  });
+
+  it('leaves an already-relative path alone', () => {
+    expect(toPathArgument('./src/a.test.ts')).toBe('./src/a.test.ts');
+  });
+
+  it('leaves an absolute path alone', () => {
+    expect(toPathArgument('/tmp/a.test.ts')).toBe('/tmp/a.test.ts');
   });
 });
