@@ -104,7 +104,7 @@ describe('loadBootstrapFromEnv', () => {
     expect(result?.agentId).toBe('agent-alex');
   });
 
-  it('throws on unreadable bootstrap file (fail fast, exit 52)', async () => {
+  it('throws on unreadable bootstrap file (fail fast, exit 52)', () => {
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE =
       join(
         tmpdir(),
