@@ -74,6 +74,54 @@ export const EXTERNALS = [
   'chokidar',
 ];
 
+/**
+ * Modules whose runtime behaviour depends on their own `__dirname` and so MUST
+ * stay external to the CLI bundle.
+ *
+ * When Bun inlines a CommonJS module it freezes `__dirname` as a build-time
+ * string literal. Any dependency that locates a runtime asset (WASM, locales,
+ * config files) relative to its own `__dirname` then ships the *build
+ * machine's* absolute path baked into the artifact: that path resolves only on
+ * the builder and leaks the release engineer's filesystem layout into user
+ * stack traces. Keeping such modules external lets Bun resolve them from
+ * `node_modules` at launch, so `__dirname` points at the *installed* package —
+ * exactly the resolution the pre-bundle TypeScript launch always used.
+ *
+ * **Ownership rule (invariant):** every entry MUST be a declared direct
+ * dependency of `packages/cli/package.json` (the published package that ships
+ * the bundle). Only a direct dependency guarantees its runtime resolution from
+ * `<pkg>/bundle/llxprt.js`: the package manager installs it in the published
+ * package's own `node_modules` scope, so `require("<name>")` from the bundle
+ * finds the *right* copy. A transitive dependency that merely appears somewhere
+ * in `node_modules` does NOT give this guarantee — it may be hoisted, shadowed
+ * by a consumer's conflicting version, or absent entirely depending on the
+ * consumer's install tree. That was the defect behind issue #3055:
+ * `config-chain` is owned by `@pnpm/npm-conf` (under `update-notifier`'s
+ * transitive graph), so externalizing it moved the resolution owner to the CLI
+ * package, where no package manager guarantees it resolves.
+ *
+ * Enforced by `scripts/tests/issue-3055-cli-externals-ownership.bun.test.ts`.
+ *
+ * This list is deliberately separate from `EXTERNALS`: the a2a-server bundle is
+ * a self-contained artifact that inlines its dependencies and already
+ * neutralises tiktoken via `portableTiktokenPlugin`, so forcing these external
+ * there would break that strategy.
+ */
+export const CLI_DIRNAME_DEPENDENT_EXTERNALS = [
+  // Locates tiktoken_bg.wasm via __dirname; throws "Missing tiktoken_bg.wasm"
+  // at import time when the baked build-machine path is absent (issue #3055).
+  '@dqbd/tiktoken',
+  // Direct dependency of packages/cli. Its transitive graph includes
+  // @pnpm/npm-conf -> config-chain, which walks __dirname to find npm-style
+  // config files. Externalizing update-notifier (not config-chain) keeps the
+  // entire transitive graph resolving from update-notifier's own package
+  // scope, where config-chain is a guaranteed dependency of @pnpm/npm-conf.
+  'update-notifier',
+  // Resolves its locale directory relative to __dirname; a baked path silently
+  // degrades CLI localisation.
+  'yargs',
+] as const;
+
 const tiktokenWasmSource = require.resolve('@dqbd/tiktoken/tiktoken_bg.wasm');
 
 // a2a-server bundle: packages/a2a-server/src/http/server.ts -> dist/a2a-server.mjs
@@ -112,7 +160,7 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
  */
 export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   target: 'bun',
-  external: EXTERNALS,
+  external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
   loader: { '.node': 'file' },
   minify: false,
   splitting: false,
