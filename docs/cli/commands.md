@@ -70,6 +70,15 @@ Slash commands control the CLI itself — configuration, navigation, session man
 | `/policies`    | View active policy rules              |
 | `/todo`        | View or manage the current todo list  |
 
+### Images
+
+| Command                                          | Description                                                          |
+| ------------------------------------------------ | -------------------------------------------------------------------- |
+| `/image <output.png> [input.png ...] "<prompt>"` | Generate or edit an image (zero inputs generates; one-to-five edits) |
+
+See [Image Generation](../tools/image-generation.md) for prerequisites,
+quoting rules, path rules, and the non-interactive `-O`/`-P`/`-I` flags.
+
 ### UI and Display
 
 | Command         | Description                                  |

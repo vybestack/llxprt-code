@@ -28,6 +28,8 @@ import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 import { isRuntimeReplaced } from './runtime-identity.js';
 import { assertRuntimeNotReplaced } from './runtime-replaced-errors.js';
+import { verifyKeyringDelete } from './keyring-delete-verification.js';
+import { SecureStoreError } from './secure-store-errors.js';
 import type { KeyringAdapter } from './secure-store.js';
 
 export type FindCredentialsFunction = (
@@ -39,6 +41,26 @@ const KEYRING_MODULE_ERROR_CODES = new Set([
   'MODULE_NOT_FOUND',
   'ERR_DLOPEN_FAILED',
 ]);
+
+/**
+ * Environment marker that suppresses use of the real OS credential store.
+ *
+ * Test suites must not read or write the developer's actual keyring. Storage
+ * roots are already redirected for tests (see `isolateStorageRoots`), but the
+ * OS credential store sits outside those roots and was never covered, so any
+ * suite that touched a SecureStore reached the real keychain. Setting this
+ * marker makes the factory return null, and SecureStore then uses its
+ * encrypted-file fallback inside the isolated storage root.
+ *
+ * Deliberately distinct from `LLXPRT_TEST_STORAGE_ISOLATED`: the storage
+ * workspace's own suites isolate their roots while still needing the genuine
+ * keyring, so the two concerns cannot share one flag.
+ */
+const DISABLE_OS_KEYRING_ENV = 'LLXPRT_TEST_DISABLE_OS_KEYRING';
+
+function isOsKeyringDisabledForTests(): boolean {
+  return process.env[DISABLE_OS_KEYRING_ENV] === '1';
+}
 
 function isErrorWithCode(value: unknown): value is { code: string } {
   return (
@@ -219,6 +241,9 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   if (isRuntimeReplaced()) {
     return null;
   }
+  if (isOsKeyringDisabledForTests()) {
+    return null;
+  }
   try {
     const module = await import('@napi-rs/keyring');
     const keyring = resolveKeyringModule(module);
@@ -242,7 +267,45 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
       },
       deletePassword: async (service: string, account: string) => {
         const entry = new kr.AsyncEntry(service, account);
-        return entry.deleteCredential();
+        const deleted = await entry.deleteCredential();
+        // Always probe, regardless of the native boolean. On macOS the delete
+        // status is destroyed below the binding (security-framework discards
+        // the OSStatus, apple-native-keyring-store returns Ok unconditionally,
+        // and the binding maps that to true), so a true result is no guarantee
+        // the credential is gone. Only the read-back can confirm absence.
+        const outcome = await verifyKeyringDelete(() => entry.getPassword());
+        if (outcome === 'still-present') {
+          // Diagnostics only — service/account names, never the read-back value.
+          _keyringLogger.debug(
+            () =>
+              `[keyring] credential remains after deletion: service='${service}' account='${account}'`,
+          );
+          // Where this rejection currently surfaces:
+          //   - MCP KeychainTokenStorage.deleteCredentials() calls this
+          //     adapter directly and propagates it. Observable today.
+          //   - SecureStore.deleteLocked() still wraps this call in a bare
+          //     `catch {}` and discards it. NOT observable through
+          //     SecureStore.delete() yet; the in-flight PR for issue #1985
+          //     replaces that catch with classification and a rethrow of
+          //     anything that is not NOT_FOUND. secure-store.ts is owned by
+          //     that PR, so it is deliberately not modified here.
+          //
+          // The message is fixed and interpolation-free for when that lands:
+          // classifyError() re-derives the code from message text and ignores
+          // SecureStoreError.code, so the message must avoid every trigger
+          // substring ("not found", "locked", "denied", "permission",
+          // "timeout", "timed out"). validateKey() permits a key literally
+          // named "not found" — interpolating one would re-classify this as
+          // NOT_FOUND and get it swallowed, silently defeating the throw.
+          throw new SecureStoreError(
+            'Credential remains after keyring deletion',
+            'UNAVAILABLE',
+            'Retry the delete; if it persists, inspect the OS keyring entry for this service and account and remove it manually.',
+          );
+        }
+        // Absent: return the original native boolean unchanged. true means "a
+        // credential was deleted"; false means "there was nothing to delete".
+        return deleted;
       },
     };
     const withFindCreds = withFindCredentials(adapter, findCredentialsFn);

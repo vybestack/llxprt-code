@@ -51,9 +51,114 @@ npm run check
 
 - `npm run lint` - Run ESLint for JavaScript/TypeScript
 - `npm run lint:fix` - Run ESLint with auto-fix
+- `npm run lint:scoped -- <target> [<target> ...]` - Lint only the named package targets (fast local lint; see below)
+- `npm run lint:changed [-- --base <ref>]` - Lint only what differs from the merge base (see below)
 - `npm run format` - Run Prettier to format code
 - `npm run format:check` - Check formatting without modifying files
 - `npm run typecheck` - Run TypeScript type checking
+
+## Scoped and Changed-Files Linting (Fast Local Lint)
+
+`npm run lint` runs a single type-aware ESLint pass over the whole monorepo.
+That is correct but slow (~9 min) and memory-hungry (~10 GB peak). The two
+commands below surface the runner's already-existing scoped-target mode for
+local iteration, without changing CI behavior or the full-run command shape.
+
+### Lint explicit targets
+
+```bash
+npm run lint:scoped -- packages/cli
+npm run lint:scoped -- packages/cli/ packages/core/ --fix
+```
+
+`lint:scoped` forwards the named targets to `scripts/run-lint.ts` as a JSON
+array on `--targets`. The runner always adds `integration-tests` and
+deduplicates/sorts the list. Trailing slashes are normalized
+(`packages/cli/` → `packages/cli`) so shell tab-completion output works.
+
+Flags:
+
+- `--fix` - forward `--fix` to ESLint (auto-fix).
+- `--cache` - enable the opt-in ESLint cache (see below).
+- `--dry-run` - print the resolved plan and exit 0 without spawning ESLint.
+- `-h`, `--help` - print usage and exit 0.
+
+`lint:scoped` does **not** inject `--max-warnings 0`: it is `npm run lint`,
+scoped. Invalid invocations fail fast with usage text and exit code 2 — an
+unknown flag, `--base` without `--changed`, `--changed` combined with explicit
+targets, `--base` with a missing/flag-looking value, and an invocation with
+neither `--changed` nor any target. There is never a silent fallback to a
+full-tree run.
+
+### Lint changed files
+
+```bash
+npm run lint:changed
+npm run lint:changed -- --base origin/main
+```
+
+`lint:changed` derives the changed paths relative to the merge base and
+delegates target selection to `selectLintTargets` from
+`scripts/affected-lint-targets.ts`:
+
+- Base ref resolution: an explicit `--base` wins; otherwise the first of
+  `origin/main`, `main` that `git rev-parse --verify` resolves.
+- Changed paths = `git diff -z --no-renames --name-only <merge-base>`
+  (committed, staged and unstaged work) unioned with untracked files from
+  `git ls-files -z --others --exclude-standard`, so newly added files are
+  linted. `--no-renames` is required so a moved file reports **both** its old
+  and new path — otherwise the source package of a rename would silently go
+  unlinted. `-z` keeps pathnames byte-exact regardless of `core.quotePath`.
+- **Fail-closed cases** (a full-tree lint is run and the reason is printed):
+  - **Shared install/build/test/tooling inputs** — the exact list checked into
+    `scripts/affected-test-shards.data.json` under `sharedInputs`:
+    `package.json`, `package-lock.json`, `bun.lock`, `tsconfig.json`, `.nvmrc`,
+    `.bun-version`, `scripts/test.ts`, `scripts/postinstall.cjs`.
+  - **Harness/workflow paths** — `scripts/**`, `.github/**`,
+    `integration-tests/**`.
+  - **Unknown paths** — any path the selector cannot classify fails closed to a
+    full run. For example `eslint.config.js` is not a shared input and is not a
+    package source, so it reaches the unknown-path fallback (not the
+    shared-inputs case).
+- If the base ref or merge base cannot be resolved, it fails fast with a clear,
+  ref-naming message and exit 2 — never a silent full-tree run.
+- **Empty diff**: it prints an explicit "nothing to lint" message and exits 0.
+
+`lint:changed` accepts the same `--fix`, `--cache`, and `--dry-run` flags as
+`lint:scoped`.
+
+### Opt-in ESLint cache
+
+Caching is **never** enabled implicitly. Pass `--cache` to `lint:scoped` /
+`lint:changed` to forward the opt-in cache flags to the runner, or set
+`LLXPRT_LINT_CACHE=true` for the runner directly. The runner owns the cache
+flags centrally and derives them from this single opt-in switch.
+
+`LLXPRT_LINT_TARGETS` (the runner's CI-facing target env var) is deliberately
+**stripped** from the environment `lint:scoped` / `lint:changed` pass to the
+runner. The wrapper always decides the targets itself, so an exported
+`LLXPRT_LINT_TARGETS` can never silently narrow a fail-closed full run.
+
+### Heap requirement and the OOM exit code
+
+The full-tree run needs the **12 GB heap** that `npm run lint` sets via
+`cross-env NODE_OPTIONS=--max-old-space-size=12288`. A bare
+`npx eslint .` (without that heap) dies with a V8
+`JavaScript heap out of memory` fatal error and exits **134** — this is an
+out-of-memory crash, **not** a lint failure. Always use `npm run lint`
+(full) or the scoped commands above rather than invoking ESLint directly.
+
+### Signal-termination diagnostic
+
+When the ESLint child is terminated by a signal (harness watchdog, OOM
+killer), `scripts/run-lint.ts` prints an explicit stderr diagnostic naming the
+signal and stating that this is an interruption/kill rather than a lint
+failure, then exits with `128 + signum` (e.g. `137` for `SIGKILL`,
+`143` for `SIGTERM`). For `SIGKILL`, the diagnostic notes that an
+out-of-memory kill is a likely cause given the full-tree run's memory profile.
+An ordinary lint failure (non-zero `exitCode`) propagates that exit code with
+no extra message, since ESLint's own report already went to the inherited
+stdio.
 
 ## What Gets Checked
 

@@ -16,7 +16,7 @@
  * real factory function, and real runtime context builder.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from '../../testApi.js';
 import * as fc from 'fast-check';
 import {
   COMPRESSION_STRATEGIES,

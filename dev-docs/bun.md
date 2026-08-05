@@ -496,13 +496,14 @@ This script is a Bun-backed orchestrator that mirrors `npm run test
    (currently only `packages/agents`). This preserves the agents
    API-surface guard and any future pretest hooks.
 
-3. **Runs each workspace's `test` script** (typically `vitest run`) in the
-   workspace directory with `node_modules/.bin` on `PATH`. Tests still run
-   under **Vitest**, not Bun's native test runner, so all Vitest APIs and
-   per-package `vitest.config.ts` configuration remain fully available.
+3. **Runs each workspace's `test` script** in the workspace directory with
+   `node_modules/.bin` on `PATH`. Migrated workspaces point that script at
+   `scripts/run_bun_tests.ts` (Bun's native runner, one isolated process per
+   file); the workspaces still finishing their migration run under Vitest.
 
 4. **Runs the script harness tests** (`scripts/tests/`) after workspace
-   tests, matching the root `test:scripts` script.
+   tests, matching the root `test:scripts` script. These run natively under
+   Bun via the `scripts-tests` and `scripts-tests-slow` manifest roots.
 
 ### CLI flags
 
@@ -516,22 +517,34 @@ This script is a Bun-backed orchestrator that mirrors `npm run test
 The `--workspace` flag matches by directory name (`core`), relative path
 (`packages/core`), or package name (`@vybestack/llxprt-code-core`).
 
-### Relationship to `npm run test`
+### The canonical command
 
-Both paths run the same workspace Vitest suites and preserve the same
-pretest guards. The npm path (`npm run test`) remains the primary CI
-verification path; `test:bun` is the supported Bun-backed alternative. The
-npm path is not removed until the Bun-backed path is proven equivalent
-across all CI matrix legs.
+One command runs the complete suite:
+
+```bash
+bun run test:bun
+```
+
+It orchestrates every workspace plus the script harness, honouring pretest
+hooks. `npm run test` remains available and runs the same per-workspace
+`test` scripts, so the two agree by construction.
+
+Two roots are deliberately **not** part of that run because they call a real
+provider and consume quota. Request them by name when you have credentials:
+
+```bash
+npm run test:integration:sandbox:none   # bun scripts/run_bun_tests.ts --root integration-tests
+npm run test:all_evals                  # bun scripts/run_bun_tests.ts --root evals
+```
 
 ## Native Bun Test Runner Migration (issue #2475)
 
 ### Overview
 
-In addition to the Bun-backed Vitest orchestration (`test:bun`), each workspace
-is being incrementally migrated to run tests natively under Bun's test runner
-(`bun test`). Native Bun tests run faster (no Vitest overhead) and provide
-better integration with Bun's module system.
+Bun's own test runner (`bun test`) is the primary runner for every workspace
+except `agents` and `cli`, which are still on Vitest and tracked by #2578.
+Native Bun tests run faster (no Vitest overhead) and integrate better with
+Bun's module system.
 
 ### Workspace `test:bun` scripts
 
@@ -606,6 +619,37 @@ The CLI workspace has additional complexities:
    (`__setWriteToStderrForTesting`, `__setRenderForTesting`) instead of
    module-level mocking.
 
+### Agents workspace specifics (issue #2845)
+
+All 330 `packages/agents` test files run under Bun. The workspace `test` and
+`test:ci` scripts invoke `bun run-bun-tests.ts`, a workspace-local runner that
+discovers every `src/**/*.{test,spec}.{ts,tsx}` file and executes each in its
+own `bun test <file>` process. `test:vitest` is retained as the Vitest fallback.
+There is no exclusion list: every discovered file must pass.
+
+Two Bun behaviours the runner has to work around:
+
+1. **`[test] timeout` in `bunfig.toml` is ignored.** Bun 1.3.14 silently falls
+   back to its 5s default even when `bunfig.toml` declares a longer timeout, so
+   the runner passes `--timeout 30000` on the command line to preserve the
+   `testTimeout: 30000` the workspace ran under in Vitest. A `bunfig.toml`
+   timeout would look correct and do nothing.
+2. **File concurrency must stay below the core count.** Every file is a fresh
+   process that re-executes the whole agents module graph, and suites under
+   `src/api/__tests__/` additionally build a real Agent per test. Saturating all
+   cores starves individual tests past the timeout, which surfaces as a
+   different file failing on each run. The runner uses a sliding worker pool
+   sized at half the core count, clamped to [2, 4], overridable with
+   `LLXPRT_AGENTS_TEST_CONCURRENCY`.
+
+The runner merges each child's Bun JUnit report into a single workspace
+`junit.xml`, so CI keeps per-test names and durations rather than a file-level
+summary. A file whose process dies without writing a report is still recorded
+as a failing suite.
+
+The `pretest` hook (`scripts/check-agents-api-surface.ts`) is unchanged and is
+still executed by both `npm run test` and the `bun scripts/test.ts` orchestrator.
+
 ### Running native Bun tests
 
 ```bash
@@ -619,24 +663,50 @@ bun scripts/run_bun_tests.ts --workspace a2a-server
 npm run test:bun --workspace @vybestack/llxprt-code-a2a-server
 ```
 
-`run_bun_tests.ts` does not support `--exclude` — every file run must be
-explicitly listed in the manifest (`scripts/bun-test-manifest.ts`). Files
-that are not Bun-compatible are simply absent from the manifest rather than
-excluded at invocation time.
+### Test roots (`scripts/bun-test-manifest.ts`)
 
-Only `packages/a2a-server`, `packages/cli`, `packages/providers`,
-`packages/telemetry`, and `packages/test-utils` define a package-level
-`test:bun` script; each passes its exact manifest workspace name.
-The native `core` and `test-setup` entries are run through the root runner
-instead: `bun scripts/run_bun_tests.ts --workspace core` and
-`bun scripts/run_bun_tests.ts --workspace test-setup`. The root package's own
-`test:bun` command remains the separate Bun-backed Vitest orchestrator
-(`scripts/test.ts`), not the native runner. Use `bun scripts/run_bun_tests.ts`
-for all native manifest entries.
+Every file the native runner executes belongs to a **root** declared in
+`scripts/bun-test-manifest.ts`. A root selects its files in one of two ways:
+
+- **`include` / `exclude` globs** — used by fully migrated roots. This is the
+  Bun-native equivalent of a Vitest config's `include`, and it is what makes
+  "no test file can be silently dropped" mechanically true: a newly added
+  test file runs without any manifest edit.
+- **`files`** — an explicit list, used while a workspace is only partly
+  migrated and naming alone cannot tell a Bun-ready file from one still owned
+  by Vitest.
+
+A root may also declare:
+
+| Field          | Purpose                                                                        |
+| -------------- | ------------------------------------------------------------------------------ |
+| `preload`      | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)    |
+| `tsconfig`     | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`   |
+| `timeout`      | Per-test timeout, mirroring Vitest `testTimeout`                               |
+| `retries`      | Per-file retry budget, mirroring Vitest `retry`                                |
+| `globalSetup`  | `setup()` / `teardown()` run once in the runner process around the whole root  |
+| `credentialed` | Marks a root that calls a real provider; excluded unless requested by `--root` |
+
+`--root <name>` is an alias of `--workspace <name>`.
+
+An unfiltered `bun scripts/run_bun_tests.ts` runs every non-credentialed
+root — the complete offline suite. The `evals` and `integration-tests` roots
+are credentialed and must be named explicitly.
 
 ### CI parity
 
-The `bun_native_test_parity` CI job runs a representative sample of tests
-from each migrated workspace under Bun's native test runner to verify
-parity with Vitest results. The full Vitest suite remains the primary
-verification path; native Bun runs are additive parity checks.
+Bun's runner is no longer additive: it is the primary verification path for
+every migrated workspace, and `test_shard` executes it by invoking each
+workspace's own `test` script.
+
+Every root therefore runs **exactly once**. `test_shard` covers each workspace
+root; the scripts shard covers the roots that belong to no workspace, listed in
+`SCRIPTS_SHARD_ROOTS` in `scripts/test.ts`. A root with a second executor, or
+none at all, fails
+`scripts/tests/bun-manifest-root-ownership.bun.test.ts`.
+
+The `bun_native_test_parity` job does **not** execute tests. It resolves the
+manifest (`--dry-run`): globs expand and every selected file, preload, tsconfig
+override and global-setup module must exist. That is what proves no test file
+was dropped — re-running the whole suite a second time would double the CI bill
+for no extra signal.

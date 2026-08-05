@@ -5,7 +5,18 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
+
+/**
+ * The embedded monitor and metrics scripts are CommonJS files designed for
+ * Node's HTTP implementation. Under Bun, process.execPath points to the Bun
+ * binary, whose HTTP error/abort event ordering differs from Node's, causing
+ * monitor tests to fail or hang. Use Node to run these subprocess scripts so
+ * the monitor's HTTP behavior matches what the test assertions expect.
+ */
+const nodeExecutable: string =
+  typeof Bun !== 'undefined' ? 'node' : process.execPath;
 import type { ChildProcessByStdio } from 'node:child_process';
+import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -13,7 +24,6 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import type { Readable } from 'node:stream';
-import { expect } from 'vitest';
 import {
   asOptionalRecord,
   asRecord,
@@ -22,10 +32,16 @@ import {
 import {
   WORKFLOW_PATH,
   commandText,
-  extractFunctionSource,
   readRootFile,
   stepNamed,
 } from './ocr-review-workflow-helpers.ts';
+
+const requireFromModule = createRequire(import.meta.url);
+const canaryModule = requireFromModule(
+  '../../.github/scripts/ocr-canary-metrics.cjs',
+) as {
+  buildCanaryMetrics: (input: unknown) => Record<string, unknown>;
+};
 
 export const REPRESENTATIVE_RESULT = {
   status: 'success',
@@ -139,11 +155,12 @@ export function extractEmbeddedSource(
   const opening = `cat > ${fileName} <<'${delimiter}'\n`;
   const start = run.indexOf(opening);
   const end = run.indexOf(`\n${delimiter}\n`, start + opening.length);
-  expect(
-    start,
-    `${fileName} should have embedded source`,
-  ).toBeGreaterThanOrEqual(0);
-  expect(end, `${fileName} source should be terminated`).toBeGreaterThan(start);
+  if (start < 0) {
+    throw new Error(`${fileName} should have embedded source`);
+  }
+  if (!(end > start)) {
+    throw new Error(`${fileName} source should be terminated`);
+  }
   return run.slice(start + opening.length, end);
 }
 
@@ -186,8 +203,14 @@ export function listen(
 export function closeServer(
   server: http.Server<typeof http.IncomingMessage, typeof http.ServerResponse>,
 ): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
+  return new Promise<void>((resolve) => {
+    const closeAll = server as unknown as {
+      closeAllConnections?: () => void;
+    };
+    if (typeof closeAll.closeAllConnections === 'function') {
+      closeAll.closeAllConnections();
+    }
+    server.close(() => resolve());
   });
 }
 
@@ -444,31 +467,18 @@ export function metricsScript(): string {
 }
 
 export function runBuild(input: RunBuildInput): Record<string, unknown> {
-  const source = extractFunctionSource(metricsScript(), 'buildCanaryMetrics');
-  const sandbox: Record<string, unknown> = {
-    JSON,
-    Number,
-    String,
-    Object,
-    Array,
-    Map,
-    Set,
-    Math,
-    Error,
-    RegExp,
-    Boolean,
-    __INPUT__: input,
-  };
-  vm.runInNewContext(
-    `${source}\n__RESULT__ = buildCanaryMetrics(__INPUT__);`,
-    sandbox,
-  );
-  return asRecord(sandbox.__RESULT__);
+  return asRecord(canaryModule.buildCanaryMetrics(input));
+}
+
+export interface EmbeddedMetricsResult {
+  [key: string]: unknown;
+  _failed: boolean;
+  _failureMessage: string | null;
 }
 
 export function runEmbeddedMetricsScript(
   versionOutput: string | NodeJS.ArrayBufferView<ArrayBufferLike>,
-) {
+): EmbeddedMetricsResult {
   const metadata = completeMetadata();
   return withTempDirectory('ocr-metrics-2673-', (directory: string) => {
     const homeDirectory = path.join(directory, 'home');
@@ -509,18 +519,20 @@ export function runEmbeddedMetricsScript(
     fs.writeFileSync(path.join(ocrDirectory, 'rule.json'), '{}\n');
     fs.writeFileSync(path.join(ocrDirectory, 'config.json'), '{}\n');
 
+    const failureMarkerPath = path.join(directory, 'ocr-driver-failed.txt');
     const scriptPath = path.join(directory, 'metrics.cjs');
     fs.writeFileSync(
       scriptPath,
       [
         "const context = { serverUrl: 'https://github.com', repo: { owner: 'owner', repo: 'repo' }, runId: 123 };",
-        'const core = { setFailed(message) { throw new Error(message); } };',
+        `const __failureMarkerPath = ${JSON.stringify(failureMarkerPath)};`,
+        'const core = { setFailed(message) { fs.writeFileSync(__failureMarkerPath, String(message)); process.exitCode = 1; } };',
         metricsScript(),
       ].join('\n'),
     );
     let execError = null;
     try {
-      execFileSync(process.execPath, [scriptPath], {
+      execFileSync(nodeExecutable, [scriptPath], {
         cwd: directory,
         env: {
           ...process.env,
@@ -552,7 +564,14 @@ export function runEmbeddedMetricsScript(
         { cause: execError },
       );
     }
-    return JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    const metrics: Record<string, unknown> = JSON.parse(
+      fs.readFileSync(artifactPath, 'utf8'),
+    );
+    const failed = fs.existsSync(failureMarkerPath);
+    const failureMessage = failed
+      ? fs.readFileSync(failureMarkerPath, 'utf8')
+      : null;
+    return { ...metrics, _failed: failed, _failureMessage: failureMessage };
   });
 }
 
@@ -587,7 +606,7 @@ export async function startEmbeddedMonitor(
       .update(source)
       .digest('hex');
     fs.writeFileSync(scriptPath, source);
-    child = spawn(process.execPath, [scriptPath], {
+    child = spawn(nodeExecutable, [scriptPath], {
       env: {
         PATH: process.env.PATH,
         TARGET_URL: targetUrl,

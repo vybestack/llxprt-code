@@ -17,7 +17,7 @@
  * surviving messages (no summary, no ack).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { CompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
@@ -26,6 +26,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 
 // ---------------------------------------------------------------------------
@@ -651,5 +652,122 @@ describe('TopDownTruncationStrategy', () => {
       expect(result.metadata.compressedMessageCount).toBe(0);
       expect(result.metadata.llmCallMade).toBe(false);
     });
+  });
+});
+
+describe('TopDownTruncationStrategy image token accounting', () => {
+  const IMAGE_WIDTH = 1092;
+  const IMAGE_HEIGHT = 1092;
+
+  function pngBase64(width: number, height: number): string {
+    const buf = Buffer.alloc(24);
+    buf[0] = 0x89;
+    buf[1] = 0x50;
+    buf[2] = 0x4e;
+    buf[3] = 0x47;
+    buf[4] = 0x0d;
+    buf[5] = 0x0a;
+    buf[6] = 0x1a;
+    buf[7] = 0x0a;
+    buf.write('IHDR', 12, 'ascii');
+    buf.writeUInt32BE(width, 16);
+    buf.writeUInt32BE(height, 20);
+    return buf.toString('base64');
+  }
+
+  /** Wire the real HistoryService estimator exactly as CompressionHandler does. */
+  function realEstimator(
+    provider: string,
+  ): (contents: readonly IContent[]) => Promise<number> {
+    const history = new HistoryService();
+    history.setActiveTokenizationTarget('claude-sonnet-4-20250514', provider);
+    return (contents) =>
+      history.estimateTokensForContents(contents as IContent[]);
+  }
+
+  /** Twelve messages of ~500 estimated tokens each. */
+  function textHistory(): IContent[] {
+    return Array.from({ length: 12 }, (_, i) => ({
+      speaker: i % 2 === 0 ? ('human' as const) : ('ai' as const),
+      blocks: [{ type: 'text' as const, text: 'x'.repeat(2000) }],
+    }));
+  }
+
+  function withTrailingImage(history: IContent[]): IContent[] {
+    const copy = history.map((content) => ({
+      ...content,
+      blocks: [...content.blocks],
+    }));
+    const last = copy[copy.length - 1];
+    last.blocks = [
+      ...last.blocks,
+      {
+        type: 'media' as const,
+        mimeType: 'image/png',
+        encoding: 'base64' as const,
+        data: pngBase64(IMAGE_WIDTH, IMAGE_HEIGHT),
+      },
+    ];
+    return copy;
+  }
+
+  it('truncates more aggressively when the history contains an image', async () => {
+    const strategy = new TopDownTruncationStrategy();
+    const estimateTokens = realEstimator('anthropic');
+
+    const textOnly = await strategy.compress(
+      buildContext({
+        history: textHistory(),
+        contextLimit: 10000,
+        compressionThreshold: 0.8,
+        currentTokenCount: 9000,
+        estimateTokens,
+      }),
+    );
+    const withImage = await strategy.compress(
+      buildContext({
+        history: withTrailingImage(textHistory()),
+        contextLimit: 10000,
+        compressionThreshold: 0.8,
+        currentTokenCount: 9000,
+        estimateTokens,
+      }),
+    );
+
+    expect(textOnly.kind).toBe('applied');
+    expect(withImage.kind).toBe('applied');
+    expect(withImage.metadata.compressedMessageCount).toBeLessThan(
+      textOnly.metadata.compressedMessageCount,
+    );
+  });
+
+  it('charges an image according to the active provider', async () => {
+    const strategy = new TopDownTruncationStrategy();
+    const history = withTrailingImage(textHistory());
+
+    const anthropic = await strategy.compress(
+      buildContext({
+        history,
+        contextLimit: 10000,
+        compressionThreshold: 0.8,
+        currentTokenCount: 9000,
+        estimateTokens: realEstimator('anthropic'),
+      }),
+    );
+    const unknownProvider = await strategy.compress(
+      buildContext({
+        history,
+        contextLimit: 10000,
+        compressionThreshold: 0.8,
+        currentTokenCount: 9000,
+        estimateTokens: realEstimator('stepfun'),
+      }),
+    );
+
+    // Anthropic charges 1590 tokens for a 1092x1092 image; an unrecognised
+    // provider charges the 1000-token default, so it can retain more history.
+    expect(anthropic.metadata.compressedMessageCount).toBeLessThan(
+      unknownProvider.metadata.compressedMessageCount,
+    );
   });
 });

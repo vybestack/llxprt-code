@@ -24,7 +24,7 @@
  * - T18a status/disableOAuth/login/logout/switchBucket/setBaseUrl behavior.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import { buildAgent } from './helpers/agentHarness.js';
 
 describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {

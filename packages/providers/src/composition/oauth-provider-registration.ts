@@ -19,7 +19,10 @@ type OAuthProviderWithAddItem = OAuthProvider & {
   setAddItem?: (addItem: AddItemCallback) => void;
 };
 
-type OAuthRegistrationManager = Pick<OAuthManager, 'registerProvider'> & {
+type OAuthRegistrationManager = Pick<
+  OAuthManager,
+  'registerProvider' | 'getProvider'
+> & {
   getTokenStore?: () => TokenStore;
 };
 
@@ -46,14 +49,23 @@ export function ensureOAuthProviderRegistered(
     registeredProviders.set(oauthManager, registered);
   }
   if (registered.has(providerName)) {
+    // The provider is already registered, but a later call may carry an
+    // `addItem` UI callback that the first registration lacked. Attach it to
+    // the existing provider rather than silently dropping it (issue #2891).
+    if (addItem) {
+      oauthManager.getProvider(providerName)?.setAddItem?.(addItem);
+    }
     return;
   }
 
   const effectiveTokenStore = tokenStore ?? oauthManager.getTokenStore?.();
   if (effectiveTokenStore === undefined) {
-    oauthLogger.debug(
+    // Previously a silent `debug` log: a missing token store leaves the
+    // provider unregistered, which then makes TokenAccessCoordinator.getToken()
+    // return null immediately. Surface this as a warning so it is observable.
+    oauthLogger.warn(
       () =>
-        `Token store unavailable for '${providerName}'; skipping OAuth provider registration`,
+        `Token store unavailable for '${providerName}'; OAuth provider registration skipped`,
     );
     return;
   }

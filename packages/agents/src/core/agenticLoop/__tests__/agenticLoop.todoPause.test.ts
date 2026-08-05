@@ -18,7 +18,13 @@
  * provider stream (scripted ServerAgentStreamEvents).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '../../../testApi.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';

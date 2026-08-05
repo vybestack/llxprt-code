@@ -14,17 +14,6 @@ import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
-// Mock the telemetry service to capture logs
-vi.mock('../packages/core/src/telemetry/TelemetryService', () => {
-  return {
-    TelemetryService: {
-      getInstance: vi.fn().mockReturnValue({
-        logApiResponse: vi.fn(),
-      }),
-    },
-  };
-});
-
 // Mock Config class
 class MockConfig {
   getRedactionConfig(): RedactionConfig {

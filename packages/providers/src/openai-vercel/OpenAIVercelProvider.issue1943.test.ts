@@ -96,6 +96,7 @@ describe('OpenAIVercelProvider.getToolFormat() - override vs auto-detection (iss
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
     resetSettingsService();
   });

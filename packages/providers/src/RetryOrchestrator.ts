@@ -95,6 +95,7 @@ import { AttemptNotificationContext } from './retryAttemptNotifier.js';
 import {
   getBucketFailoverHandlerFromOptions,
   getOnAuthErrorHandlerFromOptions,
+  hasAuthRecoveryHandler,
 } from './retryConfigHandlers.js';
 import { resolveAuthTokenFromOptions } from './retryAuthTokenResolver.js';
 import { randomUUID } from 'node:crypto';
@@ -170,10 +171,6 @@ export class RetryOrchestrator implements IProvider {
       authRetryTimeoutMs: config?.authRetryTimeoutMs ?? 30000,
       trackThrottleWaitTime: config?.trackThrottleWaitTime ?? (() => {}),
     };
-  }
-
-  private shouldBypassRetry(options: GenerateChatOptions): boolean {
-    return options.metadata?.loadBalancerDelegate === true;
   }
 
   // Delegate all IProvider methods to wrapped provider
@@ -307,7 +304,7 @@ export class RetryOrchestrator implements IProvider {
   private async *generateChatCompletionWithRetry(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    if (this.shouldBypassRetry(options)) {
+    if (options.metadata?.loadBalancerDelegate === true) {
       yield* this.wrappedProvider.generateChatCompletion(options);
       return;
     }
@@ -746,7 +743,10 @@ export class RetryOrchestrator implements IProvider {
 
   /**
    * Invoke the auth error handler on the first consecutive auth failure (if
-   * retries remain), returning whether a refresh attempt was made.
+   * retries remain), returning whether a refresh attempt was made. Only grant
+   * the retry when a recovery mechanism that can change the outcome is
+   * configured (an onAuthError or bucket-failover handler) — otherwise it only
+   * burns an attempt + backoff on a terminal 403 (issue #2917).
    */
   private async maybeRefreshAuth(
     isAuthError: boolean,
@@ -760,6 +760,7 @@ export class RetryOrchestrator implements IProvider {
   ): Promise<boolean> {
     if (!(isAuthError && consecutiveAuthErrors === 1 && attempt < maxAttempts))
       return false;
+    if (!hasAuthRecoveryHandler(options)) return false;
     await this.invokeAuthErrorHandler(error, options, errorStatus, signal);
     return true;
   }

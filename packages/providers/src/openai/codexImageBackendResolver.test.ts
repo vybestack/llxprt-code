@@ -11,6 +11,24 @@ import { createCodexImageBackendResolver } from './codexImageBackendResolver.js'
 import type { CodexImageBackendResolverDeps } from './codexImageBackendResolver.js';
 import type { IProvider } from '../IProvider.js';
 
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed by throwing if the operation fulfills, so tests cannot pass
+ * silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    throw new Error('expected the operation to reject');
+  }
+  return outcome;
+}
+
 interface StubToken {
   access_token: string;
   account_id: string;
@@ -200,9 +218,11 @@ describe('createCodexImageBackendResolver', () => {
     const backend = resolved as NonNullable<typeof resolved>;
 
     const signal = new AbortController().signal;
-    await expect(backend.generate({ prompt: 'a cat' }, signal)).rejects.toThrow(
-      /OAuth authentication/i,
-    );
+    expect(
+      await captureRejection(backend.generate({ prompt: 'a cat' }, signal)),
+    ).toMatchObject({
+      message: expect.stringMatching(/OAuth authentication/i),
+    });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -225,9 +245,9 @@ describe('createCodexImageBackendResolver', () => {
     const backend = resolved as NonNullable<typeof resolved>;
 
     const signal = new AbortController().signal;
-    await expect(backend.generate({ prompt: 'a cat' }, signal)).rejects.toThrow(
-      /account_id/i,
-    );
+    expect(
+      await captureRejection(backend.generate({ prompt: 'a cat' }, signal)),
+    ).toMatchObject({ message: expect.stringMatching(/account_id/i) });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

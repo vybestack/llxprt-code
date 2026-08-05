@@ -84,6 +84,7 @@
     "vscode-ide-companion": ["ide-integration"]
   },
   "testOnlyEdges": {
+    "agents": ["storage"],
     "cli": ["test-utils"],
     "core": ["providers", "test-utils"],
     "tools": ["storage", "test-utils"]

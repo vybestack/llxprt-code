@@ -461,13 +461,22 @@ describe('elapsedToSeconds — strict grammar', () => {
 });
 
 describe('routing decision validation', () => {
-  it.each([
+  // Bun's it.each treats an array row (e.g. []) as a "spread row": its
+  // elements become individual callback arguments. An empty array yields
+  // zero arguments, so Bun sees callback.length === 1 and injects a done
+  // callback, causing the test to hang forever. Iterating with individual
+  // it() calls avoids the spread-row ambiguity while keeping the same four
+  // test cases under both Bun and Vitest.
+  const malformedRoutingDecisions: readonly unknown[] = [
     null,
     [],
     { category: 1, severity: 'high' },
     { category: 'bug', severity: null },
-  ])('rejects malformed routing decision %j', (decision) => {
-    const input = baseInput({ routingDecisions: [decision] });
-    expect(validateTelemetryInput(input)).toMatch(/routingDecisions/i);
-  });
+  ];
+  for (const decision of malformedRoutingDecisions) {
+    it(`rejects malformed routing decision ${JSON.stringify(decision)}`, () => {
+      const input = baseInput({ routingDecisions: [decision] });
+      expect(validateTelemetryInput(input)).toMatch(/routingDecisions/i);
+    });
+  }
 });

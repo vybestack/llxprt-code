@@ -39,8 +39,87 @@ export function isShellToolHost(
   return 'executeShellCommand' in host;
 }
 
-const WRAPPED_PREFIX = '{ ';
-const WRAPPED_SUFFIX = ' }; __code=$?; pgrep -g 0 >';
+const TRAP_LINE_PREFIX = 'trap ';
+// Suffix following the canonical action token on the trap line: ` EXIT`. The
+// action token's own closing quote is consumed by matchCanonicalSingleQuoted,
+// so this is the text that must remain after it.
+const TRAP_LINE_SUFFIX = ' EXIT';
+const TRAP_ACTION_PREFIX = '__code=$?; pgrep -g 0 >';
+const TRAP_ACTION_SUFFIX = ' 2>&1; exit $__code';
+
+/**
+ * Wraps a value in single quotes using POSIX-safe escaping so it can be
+ * interpolated into a bash command without word-splitting or command
+ * substitution. Every embedded single quote is escaped using the standard
+ * close-quote, escaped-quote, reopen-quote sequence.
+ */
+export function singleQuoteForShell(value: string): string {
+  return `'${value.split("'").join("'\\''")}'`;
+}
+
+/**
+ * Recognizes a canonical singleQuoteForShell token at the start of `input` and
+ * returns its decoded value plus the unconsumed remainder. Decoding walks the
+ * escaped-quote sequence (`'\''`) exactly as singleQuoteForShell emits it, then
+ * requires that re-encoding the decoded value reproduces the exact token. This
+ * rejects any input that merely resembles a quoted string without being a
+ * canonically generated wrapper argument.
+ */
+function matchCanonicalSingleQuoted(
+  input: string,
+): { decoded: string; rest: string } | null {
+  if (!input.startsWith("'")) {
+    return null;
+  }
+  let i = 1;
+  let decoded = '';
+  let closed = false;
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === "'") {
+      if (input.slice(i, i + 4) === "'\\''") {
+        decoded += "'";
+        i += 4;
+      } else {
+        closed = true;
+        break;
+      }
+    } else {
+      decoded += ch;
+      i += 1;
+    }
+  }
+  if (!closed) {
+    return null;
+  }
+  const token = input.slice(0, i + 1);
+  return singleQuoteForShell(decoded) === token
+    ? { decoded, rest: input.slice(i + 1) }
+    : null;
+}
+
+/**
+ * Confirms a decoded trap action is exactly the generated form:
+ * TRAP_ACTION_PREFIX + one canonical singleQuoteForShell path token +
+ * TRAP_ACTION_SUFFIX. Only such an action is treated as a generated wrapper.
+ */
+function isCanonicalTrapAction(action: string): boolean {
+  if (
+    !action.startsWith(TRAP_ACTION_PREFIX) ||
+    !action.endsWith(TRAP_ACTION_SUFFIX)
+  ) {
+    return false;
+  }
+  const pathToken = action.slice(
+    TRAP_ACTION_PREFIX.length,
+    action.length - TRAP_ACTION_SUFFIX.length,
+  );
+  const matched = matchCanonicalSingleQuoted(pathToken);
+  // The path slot must be EXACTLY one canonical token: no trailing content may
+  // remain after it, so a same-prefix/suffix trap with extra action content is
+  // treated as non-canonical and passed through unchanged.
+  return matched !== null && matched.rest === '';
+}
 
 function buildShellResultError(result: ShellResult): Error | null {
   const trimmedStderr = result.stderr.trim();
@@ -54,21 +133,47 @@ function buildShellResultError(result: ShellResult): Error | null {
 }
 
 function unwrapCommandForExecutionService(command: string): string {
-  if (!command.startsWith(WRAPPED_PREFIX)) {
+  if (!command.startsWith(TRAP_LINE_PREFIX)) {
     return command;
   }
-  // The wrapped form is `{ <cmd> }; __code=$?; pgrep -g 0 ><tmpfile> ...`.
-  // WRAPPED_SUFFIX marks where the command body ends; it is NOT at the very
-  // end of the string (the temp-file path and trailing shell follow it), so
-  // locate it by position rather than with endsWith.
-  const suffixIndex = command.indexOf(WRAPPED_SUFFIX, WRAPPED_PREFIX.length);
-  if (suffixIndex === -1) {
+  // The wrapped form is `trap '<quotedAction>' EXIT` followed by a newline and
+  // the trimmed body. The action token may itself contain a literal newline
+  // (e.g. a temp path with a line break), so it is decoded from the entire
+  // suffix after `trap ` rather than truncated at the first newline. After the
+  // canonical action is validated, the remainder must begin exactly with
+  // TRAP_LINE_SUFFIX plus a newline; the body is everything after that
+  // delimiter. The action token is validated strictly so only a canonically
+  // generated wrapper is unwrapped; anything else passes through unchanged.
+  const afterPrefix = command.slice(TRAP_LINE_PREFIX.length);
+  const actionToken = matchCanonicalSingleQuoted(afterPrefix);
+  if (actionToken === null) {
     return command;
   }
-  const innerCommand = command.slice(WRAPPED_PREFIX.length, suffixIndex).trim();
-  return innerCommand.endsWith(';')
-    ? innerCommand.slice(0, -1).trimEnd()
-    : innerCommand;
+  const bodyDelimiter = TRAP_LINE_SUFFIX + String.fromCharCode(10);
+  if (!actionToken.rest.startsWith(bodyDelimiter)) {
+    return command;
+  }
+  if (!isCanonicalTrapAction(actionToken.decoded)) {
+    return command;
+  }
+  return actionToken.rest.slice(bodyDelimiter.length);
+}
+
+const STANDALONE_BACKGROUND_ERROR =
+  'Background jobs are not supported in the standalone execution-service adapter. ' +
+  'This capability requires a configured ShellJobManager.';
+
+function standaloneValidatePathWithinWorkspace(
+  targetDir: string,
+  dirPath: string,
+): string | null {
+  const resolvedPath = path.isAbsolute(dirPath)
+    ? dirPath
+    : path.resolve(targetDir, dirPath);
+  return resolvedPath === targetDir ||
+    resolvedPath.startsWith(`${targetDir}${path.sep}`)
+    ? null
+    : `Directory '${dirPath}' is not a registered workspace directory`;
 }
 
 export function createShellToolHostFromExecutionService(
@@ -124,15 +229,8 @@ export function createShellToolHostFromExecutionService(
       return root ? [root] : [];
     },
     stripShellWrapper: (command: string) => command,
-    validatePathWithinWorkspace: (_workspaceContext, dirPath) => {
-      const resolvedPath = path.isAbsolute(dirPath)
-        ? dirPath
-        : path.resolve(targetDir, dirPath);
-      return resolvedPath === targetDir ||
-        resolvedPath.startsWith(`${targetDir}${path.sep}`)
-        ? null
-        : `Directory '${dirPath}' is not a registered workspace directory`;
-    },
+    validatePathWithinWorkspace: (_workspaceContext, dirPath) =>
+      standaloneValidatePathWithinWorkspace(targetDir, dirPath),
     isPtyActive: () => false,
     formatMemoryUsage: (bytes: number) => {
       if (bytes < 1024) return `${bytes} bytes`;
@@ -141,6 +239,16 @@ export function createShellToolHostFromExecutionService(
     trySummarizeOutput: async (content: string) => content,
     getSummarizeConfig: () => undefined,
     limitOutputTokens: (content: string) => ({ content, wasTruncated: false }),
+    launchBackgroundJob: () => {
+      throw new Error(STANDALONE_BACKGROUND_ERROR);
+    },
+    tailBackgroundJob: () => {
+      throw new Error(STANDALONE_BACKGROUND_ERROR);
+    },
+    detectTrailingBackground: (command: string) => ({
+      promoted: false,
+      command,
+    }),
   };
 }
 
@@ -249,11 +357,20 @@ export function buildCommandToExecute(
   if (isWindows) {
     return strippedCommand;
   }
-  let command = strippedCommand.trim();
-  if (!command.endsWith('&')) {
-    command += ';';
-  }
-  return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+  // Emit an EXIT trap on its own line so a body comment, heredoc, or terminal
+  // operator cannot consume the appended pgrep/exit epilogue. The trap action
+  // captures $? before running pgrep and re-exits with it, preserving the
+  // body's exit status. Both the path and the whole action are single-quoted
+  // via singleQuoteForShell so hostile paths stay literal shell data.
+  // Known boundary: a body that removes (`trap - EXIT`) or replaces the EXIT
+  // trap intentionally opts out — our pgrep temp file is not written and the
+  // epilogue does not re-emit the exit status. The trap is still the right
+  // choice because, unlike an appended epilogue, it survives trailing
+  // comments, heredocs, and terminal operators, and still fires when the body
+  // calls `exit`.
+  const trapAction = `${TRAP_ACTION_PREFIX}${singleQuoteForShell(tempFilePath)}${TRAP_ACTION_SUFFIX}`;
+  const newline = String.fromCharCode(10);
+  return `trap ${singleQuoteForShell(trapAction)} EXIT${newline}${strippedCommand.trim()}`;
 }
 
 export function parsePgrepFile(
@@ -337,7 +454,7 @@ export function getShellToolDescription(): string {
   if (os.platform() === 'win32') {
     return `This tool executes a given shell command using PowerShell (\`powershell.exe\` or \`pwsh\`) with \`-NoProfile -Command <command>\`. Use PowerShell-compatible syntax: quote paths containing spaces with single quotes (for example, \`New-Item -ItemType Directory -Force -Path 'C:\\My Folder'\`) and represent an apostrophe inside a single-quoted path with two single quotes. Independent background processes can be started with \`Start-Process\`.${returnedInfo}`;
   }
-  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
+  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`: a trailing \`&\` is detected via AST parsing and the command is launched as a managed background job with a stable job id (use check_async_tasks to inspect or cancel it). Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`. Note: a command that daemonizes (e.g. setsid or double-fork) escapes the process group and cannot be stopped by job cancellation.${returnedInfo}`;
 }
 
 export function getCommandDescription(): string {
@@ -353,4 +470,54 @@ export function getCommandDescription(): string {
     'Exact bash command to execute as `bash -c <command>`' +
     cmd_substitution_warning
   );
+}
+
+/** Description for the `is_background` schema property (non-Windows only). */
+export function getBackgroundParamDescription(): string {
+  return 'When true, the command is launched as a managed background job and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. A background job runs until it exits on its own — timeout_seconds bounds only the launch, not the job lifetime.';
+}
+
+/** JSON Schema for the run_shell_command tool parameters. */
+export function buildShellSchema(): {
+  type: 'object';
+  properties: Record<string, { type: string; description: string }>;
+  required: string[];
+} {
+  const properties: Record<string, { type: string; description: string }> = {
+    command: {
+      type: 'string',
+      description: getCommandDescription(),
+    },
+    description: {
+      type: 'string',
+      description:
+        'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
+    },
+    dir_path: {
+      type: 'string',
+      description:
+        '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages"), a relative path (e.g., "src/utils"), or an absolute path within the workspace.',
+    },
+    directory: {
+      type: 'string',
+      description:
+        'Alternative parameter name for dir_path (for backward compatibility).',
+    },
+    timeout_seconds: {
+      type: 'number',
+      description:
+        '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
+    },
+  };
+  if (os.platform() !== 'win32') {
+    properties['is_background'] = {
+      type: 'boolean',
+      description: getBackgroundParamDescription(),
+    };
+  }
+  return {
+    type: 'object',
+    properties,
+    required: ['command'],
+  };
 }

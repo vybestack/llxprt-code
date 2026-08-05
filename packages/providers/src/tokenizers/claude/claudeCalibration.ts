@@ -1,0 +1,222 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import {
+  CLAUDE_CONTENT_FEATURE_NAMES,
+  type ClaudeContentFeatureName,
+  type ClaudeContentFeatures,
+} from './claudeContentFeatures.js';
+
+/**
+ * Held-out evidence that justified activating a calibration.
+ *
+ * `underestimationP95Percent` is the 95th percentile of `max(0, (actual -
+ * predicted) / actual)`: overestimates contribute zero, so the statistic only
+ * grows when an estimator claims a prompt is smaller than it really is.
+ */
+export interface ClaudeCalibrationHeldOut {
+  readonly sampleCount: number;
+  readonly mapePercent: number;
+  readonly rmse: number;
+  readonly underestimationP95Percent: number;
+  readonly baselineEstimator: string;
+  readonly baselineMapePercent: number;
+  readonly baselineRmse: number;
+  readonly baselineUnderestimationP95Percent: number;
+  readonly relativeMapeImprovementPercent: number;
+}
+
+export interface ClaudeCalibrationProvenance {
+  readonly corpusId: string;
+  readonly corpusObservations: number;
+  readonly endpointHost: string;
+  readonly groundTruth: string;
+  readonly fittedAt: string;
+  readonly modelSelection: string;
+  /** Base-counter range the calibration was actually measured over. */
+  readonly validatedBaseTokenRange: readonly [number, number];
+}
+
+export interface ClaudeFeatureCoefficient {
+  readonly feature: ClaudeContentFeatureName;
+  readonly coefficient: number;
+}
+
+/**
+ * An immutable, model-scoped correction from a base-counter reading to a
+ * predicted provider prompt-token count.
+ *
+ * A calibration is only valid for the exact tuple it records: canonical model,
+ * wire protocol, estimator version, base counter asset and finalized
+ * request-projection revision. Any of those changing invalidates it.
+ */
+export interface ClaudeCalibration {
+  readonly canonicalModelFamily: string;
+  readonly protocol: PromptEnvelopeProtocol;
+  readonly estimatorVersion: string;
+  readonly baseCounterAssetRevision: string;
+  readonly projectionRevision: number;
+  readonly intercept: number;
+  readonly baseTokenCoefficient: number;
+  readonly featureCoefficients: readonly ClaudeFeatureCoefficient[];
+  readonly heldOut: ClaudeCalibrationHeldOut;
+  readonly provenance: ClaudeCalibrationProvenance;
+}
+
+/**
+ * The part of a calibration that turns a reading into a count. Narrowing the
+ * application contract to this keeps the fitting tool and the runtime using
+ * one implementation without the tool having to invent held-out metrics
+ * before it has computed them.
+ */
+export type ClaudeCalibrationCoefficients = Pick<
+  ClaudeCalibration,
+  'intercept' | 'baseTokenCoefficient' | 'featureCoefficients'
+>;
+
+/** Minimum relative held-out MAPE improvement required to activate (AC5). */
+export const CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT = 10;
+
+function isKnownFeature(name: string): name is ClaudeContentFeatureName {
+  return (CLAUDE_CONTENT_FEATURE_NAMES as readonly string[]).includes(name);
+}
+
+/**
+ * Whether a calibration is internally consistent and cleared the activation
+ * gate. Assets are validated at module load so a mis-edited coefficient table
+ * fails immediately rather than silently shipping an unjustified estimate.
+ */
+function hasUsableCoefficients(calibration: ClaudeCalibration): boolean {
+  const features = calibration.featureCoefficients.map(
+    (entry) => entry.feature,
+  );
+  return (
+    Number.isFinite(calibration.intercept) &&
+    Number.isFinite(calibration.baseTokenCoefficient) &&
+    new Set(features).size === features.length &&
+    calibration.featureCoefficients.every(
+      (entry) =>
+        isKnownFeature(entry.feature) && Number.isFinite(entry.coefficient),
+    )
+  );
+}
+
+function hasUsableHeldOutMetrics(heldOut: ClaudeCalibrationHeldOut): boolean {
+  const metrics = [
+    heldOut.mapePercent,
+    heldOut.rmse,
+    heldOut.underestimationP95Percent,
+    heldOut.baselineMapePercent,
+    heldOut.baselineRmse,
+    heldOut.baselineUnderestimationP95Percent,
+  ];
+  return (
+    Number.isInteger(heldOut.sampleCount) &&
+    heldOut.sampleCount > 0 &&
+    heldOut.baselineMapePercent > 0 &&
+    metrics.every((metric) => Number.isFinite(metric) && metric >= 0)
+  );
+}
+
+/**
+ * The improvement is recomputed from the two MAPE values rather than trusted
+ * from the asset, so a mis-stated headline number cannot activate a
+ * calibration that the underlying measurements do not support.
+ */
+export function relativeMapeImprovementPercent(
+  heldOut: ClaudeCalibrationHeldOut,
+): number {
+  return (
+    ((heldOut.baselineMapePercent - heldOut.mapePercent) /
+      heldOut.baselineMapePercent) *
+    100
+  );
+}
+
+function clearsActivationGate(heldOut: ClaudeCalibrationHeldOut): boolean {
+  if (!hasUsableHeldOutMetrics(heldOut)) return false;
+  if (
+    relativeMapeImprovementPercent(heldOut) <
+    CLAUDE_ACTIVATION_MIN_RELATIVE_MAPE_IMPROVEMENT_PERCENT
+  ) {
+    return false;
+  }
+  return (
+    heldOut.underestimationP95Percent <=
+    heldOut.baselineUnderestimationP95Percent
+  );
+}
+
+export function isActivatableClaudeCalibration(
+  calibration: ClaudeCalibration,
+): boolean {
+  return (
+    hasUsableCoefficients(calibration) &&
+    clearsActivationGate(calibration.heldOut)
+  );
+}
+
+/**
+ * Apply a calibration to one base-counter reading and its content features.
+ *
+ * Pure, deterministic and allocation-free. An empty prompt yields exactly 0:
+ * the intercept models per-request framing that only exists when there is a
+ * request, so it is not added to nothing.
+ *
+ * The result is floored at the base-counter reading. The fitted intercept is
+ * negative, which is correct inside the measured request-size range but would
+ * extrapolate to an absurd count for a request far smaller than anything
+ * observed. Every observation in every corpus had a provider count above its
+ * base-counter reading, so that reading is a measured lower bound rather than
+ * an invented guard, and inside the validated range the floor never binds.
+ */
+export function applyClaudeCalibration(
+  baseTokens: number,
+  features: ClaudeContentFeatures,
+  calibration: ClaudeCalibrationCoefficients,
+): number {
+  if (baseTokens === 0 && features.codePoints === 0) return 0;
+  const total =
+    calibration.intercept + marginalTokens(baseTokens, features, calibration);
+  const rounded = total <= 0 ? 0 : Math.round(total);
+  return rounded < baseTokens ? baseTokens : rounded;
+}
+
+function marginalTokens(
+  baseTokens: number,
+  features: ClaudeContentFeatures,
+  calibration: ClaudeCalibrationCoefficients,
+): number {
+  let total = calibration.baseTokenCoefficient * baseTokens;
+  for (const entry of calibration.featureCoefficients) {
+    total += entry.coefficient * features[entry.feature];
+  }
+  return total;
+}
+
+/**
+ * The content-only contribution of one piece of a request.
+ *
+ * The calibration's features are extensive, so a whole request decomposes into
+ * one per-request framing constant plus the sum of its parts. The intercept is
+ * that framing constant: it belongs to the request, not to any single message,
+ * and adding it once per message would inflate every count.
+ *
+ * This is used for incremental history accounting, where the per-request
+ * framing is carried by the baseline that provider usage synchronizes after
+ * every response, not by the individual entries.
+ */
+export function applyClaudeMarginalCalibration(
+  baseTokens: number,
+  features: ClaudeContentFeatures,
+  calibration: ClaudeCalibrationCoefficients,
+): number {
+  if (baseTokens === 0 && features.codePoints === 0) return 0;
+  const marginal = marginalTokens(baseTokens, features, calibration);
+  const rounded = marginal <= 0 ? 0 : Math.round(marginal);
+  return rounded < baseTokens ? baseTokens : rounded;
+}

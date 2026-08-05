@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { asStringArray } from './typed-test-helpers.ts';
+import { asRecord, asStringArray } from './typed-test-helpers.ts';
 import {
   REPRESENTATIVE_RESULT,
   REPRESENTATIVE_TELEMETRY,
@@ -38,10 +38,9 @@ describe('normalized canary evidence', () => {
     expect(metrics.valid).toBe(true);
     expect(metrics['validation_errors']).toEqual([]);
     expectSanitized(metrics);
-    expect(metrics.provenance.actual_ocr_version).toBe('1.7.16');
-    expect(metrics.provenance.canonical_config_fingerprint).toMatch(
-      /^[0-9a-f]{64}$/,
-    );
+    const provenance = asRecord(metrics.provenance);
+    expect(provenance.actual_ocr_version).toBe('1.7.16');
+    expect(provenance.canonical_config_fingerprint).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it.each([
@@ -245,5 +244,24 @@ describe('normalized canary evidence', () => {
         asStringArray(metrics['validation_errors']).length,
       ).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('fail-fast semantics — embedded driver signals failure via core.setFailed', () => {
+  it('does NOT signal failure for a valid canary input', () => {
+    const result = runEmbeddedMetricsScript(OBSERVED_OCR_VERSION_OUTPUT);
+    expect(result._failed).toBe(false);
+    expect(result._failureMessage).toBeNull();
+    expect(result.valid).toBe(true);
+  });
+
+  it('DOES signal failure for an invalid canary input and reports the validation errors', () => {
+    const result = runEmbeddedMetricsScript('');
+    expect(result._failed).toBe(true);
+    expect(result._failureMessage).not.toBeNull();
+    expect(result._failureMessage).toMatch(
+      /OCR canary evidence is invalid: .*OCR version output/i,
+    );
+    expect(result.valid).toBe(false);
   });
 });

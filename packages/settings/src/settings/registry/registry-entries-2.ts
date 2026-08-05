@@ -349,6 +349,28 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     validate: validateTaskMaxAsync,
   },
   {
+    // #1995 slice 2
+    key: 'shell-max-background-jobs',
+    category: 'cli-behavior',
+    description:
+      'Maximum concurrent managed background shell jobs. Default 10, use -1 for unlimited.',
+    type: 'number',
+    default: 10,
+    persistToProfile: true,
+    validate: validateShellMaxBackgroundJobs,
+  },
+  {
+    // #1995 slice 2
+    key: 'shell-background-log-max-bytes',
+    category: 'cli-behavior',
+    description:
+      'Maximum log file size in bytes for managed background shell jobs. A job exceeding this cap is failed. Default 8388608 (8 MiB).',
+    type: 'number',
+    default: 8388608,
+    persistToProfile: true,
+    validate: validateShellBackgroundLogMaxBytes,
+  },
+  {
     key: 'subagents.async.enabled',
     category: 'cli-behavior',
     description: 'Enable async subagents for this profile.',
@@ -469,4 +491,33 @@ function validateTaskMaxAsync(value: unknown): ValidationResult {
     message:
       'task-max-async must be -1 (unlimited) or an integer between 1 and 100',
   };
+}
+
+function validateShellMaxBackgroundJobs(value: unknown): ValidationResult {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return {
+      success: false,
+      message:
+        'shell-max-background-jobs must be -1 (unlimited) or a positive integer',
+    };
+  }
+  if (value === -1 || value >= 1) {
+    return { success: true, value };
+  }
+  return {
+    success: false,
+    message:
+      'shell-max-background-jobs must be -1 (unlimited) or a positive integer',
+  };
+}
+
+function validateShellBackgroundLogMaxBytes(value: unknown): ValidationResult {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1024) {
+    return {
+      success: false,
+      message:
+        'shell-background-log-max-bytes must be an integer of at least 1024',
+    };
+  }
+  return { success: true, value };
 }

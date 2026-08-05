@@ -23,6 +23,8 @@ import {
   mock,
   setSystemTime as bunSetSystemTime,
   describe as bunDescribe,
+  it as bunIt,
+  test as bunTest,
   expect,
 } from 'bun:test';
 import { drainMicrotasks } from 'bun:jsc';
@@ -32,6 +34,7 @@ import {
   waitFor,
   isMockFunction,
   setWaitForScheduler,
+  setDefaultWaitForScheduler,
   type WaitForScheduler,
 } from './stub-helpers.js';
 import { resolveModuleSpecifier } from './module-resolution.js';
@@ -200,6 +203,7 @@ const bunWaitForScheduler: WaitForScheduler = {
 };
 
 setWaitForScheduler(bunWaitForScheduler);
+setDefaultWaitForScheduler(bunWaitForScheduler);
 
 const resolveActualId = (id: string): string => {
   const resolvedId = resolveModuleSpecifier(id);
@@ -365,19 +369,9 @@ function automockValue(
         value: state.prototype,
       });
       for (const key of Reflect.ownKeys(value)) {
-        if (['length', 'name', 'prototype'].includes(String(key))) continue;
-        const staticDescriptor = Object.getOwnPropertyDescriptor(value, key);
-        if (!staticDescriptor) continue;
-        if (!('value' in staticDescriptor)) {
-          Object.defineProperty(mockedConstructor, key, staticDescriptor);
-          continue;
+        if (!['length', 'name', 'prototype'].includes(String(key))) {
+          defineAutomockedProperty(mockedConstructor, value, key, references);
         }
-        Object.defineProperty(mockedConstructor, key, {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: automockValue(staticDescriptor.value, references),
-        });
       }
       return mockedConstructor;
     }
@@ -389,24 +383,44 @@ function automockValue(
   const mockedObject: Record<string | symbol, unknown> = {};
   references.set(value, mockedObject);
   for (const key of Reflect.ownKeys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (!descriptor) continue;
-    // Accessor properties are copied as accessors rather than read. Invoking a
-    // getter on a prototype (e.g. ChildProcess.prototype.stdin in
-    // node:child_process) throws because `this` is the prototype and not a
-    // real instance, which would abort the whole automock.
-    if (!('value' in descriptor)) {
-      Object.defineProperty(mockedObject, key, descriptor);
-      continue;
-    }
-    Object.defineProperty(mockedObject, key, {
-      configurable: true,
-      enumerable: descriptor.enumerable,
-      writable: true,
-      value: automockValue(descriptor.value, references),
-    });
+    defineAutomockedProperty(mockedObject, value, key, references);
   }
   return mockedObject;
+}
+
+/**
+ * Copies one property from `source` onto `target` in automocked form.
+ *
+ * Accessor properties are mirrored as accessors rather than being read
+ * eagerly. Some built-in prototypes (e.g. `node:fs`'s `Dirent`/`ReadStream`)
+ * expose getters backed by private class fields, which throw when invoked on
+ * anything but a real instance. Reading those eagerly aborted the automock of
+ * the entire module; mirroring them defers the failure to a caller that
+ * actually touches the property, which is also what Vitest's automock does.
+ */
+function defineAutomockedProperty(
+  target: object,
+  source: object,
+  key: string | symbol,
+  references: Map<object, unknown>,
+): void {
+  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+  if (!descriptor) return;
+  const getter = descriptor.get;
+  if (getter !== undefined) {
+    Object.defineProperty(target, key, {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      get: () => automockValue(getter.call(source), references),
+    });
+    return;
+  }
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    writable: true,
+    value: automockValue(descriptor.value, references),
+  });
 }
 
 /**
@@ -748,6 +762,7 @@ const unsupportedMockRegistry = new Proxy(Object.freeze({}), {
 const originalRestoreAllMocks = (bunVi as BunViBase).restoreAllMocks.bind(
   bunVi,
 );
+const originalClearAllMocks = (bunVi as BunViBase).clearAllMocks.bind(bunVi);
 
 const originalSpyOn = (bunVi as BunViBase).spyOn.bind(bunVi);
 
@@ -890,10 +905,12 @@ const viAugmentations = {
     runCleanupSteps([
       () => restoreInstalledSpies(),
       () => originalRestoreAllMocks(),
-      // Bun's restoreAllMocks also reverts module mocks, but Vitest's only
-      // restores spies. Re-apply the registered module mocks so a
-      // restoreAllMocks() in one hook cannot un-mock modules for the rest of
-      // the file.
+      // Vitest restores the original implementation AND resets
+      // recorded calls; Bun only does the former, so spy history
+      // would otherwise leak across tests.
+      () => originalClearAllMocks(),
+      // Bun also reverts module mocks, which Vitest does not, so
+      // re-register them and clear their (possibly nested) calls.
       () => reapplyModuleMocks(),
       () => clearModuleMockCalls(),
       () => envRegistry.restoreAll(),
@@ -998,6 +1015,7 @@ const forceOverride = new Set([
   'restoreAllMocks',
   'clearAllTimers',
   'setSystemTime',
+  'waitFor',
 ]);
 
 for (const [key, value] of Object.entries(viAugmentations)) {
@@ -1020,27 +1038,54 @@ for (const [key, value] of Object.entries(viAugmentations)) {
   }
 }
 
-// Add describe.sequential as an alias for describe. Bun runs tests
-// sequentially by default (--max-concurrency 1 in bun test), so the
-// semantic guarantee is preserved without explicit opt-in.
-const describeRecord = bunDescribe as unknown as Record<string, unknown>;
-if (!describeRecord.sequential) {
+/**
+ * Adds `key` to `target` when it is absent, tolerating hosts that expose the
+ * property as non-configurable or read-only. Bun's `describe`/`it` objects are
+ * native bindings whose descriptor flags vary by version, so the two-step
+ * defineProperty/assignment fallback keeps augmentation best-effort rather
+ * than fatal at preload time.
+ */
+function defineIfAbsent(target: object, key: string, value: unknown): void {
+  if ((target as Record<string, unknown>)[key] !== undefined) {
+    return;
+  }
   try {
-    Object.defineProperty(bunDescribe, 'sequential', {
-      value: bunDescribe,
+    Object.defineProperty(target, key, {
+      value,
       writable: true,
       enumerable: true,
       configurable: true,
     });
   } catch {
-    // If defineProperty fails (non-configurable), try direct assignment.
     try {
-      describeRecord.sequential = bunDescribe;
+      (target as Record<string, unknown>)[key] = value;
     } catch {
       // Property is truly read-only; skip.
     }
   }
 }
+
+// Add describe.sequential as an alias for describe. Bun runs tests
+// sequentially by default (--max-concurrency 1 in bun test), so the
+// semantic guarantee is preserved without explicit opt-in.
+defineIfAbsent(bunDescribe, 'sequential', bunDescribe);
+
+// Vitest exposes `runIf(condition)` on `it`, `test` and `describe` as the
+// inverse of `skipIf`. Bun ships `skipIf`/`todoIf` but not `runIf`, so tests
+// that gate on a platform or capability probe fail to even collect. Bun's
+// `vitest` module re-exports the very same `it`/`test`/`describe` objects as
+// `bun:test`, so augmenting them here covers both import specifiers.
+type ConditionalRunner<T> = (condition: boolean) => T;
+
+function runIfFor<T extends { skipIf: ConditionalRunner<T> }>(
+  runner: T,
+): ConditionalRunner<T> {
+  return (condition: boolean) => runner.skipIf(!condition);
+}
+
+defineIfAbsent(bunIt, 'runIf', runIfFor(bunIt));
+defineIfAbsent(bunTest, 'runIf', runIfFor(bunTest));
+defineIfAbsent(bunDescribe, 'runIf', runIfFor(bunDescribe));
 
 // Vitest-compatible custom matcher: toHaveBeenCalledExactlyOnceWith.
 // Bun's expect does not provide this matcher, so we add it via expect.extend.

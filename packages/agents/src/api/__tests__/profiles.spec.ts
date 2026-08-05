@@ -23,7 +23,7 @@
  *        full raw>keyName>inline>keyfile>oauth>none chain.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import * as fc from 'fast-check';
 import { buildAgent, drain, countType } from './helpers/agentHarness.js';
 import {

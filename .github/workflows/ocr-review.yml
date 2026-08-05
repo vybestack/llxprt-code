@@ -1361,6 +1361,69 @@ jobs:
             echo "SAME_HEAD=${SAME_HEAD}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve effective review context
+        id: review-context
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
+          RANGE_FROM_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          TRUSTED_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            // --- BEGIN OCR REVIEW CONTEXT SNIPPET ---
+            function resolveEffectiveReviewContext(input) {
+              const eventName =
+                input && typeof input.eventName === 'string' ? input.eventName : '';
+              const mergeBaseSha =
+                input && typeof input.mergeBaseSha === 'string' ? input.mergeBaseSha : '';
+              const rangeFromSha =
+                input && typeof input.rangeFromSha === 'string' ? input.rangeFromSha : '';
+              const rangeMode =
+                input && typeof input.rangeMode === 'string' ? input.rangeMode : '';
+              const prNumber =
+                input && typeof input.prNumber === 'string' ? input.prNumber : '';
+              const trustedBaseSha =
+                input && typeof input.trustedBaseSha === 'string'
+                  ? input.trustedBaseSha
+                  : '';
+              if (eventName === 'workflow_dispatch') {
+                return {
+                  fromSha: mergeBaseSha,
+                  rangeMode: 'full',
+                  prNumber,
+                  trustedBaseSha,
+                };
+              }
+              return {
+                fromSha: rangeFromSha,
+                rangeMode,
+                prNumber,
+                trustedBaseSha,
+              };
+            }
+            // --- END OCR REVIEW CONTEXT SNIPPET ---
+
+            const result = resolveEffectiveReviewContext({
+              eventName: process.env.EVENT_NAME || '',
+              mergeBaseSha: process.env.MERGE_BASE_SHA || '',
+              rangeFromSha: process.env.RANGE_FROM_SHA || '',
+              rangeMode: process.env.RANGE_MODE || '',
+              prNumber: process.env.PR_NUMBER || '',
+              trustedBaseSha: process.env.TRUSTED_BASE_SHA || '',
+            });
+            const lines = [
+              `OCR_EFFECTIVE_FROM_SHA=${result.fromSha}`,
+              `OCR_EFFECTIVE_RANGE_MODE=${result.rangeMode}`,
+              `OCR_EFFECTIVE_PR_NUMBER=${result.prNumber}`,
+              `OCR_EFFECTIVE_TRUSTED_BASE_SHA=${result.trustedBaseSha}`,
+            ];
+            fs.appendFileSync(process.env.GITHUB_ENV, lines.join('\n') + '\n');
       - name: Initialize OCR artifact files
         shell: bash
         run: |
@@ -1671,9 +1734,9 @@ jobs:
       - name: Verify review scope includes changed tests
         shell: bash
         env:
-          FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
+          FROM_SHA: ${{ env.OCR_EFFECTIVE_FROM_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
@@ -2169,8 +2232,8 @@ jobs:
         # Parse failures are handled distinctly in the posting step
         # (OCR failed vs. no findings).
         env:
-          FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
-          RANGE_MODE: ${{ github.event_name == 'workflow_dispatch' && 'full' || steps.resolve-range.outputs.RANGE_MODE }}
+          FROM_SHA: ${{ env.OCR_EFFECTIVE_FROM_SHA }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ github.event_name == 'workflow_dispatch' && steps.ocr-transport-monitor.outputs.proxy_url || vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -2178,7 +2241,7 @@ jobs:
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
           EVENT_NAME: ${{ github.event_name }}
           # Feature 1 (issue #2670): business context for the LLM.
-          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           PR_TITLE: ${{ steps.pr-context.outputs.pr_title }}
           PR_BODY: ${{ steps.pr-context.outputs.pr_body }}
           OCR_BACKGROUND: ${{ vars.OCR_BACKGROUND }}
@@ -2535,10 +2598,10 @@ jobs:
           BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          API_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
+          API_BASE_SHA: ${{ env.OCR_EFFECTIVE_TRUSTED_BASE_SHA }}
           API_HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
-          FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
-          RANGE_MODE: ${{ github.event_name == 'workflow_dispatch' && 'full' || steps.resolve-range.outputs.RANGE_MODE }}
+          FROM_SHA: ${{ env.OCR_EFFECTIVE_FROM_SHA }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
           FALLBACK_REASON: ${{ steps.resolve-range.outputs.FALLBACK_REASON }}
           CHECKPOINT_BEFORE: ${{ steps.read-checkpoint.outputs.CHECKPOINT_ENCODED }}
           EVENT_NAME: ${{ github.event_name }}
@@ -2551,7 +2614,7 @@ jobs:
           OCR_POLICY_HASH: ${{ vars.OCR_POLICY_HASH }}
           OCR_WORKFLOW_SCHEMA_HASH: ${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}
           OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
-          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           # Whether this run is an automatic (pull_request_target) trigger.
           # Automatic runs increment the auto-review counter; manual runs do not.
           IS_AUTOMATIC: ${{ needs.auto-review-gate.outputs.is-manual == 'false' }}
@@ -3039,6 +3102,11 @@ jobs:
             let rawFindingCount = 0;
             let schemaInvalidCount = 0;
             const overflowRouted = [];
+            // Issue #2930: findings the 422 fallback proved sit outside the PR
+            // diff. Kept separate from overflowRouted because they were not
+            // held back by the inline cap — reporting them as cap overflow
+            // would state the wrong reason in both the summary and telemetry.
+            const outOfDiffRouted = [];
             const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
             const exitCode = readExitCode('ocr-exit-code.txt');
             if (exitCode !== 0) {
@@ -3443,6 +3511,367 @@ jobs:
                   body: comment.body,
                 })));
             }
+            // Issue #2930: partial adoption of upstream OCR 1.8.0/1.8.4's
+            // HTTP 422 line-resolution fallback. We keep our inline cap and
+            // summary routing (see dev-docs/ocr-version-1.8.4-comparison.md for
+            // the full comparison and decision), but adopt the grouping: when a
+            // batch review is rejected because a line could not be resolved,
+            // drop the comments we can PROVE sit outside the PR diff and re-send
+            // the survivors as ONE review instead of N individual writes.
+            //
+            // GitHub documents 422 on the reviews endpoint as "Validation
+            // failed, OR the endpoint has been spammed", so a bare status code
+            // is not evidence of a line problem. Only a confirmed line/diff
+            // validation error may activate the grouped retry; anything else
+            // (spam/abuse throttling in particular) falls through to the
+            // pre-existing per-comment loop, because re-sending a batch into a
+            // throttled endpoint would deepen the incident.
+            const LINE_RESOLUTION_PATTERNS = [
+              /could not be resolved/i,
+              /must be part of the diff/i,
+              /not part of the diff/i,
+              /outside the diff/i,
+              /diff hunk/i,
+            ];
+            // Defensive: this endpoint returns `errors` as plain strings, but
+            // other REST endpoints return structured {resource, field, code}.
+            const LINE_RESOLUTION_FIELDS = new Set([
+              'line',
+              'start_line',
+              'position',
+              'original_line',
+              'original_start_line',
+            ]);
+
+            function errorStatus(error) {
+              if (!error || typeof error !== 'object') return undefined;
+              // Octokit puts the status on the error; a re-wrapped error may
+              // only carry it on `response`. Take the first candidate that is
+              // actually a number so a junk top-level `status` cannot mask a
+              // valid `response.status`.
+              const candidates = [error.status, error.response && error.response.status];
+              for (const candidate of candidates) {
+                if (candidate === undefined || candidate === null) continue;
+                const parsed = Number(candidate);
+                if (Number.isInteger(parsed)) return parsed;
+              }
+              return undefined;
+            }
+
+            function isLineResolutionFailure(error) {
+              if (!error) return false;
+              const texts = [];
+              // Octokit composes `message` as "<data.message>: <errors[]>", so
+              // it carries the decisive wording on the live payload. The raw
+              // errors[] array is read too because a re-wrapped error may drop
+              // one or the other.
+              if (error.message) texts.push(String(error.message));
+              const errors = (error.response && error.response.data && error.response.data.errors)
+                || (error.data && error.data.errors)
+                || error.errors;
+              if (Array.isArray(errors)) {
+                for (const entry of errors) {
+                  if (!entry) continue;
+                  if (typeof entry === 'string') {
+                    texts.push(entry);
+                    continue;
+                  }
+                  // A structured validation error naming a line-position field
+                  // is conclusive on its own, whatever its message says: the
+                  // field itself identifies the problem as line resolution.
+                  // (Upstream notes this branch is unreachable for the reviews
+                  // endpoint, which returns plain strings; it is kept for
+                  // other endpoints' structured error shape.)
+                  if (entry.field && LINE_RESOLUTION_FIELDS.has(String(entry.field))) {
+                    return true;
+                  }
+                  if (entry.message) texts.push(String(entry.message));
+                }
+              }
+              const text = texts.join(' | ');
+              if (!text) return false;
+              return LINE_RESOLUTION_PATTERNS.some((pattern) => pattern.test(text));
+            }
+
+            // Parse a unified-diff patch into RIGHT-side (new file) line ranges,
+            // ONE RANGE PER HUNK. Ranges rather than a flat line set because
+            // GitHub requires a multi-line comment's start_line and line to sit
+            // inside the SAME hunk; a flat set cannot tell a legal span from one
+            // that straddles two hunks, and a straddling span 422s again.
+            //
+            // Within a hunk the new-file line numbers run contiguously from the
+            // header's start: additions and context lines advance the new-side
+            // counter, deletions do not. `complete` is false when the observed
+            // body line counts disagree with the header's declared counts,
+            // which means the patch was clipped — treating a clipped prefix as
+            // authoritative would prove later lines "outside the diff" and
+            // silently relegate postable findings to the summary.
+            //
+            // BOTH sides are validated. Checking only the new side misses a
+            // patch truncated inside a run of deletions (the new-side count is
+            // already satisfied by then), which would leave `complete` true for
+            // a hunk whose tail — and possibly whole later hunks — is missing.
+            // The caller additionally cross-checks the totals against the file
+            // entry's own additions/deletions, which is what catches a patch
+            // truncated exactly on a hunk boundary.
+            function parseDiffHunkInventory(patch) {
+              if (!patch) return { ranges: [], complete: false, additions: 0, deletions: 0 };
+              const ranges = [];
+              const hunkHeaderRegex = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+              const lines = String(patch).split(String.fromCharCode(10));
+              let current = null;
+              let sawHunk = false;
+              let complete = true;
+              let additions = 0;
+              let deletions = 0;
+              function flush() {
+                if (!current) return;
+                if (current.observedNew !== current.expectedNew
+                  || current.observedOld !== current.expectedOld) {
+                  complete = false;
+                }
+                // A pure-deletion hunk ("+N,0") never advanced the new-side
+                // counter, so end < start and there is nothing to comment on.
+                if (current.end >= current.start) {
+                  ranges.push({ start: current.start, end: current.end });
+                }
+              }
+              for (const line of lines) {
+                const match = hunkHeaderRegex.exec(line);
+                if (match) {
+                  flush();
+                  const start = parseInt(match[3], 10);
+                  const expectedNew = match[4] === undefined ? 1 : parseInt(match[4], 10);
+                  const expectedOld = match[2] === undefined ? 1 : parseInt(match[2], 10);
+                  current = {
+                    start,
+                    end: start - 1,
+                    next: start,
+                    expectedNew,
+                    observedNew: 0,
+                    expectedOld,
+                    observedOld: 0,
+                  };
+                  sawHunk = true;
+                  continue;
+                }
+                if (!current) continue;
+                if (line.startsWith('\\')) continue; // "\ No newline at end of file"
+                if (line.startsWith('-')) { // deletion: old file only
+                  current.observedOld += 1;
+                  deletions += 1;
+                  continue;
+                }
+                if (line.startsWith('+') || line.startsWith(' ')) {
+                  current.end = current.next;
+                  current.next += 1;
+                  current.observedNew += 1;
+                  if (line.startsWith('+')) {
+                    additions += 1;
+                  } else {
+                    current.observedOld += 1; // context advances both sides
+                  }
+                }
+                // Anything else (notably a bare "" from a trailing newline) is
+                // not a diff body line and must not advance the counters.
+              }
+              flush();
+              return { ranges, complete: sawHunk && complete, additions, deletions };
+            }
+
+            // TRI-STATE: 'valid' | 'invalid' | 'unknown'.
+            //
+            // 'invalid' permanently relegates a finding to the sticky summary
+            // without ever attempting to post it, so it must be PROVABLE.
+            // Anything we cannot check is 'unknown', which keeps the
+            // pre-existing per-comment behaviour rather than silently voiding a
+            // comment that might well post.
+            function classifyCommentAgainstDiff(comment, diff) {
+              if (!diff || !diff.complete) return 'unknown';
+              const commentPath = comment.path;
+              // Not among the PR's changed files at all: provably out of diff.
+              if (!diff.known.has(commentPath)) return 'invalid';
+              // In the PR, but GitHub omitted the patch (binary, or over the
+              // diff size limit): we know nothing about its lines.
+              const ranges = diff.files.get(commentPath);
+              if (!ranges) return 'unknown';
+              // We only model RIGHT-side lines; decline to judge anything else.
+              if (comment.side && comment.side !== 'RIGHT') return 'unknown';
+              const endLine = comment.line;
+              if (endLine === undefined || endLine === null) return 'unknown';
+              const startLine = (comment.start_line === undefined || comment.start_line === null)
+                ? endLine
+                : comment.start_line;
+              // A reversed span is malformed and GitHub will reject it.
+              if (startLine > endLine) return 'invalid';
+              // Both endpoints must fall inside ONE hunk.
+              const withinOneHunk = ranges.some(
+                (range) => startLine >= range.start && endLine <= range.end,
+              );
+              return withinOneHunk ? 'valid' : 'invalid';
+            }
+
+            // Does the parsed patch account for every line the file entry says
+            // changed? A truncated patch reports fewer. Missing or non-numeric
+            // totals mean we cannot cross-check, and an unverifiable file is
+            // simply not indexed, so its comments classify "unknown".
+            function patchTotalsAgree(file, parsed) {
+              if (!Number.isInteger(file.additions) || !Number.isInteger(file.deletions)) {
+                return false;
+              }
+              return file.additions === parsed.additions
+                && file.deletions === parsed.deletions;
+            }
+
+            // Build the PR's RIGHT-side diff inventory:
+            //   files    Map<path, Array<{start,end}>> — parsed patches
+            //   known    Set<path>                     — every path in the PR
+            //   complete boolean                       — safe to prove 'invalid'
+            //
+            // Every "cannot judge" condition clears `complete` so that no
+            // comment is discarded: truncated pagination, an empty file list
+            // (impossible for a PR under review, so it means the diff has not
+            // materialised server-side), or a head SHA that moved while we
+            // walked. The head check runs AFTER pagination so a push landing
+            // mid-walk is also caught.
+            async function prDiffHunkInventory(commitSha) {
+              const files = new Map();
+              const known = new Set();
+              let complete = true;
+              const PER_PAGE = 100;
+              const MAX_PAGES = 30;
+              let page = 1;
+              let truncated = true;
+              while (page <= MAX_PAGES) {
+                const res = await github.rest.pulls.listFiles({
+                  owner, repo, pull_number: number, per_page: PER_PAGE, page,
+                });
+                const batch = (res && res.data) || [];
+                for (const file of batch) {
+                  if (!file || !file.filename) continue;
+                  known.add(file.filename);
+                  if (file.patch) {
+                    const parsed = parseDiffHunkInventory(file.patch);
+                    // Per-hunk counts cannot detect a patch truncated exactly
+                    // on a hunk boundary — every hunk we did see is internally
+                    // consistent while whole later hunks are missing. The file
+                    // entry's own additions/deletions totals are the
+                    // independent signal that catches it, so a file is only
+                    // indexed when the parsed patch accounts for all of them.
+                    if (parsed.complete && patchTotalsAgree(file, parsed)) {
+                      files.set(file.filename, parsed.ranges);
+                    }
+                  }
+                }
+                if (batch.length < PER_PAGE) {
+                  truncated = false;
+                  break;
+                }
+                page += 1;
+              }
+              if (truncated) {
+                complete = false;
+                core.warning(`OCR 422 fallback: PR changed-file list exceeded ${MAX_PAGES * PER_PAGE} files; no inline comment will be treated as out-of-diff.`);
+              }
+              if (known.size === 0) {
+                complete = false;
+                core.warning('OCR 422 fallback: PR changed-file list came back empty, which cannot be right for a PR under review; no inline comment will be treated as out-of-diff.');
+              }
+              if (complete && commitSha) {
+                const headRes = await github.rest.pulls.get({ owner, repo, pull_number: number });
+                const inventoryHead = headRes && headRes.data && headRes.data.head && headRes.data.head.sha;
+                if (!inventoryHead || inventoryHead !== commitSha) {
+                  complete = false;
+                  core.warning('OCR 422 fallback: PR head moved while resolving diff hunks; no inline comment will be treated as out-of-diff.');
+                }
+              }
+              return { files, known, complete };
+            }
+
+            // Regroup a batch that GitHub rejected with a line-resolution 422.
+            //
+            // Returns { posted, invalidPairs, remaining }:
+            //   posted       comments published by the single grouped review
+            //   invalidPairs provably out-of-diff; the CALLER counts them as
+            //                failed and routes them to the sticky summary, which
+            //                preserves the failedInline invariant that
+            //                shouldAdvanceCheckpoint depends on
+            //   remaining    pairs for the pre-existing per-comment loop
+            //   secondaryFailed  a grouped write was sent and threw, so it may
+            //                    have landed anyway; the caller must re-read
+            //                    before the per-comment loop reposts anything
+            async function regroupLineResolutionFailure(pairs, commitSha) {
+              let diff = null;
+              try {
+                diff = await prDiffHunkInventory(commitSha);
+              } catch (hunkErr) {
+                core.warning(redactSecretDiagnostics(`OCR 422 fallback: could not resolve PR diff hunks (${hunkErr.message || hunkErr}); posting individually.`));
+                return { posted: 0, invalidPairs: [], remaining: pairs, secondaryFailed: false };
+              }
+              const validPairs = [];
+              const unknownPairs = [];
+              const invalidPairs = [];
+              for (const pair of pairs) {
+                const verdict = classifyCommentAgainstDiff(pair.comment, diff);
+                if (verdict === 'valid') {
+                  validPairs.push(pair);
+                } else if (verdict === 'unknown') {
+                  unknownPairs.push(pair);
+                } else {
+                  invalidPairs.push(pair);
+                }
+              }
+              // A grouped retry is only worth sending when classification
+              // actually removed something (an out-of-diff comment, or one we
+              // could not judge). If every comment here survived, we have found
+              // nothing wrong with the payload GitHub just rejected, so a
+              // resend would very likely earn a second 422 from an endpoint
+              // that may already be throttling us. (`pairs` is the
+              // dedup-filtered candidate set rather than the exact rejected
+              // batch, so this is a strong likelihood rather than a certainty.)
+              //
+              // Falling through to the per-comment loop is not merely the safe
+              // choice here, it is the more USEFUL one: GitHub rejects the
+              // whole batch when ANY single comment is unresolvable, so posting
+              // one at a time still publishes every good comment and isolates
+              // the offending one. A repeated batch can only fail as a unit and
+              // tells us nothing about which comment was at fault. Upstream
+              // skips its secondary batch under the same condition.
+              if (validPairs.length === 0 || validPairs.length === pairs.length) {
+                return {
+                  posted: 0,
+                  invalidPairs,
+                  remaining: validPairs.concat(unknownPairs),
+                  secondaryFailed: false,
+                };
+              }
+              try {
+                await github.rest.pulls.createReview({
+                  owner, repo, pull_number: number,
+                  event: 'COMMENT', commit_id: commitSha, comments: validPairs.map((pair) => pair.comment),
+                });
+                core.info(`OCR 422 fallback: posted ${validPairs.length} in-diff inline comment(s) as one grouped review; ${invalidPairs.length} comment(s) were outside the diff.`);
+                return {
+                  posted: validPairs.length,
+                  invalidPairs,
+                  remaining: unknownPairs,
+                  secondaryFailed: false,
+                };
+              } catch (secondaryErr) {
+                core.warning(redactSecretDiagnostics(`OCR 422 fallback: grouped retry failed (${secondaryErr.message || secondaryErr}); posting individually.`));
+                // The grouped write may have been committed before the error
+                // reached us (a 5xx or a dropped connection), so the survivors
+                // are returned for individual posting only after the caller
+                // re-reads what actually landed.
+                return {
+                  posted: 0,
+                  invalidPairs,
+                  remaining: validPairs.concat(unknownPairs),
+                  secondaryFailed: true,
+                };
+              }
+            }
+
 
             // Issue #2575: reviewed-range manifest for completeness tracking.
             // A partial OCR run must never be mistaken for complete coverage.
@@ -4158,10 +4587,58 @@ jobs:
                 } catch (listErr) {
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
+                // Issue #2930: when GitHub rejected the batch specifically
+                // because a line could not be resolved, re-send the comments we
+                // can prove are in-diff as ONE grouped review instead of N
+                // individual writes. Provably out-of-diff comments are counted
+                // as failed and routed to the sticky summary here — exactly the
+                // accounting the per-comment loop below performs when an
+                // individual post fails — so the failedInline invariant that
+                // shouldAdvanceCheckpoint relies on is preserved. Every other
+                // failure shape (5xx, network, spam-throttle 422, unrecognised
+                // 422) skips this entirely and uses the loop unchanged.
+                // The refreshed key set above can reveal comments that landed
+                // after the pre-batch read, or that the pre-batch read missed
+                // entirely because the list call failed. Drop them here, before
+                // EITHER recovery path runs, so the grouped review cannot
+                // repost something the per-comment loop would have skipped.
+                const recoverablePairs = [];
+                for (const p of pairsToPost) {
+                  if (existingInlineKeys.has(inlineCommentKey(p.comment))) {
+                    core.warning(`Skipping duplicate OCR inline comment on ${p.comment.path}:${p.comment.line} after batch post uncertainty.`);
+                    skippedExactHistoryCount += 1;
+                  } else {
+                    recoverablePairs.push(p);
+                  }
+                }
+                let pairsToPostIndividually = recoverablePairs;
+                if (errorStatus(batchErr) === 422 && isLineResolutionFailure(batchErr)) {
+                  const regrouped = await regroupLineResolutionFailure(recoverablePairs, headSha);
+                  postedInline += regrouped.posted;
+                  for (const p of regrouped.invalidPairs) {
+                    core.warning(`Skipping OCR inline comment on ${p.comment.path}:${p.comment.line}; it is outside the PR diff hunks. Routing it to the sticky summary.`);
+                    failedInline += 1;
+                    outOfDiffRouted.push(p.finding);
+                  }
+                  pairsToPostIndividually = regrouped.remaining;
+                  // A grouped write that threw may still have been committed,
+                  // so re-read before the per-comment loop can repost it.
+                  if (regrouped.secondaryFailed) {
+                    try {
+                      existingInlineKeys = await existingInlineCommentKeys();
+                    } catch (listErr) {
+                      core.warning(redactSecretDiagnostics(`Could not re-list OCR inline comments after the grouped 422 retry: ${listErr.message || listErr}`));
+                    }
+                  }
+                }
                 // pairsToPost was already capped to effectiveCap before the
                 // batch attempt, so the fallback loop does not need a second
                 // overflow check — every remaining pair is within the cap.
-                for (const p of pairsToPost) {
+                // The per-comment dedup check below is still load-bearing even
+                // though recoverablePairs was already filtered: the grouped 422
+                // retry can refresh existingInlineKeys after a write that may
+                // have landed, and this loop must honour that newer view.
+                for (const p of pairsToPostIndividually) {
                   const c = p.comment;
                   if (existingInlineKeys.has(inlineCommentKey(c))) {
                     core.warning(`Skipping duplicate OCR inline comment on ${c.path}:${c.line} after batch post uncertainty.`);
@@ -4354,6 +4831,16 @@ jobs:
             if (overflowRouted.length > 0) {
               body.push('', '### Inline overflow (exceeds inline comment cap)', '');
               for (const f of overflowRouted) {
+                const where = f && f.path ? `\`${f.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
+                const rawText = f.content || f.comment || f.message || f.body;
+                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                body.push(`- ${where}${label}${text}`);
+              }
+            }
+            if (outOfDiffRouted.length > 0) {
+              body.push('', '### Findings outside the PR diff', '');
+              for (const f of outOfDiffRouted) {
                 const where = f && f.path ? `\`${f.path}\`: ` : '';
                 const label = categorySeverityLabel(f);
                 const rawText = f.content || f.comment || f.message || f.body;
@@ -4815,8 +5302,9 @@ jobs:
                 schema_invalid: schemaInvalidCount,
                 policy_tiered: summaryRouted.length + overflowRouted.length,
                 inline_overflow: overflowRouted.length,
+                out_of_diff: outOfDiffRouted.length,
                 inline: postedInline,
-                summary: lineless.length + summaryRouted.length + overflowRouted.length,
+                summary: lineless.length + summaryRouted.length + overflowRouted.length + outOfDiffRouted.length,
                 overflow: overflowRouted.length,
                 failed: failedInline,
                 severity_distribution: severityDistribution,
@@ -4847,7 +5335,7 @@ jobs:
           TRUSTED_BASE_SHA: ${{ env.TRUSTED_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
           EXPECTED_OCR_VERSION: ${{ env.OCR_VERSION }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
@@ -4859,16 +5347,37 @@ jobs:
             const crypto = require('crypto');
             const fs = require('fs');
 
+            // --- BEGIN OCR CANARY METRICS SNIPPET ---
             function buildCanaryMetrics(input) {
               const errors = [];
-              const meta = input && input.metadata && typeof input.metadata === 'object' &&
-                !Array.isArray(input.metadata) ? input.metadata : {};
+              const meta =
+                input &&
+                input.metadata &&
+                typeof input.metadata === 'object' &&
+                !Array.isArray(input.metadata)
+                  ? input.metadata
+                  : {};
               const requiredStrings = [
-                'runUrl', 'runId', 'prNumber', 'trustedBaseSha', 'mergeBaseSha',
-                'headSha', 'expectedOcrVersion', 'actualOcrVersion', 'workflowSha',
-                'endpointResolutionSource', 'normalizedModel', 'protocol', 'language',
-                'ruleJsonSha256', 'providerUrlSha256', 'configuredOcrSettingsSha256',
-                'ocrConfigFileSha256', 'monitorSha256', 'audience', 'format',
+                'runUrl',
+                'runId',
+                'prNumber',
+                'trustedBaseSha',
+                'mergeBaseSha',
+                'headSha',
+                'expectedOcrVersion',
+                'actualOcrVersion',
+                'workflowSha',
+                'endpointResolutionSource',
+                'normalizedModel',
+                'protocol',
+                'language',
+                'ruleJsonSha256',
+                'providerUrlSha256',
+                'configuredOcrSettingsSha256',
+                'ocrConfigFileSha256',
+                'monitorSha256',
+                'audience',
+                'format',
                 'canonicalConfigFingerprint',
               ];
               for (const key of requiredStrings) {
@@ -4876,17 +5385,28 @@ jobs:
                   errors.push(`metadata ${key} is required`);
                 }
               }
-              for (const key of ['trustedBaseSha', 'mergeBaseSha', 'headSha', 'workflowSha']) {
+              for (const key of [
+                'trustedBaseSha',
+                'mergeBaseSha',
+                'headSha',
+                'workflowSha',
+              ]) {
                 if (typeof meta[key] === 'string' && !/^[a-fA-F0-9]{40}$/.test(meta[key])) {
                   errors.push(`metadata ${key} must be an exact 40-character Git SHA`);
                 }
               }
               if (meta.trustedBaseSha !== meta.mergeBaseSha) {
-                errors.push('trusted checkout base SHA must equal merge-base SHA for comparable canaries');
+                errors.push(
+                  'trusted checkout base SHA must equal merge-base SHA for comparable canaries',
+                );
               }
               for (const key of [
-                'ruleJsonSha256', 'providerUrlSha256', 'configuredOcrSettingsSha256',
-                'ocrConfigFileSha256', 'monitorSha256', 'canonicalConfigFingerprint',
+                'ruleJsonSha256',
+                'providerUrlSha256',
+                'configuredOcrSettingsSha256',
+                'ocrConfigFileSha256',
+                'monitorSha256',
+                'canonicalConfigFingerprint',
               ]) {
                 if (typeof meta[key] === 'string' && !/^[a-f0-9]{64}$/.test(meta[key])) {
                   errors.push(`metadata ${key} must be a SHA-256 value`);
@@ -4922,10 +5442,11 @@ jobs:
                 errors.push('disabled background context hash must be null');
               }
 
-              const exitCodeText = input && typeof input.exitCodeText === 'string'
-                ? input.exitCodeText : '';
+              const exitCodeText =
+                input && typeof input.exitCodeText === 'string' ? input.exitCodeText : '';
               const parsedExitCode = /^-?[0-9]+$/.test(exitCodeText.trim())
-                ? Number(exitCodeText.trim()) : null;
+                ? Number(exitCodeText.trim())
+                : null;
               const exactZeroExit = /^0\n?$/.test(exitCodeText);
               if (!exactZeroExit) {
                 errors.push('OCR exit code must be exactly zero');
@@ -4933,15 +5454,27 @@ jobs:
 
               const timingInput = input && input.commandTiming;
               let commandWallSeconds = null;
-              if (timingInput && typeof timingInput === 'object' && !Array.isArray(timingInput)) {
+              if (
+                timingInput &&
+                typeof timingInput === 'object' &&
+                !Array.isArray(timingInput)
+              ) {
                 commandWallSeconds = timingInput.command_wall_seconds;
-                if (timingInput.schema_version !== 1 ||
-                    typeof commandWallSeconds !== 'number' ||
-                    !Number.isFinite(commandWallSeconds) || commandWallSeconds < 0) {
+                if (
+                  timingInput.schema_version !== 1 ||
+                  typeof commandWallSeconds !== 'number' ||
+                  !Number.isFinite(commandWallSeconds) ||
+                  commandWallSeconds < 0
+                ) {
                   errors.push('OCR command wall timing is invalid');
                 }
-                if (!Number.isInteger(timingInput.exit_code) || timingInput.exit_code !== parsedExitCode) {
-                  errors.push('OCR command timing exit code disagrees with review exit code');
+                if (
+                  !Number.isInteger(timingInput.exit_code) ||
+                  timingInput.exit_code !== parsedExitCode
+                ) {
+                  errors.push(
+                    'OCR command timing exit code disagrees with review exit code',
+                  );
                 }
               } else {
                 errors.push('OCR command timing is missing');
@@ -4949,13 +5482,25 @@ jobs:
 
               const transportInput = input && input.transportTelemetry;
               let transport = null;
-              if (transportInput && typeof transportInput === 'object' && !Array.isArray(transportInput)) {
+              if (
+                transportInput &&
+                typeof transportInput === 'object' &&
+                !Array.isArray(transportInput)
+              ) {
                 const distribution = {};
-                if (transportInput.responses_by_status &&
-                    typeof transportInput.responses_by_status === 'object' &&
-                    !Array.isArray(transportInput.responses_by_status)) {
-                  for (const [status, count] of Object.entries(transportInput.responses_by_status)) {
-                    if (/^[1-5][0-9]{2}$/.test(status) && Number.isInteger(count) && count >= 0) {
+                if (
+                  transportInput.responses_by_status &&
+                  typeof transportInput.responses_by_status === 'object' &&
+                  !Array.isArray(transportInput.responses_by_status)
+                ) {
+                  for (const [status, count] of Object.entries(
+                    transportInput.responses_by_status,
+                  )) {
+                    if (
+                      /^[1-5][0-9]{2}$/.test(status) &&
+                      Number.isInteger(count) &&
+                      count >= 0
+                    ) {
                       distribution[status] = count;
                     } else {
                       errors.push('transport status distribution is invalid');
@@ -4980,27 +5525,36 @@ jobs:
                   retry_count_header_malformed: transportInput.retry_count_header_malformed,
                 };
                 const counters = [
-                  transport.total_requests, transport.upstream_errors,
-                  transport.http_429_responses, transport.retry_events,
+                  transport.total_requests,
+                  transport.upstream_errors,
+                  transport.http_429_responses,
+                  transport.retry_events,
                   transport.retry_count_header_missing,
                   transport.retry_count_header_malformed,
                 ];
                 if (counters.some((value) => !Number.isInteger(value) || value < 0)) {
                   errors.push('transport counters are invalid');
                 }
-                if (transport.schema_version !== 1 ||
-                    transport.bind_address !== '127.0.0.1' ||
-                    (transport.target_protocol !== 'http:' && transport.target_protocol !== 'https:') ||
-                    transport.shutdown_signal !== 'SIGTERM' ||
-                    transport.shutdown_complete !== true ||
-                    transport.monitor_sha256 !== meta.monitorSha256) {
-                  errors.push('transport monitor startup, shutdown, or provenance is invalid');
+                if (
+                  transport.schema_version !== 1 ||
+                  transport.bind_address !== '127.0.0.1' ||
+                  (transport.target_protocol !== 'http:' &&
+                    transport.target_protocol !== 'https:') ||
+                  transport.shutdown_signal !== 'SIGTERM' ||
+                  transport.shutdown_complete !== true ||
+                  transport.monitor_sha256 !== meta.monitorSha256
+                ) {
+                  errors.push(
+                    'transport monitor startup, shutdown, or provenance is invalid',
+                  );
                 }
                 if (transport.total_requests === 0) {
                   errors.push('transport must observe positive monitored traffic');
                 }
-                if (transport.retry_count_header_missing !== 0 ||
-                    transport.retry_count_header_malformed !== 0) {
+                if (
+                  transport.retry_count_header_missing !== 0 ||
+                  transport.retry_count_header_malformed !== 0
+                ) {
                   errors.push('transport retry-count headers are missing or malformed');
                 }
                 if ((distribution['429'] || 0) !== transport.http_429_responses) {
@@ -5010,34 +5564,44 @@ jobs:
                   (total, count) => total + count,
                   0,
                 );
-                if (Number.isInteger(transport.total_requests) &&
-                    Number.isInteger(transport.upstream_errors) &&
-                    responseCount + transport.upstream_errors !== transport.total_requests) {
-                  errors.push('transport request count disagrees with response and error aggregates');
+                if (
+                  Number.isInteger(transport.total_requests) &&
+                  Number.isInteger(transport.upstream_errors) &&
+                  responseCount + transport.upstream_errors !== transport.total_requests
+                ) {
+                  errors.push(
+                    'transport request count disagrees with response and error aggregates',
+                  );
                 }
               } else {
                 errors.push('transport telemetry is missing');
               }
 
-              const trimmedResult = input && typeof input.resultText === 'string'
-                ? input.resultText.trim() : '';
+              const trimmedResult =
+                input && typeof input.resultText === 'string'
+                  ? input.resultText.trim()
+                  : '';
               let parsed = null;
               if (trimmedResult.length === 0) {
                 errors.push('OCR result is empty');
               } else {
                 try {
                   parsed = JSON.parse(trimmedResult);
-                } catch (_) {
+                } catch {
                   errors.push('OCR result is not valid JSON');
                 }
               }
               if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                if (trimmedResult.length > 0 && errors.every((error) => error !== 'OCR result is not valid JSON')) {
+                if (
+                  trimmedResult.length > 0 &&
+                  errors.every((error) => error !== 'OCR result is not valid JSON')
+                ) {
                   errors.push('OCR result must be an object');
                 }
                 parsed = null;
               }
-              const status = parsed && typeof parsed.status === 'string' ? parsed.status : null;
+              const status =
+                parsed && typeof parsed.status === 'string' ? parsed.status : null;
               if (status !== 'success') {
                 errors.push('OCR result status must be success');
               }
@@ -5069,28 +5633,46 @@ jobs:
                   errors.push('OCR result comments array is missing');
                 }
                 if (summary && typeof summary === 'object' && Array.isArray(comments)) {
-                  if (!Number.isInteger(summary.comments) || summary.comments !== comments.length) {
+                  if (
+                    !Number.isInteger(summary.comments) ||
+                    summary.comments !== comments.length
+                  ) {
                     errors.push('OCR summary comment count does not match comments length');
                   }
                   const numericValues = [
-                    summary.files_reviewed, summary.total_tokens,
-                    summary.input_tokens, summary.output_tokens,
-                    summary.cache_read_tokens ?? 0, summary.cache_write_tokens ?? 0,
+                    summary.files_reviewed,
+                    summary.total_tokens,
+                    summary.input_tokens,
+                    summary.output_tokens,
+                    summary.cache_read_tokens ?? 0,
+                    summary.cache_write_tokens ?? 0,
                   ];
-                  if (numericValues.some((value) => !Number.isInteger(value) || value < 0)) {
+                  if (
+                    numericValues.some((value) => !Number.isInteger(value) || value < 0)
+                  ) {
                     errors.push('OCR summary counters are invalid');
                   }
-                  const elapsedMatch = typeof summary.elapsed === 'string'
-                    ? /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i.exec(summary.elapsed)
-                    : null;
-                  if (!elapsedMatch || !elapsedMatch.slice(1).some((part) => part !== undefined)) {
+                  const elapsedMatch =
+                    typeof summary.elapsed === 'string'
+                      ? /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i.exec(
+                          summary.elapsed,
+                        )
+                      : null;
+                  if (
+                    !elapsedMatch ||
+                    !elapsedMatch.slice(1).some((part) => part !== undefined)
+                  ) {
                     errors.push('OCR summary elapsed is invalid');
                   } else {
                     internalElapsed = summary.elapsed;
-                    internalElapsedSeconds = Number(elapsedMatch[1] || 0) * 3600 +
-                      Number(elapsedMatch[2] || 0) * 60 + Number(elapsedMatch[3] || 0);
+                    internalElapsedSeconds =
+                      Number(elapsedMatch[1] || 0) * 3600 +
+                      Number(elapsedMatch[2] || 0) * 60 +
+                      Number(elapsedMatch[3] || 0);
                   }
-                  if (numericValues.every((value) => Number.isInteger(value) && value >= 0)) {
+                  if (
+                    numericValues.every((value) => Number.isInteger(value) && value >= 0)
+                  ) {
                     summaryOutput = {
                       files_reviewed: summary.files_reviewed,
                       tokens: {
@@ -5102,12 +5684,18 @@ jobs:
                       },
                     };
                   }
-                  if (comments.every((comment) => comment && typeof comment === 'object' && !Array.isArray(comment))) {
+                  if (
+                    comments.every(
+                      (comment) =>
+                        comment && typeof comment === 'object' && !Array.isArray(comment),
+                    )
+                  ) {
                     const tally = (field) => {
                       const counts = new Map();
                       for (const comment of comments) {
                         const raw = comment[field];
-                        const bucket = typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
+                        const bucket =
+                          typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
                         counts.set(bucket, (counts.get(bucket) || 0) + 1);
                       }
                       return Object.fromEntries(counts);
@@ -5156,10 +5744,16 @@ jobs:
                   },
                   configured_ocr_settings_sha256: meta.configuredOcrSettingsSha256 || null,
                   ocr_config_file_sha256: meta.ocrConfigFileSha256 || null,
-                  use_anthropic: typeof meta.useAnthropic === 'boolean' ? meta.useAnthropic : null,
-                  review_timeout_minutes: Number.isInteger(reviewTimeoutMinutes) ? reviewTimeoutMinutes : null,
+                  use_anthropic:
+                    typeof meta.useAnthropic === 'boolean' ? meta.useAnthropic : null,
+                  review_timeout_minutes: Number.isInteger(reviewTimeoutMinutes)
+                    ? reviewTimeoutMinutes
+                    : null,
                   rule_json_sha256: meta.ruleJsonSha256 || null,
-                  background_enabled: typeof meta.backgroundEnabled === 'boolean' ? meta.backgroundEnabled : null,
+                  background_enabled:
+                    typeof meta.backgroundEnabled === 'boolean'
+                      ? meta.backgroundEnabled
+                      : null,
                   background_context_sha256: meta.backgroundContextSha256 ?? null,
                   monitor_sha256: meta.monitorSha256 || null,
                   audience: meta.audience || null,
@@ -5171,6 +5765,24 @@ jobs:
                 transport,
               };
             }
+            function parseOcrVersionOutput(output) {
+              const lines = output.split('\n');
+              const firstLine = lines[0].endsWith('\r') ? lines[0].slice(0, -1) : lines[0];
+              const match =
+                /^open-code-review v([0-9]+[.][0-9]+[.][0-9]+)(?: [(][a-fA-F0-9]+[)] [A-Za-z0-9._-]+[/][A-Za-z0-9._-]+)?$/.exec(
+                  firstLine,
+                );
+              const hasAdditionalVersionHeader = lines
+                .slice(1)
+                .some((line) => line.startsWith('open-code-review v'));
+              if (!match || hasAdditionalVersionHeader) {
+                throw new Error(
+                  'OCR version output must begin with exactly one valid open-code-review vX.Y.Z first line',
+                );
+              }
+              return match[1];
+            }
+            // --- END OCR CANARY METRICS SNIPPET ---
 
             const safeRead = (fileName) => {
               try {
@@ -5185,20 +5797,6 @@ jobs:
               } catch (_) {
                 return null;
               }
-            };
-            const parseOcrVersionOutput = (output) => {
-              const lines = output.split('\n');
-              const firstLine = lines[0].endsWith('\r') ? lines[0].slice(0, -1) : lines[0];
-              const match = /^open-code-review v([0-9]+[.][0-9]+[.][0-9]+)(?: [(][a-fA-F0-9]+[)] [A-Za-z0-9._-]+[/][A-Za-z0-9._-]+)?$/.exec(firstLine);
-              const hasAdditionalVersionHeader = lines.slice(1).some((line) =>
-                line.startsWith('open-code-review v')
-              );
-              if (!match || hasAdditionalVersionHeader) {
-                throw new Error(
-                  'OCR version output must begin with exactly one valid open-code-review vX.Y.Z first line'
-                );
-              }
-              return match[1];
             };
             const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
             let versionParseError = null;
@@ -5417,7 +6015,7 @@ jobs:
         shell: bash
         if: always()
         env:
-          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          RANGE_MODE: ${{ env.OCR_EFFECTIVE_RANGE_MODE }}
         run: |
           set -euo pipefail
           preview_attempted="false"
@@ -5572,7 +6170,7 @@ jobs:
         env:
           OCR_RUN_ID: ${{ github.run_id }}
           OCR_RUN_ATTEMPT: ${{ github.run_attempt }}
-          OCR_PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           OCR_SHA: ${{ env.HEAD_SHA }}
           OCR_GENERATED_AT: ${{ steps.ocr-generated-at.outputs.generated_at }}
           OCR_WALL_CLOCK_SECONDS: ${{ steps.ocr-wall-clock.outputs.wall_clock_seconds }}
@@ -5663,7 +6261,7 @@ jobs:
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_RUN_ID: ${{ github.run_id }}
           OCR_RUN_ATTEMPT: ${{ github.run_attempt }}
-          OCR_PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_PR_NUMBER: ${{ env.OCR_EFFECTIVE_PR_NUMBER }}
           OCR_SHA: ${{ env.HEAD_SHA }}
           OCR_GENERATED_AT: ${{ steps.ocr-generated-at.outputs.generated_at }}
           OCR_WALL_CLOCK_SECONDS: ${{ steps.ocr-wall-clock.outputs.wall_clock_seconds }}

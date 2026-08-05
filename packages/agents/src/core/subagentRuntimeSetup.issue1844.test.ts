@@ -10,7 +10,7 @@
  * so downstream converters don't see empty schemas.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from '../testApi.js';
 
 let convertMetadataToFunctionDeclaration: (
   fallbackName: string,

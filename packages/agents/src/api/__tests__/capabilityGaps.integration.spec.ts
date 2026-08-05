@@ -15,7 +15,7 @@
  * exactly the surface #1595 will hold.
  */
 
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach } from '../../testApi.js';
 import * as fc from 'fast-check';
 import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-agents';
 import type {
@@ -109,8 +109,8 @@ describe('P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-
     expect(Array.isArray(tasks)).toBe(true);
     expect(Array.isArray(running)).toBe(true);
     expect(built.agent.tasks.get('nonexistent')).toBeUndefined();
-    expect(built.agent.tasks.cancel('nonexistent')).toBe(false);
-    expect(built.agent.tasks.cancelAllRunning()).toBe(0);
+    expect(await built.agent.tasks.cancel('nonexistent')).toBe(false);
+    expect(await built.agent.tasks.cancelAllRunning()).toBe(0);
     // Any present element MUST be a projected view WITHOUT abortController.
     [...tasks, ...running].forEach((task) =>
       expect('abortController' in task).toBe(false),

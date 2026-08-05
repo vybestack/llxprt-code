@@ -23,6 +23,10 @@
 
 import ts from 'typescript';
 
+interface ParsedSourceFile extends ts.SourceFile {
+  readonly parseDiagnostics?: readonly ts.Diagnostic[];
+}
+
 const parseDiagnostics = new WeakMap<ts.SourceFile, readonly ts.Diagnostic[]>();
 
 export {
@@ -55,28 +59,18 @@ export function parseSourceFile(
     true,
     scriptKind,
   );
-  const transpilation = ts.transpileModule(sourceText, {
-    compilerOptions: {
-      jsx: ts.JsxEmit.ReactJSX,
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.Latest,
-    },
-    fileName:
-      scriptKind === ts.ScriptKind.TSX || scriptKind === ts.ScriptKind.JSX
-        ? 'diagnostics.tsx'
-        : 'diagnostics.ts',
-    reportDiagnostics: true,
-  });
-  parseDiagnostics.set(sourceFile, transpilation.diagnostics ?? []);
+  const diagnostics = (sourceFile as ParsedSourceFile).parseDiagnostics;
+  if (diagnostics === undefined) {
+    throw new Error('TypeScript parser did not expose parse diagnostics');
+  }
+  parseDiagnostics.set(sourceFile, diagnostics);
   return sourceFile;
 }
 
 /**
- * Stable scanner-owned API for retrieving parse diagnostics from a parsed
- * SourceFile. Consumers should use this instead of directly accessing the
- * internal `sourceFile.parseDiagnostics` property, which is an
- * implementation detail of the TypeScript compiler API that could change
- * across versions.
+ * Stable scanner-owned API for retrieving the parse diagnostics captured
+ * from the TypeScript AST. Keeping the compiler-specific property access in
+ * parseSourceFile lets consumers depend only on this scanner-owned contract.
  *
  * Returns an array of diagnostic objects with `start` (position) and
  * `messageText` properties, or an empty array if the source parsed cleanly.

@@ -8,14 +8,14 @@
  * Shared helpers for client test files. Extracted from the original
  * monolithic client.test.ts so no file-level max-lines disable is needed.
  *
- * IMPORTANT: vi.mock() calls are file-scoped and hoisted by vitest above
+ * IMPORTANT: vi.mock() calls are file-scoped and hoisted by the test runner above
  * all imports. Each test file that exercises AgentClient must declare its
  * own vi.mock() calls and vi.hoisted() mock-fn references at the top of
  * the file. The setup function below receives those mock fns as arguments
  * so it can wire them into the shared Config/GoogleGenAI mock.
  */
 
-import { vi } from 'vitest';
+import { vi } from '../testApi.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
@@ -218,6 +218,7 @@ async function createAndInitClient(
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
     getContextLimit: vi.fn().mockReturnValue(0),
+    getConfig: vi.fn().mockReturnValue(undefined),
     getTokenUsageLogger: vi.fn().mockReturnValue({
       isEnabled: () => false,
     }),

@@ -9,7 +9,7 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -34,6 +34,7 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 describe('ChatSession runtime streaming and abort behavior', () => {
   let settingsService: SettingsService;
@@ -254,8 +255,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
+      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+        true,
+      );
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
@@ -353,8 +355,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
+      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+        true,
+      );
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;

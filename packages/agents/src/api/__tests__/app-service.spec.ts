@@ -19,7 +19,7 @@
  * consumer-facing spec imports only the public subpath + relative helper.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '../../testApi.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 

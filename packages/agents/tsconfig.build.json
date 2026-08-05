@@ -15,7 +15,12 @@
       "@vybestack/llxprt-code-tools/*": ["../tools/dist/src/*"]
     }
   },
-  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../../node_modules/bun-types/test.d.ts"
+  ],
   "exclude": [
     "node_modules",
     "dist",

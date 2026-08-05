@@ -57,10 +57,10 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "bun test --path-ignore-patterns research",
-    "test:vitest": "vitest run",
-    "test:ci": "bun test --path-ignore-patterns research",
-    "typecheck": "tsc --noEmit"
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace policy --junit junit.xml",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace policy --junit junit.xml",
+    "typecheck": "tsc --noEmit",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace policy"
   },
   "files": [
     "index.ts",

@@ -82,7 +82,7 @@ const DEFAULT_CHECKS = [
   'all-files-imports',
   'metadata',
   'tsconfig-references',
-  'vitest-aliases',
+  'test-setup-aliases',
   'export-style',
   'old-paths',
   'root-barrel',
@@ -105,7 +105,7 @@ const CHECK_NAMES = {
   'all-files-imports': 2,
   metadata: 3,
   'tsconfig-references': 4,
-  'vitest-aliases': 5,
+  'test-setup-aliases': 5,
   'export-style': 6,
   'old-paths': 7,
   'root-barrel': 8,
@@ -287,25 +287,29 @@ function check4_tsconfigReferences() {
 
 /**
  * @plan PLAN-20260608-ISSUE1588.P03
- * Check 5: vitest.config.ts has no forbidden aliases (warn only).
+ * Check 5: the test setup has no forbidden aliases (warn only).
+ *
+ * Settings tests run under Bun's native runner, whose per-root preload
+ * replaced the former vitest.config.ts. The boundary being protected is the
+ * same: the settings test setup must not reach into core or providers.
  */
-function check5_vitestAliases() {
-  const vitestPath = join(SETTINGS_PKG, 'vitest.config.ts');
-  if (!existsSync(vitestPath)) {
+function check5_testSetupAliases() {
+  const setupPath = join(SETTINGS_PKG, 'test-setup-storage-isolation.ts');
+  if (!existsSync(setupPath)) {
     console.error(
-      'FAIL: vitest-aliases: packages/settings/vitest.config.ts not found',
+      'FAIL: test-setup-aliases: packages/settings/test-setup-storage-isolation.ts not found',
     );
     return false;
   }
-  const content = readFileSync(vitestPath, 'utf-8');
+  const content = readFileSync(setupPath, 'utf-8');
   const pattern =
     /@vybestack\/llxprt-code-core|@vybestack\/llxprt-code-providers/;
   if (pattern.test(content)) {
     console.warn(
-      'WARN: vitest-aliases: vitest config has forbidden workspace alias references (not a hard failure)',
+      'WARN: test-setup-aliases: settings test setup has forbidden workspace alias references (not a hard failure)',
     );
   }
-  console.log('OK: vitest-aliases');
+  console.log('OK: test-setup-aliases');
   return true;
 }
 
@@ -886,7 +890,7 @@ const CHECK_HANDLERS: Record<string, (reportOnly?: boolean) => boolean> = {
   'all-files-imports': () => check2_allFilesImports(),
   metadata: () => check3_metadata(),
   'tsconfig-references': () => check4_tsconfigReferences(),
-  'vitest-aliases': () => check5_vitestAliases(),
+  'test-setup-aliases': () => check5_testSetupAliases(),
   'export-style': () => check6_exportStyle(),
   'old-paths': (reportOnly?: boolean) => check7_oldPaths(!!reportOnly),
   'root-barrel': () => check8_rootBarrel(),

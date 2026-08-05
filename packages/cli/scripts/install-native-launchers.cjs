@@ -209,16 +209,50 @@ function escapeForCmdQuote(value) {
 // preflights file existence (giving exit 43 for a missing bun/entry) and then
 // preserves the child's exit code EXACTLY. The PowerShell launcher (ps1)
 // uses try/catch to detect native launch exceptions for the diagnostic path.
-function generateCmdLauncher(bunRelative, entryRelative) {
+/**
+ * Guards the launcher generators against missing path arguments. These used to
+ * carry defaults (`sourceRelative = bundleRelative`), which silently aliased
+ * the source entry to the bundle; dropping the defaults without a guard would
+ * instead bake a literal `undefined` into the generated launcher. Both failure
+ * modes are invisible until a user's CLI refuses to start, so fail here.
+ */
+function assertRelativeArgs(fnName, args) {
+  for (const [name, value] of Object.entries(args)) {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new TypeError(
+        `${fnName}: ${name} must be a non-empty string, received ${String(value)}`,
+      );
+    }
+  }
+}
+
+function generateCmdLauncher(bunRelative, bundleRelative, sourceRelative) {
+  // No defaults: a missing argument must fail loudly here rather than silently
+  // emitting `%~dp0undefined` into a launcher that then cannot start the CLI.
+  assertRelativeArgs('generateCmdLauncher', {
+    bunRelative,
+    bundleRelative,
+    sourceRelative,
+  });
   const bunQuoted = escapeForCmdQuote(bunRelative);
-  const entryQuoted = escapeForCmdQuote(entryRelative);
+  const bundleQuoted = escapeForCmdQuote(bundleRelative);
+  const sourceQuoted = escapeForCmdQuote(sourceRelative);
   return [
     '@echo off',
     `REM ${OWNERSHIP_SENTINEL}`,
     'setlocal enableextensions',
     `if not exist "%~dp0${bunQuoted}" goto :LLXPRT_NO_BUN`,
-    `if not exist "%~dp0${entryQuoted}" goto :LLXPRT_NO_ENTRY`,
-    `"%~dp0${bunQuoted}" "%~dp0${entryQuoted}" %*`,
+    'rem Entry precedence (issue #2999): forced source > bundle > source fallback.',
+    // The quoted `set "VAR=value"` form is required: an unquoted assignment
+    // would let cmd metacharacters in the install path (notably &) terminate
+    // the statement. escapeForCmdQuote only neutralizes " and %, because every
+    // other interpolation site keeps the value inside double quotes.
+    `set "_llxprt_entry=%~dp0${sourceQuoted}"`,
+    'if "%LLXPRT_FORCE_SOURCE_ENTRY%"=="1" goto :LLXPRT_RUN',
+    `if exist "%~dp0${bundleQuoted}" set "_llxprt_entry=%~dp0${bundleQuoted}"`,
+    ':LLXPRT_RUN',
+    'if not exist "%_llxprt_entry%" goto :LLXPRT_NO_ENTRY',
+    `"%~dp0${bunQuoted}" "%_llxprt_entry%" %*`,
     'exit /b %ERRORLEVEL%',
     '',
     ':LLXPRT_NO_BUN',
@@ -228,22 +262,39 @@ function generateCmdLauncher(bunRelative, entryRelative) {
     'exit /b ' + LAUNCHER_ERROR_EXIT_CODE,
     '',
     ':LLXPRT_NO_ENTRY',
-    'echo LLxprt Code: TypeScript entry point ^(index.ts^) was not found. 1>&2',
+    'echo LLxprt Code: entry point was not found. 1>&2',
     'echo Your installation may be corrupt; reinstall @vybestack/llxprt-code. 1>&2',
     'exit /b ' + LAUNCHER_ERROR_EXIT_CODE,
     '',
   ].join('\r\n');
 }
 
-function generatePs1Launcher(bunRelativePosix, entryRelativePosix) {
+function generatePs1Launcher(
+  bunRelativePosix,
+  bundleRelativePosix,
+  sourceRelativePosix,
+) {
+  assertRelativeArgs('generatePs1Launcher', {
+    bunRelative: bunRelativePosix,
+    bundleRelative: bundleRelativePosix,
+    sourceRelative: sourceRelativePosix,
+  });
   const bunPs = bunRelativePosix.replace(/'/g, "''");
-  const entryPs = entryRelativePosix.replace(/'/g, "''");
+  const bundlePs = bundleRelativePosix.replace(/'/g, "''");
+  const sourcePs = sourceRelativePosix.replace(/'/g, "''");
   return [
     '#!/usr/bin/env pwsh',
     `# ${OWNERSHIP_SENTINEL}`,
     '$basedir = Split-Path $MyInvocation.MyCommand.Definition -Parent',
     `$bunExe = Join-Path $basedir '${bunPs}'`,
-    `$entry = Join-Path $basedir '${entryPs}'`,
+    `$bundleEntry = Join-Path $basedir '${bundlePs}'`,
+    `$sourceEntry = Join-Path $basedir '${sourcePs}'`,
+    '# Entry precedence (issue #2999): forced source > bundle > source fallback.',
+    "if (($env:LLXPRT_FORCE_SOURCE_ENTRY -ne '1') -and (Test-Path $bundleEntry)) {",
+    '  $entry = $bundleEntry',
+    '} else {',
+    '  $entry = $sourceEntry',
+    '}',
     'if (-not (Test-Path $bunExe)) {',
     "  [Console]::Error.WriteLine('LLxprt Code: bundled Bun runtime was not found.')",
     '  [Console]::Error.WriteLine(\'Reinstall the package with "npm install @vybestack/llxprt-code"\')',
@@ -251,7 +302,7 @@ function generatePs1Launcher(bunRelativePosix, entryRelativePosix) {
     '  exit ' + LAUNCHER_ERROR_EXIT_CODE,
     '}',
     'if (-not (Test-Path $entry)) {',
-    "  [Console]::Error.WriteLine('LLxprt Code: TypeScript entry point (index.ts) was not found.')",
+    "  [Console]::Error.WriteLine('LLxprt Code: entry point was not found.')",
     "  [Console]::Error.WriteLine('Your installation may be corrupt; reinstall @vybestack/llxprt-code.')",
     '  exit ' + LAUNCHER_ERROR_EXIT_CODE,
     '}',
@@ -392,6 +443,9 @@ function resolveBunExe(packageRoot) {
 }
 
 function resolveEntry(packageRoot) {
+  // The launchers re-evaluate bundle-vs-source at runtime (issue #2999), so the
+  // install-time guard only needs to confirm the guaranteed fallback (source
+  // index.ts) exists. Bundle presence is decided inside the generated scripts.
   const entry = path.join(packageRoot, 'index.ts');
   if (isRegularFile(entry)) {
     return entry;
@@ -480,7 +534,7 @@ function installNativeLaunchers(options) {
 
   const packageRoot = options?.packageRoot ?? path.join(__dirname, '..');
   const bunExeAbs = resolveBunExe(packageRoot);
-  const entryAbs = resolveEntry(packageRoot);
+  const sourceEntryAbs = resolveEntry(packageRoot);
 
   if (!bunExeAbs) {
     log(
@@ -489,13 +543,18 @@ function installNativeLaunchers(options) {
     );
     return { written: [], skipped: [], error: 'bun-not-found' };
   }
-  if (!entryAbs) {
+  if (!sourceEntryAbs) {
     log(
       `[postinstall] Could not resolve entry point for ${PACKAGE_NAME}; ` +
         'skipping native launcher generation.',
     );
     return { written: [], skipped: [], error: 'entry-not-found' };
   }
+
+  // The bundle may be present or absent at install time; both paths are baked
+  // into the launchers, which re-check bundle presence at runtime so a bundle
+  // added or removed after install is honored (issue #2999).
+  const bundleEntryAbs = path.join(packageRoot, 'bundle', 'llxprt.js');
 
   const binLinkDirs = findBinLinkDirs(packageRoot, env);
   const written = [];
@@ -506,12 +565,18 @@ function installNativeLaunchers(options) {
     const ps1Path = path.join(dir, `${BIN_NAME}.ps1`);
 
     const bunRel = relativePath(dir, bunExeAbs);
-    const entryRel = relativePath(dir, entryAbs);
+    const sourceRel = relativePath(dir, sourceEntryAbs);
+    const bundleRel = relativePath(dir, bundleEntryAbs);
     const bunRelPosix = relativePathPosix(dir, bunExeAbs);
-    const entryRelPosix = relativePathPosix(dir, entryAbs);
+    const sourceRelPosix = relativePathPosix(dir, sourceEntryAbs);
+    const bundleRelPosix = relativePathPosix(dir, bundleEntryAbs);
 
-    const cmdContent = generateCmdLauncher(bunRel, entryRel);
-    const ps1Content = generatePs1Launcher(bunRelPosix, entryRelPosix);
+    const cmdContent = generateCmdLauncher(bunRel, bundleRel, sourceRel);
+    const ps1Content = generatePs1Launcher(
+      bunRelPosix,
+      bundleRelPosix,
+      sourceRelPosix,
+    );
 
     if (writeOwnedLauncher(cmdPath, cmdContent, dir, packageRoot, 'cmd', log)) {
       written.push(cmdPath);

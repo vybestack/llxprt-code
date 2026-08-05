@@ -32,7 +32,7 @@ interface AnthropicMessage {
   content: string | AnthropicContentBlock[];
 }
 
-vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+void vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn(() => []),
     fromProviderFormat: vi.fn(() => []),
@@ -41,7 +41,7 @@ vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
 
 const mockMessagesCreate = vi.fn();
 
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: {
       create: mockMessagesCreate,
@@ -61,18 +61,18 @@ vi.mock('@anthropic-ai/sdk', () => ({
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('System prompt'),
 }));
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js',
   () => ({
     shouldIncludeSubagentDelegation: vi.fn().mockReturnValue(false),
   }),
 );
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   getErrorStatus: vi.fn(() => undefined),
   isNetworkTransientError: vi.fn(() => false),
 }));

@@ -5,7 +5,11 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { JspBoundDocument } from './jspDocuments.js';
+import type {
+  JspBoundDocument,
+  JspSnapshotDocument,
+  JspTodoItem,
+} from './jspDocuments.js';
 import {
   JspProducer,
   OBSERVER_LEASE_MS,
@@ -72,6 +76,31 @@ function eventTypes(documents: readonly JspBoundDocument[]): string[] {
   return documents.flatMap((document) =>
     document.kind === 'event' ? [document.event.type] : [],
   );
+}
+
+/**
+ * Pull the task-list items out of a published `todos.replaced` event so a test
+ * can assert them exactly. The consumer schema is closed, so an extra member is
+ * rejected at ingress; a partial matcher would let one through.
+ */
+function todoItemsOfEvent(
+  document: JspBoundDocument,
+): readonly JspTodoItem[] | undefined {
+  if (document.kind !== 'event' || document.event.type !== 'todos.replaced') {
+    return undefined;
+  }
+  return document.event.items;
+}
+
+/** The same, for the task list carried on a snapshot. */
+function todoItemsOfSnapshot(
+  snapshot: JspSnapshotDocument,
+): readonly JspTodoItem[] | undefined {
+  const { todos } = snapshot;
+  if (todos === 'unsupported' || todos.availability !== 'known') {
+    return undefined;
+  }
+  return todos.value.items;
 }
 
 describe('heartbeat cadence', () => {
@@ -167,8 +196,80 @@ describe('JspProducer', () => {
       availability: 'known',
       value: {
         revision: 1,
-        items: [{ text: 'after resume', completed: false }],
+        items: [{ text: 'after resume', state: 'in_progress' }],
       },
+    });
+    producer.stop();
+  });
+
+  it('publishes the item the agent is working on as in_progress', async () => {
+    // The active item is the whole point of the field: a derived boolean
+    // collapsed pending and in_progress, so an observer had to guess which
+    // entry was live. Prove the distinction survives the wire on the event
+    // path as well as the snapshot.
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    producer.observeTodosReplaced(undefined, [
+      { content: 'Done already', status: 'completed' },
+      { content: 'Working on it', status: 'in_progress' },
+      { content: 'Not started', status: 'pending' },
+    ]);
+    await producer.flush();
+
+    // The consumer schema is closed, so assert the published items exactly
+    // rather than with a partial match: a surviving `completed` member would
+    // be rejected at ingress and take the whole document with it.
+    expect(published).toHaveLength(1);
+    expect(todoItemsOfEvent(published[0])).toStrictEqual([
+      { text: 'Done already', state: 'completed' },
+      { text: 'Working on it', state: 'in_progress' },
+      { text: 'Not started', state: 'pending' },
+    ]);
+    expect(todoItemsOfSnapshot(producer.snapshot())).toStrictEqual([
+      { text: 'Done already', state: 'completed' },
+      { text: 'Working on it', state: 'in_progress' },
+      { text: 'Not started', state: 'pending' },
+    ]);
+    producer.stop();
+  });
+
+  it('drops a todo replacement it cannot publish faithfully', async () => {
+    // The native status set is a closed enum well inside the bound, so an
+    // over-bound status is an impossible state. Publishing a truncated label
+    // would put a value the source never reported onto the wire, and
+    // publishing the full one would be rejected for the bound and take the
+    // whole document with it, so the replacement is refused outright.
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    expect(() =>
+      producer.observeTodosReplaced(undefined, [
+        { content: 'Runaway', status: 'x'.repeat(65) },
+      ]),
+    ).toThrow(RangeError);
+    await producer.flush();
+
+    expect(published).toStrictEqual([]);
+    expect(producer.snapshot().todos).toMatchObject({
+      availability: 'unknown',
+    });
+
+    // The refused replacement must not consume a revision: a hole in the
+    // sequence is how an observer detects loss.
+    producer.observeTodosReplaced(undefined, [
+      { content: 'Recovered', status: 'pending' },
+    ]);
+    await producer.flush();
+    expect(producer.snapshot().todos).toMatchObject({
+      availability: 'known',
+      value: { revision: 1 },
     });
     producer.stop();
   });
@@ -218,14 +319,10 @@ describe('JspProducer', () => {
 
     await producer.shutdown();
 
-    expect(published.at(-1)).toMatchObject({
+    const terminal = published.at(-1);
+    expect(terminal).toMatchObject({
       kind: 'snapshot',
-      todos: {
-        availability: 'known',
-        value: {
-          items: [{ text: 'Completed task', completed: true }],
-        },
-      },
+      todos: { availability: 'known' },
       last_displayed_assistant_message: {
         availability: 'known',
         value: { content: 'Committed reply' },
@@ -235,6 +332,12 @@ describe('JspProducer', () => {
         value: null,
       },
     });
+    // Assert the task-list items exactly: the consumer schema is closed, so a
+    // surviving `completed` member would fail the whole snapshot at ingress
+    // and a partial match would not notice it.
+    expect(todoItemsOfSnapshot(terminal as JspSnapshotDocument)).toStrictEqual([
+      { text: 'Completed task', state: 'completed' },
+    ]);
   });
 
   it('never blocks or throws when registration and publication fail', () => {

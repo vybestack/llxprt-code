@@ -11,7 +11,7 @@
  * assert on mock call counts/arguments.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   recoverPendingBoundary,

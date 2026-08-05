@@ -15,8 +15,10 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { IProvider } from '../IProvider.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import type { RuntimeKind } from './runtimeRegistry.js';
 import {
   maybeGetCliOAuthManager,
+  getActiveRuntimeKind,
   getCliRuntimeServices,
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
@@ -66,7 +68,7 @@ interface ProviderSwitchOptions {
 interface ProviderSwitchContext {
   name: string;
   currentProvider: string | null;
-  autoOAuth: boolean;
+  autoOAuth: boolean | undefined;
   skipModelDefaults: boolean;
   preserveEphemerals: string[];
   config: Config;
@@ -484,6 +486,46 @@ function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
   context.finalBaseUrl = finalBaseUrl;
 }
 
+/**
+ * Pure policy: whether the lazy Claude Code OAuth browser flow should be
+ * initiated for a provider switch. Tri-state semantics for `explicitAutoOAuth`:
+ *  - `true`  → always attempt (explicit opt-in).
+ *  - `false` → never attempt (explicit suppression: profile application,
+ *              same-provider switch, welcome onboarding).
+ *  - `undefined` → derive: attempt only in an interactive, non-agent runtime.
+ *
+ * Exported so the policy is unit-testable in isolation from the full runtime
+ * wiring. Never launches a browser in a headless/agent/subagent context.
+ */
+export function resolveLazyClaudeCodeOAuthDecision(input: {
+  explicitAutoOAuth?: boolean;
+  isInteractive: boolean;
+  runtimeKind?: RuntimeKind;
+}): boolean {
+  if (input.explicitAutoOAuth === true) {
+    return true;
+  }
+  if (input.explicitAutoOAuth === false) {
+    return false;
+  }
+  if (!input.isInteractive) {
+    return false;
+  }
+  if (input.runtimeKind === 'agent' || input.runtimeKind === 'subagent') {
+    return false;
+  }
+  return true;
+}
+
+function readConfigInteractive(config: Config): boolean {
+  const candidate = config as Config & { isInteractive?: () => boolean };
+  // Default to NOT interactive when the signal is absent: a browser flow must
+  // never auto-launch unless we are certain the session is interactive.
+  return typeof candidate.isInteractive === 'function'
+    ? candidate.isInteractive()
+    : false;
+}
+
 async function handleClaudeCodeOAuth(
   context: ProviderSwitchContext,
 ): Promise<void> {
@@ -499,11 +541,20 @@ async function handleClaudeCodeOAuth(
   ensureOAuthProviderRegistered(
     'claudecode',
     oauthManager,
+    // Intentionally undefined: `ensureOAuthProviderRegistered` resolves the
+    // token store from the manager itself (`oauthManager.getTokenStore?.()`),
+    // which tolerates managers that do not expose one.
     undefined,
     context.addItem,
   );
 
-  if (!context.autoOAuth) {
+  const shouldAttemptLazy = resolveLazyClaudeCodeOAuthDecision({
+    explicitAutoOAuth: context.autoOAuth,
+    isInteractive: readConfigInteractive(context.config),
+    runtimeKind: getActiveRuntimeKind(),
+  });
+
+  if (!shouldAttemptLazy) {
     return;
   }
 
@@ -772,7 +823,7 @@ function createProviderSwitchContext(
   const context: ProviderSwitchContext = {
     name,
     currentProvider,
-    autoOAuth: options.autoOAuth ?? false,
+    autoOAuth: options.autoOAuth,
     skipModelDefaults: options.skipModelDefaults ?? false,
     preserveEphemerals,
     config,

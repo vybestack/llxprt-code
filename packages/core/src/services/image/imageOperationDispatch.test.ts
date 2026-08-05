@@ -15,6 +15,24 @@ import {
 } from './imageOperationDispatch.js';
 import { ImageOperationError } from './imageOperation.js';
 
+/**
+ * Runs `operation` expecting rejection and returns the rejection reason.
+ * Fails closed by throwing if the operation fulfills, so tests cannot pass
+ * silently when the promise resolves with an Error-shaped value.
+ */
+const NOT_REJECTED = Symbol('not-rejected');
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  const outcome: unknown = await operation.then(
+    () => NOT_REJECTED,
+    (error: unknown) => error,
+  );
+  if (outcome === NOT_REJECTED) {
+    throw new Error('expected the operation to reject');
+  }
+  return outcome;
+}
+
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
@@ -199,15 +217,17 @@ describe('runImageOperation', () => {
   });
 
   it('returns a capability error when no backend resolves', async () => {
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png' },
-        {
-          workspaceRoot,
-          resolveBackend: makeStubResolver({ noBackend: true }),
-        },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png' },
+          {
+            workspaceRoot,
+            resolveBackend: makeStubResolver({ noBackend: true }),
+          },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'capability',
     });
@@ -217,55 +237,63 @@ describe('runImageOperation', () => {
     const { resolver, generateCalled } = makeTrackingResolver();
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png' },
-        {
-          workspaceRoot,
-          resolveBackend: resolver,
-          signal: controller.signal,
-        },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png' },
+          {
+            workspaceRoot,
+            resolveBackend: resolver,
+            signal: controller.signal,
+          },
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    ).toBeInstanceOf(ImageOperationError);
     // The backend must NOT have been called — no billable provider request.
     expect(generateCalled()).toBe(0);
   });
 
   it('rejects when the output path escapes the workspace', async () => {
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: '../../escape.png' },
-        { workspaceRoot, resolveBackend: makeStubResolver({}) },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: '../../escape.png' },
+          { workspaceRoot, resolveBackend: makeStubResolver({}) },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'output-resolution',
     });
   });
 
   it('rejects a non-png output', async () => {
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.jpg' },
-        { workspaceRoot, resolveBackend: makeStubResolver({}) },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.jpg' },
+          { workspaceRoot, resolveBackend: makeStubResolver({}) },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
     });
   });
 
   it('does not call the backend when an input path is invalid (missing file)', async () => {
     const { resolver, editCalled } = makeTrackingResolver();
-    await expect(
-      runImageOperation(
-        {
-          prompt: 'edit',
-          outputPath: 'out.png',
-          inputPaths: ['does-not-exist.png'],
-        },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          {
+            prompt: 'edit',
+            outputPath: 'out.png',
+            inputPaths: ['does-not-exist.png'],
+          },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'input-validation',
     });
@@ -274,16 +302,18 @@ describe('runImageOperation', () => {
 
   it('does not call the backend when an input path is a URL', async () => {
     const { resolver, editCalled } = makeTrackingResolver();
-    await expect(
-      runImageOperation(
-        {
-          prompt: 'edit',
-          outputPath: 'out.png',
-          inputPaths: ['https://example.com/img.png'],
-        },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          {
+            prompt: 'edit',
+            outputPath: 'out.png',
+            inputPaths: ['https://example.com/img.png'],
+          },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'input-validation',
     });
@@ -292,16 +322,18 @@ describe('runImageOperation', () => {
 
   it('does not call the backend when an input path escapes the workspace', async () => {
     const { resolver, editCalled } = makeTrackingResolver();
-    await expect(
-      runImageOperation(
-        {
-          prompt: 'edit',
-          outputPath: 'out.png',
-          inputPaths: ['../../escape.png'],
-        },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          {
+            prompt: 'edit',
+            outputPath: 'out.png',
+            inputPaths: ['../../escape.png'],
+          },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'input-validation',
     });
@@ -311,16 +343,18 @@ describe('runImageOperation', () => {
   it('does not call the backend when an input path is a non-png file', async () => {
     const { resolver, editCalled } = makeTrackingResolver();
     await fs.promises.writeFile(path.join(workspaceRoot, 'notimage.txt'), 'hi');
-    await expect(
-      runImageOperation(
-        {
-          prompt: 'edit',
-          outputPath: 'out.png',
-          inputPaths: ['notimage.txt'],
-        },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          {
+            prompt: 'edit',
+            outputPath: 'out.png',
+            inputPaths: ['notimage.txt'],
+          },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'input-validation',
     });
@@ -333,16 +367,18 @@ describe('runImageOperation', () => {
       path.join(workspaceRoot, 'fake.png'),
       Buffer.from([0x00, 0x01, 0x02, 0x03]),
     );
-    await expect(
-      runImageOperation(
-        {
-          prompt: 'edit',
-          outputPath: 'out.png',
-          inputPaths: ['fake.png'],
-        },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          {
+            prompt: 'edit',
+            outputPath: 'out.png',
+            inputPaths: ['fake.png'],
+          },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'input-validation',
     });
@@ -388,17 +424,19 @@ describe('runImageOperation', () => {
     // Non-canonical base64 (trailing junk after valid group) must be rejected
     // by strictBase64Decode before writeImageAtomically runs.
     const malformed = `${VALID_PNG_BASE64}XXXX`;
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png' },
-        {
-          workspaceRoot,
-          resolveBackend: makeStubResolver({
-            generateResult: { data: malformed },
-          }),
-        },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png' },
+          {
+            workspaceRoot,
+            resolveBackend: makeStubResolver({
+              generateResult: { data: malformed },
+            }),
+          },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'response-validation',
     });
@@ -411,17 +449,19 @@ describe('runImageOperation', () => {
     // Valid canonical base64 that decodes to non-PNG bytes must be rejected
     // by validatePngStructure before writeImageAtomically runs.
     const notPng = Buffer.from('not a png file at all').toString('base64');
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png' },
-        {
-          workspaceRoot,
-          resolveBackend: makeStubResolver({
-            generateResult: { data: notPng },
-          }),
-        },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png' },
+          {
+            workspaceRoot,
+            resolveBackend: makeStubResolver({
+              generateResult: { data: notPng },
+            }),
+          },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'response-validation',
     });
@@ -434,17 +474,19 @@ describe('runImageOperation', () => {
     const corrupted = Buffer.from(png);
     corrupted[corrupted.length - 12] ^= 0xff;
     const corruptedBase64 = corrupted.toString('base64');
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png' },
-        {
-          workspaceRoot,
-          resolveBackend: makeStubResolver({
-            generateResult: { data: corruptedBase64 },
-          }),
-        },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png' },
+          {
+            workspaceRoot,
+            resolveBackend: makeStubResolver({
+              generateResult: { data: corruptedBase64 },
+            }),
+          },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'response-validation',
     });
@@ -455,12 +497,14 @@ describe('runImageOperation', () => {
     const { resolver, generateCalled } = makeTrackingResolver();
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png', signal: controller.signal },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png', signal: controller.signal },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toBeInstanceOf(ImageOperationError);
+    ).toBeInstanceOf(ImageOperationError);
     // The backend must NOT have been called — no billable provider request.
     expect(generateCalled()).toBe(0);
   });
@@ -487,12 +531,14 @@ describe('runImageOperation', () => {
         };
       },
     });
-    await expect(
-      runImageOperation(
-        { prompt: 'a cat', outputPath: 'cat.png' },
-        { workspaceRoot, resolveBackend: resolver },
+    expect(
+      await captureRejection(
+        runImageOperation(
+          { prompt: 'a cat', outputPath: 'cat.png' },
+          { workspaceRoot, resolveBackend: resolver },
+        ),
       ),
-    ).rejects.toMatchObject({
+    ).toMatchObject({
       name: 'ImageOperationError',
       stage: 'response-validation',
     });

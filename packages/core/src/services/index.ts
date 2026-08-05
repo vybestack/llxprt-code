@@ -21,3 +21,12 @@ export type {
 } from './asyncTaskManager.js';
 export { AsyncTaskReminderService } from './asyncTaskReminderService.js';
 export { AsyncTaskAutoTrigger } from './asyncTaskAutoTrigger.js';
+export { ShellJobManager } from './shellJobManager.js';
+export type {
+  ShellJob,
+  ShellJobState,
+  ShellJobLaunchInput,
+  ShellJobTailOptions,
+  ShellJobTailResult,
+  ShellJobPrefixLookup,
+} from './shellJobManager.js';

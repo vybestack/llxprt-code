@@ -312,6 +312,8 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
       userMessageTimestamp: number,
       options?: { clearQueue?: boolean },
     ) => {
+      if (options?.clearQueue ?? true) clearSubmissions();
+      setThought(null);
       if (pendingHistoryItemRef.current) {
         flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
@@ -331,8 +333,6 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
         },
         userMessageTimestamp,
       );
-      if (options?.clearQueue ?? true) clearSubmissions();
-      setThought(null);
     },
     [
       addItem,

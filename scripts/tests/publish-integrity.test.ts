@@ -447,9 +447,48 @@ describe('published package no-compile runtime contract (S6)', () => {
 
     expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt');
     expect(cliPackage.bin?.llxprt).toBe('bin/llxprt');
-    expect(cliPackage.scripts?.prepack).toBeUndefined();
     expect(cliPackage.scripts?.start).toBe('bun index.ts');
     expect(cliPackage.scripts?.debug).toBe('bun --inspect-brk index.ts');
+
+    // #2305 retired the bundle to guarantee that a user never compiles on
+    // their own machine. #2999 reintroduces a bundle built at PUBLISH time,
+    // which preserves that guarantee exactly: the artifact is produced on the
+    // publisher's machine before the tarball exists, and `npm install` still
+    // runs no compiler. The contract that matters is therefore about what
+    // executes on the consumer's machine, not about whether a build artifact
+    // exists anywhere. These assertions pin that narrower, real guarantee.
+    expect(cliPackage.scripts?.preinstall).toBeUndefined();
+    expect(cliPackage.scripts?.install).toBeUndefined();
+    expect(cliPackage.scripts?.prepare).toBeUndefined();
+    // postinstall is permitted, but only to generate the native Windows
+    // launcher shims -- never to compile or bundle anything.
+    expect(cliPackage.scripts?.postinstall).toBe(
+      'node scripts/install-native-launchers.cjs',
+    );
+
+    // prepack runs only on the publisher's machine. If present it must build
+    // the prebuilt bundle and must never compile the shipped TypeScript.
+    const prepack: unknown = cliPackage.scripts?.prepack;
+    if (prepack !== undefined) {
+      expect(prepack).toContain('bun-build.config.ts');
+      expect(prepack).toContain('--cli-only');
+      expect(prepack).not.toContain('tsc');
+    }
+  });
+
+  it('ships the prebuilt bundle alongside the TypeScript source fallback', () => {
+    const cliPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
+    );
+    const files: string[] = cliPackage.files ?? [];
+
+    // The bundle is the fast path (issue #2999). The source entry must keep
+    // shipping so the launcher can fall back when the bundle is absent, which
+    // is what keeps source checkouts and LLXPRT_FORCE_SOURCE_ENTRY working.
+    expect(files).toContain('bundle');
+    expect(files).toContain('index.ts');
+    expect(files).toContain('src');
+    expect(files).toContain('bin');
   });
 
   it('ships the launcher and TypeScript source needed by Bun at runtime', () => {

@@ -20,12 +20,6 @@ import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
-// Mock the provider manager instance to return our test instance
-const mockProviderManager = vi.fn();
-vi.mock('../packages/cli/src/providers/providerManagerInstance.js', () => ({
-  getProviderManager: () => mockProviderManager(),
-}));
-
 /**
  * UI Behavioral Tests for Token Tracking
  *
@@ -65,9 +59,6 @@ describe('Token Tracking UI Behavioral Tests', () => {
     providerManager = new ProviderManager(testRuntime);
     providerManager.setConfig(config);
     config.setProviderManager(providerManager);
-
-    // Mock the provider manager instance
-    mockProviderManager.mockReturnValue(providerManager);
   });
 
   afterEach(() => {

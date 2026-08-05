@@ -293,6 +293,9 @@ type GlobalWithReactInternals = typeof globalThis & {
 
 const globalWithReact = globalThis as GlobalWithReactInternals;
 globalWithReact.React = React;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const reactWithInternals = React as ReactWithSharedInternals;
 const ReactInternals =
