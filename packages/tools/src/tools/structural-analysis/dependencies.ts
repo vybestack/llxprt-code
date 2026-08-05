@@ -6,6 +6,7 @@
 
 import * as path from 'node:path';
 import type { NapiConfig } from '@ast-grep/napi';
+import type { SgNode } from '@ast-grep/napi';
 import type {
   ParsedFile,
   AnalysisResult,
@@ -14,40 +15,81 @@ import type {
 } from './types.js';
 import { getFiles, parseFile, makeRelative } from './helpers.js';
 
-function collectNamedAndDefaultImports(
+/**
+ * Strips surrounding single or double quotes from a module specifier.
+ */
+function stripQuotes(text: string): string {
+  return text.replace(/^['"]|['"]$/g, '');
+}
+
+/**
+ * Returns the string child of an import_statement (the module source), or
+ * null if the statement has no source string (malformed input).
+ */
+function findImportSource(children: SgNode[]): SgNode | null {
+  return children.find((c: SgNode) => String(c.kind()) === 'string') ?? null;
+}
+
+/**
+ * Classifies a single import_statement node into one or more import records by
+ * inspecting its children, rather than running overlapping literal patterns.
+ *
+ * A statement can produce BOTH a `default` and a `named` record (e.g.
+ * `import def, { named } from '...'`).
+ */
+function classifyImportStatement(
+  stmt: SgNode,
+  relPath: string,
+  imports: ImportEntry[],
+): void {
+  const children = stmt.children();
+  const line = stmt.range().start.line + 1;
+  const sourceNode = findImportSource(children);
+  const source = sourceNode ? stripQuotes(sourceNode.text()) : '';
+
+  const hasTypeKeyword = children.some(
+    (c: SgNode) => String(c.kind()) === 'type',
+  );
+  if (hasTypeKeyword) {
+    imports.push({ file: relPath, line, source, kind: 'type' });
+    return;
+  }
+
+  const clause = children.find(
+    (c: SgNode) => String(c.kind()) === 'import_clause',
+  );
+  if (!clause) {
+    imports.push({ file: relPath, line, source, kind: 'side-effect' });
+    return;
+  }
+
+  const clauseChildren = clause.children();
+  if (clauseChildren.some((c: SgNode) => String(c.kind()) === 'identifier')) {
+    imports.push({ file: relPath, line, source, kind: 'default' });
+  }
+  if (
+    clauseChildren.some((c: SgNode) => String(c.kind()) === 'named_imports')
+  ) {
+    imports.push({ file: relPath, line, source, kind: 'named' });
+  }
+  if (
+    clauseChildren.some((c: SgNode) => String(c.kind()) === 'namespace_import')
+  ) {
+    imports.push({ file: relPath, line, source, kind: 'namespace' });
+  }
+}
+
+function collectStaticImports(
   parsed: ParsedFile,
   relPath: string,
   imports: ImportEntry[],
 ): void {
   try {
-    const named = parsed.root.findAll(`import { $$$NAMES } from $SOURCE`);
-    for (const m of named) {
-      const src = m.getMatch('SOURCE');
-      if (src) {
-        imports.push({
-          file: relPath,
-          line: m.range().start.line + 1,
-          source: src.text().replace(/['"]/g, ''),
-          kind: 'named',
-        });
-      }
-    }
-  } catch {
-    /* skip */
-  }
-
-  try {
-    const defaults = parsed.root.findAll(`import $DEFAULT from $SOURCE`);
-    for (const m of defaults) {
-      const src = m.getMatch('SOURCE');
-      if (src) {
-        imports.push({
-          file: relPath,
-          line: m.range().start.line + 1,
-          source: src.text().replace(/['"]/g, ''),
-          kind: 'default',
-        });
-      }
+    const statements = parsed.root.findAll({
+      rule: { kind: 'import_statement' },
+    } as NapiConfig);
+    for (const stmt of statements) {
+      classifyImportStatement(stmt, relPath, imports);
     }
   } catch {
     /* skip */
@@ -105,7 +147,7 @@ function collectFileImports(
   relPath: string,
   imports: ImportEntry[],
 ): void {
-  collectNamedAndDefaultImports(parsed, relPath, imports);
+  collectStaticImports(parsed, relPath, imports);
   collectDynamicAndReexports(parsed, relPath, imports);
 }
 
@@ -257,8 +299,24 @@ export async function executeDependencies(
     mode: 'dependencies',
     truncated: false,
     results: {
-      imports,
+      imports: deduplicateForwardImports(imports),
       reverseImports: reverse ? reverseImports : undefined,
     },
   };
+}
+
+/**
+ * Deduplicates the forward import list by (file, line, source, kind) so no
+ * tuple is emitted more than once.
+ */
+function deduplicateForwardImports(imports: ImportEntry[]): ImportEntry[] {
+  const seen = new Set<string>();
+  const result: ImportEntry[] = [];
+  for (const imp of imports) {
+    const key = JSON.stringify([imp.file, imp.line, imp.source, imp.kind]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(imp);
+  }
+  return result;
 }

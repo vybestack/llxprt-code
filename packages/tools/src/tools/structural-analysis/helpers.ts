@@ -102,6 +102,7 @@ export async function parseFile(
 const FUNCTION_CONTAINER_KINDS = new Set([
   'method_definition',
   'function_declaration',
+  'generator_function_declaration',
   'arrow_function',
 ]);
 
@@ -125,7 +126,10 @@ export function getContainerName(node: SgNode): string | null {
     return nameNode?.text() ?? null;
   }
 
-  if (kind === 'function_declaration') {
+  if (
+    kind === 'function_declaration' ||
+    kind === 'generator_function_declaration'
+  ) {
     const nameNode = node
       .children()
       .find((c: SgNode) => String(c.kind()) === 'identifier');

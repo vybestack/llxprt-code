@@ -13,36 +13,89 @@ import type {
 } from './types.js';
 import { escapeRegex, getFiles, parseFile, makeRelative } from './helpers.js';
 
-function searchDefinitionPatterns(
+function searchFunctionAndMethodDefinitions(
   parsed: ParsedFile,
   symbol: string,
   relPath: string,
   definitions: DefinitionEntry[],
 ): void {
-  const patterns = [
-    { pat: `${symbol}($$$PARAMS) { $$$BODY }`, kind: 'method' },
-    { pat: `function ${symbol}($$$PARAMS) { $$$BODY }`, kind: 'function' },
-    { pat: `class ${symbol} { $$$BODY }`, kind: 'class' },
-    { pat: `class ${symbol} extends $PARENT { $$$BODY }`, kind: 'class' },
+  const escaped = escapeRegex(symbol);
+  const rules: Array<{ kind: string; kindLabel: string; nameKind: string }> = [
+    {
+      kind: 'function_declaration',
+      kindLabel: 'function',
+      nameKind: 'identifier',
+    },
+    {
+      kind: 'generator_function_declaration',
+      kindLabel: 'function',
+      nameKind: 'identifier',
+    },
+    {
+      kind: 'method_definition',
+      kindLabel: 'method',
+      nameKind: 'property_identifier',
+    },
   ];
 
-  for (const { pat, kind } of patterns) {
-    try {
-      const matches = parsed.root.findAll(pat);
-      for (const m of matches) {
-        const range = m.range();
-        definitions.push({
-          file: relPath,
-          line: range.start.line + 1,
-          kind,
-          text: m.text().substring(0, 200),
-        });
-      }
-    } catch {
-      // Pattern may not be valid for all languages
+  for (const { kind, kindLabel, nameKind } of rules) {
+    collectRuleDefinitions(
+      parsed,
+      { kind, nameKind, regex: `^${escaped}$` },
+      kindLabel,
+      relPath,
+      definitions,
+    );
+  }
+}
+
+/**
+ * Runs a single AST kind + name rule and appends deduplicated definition
+ * entries. Isolated so the caller stays below the nesting limit.
+ */
+function collectRuleDefinitions(
+  parsed: ParsedFile,
+  rule: { kind: string; nameKind: string; regex: string },
+  kindLabel: string,
+  relPath: string,
+  definitions: DefinitionEntry[],
+): void {
+  let matches;
+  try {
+    matches = parsed.root.findAll({
+      rule: {
+        kind: rule.kind,
+        has: { kind: rule.nameKind, regex: rule.regex },
+      },
+    } as NapiConfig);
+  } catch {
+    return;
+  }
+  for (const m of matches) {
+    const line = m.range().start.line + 1;
+    const exists = definitions.some(
+      (d) => d.file === relPath && d.line === line,
+    );
+    if (!exists) {
+      definitions.push({
+        file: relPath,
+        line,
+        kind: kindLabel,
+        text: m.text().substring(0, 200),
+      });
     }
   }
 }
+
+/**
+ * Maps raw ast-grep declaration node kinds to the friendly labels used by the
+ * function/method path, so callers see 'class' not 'class_declaration'.
+ */
+const DECLARATION_KIND_LABELS: Record<string, string> = {
+  class_declaration: 'class',
+  interface_declaration: 'interface',
+  type_alias_declaration: 'type',
+};
 
 function searchDeclarationRules(
   parsed: ParsedFile,
@@ -84,10 +137,11 @@ function searchDeclarationRules(
         (d) => d.file === relPath && d.line === range.start.line + 1,
       );
       if (!exists) {
+        const rawKind = String(m.kind());
         definitions.push({
           file: relPath,
           line: range.start.line + 1,
-          kind: String(m.kind()),
+          kind: DECLARATION_KIND_LABELS[rawKind] ?? rawKind,
           text: m.text().substring(0, 200),
         });
       }
@@ -113,7 +167,7 @@ async function processDefinitionsFile(
   }
 
   const relPath = makeRelative(file, workspaceRoot);
-  searchDefinitionPatterns(parsed, symbol, relPath, definitions);
+  searchFunctionAndMethodDefinitions(parsed, symbol, relPath, definitions);
   searchDeclarationRules(parsed, symbol, relPath, definitions);
   return true;
 }
