@@ -12,6 +12,13 @@ import {
   type StreamContext,
 } from './MessageStreamOrchestrator.js';
 import { AgentEventType, type ServerAgentStreamEvent } from './turn.js';
+import {
+  buildToolContentRejectionAdvice,
+  describeRejectedPayload,
+  extractToolNamesFromRequest,
+  isToolContentRejection,
+  type RejectedPayloadDescription,
+} from './toolContentRejection.js';
 
 interface TerminalState {
   hadToolCallsThisTurn: boolean;
@@ -64,53 +71,6 @@ async function* fireAfterHookAndEmitClearContext(
   }
 }
 
-/**
- * Extracts a tool name from a single request part in neutral or legacy form.
- *
- * Recognizes:
- * - Neutral `tool_response`: `{ type: 'tool_response', toolName }`
- * - Neutral `tool_call`: `{ type: 'tool_call', name }`
- * - Legacy Google `functionResponse`: `{ functionResponse: { name } }`
- *
- * Returns the extracted name, or `undefined` if the part is not a
- * tool-response/tool-call shape.
- */
-function extractToolName(part: unknown): string | undefined {
-  if (part == null || typeof part !== 'object') return undefined;
-  const obj = part as Record<string, unknown>;
-
-  if (obj['type'] === 'tool_response') {
-    const toolName = obj['toolName'];
-    if (typeof toolName === 'string' && toolName.length > 0) return toolName;
-    return undefined;
-  }
-
-  if (obj['type'] === 'tool_call') {
-    const name = obj['name'];
-    if (typeof name === 'string' && name.length > 0) return name;
-    return undefined;
-  }
-
-  if ('functionResponse' in obj) {
-    const funcResp = obj['functionResponse'] as { name?: string } | undefined;
-    if (funcResp?.name) return funcResp.name;
-  }
-
-  return undefined;
-}
-
-function extractToolNamesFromRequest(request: AgentMessageInput): string[] {
-  if (!Array.isArray(request)) return [];
-  const names = new Set<string>();
-  for (const rawPart of request) {
-    const name = extractToolName(rawPart);
-    if (name !== undefined) {
-      names.add(name);
-    }
-  }
-  return [...names];
-}
-
 async function* handle413Error(
   deps: MessageStreamDeps,
   ctx: StreamContext,
@@ -120,7 +80,7 @@ async function* handle413Error(
   signal: AbortSignal,
   boundedTurns: number,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
-  if (ctx.is413Retry) {
+  if (ctx.isPayloadRecoveryRetry) {
     deps.logger.warn(
       () =>
         `[stream:orchestrator] received repeated 413 after retry; ending iteration`,
@@ -166,7 +126,67 @@ async function* handle413Error(
   });
 }
 
-function getErrorStatus(event: ServerAgentStreamEvent): number | undefined {
+async function* handleToolContentRejection400(
+  deps: MessageStreamDeps,
+  ctx: StreamContext,
+  deferredEvents: ServerAgentStreamEvent[],
+  state: TerminalState,
+  description: RejectedPayloadDescription,
+  providerMessage: string,
+  signal: AbortSignal,
+  boundedTurns: number,
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
+  if (ctx.isPayloadRecoveryRetry) {
+    deps.logger.warn(
+      () =>
+        `[stream:orchestrator] received repeated tool-content 400 after retry; ending iteration`,
+      {
+        deferredEventCount: deferredEvents.length,
+        hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+      },
+    );
+    for (const d of deferredEvents) yield d;
+    await fireAfterHook(deps, ctx);
+    return earlyIterResult(state.hadToolCallsThisTurn, {
+      ...state,
+      deferredEvents,
+    });
+  }
+
+  const advice = buildToolContentRejectionAdvice(description, providerMessage);
+  deps.logger.warn(
+    () =>
+      `[stream:orchestrator] retrying after tool-content rejection (HTTP 400)`,
+    {
+      toolNames: description.toolNames,
+      mediaDescriptors: description.mediaDescriptors,
+      deferredEventCount: deferredEvents.length,
+      hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+    },
+  );
+  yield* deps.sendMessageStream(
+    [{ type: 'text', text: advice }],
+    signal,
+    ctx.prompt_id,
+    boundedTurns - 1,
+    false,
+    true,
+  );
+  await fireAfterHook(deps, ctx);
+  return earlyIterResult(state.hadToolCallsThisTurn, {
+    ...state,
+    deferredEvents,
+  });
+}
+
+/**
+ * Narrows the error payload carried by a terminal Error event. The payload
+ * originates from provider SDKs, so its shape is genuinely external and is
+ * validated structurally rather than trusted. Returns the narrowed value as a
+ * plain `object`; each field is read by the accessors below with an `in` plus
+ * `typeof` check, so no cast to an index-signature type is needed.
+ */
+function getErrorPayload(event: ServerAgentStreamEvent): object | undefined {
   if (!('value' in event)) {
     return undefined;
   }
@@ -180,7 +200,21 @@ function getErrorStatus(event: ServerAgentStreamEvent): number | undefined {
   if (errorValue == null || typeof errorValue !== 'object') {
     return undefined;
   }
-  return (errorValue as { status?: number }).status;
+  return errorValue;
+}
+
+function getErrorStatus(event: ServerAgentStreamEvent): number | undefined {
+  const payload = getErrorPayload(event);
+  if (payload === undefined || !('status' in payload)) return undefined;
+  const status = payload.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function getErrorMessage(event: ServerAgentStreamEvent): string | undefined {
+  const payload = getErrorPayload(event);
+  if (payload === undefined || !('message' in payload)) return undefined;
+  const message = payload.message;
+  return typeof message === 'string' ? message : undefined;
 }
 
 async function* handleErrorEvent(
@@ -193,6 +227,7 @@ async function* handleErrorEvent(
   initialRequest: AgentMessageInput,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
   const errorStatus = getErrorStatus(event);
+  const errorMessage = getErrorMessage(event);
   const { config } = deps;
   const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
 
@@ -220,6 +255,34 @@ async function* handleErrorEvent(
       boundedTurns,
     );
     if (result) return result;
+  }
+
+  if (
+    isToolContentRejection(errorStatus, errorMessage) &&
+    config.getContinueOnFailedApiCall() &&
+    canRetryFailedStream(state)
+  ) {
+    // Issue #2722 is about tool-related 400s: recovery also requires that the
+    // failing request actually carried tool evidence (a tool_response or a
+    // media block), so a 400 caused by user-pasted content is not mistaken for
+    // rejected tool content.
+    const description = describeRejectedPayload(initialRequest);
+    if (
+      description.toolNames.length > 0 ||
+      description.mediaDescriptors.length > 0
+    ) {
+      const result = yield* handleToolContentRejection400(
+        deps,
+        ctx,
+        deferredEvents,
+        state,
+        description,
+        errorMessage ?? '',
+        signal,
+        boundedTurns,
+      );
+      if (result) return result;
+    }
   }
 
   deps.logger.warn(

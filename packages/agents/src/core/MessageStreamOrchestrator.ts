@@ -66,7 +66,7 @@ export interface MessageStreamDeps {
     prompt_id: string,
     turns?: number,
     isInvalidStreamRetry?: boolean,
-    is413Retry?: boolean,
+    isPayloadRecoveryRetry?: boolean,
   ) => AsyncGenerator<ServerAgentStreamEvent, Turn>;
   createTurn?: (
     chat: ChatSession,
@@ -83,7 +83,7 @@ export interface StreamContext {
   signal: AbortSignal;
   turns: number;
   isInvalidStreamRetry: boolean;
-  is413Retry: boolean;
+  isPayloadRecoveryRetry: boolean;
 }
 
 export interface IterationResult {
@@ -146,7 +146,7 @@ export class MessageStreamOrchestrator {
     prompt_id: string,
     turns: number,
     isInvalidStreamRetry: boolean,
-    is413Retry: boolean = false,
+    isPayloadRecoveryRetry: boolean = false,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     this.deps.logger.debug(() => 'DEBUG: AgentClient.sendMessageStream called');
 
@@ -162,7 +162,7 @@ export class MessageStreamOrchestrator {
       signal,
       turns,
       isInvalidStreamRetry,
-      is413Retry,
+      isPayloadRecoveryRetry,
     };
 
     const request = yield* this._preflight(narrowedRequest, ctx);
