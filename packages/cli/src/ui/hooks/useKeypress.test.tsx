@@ -209,7 +209,11 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
 
       const sequences = onKeypress.mock.calls.map(([arg]) => arg.sequence);
 
-      const expectedSequences = useKitty ? ['\x1B[200do'] : ['\x1B[200d', 'o'];
+      // The same split is produced with and without the kitty debounce:
+      // KeypressProvider has no kitty protocol support (it takes only
+      // `children`), so there is no debounce to coalesce the incomplete
+      // escape prefix with the characters that follow it.
+      const expectedSequences = ['\x1B[200d', 'o'];
       expect(sequences).toStrictEqual(expectedSequences);
     });
 

@@ -681,17 +681,39 @@ describe('useAgentStream', () => {
       await result.current.submitQuery('test input');
     });
 
-    // Expectation: addItem:gemini (rationale) MUST happen before scheduleToolCalls_START
+    // A ToolCallRequest in the stream no longer makes the CLI call
+    // scheduleToolCalls: the dispatcher treats tool-call as display-only and
+    // the agent executes tools itself, so the React scheduler is now reached
+    // only for client-initiated calls. Drive the completion callback directly
+    // to exercise the ordering guarantee that does still exist —
+    // useAgentEventStream flushes pending AI content before adding the
+    // tool_group item.
+    const completedTools = [
+      {
+        request: { callId: '1', name: 'test_tool', args: {} },
+        status: 'success',
+        tool: { displayName: 'test_tool', name: 'test_tool' },
+        invocation: { getDescription: () => 'desc' },
+        response: { responseParts: [], resultDisplay: 'done' },
+        startTime: Date.now(),
+        endTime: Date.now(),
+      },
+    ];
+
+    expect(capturedOnComplete).toBeDefined();
+    await act(async () => {
+      await capturedOnComplete!(Symbol('test-scheduler'), completedTools, {
+        isPrimary: true,
+      });
+    });
+
     const rationaleIndex = addItemOrder.indexOf('addItem:gemini');
-    const scheduleIndex = addItemOrder.indexOf('scheduleToolCalls_START');
     const toolGroupIndex = addItemOrder.indexOf('addItem:tool_group');
 
     expect(rationaleIndex).toBeGreaterThan(-1);
-    expect(scheduleIndex).toBeGreaterThan(-1);
     expect(toolGroupIndex).toBeGreaterThan(-1);
 
-    // This is the core fix validation: Rationale comes before tools are even scheduled (awaited)
-    expect(rationaleIndex).toBeLessThan(scheduleIndex);
+    // Core guarantee: the rationale is committed to history before the tools.
     expect(rationaleIndex).toBeLessThan(toolGroupIndex);
   });
 });
