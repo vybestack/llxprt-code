@@ -29,13 +29,11 @@ function createTempDir(): string {
 }
 
 afterEach(() => {
+  // No try/catch: `force` already tolerates an already-removed directory, so a
+  // failure here is a real problem (a locked or undeletable temp dir) and must
+  // surface rather than accumulate silently.
   while (tempDirs.length > 0) {
-    const dir = tempDirs.pop()!;
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
   }
 });
 

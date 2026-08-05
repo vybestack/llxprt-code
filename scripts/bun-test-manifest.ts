@@ -238,9 +238,6 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/tools/tool-key-storage.test.ts',
       'src/tools-adapters/CoreSubagentServiceAdapter.timeout.test.ts',
       'src/tools-adapters/CoreSubagentServiceAdapter.cancellation.cr3031.test.ts',
-      // Issue #3063: a failed tool call must stay failed on the way out —
-      // createErrorResponse sets the top-level ToolResponseBlock.error marker.
-      'src/utils/generateContentResponseUtilities.toolErrorRemedy.test.ts',
     ],
   },
   PROVIDERS_MANIFEST_ENTRY,
