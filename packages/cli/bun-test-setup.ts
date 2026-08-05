@@ -98,6 +98,10 @@ process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 delete process.env.LLXPRT_CREDENTIAL_SOCKET;
 delete process.env.LLXPRT_CAPABILITY_TOKEN;
 delete process.env.LLXPRT_CAPABILITY_FD;
+// A developer running the suite from inside llxprt exports this, pointing at a
+// session-scoped bootstrap file. Anything that boots the CLI in-process then
+// dies with "JSP bootstrap file could not be read".
+delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
 if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
