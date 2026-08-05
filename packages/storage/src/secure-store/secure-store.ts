@@ -32,6 +32,7 @@ import {
   type Envelope,
 } from './envelope.js';
 import { verifyKeyringWrite } from './keyring-write-verification.js';
+import { isKeychainGrantPersistenceBroken as isKeychainGrantPersistenceBrokenState } from './keychain-grant-persistence.js';
 import {
   assertRuntimeNotReplaced,
   RUNTIME_REPLACED_REMEDIATION,
@@ -423,6 +424,22 @@ export class SecureStore {
       }
       return false;
     }
+  }
+
+  /**
+   * Reports whether the discarded macOS Keychain "Always Allow" grant has been
+   * detected this process (issue #3020). Terminal: once true, always true.
+   *
+   * This proxies **process-wide** state shared across every SecureStore
+   * instance and every service/account — it is NOT scoped to this store
+   * instance or to this service. The detector correlates by credential, but
+   * the resulting predicate is global: once any credential triggers it, every
+   * store's accessor reports true for the rest of the process.
+   *
+   * @plan PLAN-20260805-ISSUE3020
+   */
+  isKeychainGrantPersistenceBroken(): boolean {
+    return isKeychainGrantPersistenceBrokenState();
   }
 
   private async deleteFallbackFiles(key: string): Promise<boolean> {

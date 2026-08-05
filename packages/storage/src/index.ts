@@ -49,6 +49,11 @@ export {
 // pushes the resolved setting in here.
 export { setOsKeyringDisabledBySetting } from './secure-store/keyring-session-state.js';
 export {
+  isKeychainGrantPersistenceBroken,
+  GRANT_NOT_PERSISTING_MESSAGE,
+  GRANT_NOT_PERSISTING_REMEDIATION,
+} from './secure-store/keychain-grant-persistence.js';
+export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,
   getProviderKeyStorage,

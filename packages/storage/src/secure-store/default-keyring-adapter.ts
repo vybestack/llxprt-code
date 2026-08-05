@@ -33,6 +33,7 @@ import {
   noteKeyringError,
 } from './keyring-session-state.js';
 import { verifyKeyringDelete } from './keyring-delete-verification.js';
+import { recordAuthorizedKeyringRead } from './keychain-grant-persistence.js';
 import { SecureStoreError } from './secure-store-errors.js';
 import type { KeyringAdapter } from './secure-store.js';
 
@@ -65,6 +66,12 @@ const DISABLE_OS_KEYRING_ENV = 'LLXPRT_TEST_DISABLE_OS_KEYRING';
 function isOsKeyringDisabledForTests(): boolean {
   return process.env[DISABLE_OS_KEYRING_ENV] === '1';
 }
+
+// The production opt-out (`LLXPRT_DISABLE_OS_KEYRING=1`, the user-facing
+// recovery lever for the discarded Keychain grant in issue #3020) now lives in
+// keyring-session-state.ts, which owns that env var alongside the
+// security.disableOsKeyring setting and the runtime latch. Reading it here too
+// would give the same variable two sources of truth.
 
 function isErrorWithCode(value: unknown): value is { code: string } {
   return (
@@ -317,12 +324,16 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   if (isOsKeyringDisabledForTests()) {
     return null;
   }
-  // Production opt-out (R3.1) AND the runtime latch (R2.3): checked BEFORE
-  // importing @napi-rs/keyring so zero Keychain operations occur — including
-  // for llxprt-code-machine-secret and MCP token storage, which both route
-  // through this factory (R3.3). Deliberately distinct from
+  // Checked BEFORE importing @napi-rs/keyring so zero Keychain operations
+  // occur — including for llxprt-code-machine-secret and MCP token storage,
+  // which both route through this factory. Deliberately distinct from
   // isOsKeyringDisabledForTests(): test suites isolate their storage roots but
   // may still need the genuine keyring.
+  //
+  // isOsKeyringSessionDisabled() covers three independent reasons, ORed:
+  // the LLXPRT_DISABLE_OS_KEYRING=1 escape hatch (issue #3020), the
+  // security.disableOsKeyring setting, and the runtime DENIED/LOCKED latch
+  // (issue #2928).
   //
   // The latch must be part of this check, not just the env/setting flags.
   // Returning a guarded adapter after a latch would hand callers an object
@@ -343,7 +354,23 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
     const adapter: KeyringAdapter = {
       getPassword: async (service: string, account: string) => {
         const entry = new kr.AsyncEntry(service, account);
-        return entry.getPassword();
+        // Issue #3020: time the native read with a monotonic clock
+        // (performance.now) so a repeatedly slow successful read of the
+        // SAME credential surfaces the discarded "Always Allow" grant.
+        // Only non-null reads are recorded; a rejection propagates
+        // untouched because the await throws before this record call is
+        // reached. The correlation key is an opaque Map key only — never
+        // logged or interpolated into any message.
+        const startedAt = performance.now();
+        const value = await entry.getPassword();
+        if (value !== null) {
+          recordAuthorizedKeyringRead({
+            credentialKey: `${service}\u0000${account}`,
+            startedAt,
+            endedAt: performance.now(),
+          });
+        }
+        return value;
       },
       setPassword: async (
         service: string,
