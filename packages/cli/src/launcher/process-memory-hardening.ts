@@ -139,6 +139,19 @@ async function resolveLibcPrctl(): Promise<PrctlCallable | null> {
 }
 
 /**
+ * Default warning sink. Writes to stderr, tolerating an already-destroyed
+ * stream so the warn-and-continue policy cannot become a fatal bootstrap
+ * failure. See {@link applyProcessMemoryHardening}.
+ */
+function writeWarningToStderr(message: string): void {
+  try {
+    process.stderr.write(message);
+  } catch {
+    // stderr is unusable; the warning is best-effort by contract.
+  }
+}
+
+/**
  * Applies the failure policy for a hardening failure. When the process is
  * credential-bearing this **fails closed** by returning an abort reason: the
  * CLI must not start if it cannot protect the credential in memory. When the
@@ -197,11 +210,12 @@ export async function applyProcessMemoryHardening(
   }
 
   const credentialBearing = isCredentialBearing(process.env);
-  const writeWarning =
-    options.writeWarning ??
-    ((message: string): void => {
-      process.stderr.write(message);
-    });
+  // The default writer must not be able to turn "warn and continue" into a
+  // fatal bootstrap failure: process.stderr.write can throw synchronously if
+  // stderr is already destroyed, and that rejection would be caught by
+  // index.ts and exit the CLI. An INJECTED sink is deliberately left strict so
+  // a throwing test sink still surfaces.
+  const writeWarning = options.writeWarning ?? writeWarningToStderr;
   // Explicit `undefined` check rather than `??` so an injected `null` really
   // short-circuits to the "could not resolve prctl" path. With `??`, injecting
   // null would fall through to resolveLibcPrctl(), making the failure path

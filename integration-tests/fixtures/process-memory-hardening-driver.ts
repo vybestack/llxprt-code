@@ -47,8 +47,10 @@
  * The E2E mode prints one of:
  *   RESULT=E2E_HARDENED       — /proc/<child>/maps is root-owned (non-dumpable).
  *   RESULT=E2E_NOT_HARDENED   — maps is owned by the process user (dumpable).
- *   RESULT=E2E_EXITED         — the CLI exited before ownership could be read.
- *   RESULT=E2E_TIMEOUT        — timed out polling.
+ *   RESULT=E2E_ERROR:<detail>  — the child exited before signalling readiness,
+ *                               readiness timed out, or ownership could not be
+ *                               read. All failure modes surface here with the
+ *                               underlying message.
  *
  * The repository is mounted at `/repo` by the test (read-only), so relative
  * imports resolve the real module regardless of the mount path.
@@ -125,14 +127,14 @@ async function runParent(): Promise<void> {
     env: { ...process.env },
   });
 
-  let result = 'ERROR:unreachable';
+  let result: string;
   try {
     const childPid = await waitForReady(child);
     result = scanProcessMemory(childPid, SECRET);
   } catch (err) {
     result = `ERROR:${err instanceof Error ? err.message : String(err)}`;
   } finally {
-    killChild(child);
+    await killChild(child);
   }
 
   process.stdout.write(`RESULT=${result}\n`);
@@ -233,14 +235,14 @@ async function runE2e(): Promise<void> {
     },
   });
 
-  let result = 'E2E_TIMEOUT';
+  let result: string;
   try {
     const childPid = await waitForReady(child);
     result = checkMapsOwnership(childPid);
   } catch (err) {
     result = `E2E_ERROR:${err instanceof Error ? err.message : String(err)}`;
   } finally {
-    killChild(child);
+    await killChild(child);
   }
 
   process.stdout.write(`RESULT=${result}\n`);
@@ -268,12 +270,36 @@ function checkMapsOwnership(pid: number): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function killChild(child: ChildProcess): void {
+/**
+ * Terminates the child and waits for it to actually exit, escalating to
+ * SIGKILL if it does not honour SIGTERM, so the parent never exits leaving an
+ * orphan holding the secret.
+ */
+async function killChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => {
+      resolve();
+    });
+  });
   try {
     child.kill('SIGTERM');
   } catch {
-    // best-effort
+    return;
   }
+  const escalate = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // best-effort
+      }
+      resolve();
+    }, 2000).unref();
+  });
+  await Promise.race([exited, escalate.then(() => exited)]);
 }
 
 function isEacces(err: unknown): boolean {
