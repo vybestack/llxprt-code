@@ -59,7 +59,9 @@ mock.module('@napi-rs/keyring', () => ({
 describe('LLXPRT_DISABLE_OS_KEYRING production opt-out (issue #3020)', () => {
   const originalProd = process.env[PROD_ENV_KEY];
   const originalTest = process.env[TEST_ENV_KEY];
-  let tempDir: string;
+  // Empty until beforeEach creates it, so afterEach can tell "never created"
+  // from "created and needs removal".
+  let tempDir = '';
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prod-disable-'));
@@ -80,7 +82,12 @@ describe('LLXPRT_DISABLE_OS_KEYRING production opt-out (issue #3020)', () => {
     } else {
       process.env[TEST_ENV_KEY] = originalTest;
     }
-    await fs.rm(tempDir, { recursive: true, force: true });
+    // Only remove a directory that was actually created. If mkdtemp threw in
+    // beforeEach, tempDir is still '' and fs.rm would raise a TypeError that
+    // masks the original failure.
+    if (tempDir !== '') {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('produces no keyring adapter when LLXPRT_DISABLE_OS_KEYRING=1 (case 15)', async () => {

@@ -375,7 +375,9 @@ describe('createDefaultKeyringAdapter getPassword — grant persistence timing (
  * @plan PLAN-20260805-ISSUE3020
  */
 describe('SecureStore — grant persistence surface (issue #3020)', () => {
-  let tempDir: string;
+  // Empty until beforeEach creates it, so afterEach can tell "never created"
+  // from "created and needs removal".
+  let tempDir = '';
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'grant-persistence-'));
@@ -393,7 +395,12 @@ describe('SecureStore — grant persistence surface (issue #3020)', () => {
     resetLeafState();
     resetRuntimeIdentityForTesting();
     resetRuntimeReplacedWarningForTesting();
-    await fs.rm(tempDir, { recursive: true, force: true });
+    // Only remove a directory that was actually created. If mkdtemp threw in
+    // beforeEach, tempDir is still '' and fs.rm would raise a TypeError that
+    // masks the original failure.
+    if (tempDir !== '') {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('after the second slow get() the store reports broken and returned the value both times (case 14)', async () => {
