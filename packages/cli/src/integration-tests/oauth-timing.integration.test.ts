@@ -82,6 +82,11 @@ function createMockOAuthManager(tokenStore: KeyringTokenStore) {
     authenticate: vi.spyOn(manager, 'authenticate'),
     getToken: vi.spyOn(manager, 'getToken'),
     isAuthenticated: vi.spyOn(manager, 'isAuthenticated'),
+    // AuthPrecedenceResolver asks the manager whether OAuth is enabled for the
+    // provider and returns null before touching getToken when it is not. These
+    // tests run against an isolated config where nothing is enabled, so the
+    // enablement check has to report the state the test is describing.
+    isOAuthEnabled: vi.spyOn(manager, 'isOAuthEnabled').mockResolvedValue(true),
   };
 
   return { manager, spies };
