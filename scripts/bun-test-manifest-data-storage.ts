@@ -12,6 +12,8 @@ export const STORAGE_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
   files: [
     'test-bun/credential-write-lock.bun.ts',
     'test-bun/keyring-delete-verification.bun.ts',
+    'test-bun/keychain-grant-persistence.bun.ts',
+    'test-bun/keyring-opt-out.bun.ts',
     'test-bun/keyring-write-verification.bun.ts',
     'test-bun/machine-secret.bun.ts',
     'test-bun/machine-secret.concurrent-write.bun.ts',
