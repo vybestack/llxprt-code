@@ -19,11 +19,17 @@ import { ESC } from './input.js';
 
 describe('mouse utils', () => {
   describe('enableMouseEvents/disableMouseEvents', () => {
-    it('writes terminal sequences to stdout', () => {
+    // The emitted escape sequences are not asserted here: mouse.ts writes them
+    // with core's writeToStdout, which deliberately bypasses process.stdout so
+    // they survive patchStdio, and is not interceptable without mocking the
+    // core module for the whole file. The tracking-state transition is the
+    // observable contract that can be checked directly.
+    it('toggles mouse tracking state', () => {
       enableMouseEvents();
+      expect(isMouseEventsActive()).toBe(true);
+
       disableMouseEvents();
-      // Just verify these don't throw - they write to process.stdout
-      expect(true).toBe(true);
+      expect(isMouseEventsActive()).toBe(false);
     });
   });
 

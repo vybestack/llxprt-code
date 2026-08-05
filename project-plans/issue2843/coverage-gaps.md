@@ -516,3 +516,41 @@ The `loadHierarchicalLlxprtMemory` assertion pinned all nine positional
 arguments and broke on an optional one that is now `undefined`, which
 `expect.anything()` does not match. It now asserts the working directory — the
 test's actual subject — instead of the whole arity.
+
+## Mock-theater sweep (RULES.md)
+
+Swept the migrated suite for placeholder and structure-only tests. Eleven
+`expect(true).toBe(true)` assertions were found, in six files.
+
+**Deleted — every case in the file was vacuous (11 cases, 5 files):**
+
+| file | cases | what the file said about itself |
+| --- | --- | --- |
+| `src/ui/App.e2e.test.tsx` | 3 | "This is a placeholder test to verify file structure" |
+| `test/baseProvider.stateless.stub.test.ts` | 1 | "TODO(Phase 05): Replace with CLI stateless provider contract verification" |
+| `test/openai.stateless.stub.test.ts` | 1 | same |
+| `test/openaiResponses.stateless.stub.test.ts` | 1 | same |
+| `src/ui/components/OAuthCodeDialog.test.tsx` | 5 | "This will be tested via integration tests" ×4 |
+
+`OAuthCodeDialog.test.tsx` nominally had one non-vacuous case, but it asserted
+only `expect(OAuthCodeDialog).toBeDefined()` — a structure assertion that the
+import resolves, which RULES.md classifies the same way.
+
+Named behaviours lost with `OAuthCodeDialog.test.tsx`, all worth real coverage:
+
+- only pasted input is accepted for security-code entry
+- Escape closes the dialog
+- Return submits the verification code
+- invalid characters are filtered from a pasted verification code
+- provider-specific instructions are produced
+
+`App.e2e.test.tsx` named one behaviour: clear user instructions for clipboard
+copy behaviour.
+
+**Repaired rather than deleted:** `src/ui/utils/mouse.test.ts` had one vacuous
+case among 20 real ones ("Just verify these don't throw"). It now asserts the
+`isMouseEventsActive()` transition, which is the observable contract. The
+emitted escape sequences are deliberately *not* asserted: `mouse.ts` writes them
+through core's `writeToStdout`, which bypasses `process.stdout` so they survive
+`patchStdio`, and a `process.stdout.write` spy captures nothing — verified by
+trying it.
