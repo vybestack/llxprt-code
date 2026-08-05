@@ -92,7 +92,6 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
 
   afterEach(() => {
     restoreGcpEnvVars(savedGcpProject, savedGcpLocation);
-    mock.clearAllMocks();
   });
   it('sets auth-keyfile ephemeral and provider setting from keyfile before switch', async () => {
     mockReadFile.mockResolvedValue('keyfile-api-key');
@@ -282,7 +281,6 @@ describe('STEP 5 workflow: non-auth ephemerals', () => {
 
   afterEach(() => {
     restoreGcpEnvVars(savedGcpProject, savedGcpLocation);
-    mock.clearAllMocks();
   });
   it('applies non-auth ephemeral settings after provider switch', async () => {
     providerManagerStub.available = ['openai'];
@@ -432,7 +430,6 @@ describe('STEP 6 workflow: model and modelParams application', () => {
 
   afterEach(() => {
     restoreGcpEnvVars(savedGcpProject, savedGcpLocation);
-    mock.clearAllMocks();
   });
   it('sets the requested model and returns it in result', async () => {
     providerManagerStub.available = ['openai'];

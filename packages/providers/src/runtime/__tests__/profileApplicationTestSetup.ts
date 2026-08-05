@@ -190,6 +190,30 @@ export const keyStorageStub = {
   getKey: vi.fn<(name: string) => Promise<string | null>>(),
 };
 
+/** Every shared stub whose recorded calls must not survive a test. */
+const SHARED_STUBS = [
+  switchActiveProviderMock,
+  setActiveModelMock,
+  updateActiveProviderBaseUrlMock,
+  updateActiveProviderApiKeyMock,
+  setActiveModelParamMock,
+  clearActiveModelParamMock,
+  getActiveModelParamsMock,
+  setEphemeralSettingMock,
+  createProviderKeyStorageMock,
+  getCliRuntimeServicesMock,
+  getActiveProviderOrThrowMock,
+  isCliStatelessProviderModeEnabledMock,
+  isCliRuntimeStatelessReadyMock,
+  keyStorageStub.getKey,
+];
+
+function clearSharedStubHistory(): void {
+  for (const stub of SHARED_STUBS) {
+    stub.mockClear();
+  }
+}
+
 /**
  * Resets all shared stubs to the standard baseline. Call from beforeEach.
  * Saves and restores GCP env vars.
@@ -200,6 +224,11 @@ export function resetProfileApplicationStubs(): {
 } {
   const savedGcpProject = process.env.GOOGLE_CLOUD_PROJECT;
   const savedGcpLocation = process.env.GOOGLE_CLOUD_LOCATION;
+  // Clearing call history belongs here rather than in each caller: the
+  // stubs are Vitest mocks, so a bun:test caller's mock.clearAllMocks()
+  // would not touch them and recorded calls would leak between tests.
+  // Setting an implementation below does not reset call history either.
+  clearSharedStubHistory();
   configStub.model = undefined;
   configStub.ephemerals.clear();
   settingsServiceStub.currentProfile = null;
