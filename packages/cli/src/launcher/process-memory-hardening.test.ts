@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, jest, beforeEach, afterEach } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +19,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** Signature of the injectable prctl callable. */
 type PrctlCallable = NonNullable<ProcessMemoryHardeningOptions['prctl']>;
 
-/** Builds a vi.fn spy matching the prctl callable signature. */
-function prctlSpy(): ReturnType<typeof vi.fn<PrctlCallable>> {
-  return vi.fn((() => 0) as PrctlCallable);
+/** Builds a jest.fn spy matching the prctl callable signature. */
+function prctlSpy(): ReturnType<typeof jest.fn<PrctlCallable>> {
+  return jest.fn((() => 0) as PrctlCallable);
 }
 
 /** Builds a warning sink that captures every message it receives. */
@@ -54,7 +54,7 @@ describe('applyProcessMemoryHardening — gate (AC2)', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('invokes prctl(4, 0, 0, 0, 0) on Linux inside a container sandbox', async () => {
@@ -145,11 +145,11 @@ describe('applyProcessMemoryHardening — warn-and-continue (not credential-bear
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('warns and returns normally when prctl returns non-zero', async () => {
-    const prctl = vi.fn((() => -1) as PrctlCallable);
+    const prctl = jest.fn((() => -1) as PrctlCallable);
     const { sink, messages } = warningSink();
 
     await expect(
@@ -167,7 +167,7 @@ describe('applyProcessMemoryHardening — warn-and-continue (not credential-bear
   });
 
   it('warns and returns normally when prctl throws', async () => {
-    const prctl = vi.fn((() => {
+    const prctl = jest.fn((() => {
       throw new Error('boom');
     }) as PrctlCallable);
     const { sink, messages } = warningSink();
@@ -189,7 +189,7 @@ describe('applyProcessMemoryHardening — warn-and-continue (not credential-bear
   it('uses the default stderr writer without throwing when no warning sink is injected', async () => {
     // Exercises the production default warning path (process.stderr.write) to
     // prove it does not throw; prctl is injected so no bun:ffi is touched.
-    const prctl = vi.fn((() => 1) as PrctlCallable);
+    const prctl = jest.fn((() => 1) as PrctlCallable);
 
     await expect(
       applyProcessMemoryHardening({ prctl, platform: 'linux' }),
@@ -211,11 +211,11 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('FAILS CLOSED (returns abortReason, exit code 44) when credential-bearing and prctl returns non-zero', async () => {
-    const prctl = vi.fn((() => -1) as PrctlCallable);
+    const prctl = jest.fn((() => -1) as PrctlCallable);
     const { sink, messages } = warningSink();
 
     const { abortReason } = await applyProcessMemoryHardening({
@@ -232,7 +232,7 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
   });
 
   it('FAILS CLOSED when credential-bearing and prctl throws', async () => {
-    const prctl = vi.fn((() => {
+    const prctl = jest.fn((() => {
       throw new Error('boom');
     }) as PrctlCallable);
     const { sink } = warningSink();
@@ -262,7 +262,7 @@ describe('applyProcessMemoryHardening — fail-closed (credential-bearing, Block
   it('FAILS CLOSED when credential-bearing via LLXPRT_CREDENTIAL_SOCKET even if SANDBOX is unset', async () => {
     delete process.env.SANDBOX;
     process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/cred.sock';
-    const prctl = vi.fn((() => -1) as PrctlCallable);
+    const prctl = jest.fn((() => -1) as PrctlCallable);
     const { sink } = warningSink();
 
     const { abortReason } = await applyProcessMemoryHardening({

@@ -184,6 +184,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',
+      // Process memory hardening (issue #3028). Imports the real `bun:test`
+      // API rather than the Vitest shim, so it runs only here and is excluded
+      // from the Vitest selection.
+      'src/launcher/process-memory-hardening.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
       // Issue #2980: Zed terminal command correlation. Migrated to bun:test
       // and excluded from the Vitest selection below; the strict wrapper
