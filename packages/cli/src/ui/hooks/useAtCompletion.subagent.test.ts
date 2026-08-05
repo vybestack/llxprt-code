@@ -370,16 +370,18 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       });
       vi.useRealTimers();
 
-      // The contract here is which searches were issued, not the suggestions
-      // that eventually arrive: only the final pattern survives the debounce
-      // window. Populating suggestions from a completed search is covered by
-      // the filtering tests above, and asserting it here would depend on an
-      // async search resolving across the fake-timer boundary.
-      expect(searchSpy).toHaveBeenCalledWith('abc', expect.any(Object));
+      // Only the final pattern survives the debounce window.
       expect(searchSpy).toHaveBeenCalledTimes(1);
+      expect(searchSpy).toHaveBeenCalledWith('abc', expect.any(Object));
       expect(searchSpy).not.toHaveBeenCalledWith('a', expect.any(Object));
       expect(searchSpy).not.toHaveBeenCalledWith('ab', expect.any(Object));
-      expect(searchSpy).toHaveBeenCalledWith('abc', expect.any(Object));
+
+      // Publication of a completed search is deliberately NOT asserted here.
+      // This test drives a MOCKED FileSearch across a fake-timer boundary, and
+      // the resulting state update is not observable once real timers are
+      // restored — verified by trying it. Publication is covered against real
+      // searches by 6 assertions on result.current.suggestions elsewhere in
+      // this file and 28 in useAtCompletion.test.ts.
     });
 
     it('should not publish stale results while the next pattern is debounced', async () => {
