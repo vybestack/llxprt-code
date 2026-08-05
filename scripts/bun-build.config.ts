@@ -177,6 +177,51 @@ export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
 };
 
 /**
+ * Separator for multi-diagnostic messages: one diagnostic per line, indented so
+ * the group reads as a unit in CI logs.
+ */
+const DIAGNOSTIC_SEPARATOR = '\n  ';
+
+/** Renders one Bun diagnostic, keeping its source position when it carries one. */
+function renderDiagnostic(diagnostic: unknown): string {
+  if (!(diagnostic instanceof Error)) {
+    return String(diagnostic);
+  }
+  const { position } = diagnostic as Error & {
+    position?: { file?: string; line?: number; column?: number } | null;
+  };
+  const where = position?.file
+    ? ` (${position.file}:${position.line ?? 0}:${position.column ?? 0})`
+    : '';
+  return `${diagnostic.name}: ${diagnostic.message}${where}`;
+}
+
+/**
+ * Renders every diagnostic Bun attaches to a rejected build.
+ *
+ * `Bun.build` rejects with an `AggregateError` whose own message is the
+ * uninformative constant "Bundle failed"; the resolution and transpile errors
+ * that say what actually broke are in `errors`. Reporting only
+ * `error.message` leaves a CI failure undiagnosable, which is what issue #3061
+ * had to reproduce locally to explain.
+ */
+function describeBuildFailure(failure: unknown): string {
+  const head = renderDiagnostic(failure);
+  if (!(failure instanceof AggregateError)) {
+    return head;
+  }
+  const nested: readonly unknown[] = failure.errors;
+  return [head, ...nested.map(renderDiagnostic)].join(DIAGNOSTIC_SEPARATOR);
+}
+
+/** Renders the diagnostics of a build that completed with `success === false`. */
+function describeBuildLogs(logs: readonly unknown[]): string {
+  return logs.length === 0
+    ? '(no diagnostics)'
+    : logs.map(renderDiagnostic).join(DIAGNOSTIC_SEPARATOR);
+}
+
+/**
  * Runs a Bun.build target and exits non-zero on any failure (rejected promise
  * or `success === false`), surfacing diagnostics. Stale artifacts must never be
  * shipped downstream, so both failure modes are fatal.
@@ -191,13 +236,11 @@ async function buildOrFail(
   );
 
   if (result instanceof Error || result.success === false) {
-    if (result instanceof Error) {
-      console.error(`${label} build failed:`, result);
-    } else {
-      console.error(`${label} build completed with errors.`);
-      const detail = (result.logs ?? []).map((log) => log.message).join('; ');
-      console.warn(`${label} build logs: ` + (detail || '(none)'));
-    }
+    console.error(
+      result instanceof Error
+        ? `${label} build failed: ${describeBuildFailure(result)}`
+        : `${label} build completed with errors: ${describeBuildLogs(result.logs ?? [])}`,
+    );
     process.exit(1);
   }
   return result;
@@ -236,16 +279,11 @@ export async function buildCliBundle(): Promise<readonly string[]> {
   try {
     cliResult = await Bun.build(cliBundleConfig);
   } catch (error) {
-    throw new Error(
-      `cli-bundle build failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    throw new Error(`cli-bundle build failed: ${describeBuildFailure(error)}`);
   }
   if (!cliResult.success) {
-    const detail = (cliResult.logs ?? []).map((log) => log.message).join('; ');
     throw new Error(
-      `cli-bundle build completed with errors: ${detail || '(no details)'}`,
+      `cli-bundle build completed with errors: ${describeBuildLogs(cliResult.logs ?? [])}`,
     );
   }
   return cliResult.outputs.map((o) => `${o.path}=${o.size}`);
