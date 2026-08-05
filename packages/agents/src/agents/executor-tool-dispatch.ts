@@ -24,6 +24,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { TASK_COMPLETE_TOOL_NAME } from './recovery.js';
 import type {
@@ -271,7 +272,7 @@ function handleCompleteTaskCall(
     const error =
       'Task already marked complete in this turn. Ignoring duplicate call.';
     syncParts.push(
-      createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, { error }),
+      createToolFailureBlock(TASK_COMPLETE_TOOL_NAME, callId, error),
     );
     emitActivity('ERROR', {
       context: 'tool_call',
@@ -344,7 +345,7 @@ function processCompleteTaskOutput(
     if (!validationResult.success) {
       const error = `Output validation failed: ${JSON.stringify(validationResult.error.flatten())}`;
       syncParts.push(
-        createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, { error }),
+        createToolFailureBlock(TASK_COMPLETE_TOOL_NAME, callId, error),
       );
       emitActivity('ERROR', {
         context: 'tool_call',
@@ -379,7 +380,7 @@ function processCompleteTaskOutput(
   // Missing required output argument
   const error = `Missing required argument '${outputName}' for completion.`;
   syncParts.push(
-    createToolResponseBlock(TASK_COMPLETE_TOOL_NAME, callId, { error }),
+    createToolFailureBlock(TASK_COMPLETE_TOOL_NAME, callId, error),
   );
   emitActivity('ERROR', {
     context: 'tool_call',
@@ -401,7 +402,7 @@ function handleUnauthorizedToolCall(
   debugLogger.warn(`[AgentExecutor] Blocked call: ${error}`);
 
   syncResponseParts.push(
-    createToolResponseBlock(functionCall.name, callId, { error }),
+    createToolFailureBlock(functionCall.name, callId, error),
   );
 
   emitActivity('ERROR', {
@@ -535,5 +536,26 @@ function createToolResponseBlock(
     callId,
     toolName,
     result,
+  };
+}
+
+/**
+ * Creates a failed `ToolResponseBlock`: the model-facing message travels in
+ * `result.error` (unchanged behaviour) AND the failure is marked explicitly on
+ * the top-level `error` field so the provider layer reports status "error"
+ * (issue #3063). Failure is authored explicitly here — never inferred from the
+ * shape of `result` by the success-path helper.
+ */
+function createToolFailureBlock(
+  toolName: string,
+  callId: string,
+  errorMessage: string,
+): ToolResponseBlock {
+  return {
+    type: 'tool_response',
+    callId,
+    toolName,
+    result: { error: errorMessage },
+    error: toolFailureMarker(errorMessage),
   };
 }

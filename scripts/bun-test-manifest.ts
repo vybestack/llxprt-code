@@ -159,6 +159,12 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'agents',
     files: [
       'src/core/CompressionProfileResolver.proxyKeyStorage.test.ts',
+      // Issue #3063: explicit failure producers must mark the top-level error
+      // marker (AC17) and cancellation must be marked at its real source (AC18).
+      'src/core/subagentToolProcessing.toolFailure.test.ts',
+      'src/scheduler/status-transitions.toolFailure.test.ts',
+      // Issue #3063: compression must keep both the marker and the remedy (AC14).
+      'src/compression/utils.toolFailureFidelity.test.ts',
       'test-bun/generatingModelStamp.issue2511.bun.ts',
       'test-bun/subagentAnthropicTextSettings.issue1738.bun.ts',
       'test-bun/taskTimeoutBounds.issue3031.bun.ts',

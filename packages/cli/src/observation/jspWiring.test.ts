@@ -14,7 +14,7 @@ import {
 } from './jspWiring.js';
 import type { JspPostResult } from './jspPublisher.js';
 import type { JspSnapshotDocument, JspBoundDocument } from './jspDocuments.js';
-import { todoEvents } from '@vybestack/llxprt-code-core';
+import { todoEvents, FatalConfigError } from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -50,6 +50,22 @@ async function writeTempFile(name: string, content: string): Promise<string> {
   const filePath = join(dir, name);
   await fs.writeFile(filePath, content, 'utf8');
   return filePath;
+}
+
+/**
+ * Run a load attempt and capture the thrown error, asserting it is a
+ * FatalConfigError with exit code 52. Returns the error so the caller can
+ * make message assertions without re-deriving the throw.
+ */
+function expectFatalBootstrap(fn: () => unknown): FatalConfigError {
+  try {
+    fn();
+  } catch (error) {
+    expect(error).toBeInstanceOf(FatalConfigError);
+    expect((error as FatalConfigError).exitCode).toBe(52);
+    return error as FatalConfigError;
+  }
+  throw new Error('expected loadBootstrapFromEnv to throw');
 }
 
 describe('loadBootstrapFromEnv', () => {
@@ -88,15 +104,26 @@ describe('loadBootstrapFromEnv', () => {
     expect(result?.agentId).toBe('agent-alex');
   });
 
-  it('throws on malformed bootstrap (fail fast)', async () => {
-    const file = await writeTempFile('bad.json', '{ not json');
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    expect(() => loadBootstrapFromEnv()).toThrow(
-      'JSP bootstrap file is malformed JSON',
-    );
+  it('throws on unreadable bootstrap file (fail fast, exit 52)', () => {
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE =
+      join(
+        tmpdir(),
+        'jsp-no-such-file-' + Math.random().toString(36).slice(2),
+      ) + '.json';
+    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain('could not be read');
   });
 
-  it('throws on non-loopback endpoint (insecure)', async () => {
+  it('throws on malformed bootstrap (fail fast, exit 52)', async () => {
+    const file = await writeTempFile('bad.json', '{ not json');
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
+    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain('malformed JSON');
+  });
+
+  it('throws on non-loopback endpoint (insecure, exit 52)', async () => {
     const file = await writeTempFile(
       'insecure.json',
       JSON.stringify({
@@ -105,16 +132,23 @@ describe('loadBootstrapFromEnv', () => {
       }),
     );
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    expect(() => loadBootstrapFromEnv()).toThrow('JSP bootstrap rejected');
+    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain('rejected (JSP-E004)');
+    // A credential-bearing file's secrets must not leak into the diagnostic.
+    expect(error.message).not.toContain('pub-secret-xyz');
+    expect(error.message).not.toContain('reg-abc');
   });
 
-  it('throws on wrong protocol version', async () => {
+  it('throws on wrong protocol version (exit 52)', async () => {
     const file = await writeTempFile(
       'wrong.json',
       JSON.stringify({ ...validBootstrapJson, protocol: 'jsp/2' }),
     );
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    expect(() => loadBootstrapFromEnv()).toThrow('JSP bootstrap rejected');
+    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain('rejected (JSP-E003)');
   });
 });
 

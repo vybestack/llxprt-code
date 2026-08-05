@@ -11,6 +11,7 @@ import {
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   type CompletedToolCall,
   type CoreToolScheduler,
@@ -203,6 +204,9 @@ function createErrorCompletedToolCall(
           callId: request.callId,
           toolName: request.name,
           result: { error: error.message },
+          // Issue #3063: mark the failure on the top-level field so the
+          // provider layer reports status "error" (derived by truthiness).
+          error: toolFailureMarker(error.message),
         },
       ],
     },

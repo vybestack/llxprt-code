@@ -38,6 +38,7 @@ import { type CompletedToolCall } from './coreToolScheduler.js';
 import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   SubagentTerminateMode,
   type OutputObject,
@@ -344,6 +345,8 @@ export function handleEmitValueCall(
       callId: request.callId,
       toolName: request.name,
       result: { error: errorMessage },
+      // Issue #3063: mark the malformed-emit failure on the top-level field.
+      error: toolFailureMarker(errorMessage),
     },
   ];
 }

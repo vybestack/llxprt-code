@@ -25,7 +25,14 @@
  * a2a-server build. Top-level execution is guarded by `import.meta.main`.
  */
 
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +81,54 @@ export const EXTERNALS = [
   'chokidar',
 ];
 
+/**
+ * Modules whose runtime behaviour depends on their own `__dirname` and so MUST
+ * stay external to the CLI bundle.
+ *
+ * When Bun inlines a CommonJS module it freezes `__dirname` as a build-time
+ * string literal. Any dependency that locates a runtime asset (WASM, locales,
+ * config files) relative to its own `__dirname` then ships the *build
+ * machine's* absolute path baked into the artifact: that path resolves only on
+ * the builder and leaks the release engineer's filesystem layout into user
+ * stack traces. Keeping such modules external lets Bun resolve them from
+ * `node_modules` at launch, so `__dirname` points at the *installed* package —
+ * exactly the resolution the pre-bundle TypeScript launch always used.
+ *
+ * **Ownership rule (invariant):** every entry MUST be a declared direct
+ * dependency of `packages/cli/package.json` (the published package that ships
+ * the bundle). Only a direct dependency guarantees its runtime resolution from
+ * `<pkg>/bundle/llxprt.js`: the package manager installs it in the published
+ * package's own `node_modules` scope, so `require("<name>")` from the bundle
+ * finds the *right* copy. A transitive dependency that merely appears somewhere
+ * in `node_modules` does NOT give this guarantee — it may be hoisted, shadowed
+ * by a consumer's conflicting version, or absent entirely depending on the
+ * consumer's install tree. That was the defect behind issue #3055:
+ * `config-chain` is owned by `@pnpm/npm-conf` (under `update-notifier`'s
+ * transitive graph), so externalizing it moved the resolution owner to the CLI
+ * package, where no package manager guarantees it resolves.
+ *
+ * Enforced by `scripts/tests/issue-3055-cli-externals-ownership.bun.test.ts`.
+ *
+ * This list is deliberately separate from `EXTERNALS`: the a2a-server bundle is
+ * a self-contained artifact that inlines its dependencies and already
+ * neutralises tiktoken via `portableTiktokenPlugin`, so forcing these external
+ * there would break that strategy.
+ */
+export const CLI_DIRNAME_DEPENDENT_EXTERNALS = [
+  // Locates tiktoken_bg.wasm via __dirname; throws "Missing tiktoken_bg.wasm"
+  // at import time when the baked build-machine path is absent (issue #3055).
+  '@dqbd/tiktoken',
+  // Direct dependency of packages/cli. Its transitive graph includes
+  // @pnpm/npm-conf -> config-chain, which walks __dirname to find npm-style
+  // config files. Externalizing update-notifier (not config-chain) keeps the
+  // entire transitive graph resolving from update-notifier's own package
+  // scope, where config-chain is a guaranteed dependency of @pnpm/npm-conf.
+  'update-notifier',
+  // Resolves its locale directory relative to __dirname; a baked path silently
+  // degrades CLI localisation.
+  'yargs',
+] as const;
+
 const tiktokenWasmSource = require.resolve('@dqbd/tiktoken/tiktoken_bg.wasm');
 
 // a2a-server bundle: packages/a2a-server/src/http/server.ts -> dist/a2a-server.mjs
@@ -112,7 +167,7 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
  */
 export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   target: 'bun',
-  external: EXTERNALS,
+  external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
   loader: { '.node': 'file' },
   minify: false,
   splitting: false,
@@ -127,6 +182,26 @@ export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   outdir: join(root, 'packages/cli/bundle'),
   naming: 'llxprt.js',
 };
+
+/**
+ * Built-in provider alias data (issue #3062).
+ *
+ * The bundled `providerAliases` loader computes its built-in directory as
+ * `<bundleDir>/providers/aliases` (resolved from the bundle's own `__dirname`
+ * at runtime). When the bundle was the only emitted artifact that directory did
+ * not exist, so no built-in aliases registered and `--provider openai` failed
+ * with "Provider 'openai' not found". The alias assets live as raw
+ * `.config`/`.json` files in the providers package source; emit them verbatim
+ * next to the bundle so the loader finds them exactly as in development.
+ */
+const providerAliasSourceDir = join(
+  root,
+  'packages/providers/src/composition/aliases',
+);
+const providerAliasBundleDir = join(
+  root,
+  'packages/cli/bundle/providers/aliases',
+);
 
 /**
  * Runs a Bun.build target and exits non-zero on any failure (rejected promise
@@ -174,6 +249,30 @@ async function buildA2aServer(): Promise<readonly string[]> {
 }
 
 /**
+ * Collects built-in provider alias asset names (`.config`/`.json`) from `dir`,
+ * failing fast when none are found.
+ *
+ * An empty result is a build-input error, not a silent no-op: the bundled
+ * `providerAliases` loader would then register zero built-in providers and
+ * `--provider openai` would fail at launch (issue #3062 regression). Surfacing
+ * this at build time prevents shipping a bundle that silently dropped every
+ * built-in alias.
+ */
+export function collectAliasAssets(dir: string): string[] {
+  const assets = readdirSync(dir).filter(
+    (name) => name.endsWith('.config') || name.endsWith('.json'),
+  );
+  if (assets.length === 0) {
+    throw new Error(
+      `cli-bundle build produced no built-in provider alias assets: ${dir} ` +
+        `contains no .config/.json files; the bundled providerAliases loader ` +
+        `would register no built-in providers.`,
+    );
+  }
+  return assets;
+}
+
+/**
  * Builds the prebuilt CLI bundle only (issue #2999).
  *
  * Kept separately invocable so `prepack` can produce the shipped bundle
@@ -200,7 +299,24 @@ export async function buildCliBundle(): Promise<readonly string[]> {
       `cli-bundle build completed with errors: ${detail || '(no details)'}`,
     );
   }
-  return cliResult.outputs.map((o) => `${o.path}=${o.size}`);
+
+  // Emit the built-in provider alias data next to the bundle (issue #3062).
+  // Replace any stale copy wholesale so removed/renamed alias files never leak
+  // into a publish artifact.
+  rmSync(providerAliasBundleDir, { recursive: true, force: true });
+  mkdirSync(providerAliasBundleDir, { recursive: true });
+  const aliasAssets = collectAliasAssets(providerAliasSourceDir);
+  for (const name of aliasAssets) {
+    copyFileSync(
+      join(providerAliasSourceDir, name),
+      join(providerAliasBundleDir, name),
+    );
+  }
+
+  return [
+    ...cliResult.outputs.map((o) => `${o.path}=${o.size}`),
+    ...aliasAssets.map((name) => join(providerAliasBundleDir, name)),
+  ];
 }
 
 /**
