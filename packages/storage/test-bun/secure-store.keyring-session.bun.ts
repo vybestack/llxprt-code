@@ -110,15 +110,21 @@ function useResettableSessionState(): {
 
 /** Saves, sets, and restores the opt-out env var around each test. */
 function useOptOutEnv(): {
-  set: (value: string | undefined) => void;
+  set: (value: string) => void;
+  clear: () => void;
   beforeEach: () => void;
   afterEach: () => void;
 } {
   let saved: string | undefined;
   return {
-    set: (value: string | undefined) => {
-      if (value === undefined) delete process.env[OPT_OUT_ENV];
-      else process.env[OPT_OUT_ENV] = value;
+    set: (value: string) => {
+      process.env[OPT_OUT_ENV] = value;
+    },
+    // `delete`, not assignment: the production check reads
+    // process.env[VAR] === '1', but leaving the key present with a literal
+    // 'undefined' would still be observable to any existence check.
+    clear: () => {
+      delete process.env[OPT_OUT_ENV];
     },
     beforeEach: () => {
       saved = process.env[OPT_OUT_ENV];
@@ -766,7 +772,7 @@ describe('R3 — explicit opt-out', () => {
     expect(await createDefaultKeyringAdapter()).toBeNull();
 
     // Neither set: the session is enabled again.
-    env.set(undefined);
+    env.clear();
     expect(isOsKeyringSessionDisabled()).toBe(false);
   });
 
