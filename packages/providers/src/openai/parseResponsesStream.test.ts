@@ -391,12 +391,13 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
   });
 
   /**
-   * Top-level message/code and a nested error.type must both reach diagnostics:
-   * top-level wins for message/code, nested type survives (issue #3034 review).
+   * Top-level and nested error fields must both reach diagnostics: the
+   * documented top-level message/code/param win (including an explicit null
+   * param) while the nested type survives (issue #3034 review).
    */
   it('preserves nested error.type alongside winning top-level message/code', async () => {
     const chunks = [
-      'data: {"type":"error","message":"top message","code":"err_code","error":{"message":"nested message","type":"rate_limit_error"}}\n\n',
+      'data: {"type":"error","message":"top message","code":"err_code","param":null,"error":{"message":"nested message","type":"rate_limit_error","code":"nested_code","param":"nested_param"}}\n\n',
       'data: [DONE]\n\n',
     ];
 
@@ -417,6 +418,7 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
         providerError: {
           message: 'top message',
           code: 'err_code',
+          param: null,
           type: 'rate_limit_error',
         },
       },
