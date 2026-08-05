@@ -354,12 +354,16 @@ export function validateASTSyntax(
  * location to the edited region.
  */
 function toDiagnostic(
-  range: { start: { line: number; column: number }; end: { line: number } },
+  range: {
+    start: { line: number; column: number };
+    end: { line: number; column: number };
+  },
   editRegion: EditRegion | undefined,
 ): AstDiagnostic {
   const line = range.start.line;
   const column = range.start.column;
   const endLine = range.end.line;
+  const endColumn = range.end.column;
   const wholeFileRecovery = line === 0 && column === 0 && endLine > line;
   let message: string;
   if (wholeFileRecovery && editRegion && editRegion.startLine > 1) {
@@ -369,7 +373,7 @@ function toDiagnostic(
   } else {
     message = `Syntax error at line ${line + 1}, column ${column + 1}`;
   }
-  return { line, column, endLine, wholeFileRecovery, message };
+  return { line, column, endLine, endColumn, wholeFileRecovery, message };
 }
 
 /**
@@ -405,11 +409,12 @@ function collectDiagnostics(
   };
   visit(root);
 
-  // Deduplicate true equivalents (identical span) preserving source order.
+  // Deduplicate true equivalents (identical span, including end column)
+  // preserving source order.
   const seen = new Set<string>();
   const result: AstDiagnostic[] = [];
   for (const d of collected) {
-    const key = `${d.line}:${d.column}:${d.endLine}:${d.wholeFileRecovery}`;
+    const key = `${d.line}:${d.column}:${d.endLine}:${d.endColumn ?? ''}:${d.wholeFileRecovery}`;
     if (!seen.has(key)) {
       seen.add(key);
       result.push(d);

@@ -516,7 +516,16 @@ export class ASTEditToolInvocation
         editData.currentContent,
         this.params.old_string,
       );
-    } else if (mapping.prefixLines > 0 || mapping.lineDelta !== 0) {
+    } else if (
+      editData.currentContent !== null &&
+      contentToWrite !== editData.currentContent
+    ) {
+      // IDE-accepted candidate diverges from the original: the edit begins at
+      // the first changed line (line 1 when the first line changed), so
+      // whole-file recovery locations are refined to the actual edited region.
+      // The candidate-diff invariant excludes a no-op revert (candidate equals
+      // original) and new files (no original), avoiding the overly broad
+      // prefixLines/lineDelta condition that skipped a line-1, zero-delta edit.
       editStartLine = mapping.prefixLines + 1;
     } else {
       editStartLine = null;

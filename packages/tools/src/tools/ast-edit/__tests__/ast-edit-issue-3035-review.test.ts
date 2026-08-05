@@ -332,6 +332,79 @@ describe('Finding 3 (In-scope): IDE-accepted content classified from the actual 
 });
 
 // ---------------------------------------------------------------------------
+// Line-1 edit region: IDE-accepted candidate diverging at line 1 with a zero
+// net line delta must be validated at the actual edit line (line 1), not
+// skipped because prefixLines === 0. The candidate-diff invariant (candidate
+// differs from the original) keeps this authoritative while excluding the
+// no-change revert and new-file cases.
+// ---------------------------------------------------------------------------
+
+describe('IDE-accepted candidate diverging at line 1 with zero net line delta is validated at the actual edit line', () => {
+  let tmpDir: string;
+  let host: IToolHost;
+
+  beforeEach(() => {
+    tmpDir = join(
+      tmpdir(),
+      `ast-edit-line1-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(tmpDir, { recursive: true });
+    host = {
+      ...createDefaultToolHost(),
+      getTargetDir: () => tmpDir,
+      getWorkspaceRoots: () => [tmpDir],
+      getApprovalMode: () => 'default',
+    };
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('refuses an IDE candidate that introduces syntax damage on line 1 (zero line delta) and leaves the original unchanged', async () => {
+    // The IDE-accepted content changes line 1 (prefixLines === 0) with no net
+    // line change (lineDelta === 0). The edit region must begin at line 1 so
+    // the candidate is validated authoritatively; introducing damage is refused.
+    const filePath = join(tmpDir, 'line1-damage.ts');
+    const original = 'const a = 1;\nconst b = 2;\n';
+    writeFileSync(filePath, original, 'utf-8');
+    const ide = fakeIdeService('connected', 'const a = {{{ 1;\nconst b = 2;\n');
+    const tool = new ASTEditTool(host, ide);
+
+    const result = await executeApplyWithIdeContent(
+      tool,
+      filePath,
+      'const a = 1;',
+      'const a = 2;',
+    );
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(readFileSync(filePath, 'utf-8')).toBe(original);
+  });
+
+  it('writes a valid IDE candidate diverging only at line 1 (zero line delta) with the exact accepted content', async () => {
+    const filePath = join(tmpDir, 'line1-valid.ts');
+    const original = 'const a = 1;\nconst b = 2;\n';
+    writeFileSync(filePath, original, 'utf-8');
+    const ideContent = 'const a = 99;\nconst b = 2;\n';
+    const ide = fakeIdeService('connected', ideContent);
+    const tool = new ASTEditTool(host, ide);
+
+    const result = await executeApplyWithIdeContent(
+      tool,
+      filePath,
+      'const a = 1;',
+      'const a = 2;',
+    );
+
+    expect(result.error).toBeUndefined();
+    // The exact IDE-accepted candidate is authoritative on write.
+    expect(readFileSync(filePath, 'utf-8')).toBe(ideContent);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Finding 4 (In-scope): ast_read_file keeps working-set context.
 // ---------------------------------------------------------------------------
 

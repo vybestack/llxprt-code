@@ -44,6 +44,12 @@ export interface AstDiagnostic {
   readonly column: number;
   /** 0-based end line; used to detect whole-file recovery spans. */
   readonly endLine: number;
+  /**
+   * 0-based end column from the parser. Optional for backward compatibility
+   * with structured fixtures that predate it; the parser always supplies it,
+   * and whole-file-recovery span identity requires it.
+   */
+  readonly endColumn?: number;
   /** True when this is a whole-file tree-sitter recovery node (1:1, spans lines). */
   readonly wholeFileRecovery: boolean;
   /** Human-readable message (display location refined to the edit region when applicable). */
@@ -239,10 +245,11 @@ function locationsMatch(
 
 /**
  * A diagnostic normalized for classification: whole-file recoveries carry no
- * reliable coordinates (line/column null) but DO carry their raw endLine for
- * span identity, precise diagnostics carry their 1-based parser coordinates.
- * Derived from structured diagnostics when present, otherwise from display
- * strings (backward compatibility — endLine is 0 when unknown).
+ * reliable start coordinates (line/column null) but DO carry their raw end span
+ * (end line AND end column) for identity, precise diagnostics carry their
+ * 1-based parser coordinates. Derived from structured diagnostics when present,
+ * otherwise from display strings (backward compatibility — endLine is 0 and
+ * endColumn is undefined when unknown).
  */
 interface NormalizedDiagnostic {
   wholeFileRecovery: boolean;
@@ -250,6 +257,8 @@ interface NormalizedDiagnostic {
   column: number | null;
   /** Raw 0-based end line from the parser; 0 when unavailable (string-only). */
   endLine: number;
+  /** Raw 0-based end column; undefined when unavailable (string-only caller). */
+  endColumn: number | undefined;
   message: string;
 }
 
@@ -265,6 +274,7 @@ function toNormalized(result: AstValidationResult): NormalizedDiagnostic[] {
       line: d.wholeFileRecovery ? null : d.line + 1,
       column: d.wholeFileRecovery ? null : d.column,
       endLine: d.endLine,
+      endColumn: d.endColumn,
       message: d.message,
     }));
   }
@@ -276,6 +286,7 @@ function toNormalized(result: AstValidationResult): NormalizedDiagnostic[] {
         line: null,
         column: null,
         endLine: 0,
+        endColumn: undefined,
         message: err,
       };
     }
@@ -285,6 +296,7 @@ function toNormalized(result: AstValidationResult): NormalizedDiagnostic[] {
       line: loc?.line ?? null,
       column: loc?.column ?? null,
       endLine: 0,
+      endColumn: undefined,
       message: err,
     };
   });
@@ -296,13 +308,15 @@ function toNormalized(result: AstValidationResult): NormalizedDiagnostic[] {
  * provenance.
  *
  * A whole-file recovery has no reliable start coordinates, so it is equivalent
- * ONLY to a baseline whole-file recovery, and ONLY when the raw end-line span
- * identity matches after adjustment through the unchanged suffix (or prefix for
- * a no-change edit). A whole-file recovery cannot be proven equivalent to a
- * precise baseline error → fail closed (returns false). This avoids blindly
- * accepting a whole-file recovery whenever the baseline was merely "invalid"
- * while still staying writable when an unchanged baseline whole-file recovery
- * remains.
+ * ONLY to a baseline whole-file recovery, and ONLY when the raw END-span
+ * identity (end line AND end column) matches after adjustment through the
+ * unchanged suffix (or prefix for a no-change edit). An unknown end column
+ * (string-only caller) cannot prove identity → fail closed (returns false), so
+ * a different/new recovery is never silently trusted as pre-existing. A
+ * whole-file recovery cannot be proven equivalent to a precise baseline error
+ * → fail closed. This avoids blindly accepting a whole-file recovery whenever
+ * the baseline was merely "invalid" while still staying writable when an
+ * unchanged baseline whole-file recovery remains.
  */
 function diagnosticsEquivalent(
   pre: NormalizedDiagnostic,
@@ -311,16 +325,25 @@ function diagnosticsEquivalent(
 ): boolean {
   if (post.wholeFileRecovery) {
     if (!pre.wholeFileRecovery) return false;
-    // Prove equivalence by raw end-line identity through the candidate mapping.
+    // Prove equivalence by raw END-span identity (line AND column) through the
+    // candidate mapping. A missing end column means no structured span identity
+    // (string-only caller) → fail closed.
+    if (pre.endColumn === undefined || post.endColumn === undefined) {
+      return false;
+    }
     const { suffixLines, prefixLines, origLineCount, lineDelta } = mapping;
     const suffixStartOrig = origLineCount - suffixLines;
     if (suffixLines > 0 && pre.endLine >= suffixStartOrig) {
-      // End maps through the unchanged suffix (lineDelta shift).
-      return pre.endLine + lineDelta === post.endLine;
+      // End maps through the unchanged suffix (lineDelta shift); the end column
+      // lies within an unchanged line, so it must match exactly.
+      return (
+        pre.endLine + lineDelta === post.endLine &&
+        pre.endColumn === post.endColumn
+      );
     }
     if (prefixLines >= origLineCount) {
       // No-change edit: entire file is unchanged prefix.
-      return pre.endLine === post.endLine;
+      return pre.endLine === post.endLine && pre.endColumn === post.endColumn;
     }
     // End is in the changed middle → cannot prove equivalence → fail closed.
     return false;

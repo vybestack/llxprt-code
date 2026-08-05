@@ -16,10 +16,12 @@ import {
 } from '../validation-categorizer.js';
 
 /**
- * Constructs a CandidateMapping simulating a single-line edit at
- * `editStartLine` (replacing exactly one line) where everything below is
- * unchanged suffix. This mirrors the old editStartLine + lineDelta semantics
- * for unit-test scenarios.
+ * Unit-test shortcut that builds a CandidateMapping from an edit start line
+ * and a net line delta, treating the lines above the edit as an unchanged
+ * prefix and the lines below it as an unchanged suffix. It does NOT require a
+ * single-line replacement — only the start line and net delta are inputs,
+ * mirroring the old editStartLine + lineDelta matching semantics for unit-test
+ * scenarios with an unchanged prefix/suffix.
  */
 function singleLineEditMapping(
   editStartLine: number,
@@ -443,15 +445,89 @@ describe('summarizeAstValidation: whole-file recovery locations (REQ-3035-3)', (
     expect(summary.newlyIntroduced).toBe(true);
   });
 
-  it('treats a whole-file recovery as pre-existing when the baseline was also a whole-file recovery', () => {
+  it('treats a whole-file recovery as pre-existing when structured end spans match', () => {
     // An unchanged baseline whole-file recovery that remains after a harmless
-    // edit must stay writable (equivalent identity).
+    // edit stays writable only when its raw END-span identity (end line AND end
+    // column) is preserved through the candidate mapping.
+    const summary = summarizeAstValidation(
+      {
+        valid: false,
+        errors: [wholeRecoveryBaseline(1)],
+        diagnostics: [
+          {
+            line: 0,
+            column: 0,
+            endLine: 6,
+            endColumn: 0,
+            wholeFileRecovery: true,
+            message: wholeRecoveryBaseline(1),
+          },
+        ],
+      },
+      {
+        valid: false,
+        errors: [wholeRecovery(10)],
+        diagnostics: [
+          {
+            line: 0,
+            column: 0,
+            endLine: 6,
+            endColumn: 0,
+            wholeFileRecovery: true,
+            message: wholeRecovery(10),
+          },
+        ],
+      },
+    );
+    expect(summary.preExisting).toBe(true);
+    expect(summary.newlyIntroduced).toBe(false);
+  });
+
+  it('fails closed for string-only whole-file recovery without structured span identity', () => {
+    // Compatibility callers that supply only display strings cannot prove that
+    // two whole-file recoveries are the same span (both normalize endLine to a
+    // sentinel 0), so equivalence must fail closed rather than be trusted.
     const summary = summarizeAstValidation(
       { valid: false, errors: [wholeRecoveryBaseline(1)] },
       { valid: false, errors: [wholeRecovery(10)] },
     );
-    expect(summary.preExisting).toBe(true);
-    expect(summary.newlyIntroduced).toBe(false);
+    expect(summary.newlyIntroduced).toBe(true);
+  });
+
+  it('treats whole-file recoveries that differ only by end column as distinct', () => {
+    // Same end line, different end column → different span identity → not
+    // equivalent → classified as newly introduced (fail closed).
+    const summary = summarizeAstValidation(
+      {
+        valid: false,
+        errors: [wholeRecoveryBaseline(1)],
+        diagnostics: [
+          {
+            line: 0,
+            column: 0,
+            endLine: 6,
+            endColumn: 0,
+            wholeFileRecovery: true,
+            message: wholeRecoveryBaseline(1),
+          },
+        ],
+      },
+      {
+        valid: false,
+        errors: [wholeRecovery(10)],
+        diagnostics: [
+          {
+            line: 0,
+            column: 0,
+            endLine: 6,
+            endColumn: 5,
+            wholeFileRecovery: true,
+            message: wholeRecovery(10),
+          },
+        ],
+      },
+    );
+    expect(summary.newlyIntroduced).toBe(true);
   });
 
   it('fails closed when a baseline whole-file recovery ends in the changed middle', () => {
@@ -464,6 +540,7 @@ describe('summarizeAstValidation: whole-file recovery locations (REQ-3035-3)', (
             line: 0,
             column: 0,
             endLine: 5,
+            endColumn: 0,
             wholeFileRecovery: true,
             message: wholeRecoveryBaseline(1),
           },
@@ -477,6 +554,7 @@ describe('summarizeAstValidation: whole-file recovery locations (REQ-3035-3)', (
             line: 0,
             column: 0,
             endLine: 6,
+            endColumn: 1,
             wholeFileRecovery: true,
             message: wholeRecovery(4),
           },
