@@ -29,7 +29,7 @@
  *   - Override the image with `LLXPRT_SANDBOX_TEST_IMAGE=<ref>`.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -345,6 +345,155 @@ describe.skipIf(skipTests)(
       expect(real).toBe(1000);
       // The setuid bit must NOT have elevated the effective uid.
       expect(effective).toBe(1000);
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Issue #3028: process memory hardening via prctl(PR_SET_DUMPABLE).
+//
+// Drives the PRODUCTION module inside a real container. The driver fixture
+// spawns a CHILD process that calls the real `applyProcessMemoryHardening()`
+// and holds a 64-hex secret in its heap; the PARENT reads
+// /proc/<child>/{maps,mem} and scans for the secret. The parent-reads-child
+// direction is the more permissive one (allowed under ptrace_scope 0 AND 1),
+// so denying it implies denying the realistic descendant-reads-ancestor vector.
+// This makes BOTH test arms Yama-independent. The container runs with the
+// production security flags (sourced from `buildContainerRunArgs`), and
+// `SANDBOX` is set in the container env so the production gate engages.
+//
+// A third test (AC4-E2E) exercises the real production hardening function
+// (same import path and call signature as index.ts) inside the container and
+// asserts the process's /proc files are root-owned, proving the real
+// production code path hardens the process. A full index.ts launch is not
+// possible in the current sandbox image (the core barrel transitively requires
+// sharp, which is not installed); the lexical ordering test in the unit suite
+// proves index.ts actually calls the function.
+// ---------------------------------------------------------------------------
+
+describe.skipIf(skipTests)(
+  'Process memory hardening PR_SET_DUMPABLE (real container) #3028',
+  () => {
+    const repoRoot = join(__dirname, '..');
+    const driverContainerPath =
+      '/repo/integration-tests/fixtures/process-memory-hardening-driver.ts';
+    const savedSandboxFlags = process.env.SANDBOX_FLAGS;
+    const savedSetUidGid = process.env.SANDBOX_SET_UID_GID;
+    let workdir = '';
+
+    beforeAll(() => {
+      // Ensure the production argv is the clean default (no stray SANDBOX_FLAGS
+      // leaking into flag extraction), exactly as the #2902 tests do.
+      delete process.env.SANDBOX_FLAGS;
+      delete process.env.SANDBOX_SET_UID_GID;
+      workdir = mkdtempSync(join(tmpdir(), 'sandbox3028-real-'));
+    });
+
+    afterAll(() => {
+      if (savedSandboxFlags !== undefined) {
+        process.env.SANDBOX_FLAGS = savedSandboxFlags;
+      } else {
+        delete process.env.SANDBOX_FLAGS;
+      }
+      if (savedSetUidGid !== undefined) {
+        process.env.SANDBOX_SET_UID_GID = savedSetUidGid;
+      } else {
+        delete process.env.SANDBOX_SET_UID_GID;
+      }
+      if (workdir !== '') {
+        rmSync(workdir, { recursive: true, force: true });
+      }
+    });
+
+    /** Security flags production emits for a default-path run. */
+    function productionSecurityFlags(): string[] {
+      const args = buildContainerRunArgs(
+        { command: 'docker', image },
+        image,
+        workdir,
+        '/workspace',
+        workdir,
+      );
+      return extractSecurityFlags(args);
+    }
+
+    /**
+     * Runs the real production driver inside a container using the
+     * production-derived security flags, with `SANDBOX` set to `sandboxEnv`
+     * (engages the production gate when non-empty; an empty value disengages it
+     * so the prctl call is never made). The repo is mounted read-only.
+     */
+    /**
+     * Runs the driver fixture in a real container using the exact security
+     * flags the production argv builder emits. `sandboxEnv` drives the
+     * production gate; `extraArgs` selects the driver mode.
+     */
+    function runDriver(sandboxEnv: string, ...extraArgs: string[]): string {
+      return execFileSync(
+        runtime!,
+        [
+          'run',
+          '--rm',
+          ...productionSecurityFlags(),
+          '--volume',
+          `${repoRoot}:/repo:ro`,
+          '--env',
+          `SANDBOX=${sandboxEnv}`,
+          '--env',
+          'BUN_INSTALL_CACHE_DIR=/tmp/.bun',
+          image,
+          'bun',
+          driverContainerPath,
+          ...extraArgs,
+        ],
+        { timeout: RUN_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 },
+      ).toString();
+    }
+
+    function runMemoryProbe(sandboxEnv: string): string {
+      return runDriver(sandboxEnv);
+    }
+
+    /**
+     * Runs the E2E driver mode, which spawns a child that calls the REAL
+     * production `applyProcessMemoryHardening()` (same import path as
+     * index.ts) inside the container, then stats /proc/<child>/maps ownership
+     * to verify the real production function hardened the process.
+     */
+    function runE2EProbe(): string {
+      return runDriver('e2e-probe', '__e2e__');
+    }
+
+    it('a parent process is DENIED the hardened child process maps (AC1, AC5)', () => {
+      // SANDBOX set => production gate engages => prctl(PR_SET_DUMPABLE, 0) =>
+      // the parent's read of /proc/<child>/maps is denied with EACCES. Parent
+      // reads child (the permissive direction), so this denial holds under both
+      // ptrace_scope 0 and 1.
+      const out = runMemoryProbe('docker-memory-probe');
+      expect(out).toContain('RESULT=MAPS_DENIED');
+    });
+
+    it('is falsifiable: with the production gate disengaged the secret IS recovered', () => {
+      // The SAME real module and driver, but SANDBOX overridden to empty so the
+      // production gate is a no-op and prctl(PR_SET_DUMPABLE) is never called.
+      // The parent then reads the child's maps+mem and recovers the secret,
+      // proving the prctl call in the production path is load-bearing. Parent
+      // reads child is permitted under both ptrace_scope 0 and 1, so this
+      // recovers the secret on Yama hosts too.
+      const out = runMemoryProbe('');
+      expect(out).toContain('RESULT=TOKEN_RECOVERED');
+    });
+
+    it('the real production hardening function makes the process non-dumpable (AC4-E2E)', () => {
+      // Spawns a child that imports the REAL production module (same path as
+      // index.ts) and calls the REAL applyProcessMemoryHardening(). The driver
+      // stats /proc/<child>/maps ownership; non-dumpable makes it root-owned
+      // (uid 0), proving the real production function makes the process
+      // non-dumpable in a real container. A full index.ts launch is not
+      // possible in this image (core barrel requires sharp); the lexical
+      // ordering unit test proves index.ts actually calls the function.
+      const out = runE2EProbe();
+      expect(out).toContain('RESULT=E2E_HARDENED');
     });
   },
 );

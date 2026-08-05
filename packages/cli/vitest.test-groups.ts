@@ -82,6 +82,9 @@ const baseExclude: readonly string[] = [
   // registered in scripts/bun-test-manifest.ts; they must not also be
   // discovered by Vitest (bun:test does not resolve under the Vitest runner).
   '**/src/zed-integration/zedIntegration.terminal.test.ts',
+  // Process memory hardening tests import the real `bun:test` API, so they
+  // run under `bun test` only (issue #3028).
+  '**/src/launcher/process-memory-hardening.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
