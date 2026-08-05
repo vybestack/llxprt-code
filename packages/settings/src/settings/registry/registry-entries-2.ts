@@ -310,7 +310,10 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && (value === -1 || value > 0)) {
+      if (
+        typeof value === 'number' &&
+        (value === -1 || (Number.isFinite(value) && value > 0))
+      ) {
         return { success: true, value };
       }
       return {
@@ -327,7 +330,10 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && (value === -1 || value > 0)) {
+      if (
+        typeof value === 'number' &&
+        (value === -1 || (Number.isFinite(value) && value > 0))
+      ) {
         return { success: true, value };
       }
       return {
@@ -389,7 +395,10 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && (value === -1 || value > 0)) {
+      if (
+        typeof value === 'number' &&
+        (value === -1 || (Number.isFinite(value) && value > 0))
+      ) {
         return { success: true, value };
       }
       return {
@@ -407,7 +416,10 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && (value === -1 || value > 0)) {
+      if (
+        typeof value === 'number' &&
+        (value === -1 || (Number.isFinite(value) && value > 0))
+      ) {
         return { success: true, value };
       }
       return {
@@ -425,7 +437,10 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && (value === -1 || value > 0)) {
+      if (
+        typeof value === 'number' &&
+        (value === -1 || (Number.isFinite(value) && value > 0))
+      ) {
         return { success: true, value };
       }
       return {

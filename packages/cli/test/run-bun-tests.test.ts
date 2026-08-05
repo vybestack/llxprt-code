@@ -190,3 +190,17 @@ describe('fileTimeoutForFile', () => {
     ).toBeGreaterThan(observedCiCost);
   });
 });
+
+describe('bun-suffixed test discovery', () => {
+  it('treats a .bun.ts suite as a test file', () => {
+    expect(isTestFile('settingsStorage.bun.ts')).toBe(true);
+  });
+
+  it('treats a .bun.tsx suite as a test file', () => {
+    expect(isTestFile('useAgentEventStream.bun.tsx')).toBe(true);
+  });
+
+  it('does not treat the workspace preload as a test file', () => {
+    expect(isTestFile('bun-test-setup.ts')).toBe(false);
+  });
+});

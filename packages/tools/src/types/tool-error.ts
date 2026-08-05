@@ -50,6 +50,7 @@ export enum ToolErrorType {
   EDIT_NO_CHANGE_LLM_JUDGEMENT = 'edit_no_change_llm_judgement',
   FILE_MODIFIED_CONFLICT = 'file_modified_conflict',
   PATCH_APPLY_FAILURE = 'patch_apply_failure',
+  AST_SYNTAX_ERROR = 'ast_syntax_error',
 
   // Glob-specific Errors
   GLOB_EXECUTION_ERROR = 'glob_execution_error',

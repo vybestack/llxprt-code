@@ -46,6 +46,8 @@ export interface IToolHostFileService {
 export interface IToolHostFileSystemService {
   readTextFile(filePath: string): Promise<string>;
   writeTextFile(filePath: string, content: string): Promise<void>;
+  /** Deletes a file when the host owns the filesystem; optional for back-compat. */
+  deleteFile?(filePath: string): Promise<void>;
 }
 
 export interface IToolHostGitStatsService {

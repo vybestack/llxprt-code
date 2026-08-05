@@ -310,7 +310,11 @@ export {
   OUTPUT_UPDATE_INTERVAL_MS,
   type ShellToolParams,
 } from './tools/shell.js';
-export { buildCommandToExecute } from './tools/shell-helpers.js';
+export {
+  buildCommandToExecute,
+  DEFAULT_SHELL_TIMEOUT_SECONDS,
+  MAX_SHELL_TIMEOUT_SECONDS,
+} from './tools/shell-helpers.js';
 export {
   GithubTool,
   GithubToolInvocation,

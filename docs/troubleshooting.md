@@ -129,6 +129,44 @@ llxprt --provider xai --key-name xai-prod
 - **Linux containers:** Same situation. Use `--keyfile` or `--key` if the encrypted fallback doesn't work.
 - **macOS:** Keychain should work out of the box. If not, check `security list-keychains` in Terminal.
 
+#### macOS: Repeated Keychain Password Prompts (Ad-hoc / Unsigned Bun)
+
+On macOS, the launcher prefers a Bun already on `PATH` when it meets the pinned version floor (so npm re-installs do not unlink a running session — see [#2962](https://github.com/vybestack/llxprt-code/issues/2962)). But on macOS the **code signature** of that binary decides whether it can hold a durable Keychain grant, and a Bun that is ad-hoc signed or otherwise lacks a stable team identity (for example the Homebrew `homebrew/core` formula, which compiles from source and discards Oven's Developer ID) cannot.
+
+The launcher inspects the selected Bun's designated code-signing requirement on startup and prints a single advisory warning to stderr when codesign inspection fails OR when a successful inspection lacks Oven's required team identity (`certificate leaf[subject.OU] = "7FRXF46ZSN"`), for example:
+
+```text
+LLxprt Code: the Bun on your PATH is ad-hoc signed or otherwise
+lacks a stable team identity, so it cannot hold a persistent macOS
+Keychain grant. You will be prompted for your login password on every
+credential read, and "Always Allow" will not persist (#3020).
+Install the official Bun release signed by Oven:
+    brew uninstall bun && brew install oven-sh/bun/bun
+    curl -fsSL https://bun.com/install | bash
+```
+
+**Why "Always Allow" does not work:** the Keychain ACL stored on each item is identity-based, so it matches any Oven-signed Bun anywhere on disk. A binary that is ad-hoc signed or has no team ID can never satisfy that requirement. Per [#3020](https://github.com/vybestack/llxprt-code/issues/3020), `change_acl` on these items has an empty application list, so clicking **Always Allow** is silently discarded — the prompt recurs on every credential read. Replacing the binary with Oven's signed build is the only durable fix.
+
+**Why it is a warning, not a hard failure:** a Bun that is ad-hoc signed or has no team identity runs LLxprt Code correctly in every respect except Keychain access, and some users keep no credentials in the Keychain at all. Failing closed would break those working setups. Skipping it and falling through to the bundled Bun would silently re-enable the npm-unlink failure mode that #2962 exists to prevent, so the launcher warns and continues to use the selected Bun.
+
+To install an Oven-signed Bun (either remedy clears the warning):
+
+```bash
+# Homebrew: use the official oven-sh tap instead of homebrew/core
+brew uninstall bun && brew install oven-sh/bun/bun
+
+# Or the official installer
+curl -fsSL https://bun.com/install | bash
+```
+
+Verify the team identity afterward (it should report `7FRXF46ZSN`):
+
+```bash
+codesign -dv --requirements - "$(command -v bun)" 2>&1
+```
+
+This check is macOS-only; Linux and Windows never key credential access on code identity.
+
 ### Common Authentication Errors
 
 **`Failed to login. Message: Request contains an invalid argument`**

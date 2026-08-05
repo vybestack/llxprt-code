@@ -73,13 +73,11 @@ llxprt --sandbox-engine podman "review this code"
   `network` is `on`, outbound network access is available to tool execution.
 - Reading the sandboxed CLI process's own memory. The credential never enters
   the sandbox's filesystem, environment, or argv, but it does enter the sandbox
-  CLI process's address space whenever a provider call is made. Whether a
-  same-UID in-container process can read that memory is **conditional on the
-  host kernel's Yama `ptrace_scope` setting**: on a permissive host (scope 0,
-  or no Yama — notably Docker Desktop for macOS) a descendant process can read
-  the CLI's `/proc/<pid>/mem`; on a host with `ptrace_scope >= 1` (the Ubuntu
-  default) that read is denied. The container flags below cannot change this.
-  See
+  CLI process's address space whenever a provider call is made. In container
+  mode (Docker/Podman) the CLI marks itself non-dumpable (`prctl
+PR_SET_DUMPABLE 0`) on startup, so an in-container process running as the same
+  UID **cannot** read `/proc/<pid>/mem` — regardless of the host kernel's Yama
+  `ptrace_scope`. See
   [Credential residency and process memory](#credential-residency-and-process-memory).
 
 The sandbox raises the bar for accidental damage and limits the blast radius of
@@ -106,40 +104,80 @@ This is unavoidable: the CLI needs the credential to call the provider.
 
 **The consequence.** Anything that can read the CLI process's memory can read
 both the capability token and the credential. The agent's shell commands are
-**descendants** of the token-holding CLI process, so they are trying to read an
-**ancestor**. Whether that succeeds is **conditional on the host kernel's Yama
-`ptrace_scope`**, because the container shares the host (or VM) kernel:
+**descendants** of the token-holding CLI process, so an attack vector is for a
+descendant to read an ancestor's memory via `/proc/<pid>/mem`.
 
-- On a host with `kernel.yama.ptrace_scope >= 1` (the default on Ubuntu and many
-  distributions), the kernel **denies** the read (`EACCES`).
-- On a host with `ptrace_scope == 0`, or where the Yama LSM is absent — notably
-  **Docker Desktop for macOS**, whose VM kernel reports no `ptrace_scope` at all
-  — a descendant process can read the ancestor CLI's `/proc/<pid>/mem` and
-  recover the secret.
+**In container mode this is blocked unconditionally.** The CLI process calls
+`prctl(PR_SET_DUMPABLE, 0)` at startup (before the CLI module is imported),
+which makes `/proc/<pid>/{maps,mem,...}` root-owned, so the kernel's
+`ptrace_may_access` check denies a same-UID in-container reader with `EACCES` —
+the read is refused at `maps`, before `mem` is ever reached. This holds
+**regardless of the host kernel's Yama `ptrace_scope`**: it holds at
+`ptrace_scope == 0` and on Docker Desktop for macOS, whose VM kernel reports no
+`ptrace_scope` at all — precisely the environments where the read used to
+succeed.
 
-This was confirmed empirically (see issue
-[#2902](https://github.com/vybestack/llxprt-code/issues/2902)): under
-`ptrace_scope == 0` (Podman machine VM) and on Docker Desktop (no Yama), a
-descendant of the token-holding CLI process recovered the secret from the CLI's
-heap under every combination of `--cap-drop=ALL`, `--security-opt
-no-new-privileges`, and `--user root` versus non-root; with the Podman machine VM
-set to `ptrace_scope == 1`, the same probe was denied. None of the container
-invocation flags can change this: reading `/proc/<pid>/mem` is an `open()` plus
-`pread()`, not the `ptrace` syscall, so `--cap-drop=ALL` is irrelevant and a
-seccomp filter on `ptrace` is ineffective (filtering `open`/`pread` by path is
-not possible with classic seccomp). The deciding factor is the host's Yama
-setting.
+This control composes with the privilege hardening shipped in
+[#3022](https://github.com/vybestack/llxprt-code/pull/3022): every container run
+drops `--cap-drop=ALL` (removing `CAP_SYS_PTRACE`) and sets
+`--security-opt no-new-privileges`. `PR_SET_DUMPABLE(0)` alone denies an ordinary
+same-UID reader — it makes the proc files root-owned so `ptrace_may_access`
+returns false. `CAP_SYS_PTRACE` is a privileged override that bypasses the
+dumpable check, so the #3022 capability drop is what prevents that override.
+Dropping the capability alone does NOT deny the ordinary reader: a dumpable
+process is still readable by same-UID without any capability. The two controls
+compose — `PR_SET_DUMPABLE` denies the ordinary reader, and the capability drop
+denies the privileged override — and together they close the vector
+unconditionally and vector-agnostically: it does not matter whether the attacker
+reached code execution through the shell tool, an MCP server, a hook, an
+extension, or a malicious `npm postinstall` — the OS boundary denies the read,
+not an allowlist that has to stay exhaustive. It also covers the credential, not
+just the token: the provider API key resides in the same address space, so both
+are protected.
+
+This was confirmed empirically against real containers (see issues
+[#2902](https://github.com/vybestack/llxprt-code/issues/2902) and
+[#3028](https://github.com/vybestack/llxprt-code/issues/3028)): with
+`--cap-drop=ALL` + `no-new-privileges` but the process still dumpable, a
+descendant recovered the secret from the CLI's heap; adding
+`prctl(PR_SET_DUMPABLE, 0)` made the descendant's open of `/proc/<pid>/maps`
+fail with `EACCES`. The behavioral test in
+`integration-tests/sandboxPrivilege.real.test.ts` reproduces this in a real
+container and fails if the `prctl` call is removed.
 
 The capability token remains a meaningful secret in its own right: it persists
 for the session and can fetch a credential from the proxy at a time when no
 credential is yet resident in memory. Once a credential is resident, however,
 both live in the same address space.
 
+**Surviving non-goal — in-process attackers.** Code executing **inside** the CLI
+process itself — a malicious dependency, a compromised in-process extension, or
+any other code sharing the CLI's address space — can still read the token and
+the credential directly from its own heap. `PR_SET_DUMPABLE` is an OS boundary
+against _other_ processes; it cannot defend against code running _within_ this
+one. This is the same non-goal it has always been (see issue
+[#1954](https://github.com/vybestack/llxprt-code/issues/1954)).
+
+**Trade-offs.** Marking the CLI non-dumpable disables core dumps for the CLI
+process and prevents external ptrace-attach debugging of the CLI inside the
+container. (`--inspect` is socket-based and unaffected.) It is applied on Linux
+when the process is running inside a container sandbox (`SANDBOX` set to a
+non-`sandbox-exec` value) **or** when it is credential-bearing
+(`LLXPRT_CAPABILITY_FD` or `LLXPRT_CREDENTIAL_SOCKET` is set); the Seatbelt
+(macOS-host) path is unchanged. On a user-supplied non-glibc sandbox image,
+`prctl` cannot be resolved from libc; in that case:
+
+- If the process is **credential-bearing**, the CLI **fails closed** — it prints
+  a fatal error and refuses to start, because it cannot protect the credential
+  in memory. Use the official Debian bookworm / glibc sandbox image.
+- If the process is **not credential-bearing** (e.g. a tokenless custom image),
+  the CLI writes a visible warning to stderr and continues, and the in-container
+  memory read is not blocked.
+
 The sandbox therefore defends against a prompt-injected agent that reads files,
-inspects the environment, scans argv, or speaks the proxy protocol. On a
-permissive Yama host it does not defend against one that reads the CLI process's
-memory; on a host with Yama `ptrace_scope >= 1` that descendant-reads-ancestor
-vector is blocked by the kernel.
+inspects the environment, scans argv, speaks the proxy protocol, or — in
+container mode — attempts to read the CLI process's memory from another
+in-container process.
 
 ## Using GitHub from a Sandbox
 

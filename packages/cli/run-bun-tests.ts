@@ -52,7 +52,14 @@ const SKIPPED_DIRECTORIES = new Set([
   '__snapshots__',
 ]);
 const TEST_ROOTS = ['src', 'test', 'test-bun', 'test-utils'];
-const TEST_FILE_PATTERN = /\.(test|spec)\.(ts|tsx)$/;
+/**
+ * Test files use three naming conventions in this workspace: `*.test.*`,
+ * `*.spec.*`, and `*.bun.*` for suites that import `bun:test` directly rather
+ * than through the Vitest shim. All three must be discovered — the `.bun.*`
+ * suites were previously reachable only through the shared manifest, so
+ * matching just `.test`/`.spec` would silently stop running eleven files.
+ */
+const TEST_FILE_PATTERN = /\.(test|spec|bun)\.(ts|tsx)$/;
 
 /**
  * Matches the `*.integration.test.*` / `*.integration.spec.*` naming used by

@@ -5,8 +5,10 @@
  */
 
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
+import type { JspToolPhase } from './jspDocuments.js';
 import { createObservationTap } from './observationTap.js';
+import type { ObservationTapTarget } from './observationTap.js';
 
 const textEvent: AgentEvent = { type: 'text', text: 'draft' };
 const toolCallEvent: AgentEvent = {
@@ -44,6 +46,26 @@ const secondExecutingEvent: AgentEvent = {
   type: 'tool-status',
   update: { id: 'tool-2', name: 'run_shell', status: 'executing' },
 };
+const cancelledStatusEvent: AgentEvent = {
+  type: 'tool-status',
+  update: { id: 'tool-1', name: 'read_file', status: 'cancelled' },
+};
+const errorStatusEvent: AgentEvent = {
+  type: 'tool-status',
+  update: { id: 'tool-1', name: 'read_file', status: 'error' },
+};
+const successStatusEvent: AgentEvent = {
+  type: 'tool-status',
+  update: { id: 'tool-1', name: 'read_file', status: 'success' },
+};
+const okResultEvent: AgentEvent = {
+  type: 'tool-result',
+  result: { id: 'tool-1', name: 'read_file', output: 'done', isError: false },
+};
+const errorResultEvent: AgentEvent = {
+  type: 'tool-result',
+  result: { id: 'tool-1', name: 'read_file', output: 'boom', isError: true },
+};
 
 /**
  * A target whose callbacks are inert except where a test overrides them, so
@@ -62,6 +84,20 @@ function noopTarget(calls: string[]) {
     onAssistantMessageCommitted: () => undefined,
     onSourceError: () => undefined,
   };
+}
+
+/** Records only the headline tool phases, in order, for terminal-stickiness. */
+function phaseRecordingTarget(): {
+  target: ObservationTapTarget;
+  phases: string[];
+} {
+  const phases: string[] = [];
+  const target: ObservationTapTarget = {
+    ...noopTarget([]),
+    onToolPhaseChanged: (_label: string, phase: JspToolPhase) =>
+      phases.push(phase),
+  };
+  return { target, phases };
 }
 
 describe('createObservationTap', () => {
@@ -243,5 +279,103 @@ describe('createObservationTap', () => {
       } as AgentEvent);
       expect(calls).toContain(`phase:read_file:${phase}`);
     }
+  });
+
+  it('preserves a cancelled phase when a later non-error tool-result arrives (#2914)', () => {
+    // A tool cancelled by abort projects to a non-error tool-result, so the
+    // later result must not rewrite the faithful cancelled status.
+    const { target, phases } = phaseRecordingTarget();
+    const tap = createObservationTap(target);
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(cancelledStatusEvent);
+    tap.processEvent(okResultEvent);
+
+    expect(phases).toStrictEqual(['cancelled']);
+  });
+
+  it('preserves a cancelled phase when a later error tool-result arrives (#2914)', () => {
+    const { target, phases } = phaseRecordingTarget();
+    const tap = createObservationTap(target);
+    tap.onTurnStarted();
+    tap.processEvent(cancelledStatusEvent);
+    tap.processEvent(errorResultEvent);
+
+    expect(phases).toStrictEqual(['cancelled']);
+  });
+
+  it('does not resurrect a terminal phase with a later non-terminal status', () => {
+    const { target, phases } = phaseRecordingTarget();
+    const tap = createObservationTap(target);
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(errorStatusEvent);
+    tap.processEvent(executingEvent);
+
+    expect(phases).toStrictEqual(['failed']);
+  });
+
+  it('keeps the first terminal phase when two terminal statuses disagree', () => {
+    const { target, phases } = phaseRecordingTarget();
+    const tap = createObservationTap(target);
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(cancelledStatusEvent);
+    tap.processEvent(successStatusEvent);
+
+    expect(phases).toStrictEqual(['cancelled']);
+  });
+
+  it('still reports succeeded and failed for normal terminal results when nothing was cancelled', () => {
+    const success = phaseRecordingTarget();
+    const successTap = createObservationTap(success.target);
+    successTap.onTurnStarted();
+    successTap.processEvent(toolCallEvent);
+    successTap.processEvent(executingEvent);
+    successTap.processEvent(okResultEvent);
+    expect(success.phases).toContain('succeeded');
+
+    const failure = phaseRecordingTarget();
+    const failureTap = createObservationTap(failure.target);
+    failureTap.onTurnStarted();
+    failureTap.processEvent(errorResultEvent);
+    expect(failure.phases).toStrictEqual(['failed']);
+  });
+
+  it('resets terminal suppression at the turn boundary so a reused id can succeed again', () => {
+    const { target, phases } = phaseRecordingTarget();
+    const tap = createObservationTap(target);
+
+    // Turn 1: tool-1 is cancelled, so its terminal phase sticks.
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(cancelledStatusEvent);
+
+    // Turn 2: the same call id is replayed with a normal success. The
+    // suppression must not leak across the turn boundary.
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(okResultEvent);
+
+    expect(phases).toStrictEqual(['cancelled', 'succeeded']);
+  });
+
+  it('does not strand a wait when a terminal tool-result is suppressed (#2914)', () => {
+    const resolved: string[] = [];
+    const { target, phases } = phaseRecordingTarget();
+    const tap = createObservationTap({
+      ...target,
+      onWaitResolved: () => resolved.push('resolved'),
+    });
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(confirmationEvent);
+    tap.processEvent(cancelledStatusEvent);
+    tap.processEvent(okResultEvent);
+
+    // The wait resolves exactly once (from the cancelled status), and the
+    // suppressed tool-result emits no further phase at all.
+    expect(resolved).toStrictEqual(['resolved']);
+    expect(phases).toStrictEqual(['awaiting_approval', 'cancelled']);
   });
 });

@@ -1,0 +1,71 @@
+{
+  "tmux": {
+    "cols": 110,
+    "rows": 34,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 9000
+  },
+  "yolo": true,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--yolo",
+    "--profile-load",
+    "stepfun-37"
+  ],
+  "steps": [
+    { "type": "capture", "label": "00-startup", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "Use the github tool to run issue.view for issue number 3030 in vybestack/llxprt-code. Do not use the shell. Report nothing but the issue title.",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "GitHub issue.view #3030 in vybestack/llxprt-code",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "01-issue-view-rendered",
+      "scope": "scrollback"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "scrollback",
+      "regex": "\"labels\": \\[",
+      "timeoutMs": 3000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "scrollback",
+      "regex": "\"state\": \"open\"",
+      "timeoutMs": 3000
+    },
+
+    {
+      "type": "line",
+      "text": "Now use the github tool to run issue.comment for issue 3030 with no body at all, exactly once, and then tell me verbatim what the tool said.",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "regex": "missing required parameter \"body\"|issue\\.comment accepts:",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "02-missing-body-error",
+      "scope": "scrollback"
+    },
+
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 2000 },
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 40000 }
+  ]
+}

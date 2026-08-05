@@ -365,6 +365,9 @@ export async function executeGitHubOp(
     descriptor.requiredParams,
   );
   if (validationError !== null) {
+    // `validateParams` already names the operation's accepted and required
+    // parameters on structural rejections, so nothing is appended here:
+    // repeating the catalogue produced the same list twice in one message.
     throw new BrokerErrorException(
       makeBrokerError(
         validationError.code as BrokerError['code'],

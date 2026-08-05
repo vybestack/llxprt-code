@@ -46,10 +46,12 @@ import {
 } from './edit-calculator.js';
 import {
   summarizeAstValidation,
-  computeLineDelta,
+  deriveCandidateMapping,
   findEditStartLine,
   formatValidationLineLabel,
   type AstValidationResult,
+  type AstValidationSummary,
+  type CandidateMapping,
 } from './validation-categorizer.js';
 
 function normalizeSeverity(severity: unknown): string {
@@ -223,9 +225,13 @@ export class ASTEditToolInvocation
           this.params.file_path,
           currentContent,
           workspaceRoot,
+          // REQ-3035-6: previews keep the target file's enhanced context but
+          // omit working-set collection/rendering. ast_read_file still collects
+          // the working set because it passes no option.
+          { collectWorkingSet: false },
         );
 
-      const { astValidation, preEditValidation, lineDelta, editStartLine } =
+      const { astValidation, preEditValidation, mapping } =
         this.computeValidationContext(editData);
 
       const fileName = path.basename(this.params.file_path);
@@ -242,10 +248,8 @@ export class ASTEditToolInvocation
         enhancedContext,
         astValidation,
         preEditValidation,
-        lineDelta,
-        editStartLine,
+        mapping,
         currentMtime,
-        workspaceRoot,
       );
 
       const returnDisplay: FileDiff = {
@@ -274,56 +278,68 @@ export class ASTEditToolInvocation
   }
 
   private computeValidationContext(editData: CalculatedEdit): {
-    astValidation: { valid: boolean; errors: string[] };
+    astValidation: AstValidationResult;
     preEditValidation: AstValidationResult | undefined;
-    lineDelta: number;
-    editStartLine: number | null;
+    mapping: CandidateMapping;
   } {
+    const editStartLine = findEditStartLine(
+      editData.currentContent,
+      this.params.old_string,
+    );
+    const editRegion =
+      editStartLine !== null ? { startLine: editStartLine } : undefined;
     const astValidation =
       editData.astValidation ??
-      this.validateASTSyntax(this.params.file_path, editData.newContent);
+      this.validateASTSyntax(
+        this.params.file_path,
+        editData.newContent,
+        editRegion,
+      );
     const preEditValidation: AstValidationResult | undefined =
       editData.preEditValidation ??
       (editData.currentContent !== null
         ? this.validateASTSyntax(this.params.file_path, editData.currentContent)
         : undefined);
-    const lineDelta = computeLineDelta(
-      this.params.old_string,
-      this.params.new_string,
-    );
-    const editStartLine = findEditStartLine(
+    // Derive the mapping from the actual original-to-candidate content diff so
+    // shifted pre-existing errors are classified correctly regardless of
+    // whether the candidate came from the model or was IDE-edited.
+    const mapping = deriveCandidateMapping(
       editData.currentContent,
-      this.params.old_string,
+      editData.newContent,
     );
-    return { astValidation, preEditValidation, lineDelta, editStartLine };
+    return { astValidation, preEditValidation, mapping };
   }
 
   private buildPreviewLlmContent(
     enhancedContext: Awaited<
       ReturnType<ASTContextCollector['collectEnhancedContext']>
     >,
-    astValidation: { valid: boolean; errors: string[] },
-    preEditValidation: { valid: boolean; errors: string[] } | undefined,
-    lineDelta: number,
-    editStartLine: number | null,
+    astValidation: AstValidationResult,
+    preEditValidation: AstValidationResult | undefined,
+    mapping: CandidateMapping,
     currentMtime: number | null,
-    workspaceRoot: string,
   ): string {
     const summary = summarizeAstValidation(
       preEditValidation,
       astValidation,
-      lineDelta,
-      editStartLine,
+      mapping,
     );
+    const hasOnlyPreExistingSyntaxErrors = Boolean(
+      preEditValidation &&
+        !preEditValidation.valid &&
+        !astValidation.valid &&
+        !summary.newlyIntroduced,
+    );
+    const preExistingSyntaxErrors = hasOnlyPreExistingSyntaxErrors
+      ? `- Pre-existing syntax errors: Yes${formatValidationLineLabel(astValidation.errors)}`
+      : '';
     return [
       `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
       `- Context: ${enhancedContext.language} file with ${enhancedContext.declarations.length} declarations`,
       `- Functions: ${enhancedContext.languageContext.functions.length}`,
       `- Classes: ${enhancedContext.languageContext.classes.length}`,
       `- AST validation: ${summary.label}`,
-      preEditValidation && !preEditValidation.valid
-        ? `- Pre-existing syntax errors: Yes${formatValidationLineLabel(preEditValidation.errors)}`
-        : '',
+      preExistingSyntaxErrors,
       !astValidation.valid
         ? `- AST errors: ${astValidation.errors.join(', ')}`
         : '',
@@ -334,7 +350,6 @@ export class ASTEditToolInvocation
       enhancedContext.relatedFiles
         ? `- Related files: ${enhancedContext.relatedFiles.length}`
         : '',
-      this.formatConnectedFilesContext(enhancedContext, workspaceRoot),
       currentMtime !== null ? `- Timestamp: ${currentMtime}` : '',
       '',
       'ENHANCED CONTEXT ANALYSIS:',
@@ -348,37 +363,6 @@ export class ASTEditToolInvocation
       .flat()
       .filter(Boolean)
       .join('\n');
-  }
-
-  private formatConnectedFilesContext(
-    enhancedContext: Awaited<
-      ReturnType<ASTContextCollector['collectEnhancedContext']>
-    >,
-    workspaceRoot: string,
-  ): string[] {
-    if (
-      !enhancedContext.connectedFiles ||
-      enhancedContext.connectedFiles.length === 0
-    ) {
-      return [];
-    }
-    return [
-      '',
-      'WORKING SET CONTEXT:',
-      ...enhancedContext.connectedFiles
-        .map((file) => {
-          const relPath = makeRelative(file.filePath, workspaceRoot);
-          if (file.declarations.length === 0)
-            return `- ${relPath} (No declarations)`;
-          return [
-            `- ${relPath}:`,
-            ...file.declarations.map(
-              (d) => `  - ${d.type}: ${d.name}${d.signature ?? ''}`,
-            ),
-          ];
-        })
-        .flat(),
-    ];
   }
 
   private formatRelatedSymbols(
@@ -438,6 +422,17 @@ export class ASTEditToolInvocation
       // replacement — mirrors write_file/edit behavior.
       const contentToWrite = this.ideAcceptedContent ?? editData.newContent;
 
+      // REQ-3035-2: validate the exact final candidate content before any disk
+      // mutation. A newly-introduced syntax error is refused and the file is
+      // left byte-for-byte unchanged.
+      const { summary, finalValidation, preEditValidation } =
+        this.resolveApplyValidation(editData, contentToWrite);
+      if (summary.newlyIntroduced) {
+        return this.refuseNewlyIntroducedEdit(
+          finalValidation.errors.join(', '),
+        );
+      }
+
       await ensureParentDirectoriesExist(this.params.file_path);
       await fsPromises.writeFile(
         this.params.file_path,
@@ -455,43 +450,21 @@ export class ASTEditToolInvocation
         DEFAULT_CREATE_PATCH_OPTIONS,
       );
 
-      const { astValidation, preEditValidation, lineDelta, editStartLine } =
-        this.computeValidationContext(editData);
       const displayResult = {
         fileDiff,
         fileName,
         originalContent: editData.currentContent,
         newContent: contentToWrite,
         applied: true,
-        metadata: {
-          astValidation,
-          preEditValidation,
-        },
+        metadata: { astValidation: finalValidation, preEditValidation },
       };
-      const summary = summarizeAstValidation(
+
+      const llmSuccessMessageParts = this.buildApplySuccessMessage(
+        editData,
+        summary,
+        finalValidation,
         preEditValidation,
-        astValidation,
-        lineDelta,
-        editStartLine,
       );
-
-      const llmSuccessMessageParts: string[] = [
-        `Successfully applied edit to: ${this.params.file_path}`,
-        `- Changes: ${editData.occurrences} replacement(s) applied`,
-        `- AST validation: ${summary.label}`,
-      ];
-
-      if (preEditValidation && !preEditValidation.valid) {
-        llmSuccessMessageParts.push(
-          `- Pre-existing syntax errors: Yes${formatValidationLineLabel(preEditValidation.errors)}${summary.newlyIntroduced ? '' : ' (not introduced by this edit)'}`,
-        );
-      }
-
-      if (summary.newlyIntroduced) {
-        llmSuccessMessageParts.push(
-          `- AST errors: ${astValidation.errors.join(', ')}`,
-        );
-      }
 
       await this.appendLspDiagnostics(llmSuccessMessageParts);
 
@@ -510,6 +483,115 @@ export class ASTEditToolInvocation
         },
       };
     }
+  }
+
+  /**
+   * Validates the exact final candidate content and categorizes the result
+   * relative to the pre-edit baseline. Reuses the pre-computed validation when
+   * the candidate equals the model's replacement; re-validates (with the edit
+   * region) when IDE-accepted content diverges.
+   *
+   * The candidate mapping (unchanged prefix/suffix boundaries) is always
+   * derived from the ACTUAL original-to-candidate content diff so shifted
+   * pre-existing errors are classified correctly regardless of whether the
+   * candidate came from the model or was IDE-edited.
+   */
+  private resolveApplyValidation(
+    editData: CalculatedEdit,
+    contentToWrite: string,
+  ): {
+    summary: AstValidationSummary;
+    finalValidation: AstValidationResult;
+    preEditValidation: AstValidationResult | undefined;
+  } {
+    const isModelContent = contentToWrite === editData.newContent;
+    // Always derive the mapping from the actual original-to-candidate diff.
+    const mapping = deriveCandidateMapping(
+      editData.currentContent,
+      contentToWrite,
+    );
+    let editStartLine: number | null;
+    if (isModelContent) {
+      editStartLine = findEditStartLine(
+        editData.currentContent,
+        this.params.old_string,
+      );
+    } else if (
+      editData.currentContent !== null &&
+      contentToWrite !== editData.currentContent
+    ) {
+      // IDE-accepted candidate diverges from the original: the edit begins at
+      // the first changed line (line 1 when the first line changed), so
+      // whole-file recovery locations are refined to the actual edited region.
+      // The candidate-diff invariant excludes a no-op revert (candidate equals
+      // original) and new files (no original), avoiding the overly broad
+      // prefixLines/lineDelta condition that skipped a line-1, zero-delta edit.
+      editStartLine = mapping.prefixLines + 1;
+    } else {
+      editStartLine = null;
+    }
+    const editRegion =
+      editStartLine !== null && editStartLine > 0
+        ? { startLine: editStartLine }
+        : undefined;
+    const finalValidation =
+      isModelContent && editData.astValidation
+        ? editData.astValidation
+        : this.validateASTSyntax(
+            this.params.file_path,
+            contentToWrite,
+            editRegion,
+          );
+    const preEditValidation = editData.preEditValidation;
+    const summary = summarizeAstValidation(
+      preEditValidation,
+      finalValidation,
+      mapping,
+    );
+    return { summary, finalValidation, preEditValidation };
+  }
+
+  private refuseNewlyIntroducedEdit(detail: string): ToolResult {
+    const prefix = `Refused edit to ${this.params.file_path}: applying it would introduce an AST syntax error (${detail})`;
+    return {
+      llmContent: `${prefix}. No changes were written.`,
+      returnDisplay: `Edit refused: newly-introduced AST syntax error.`,
+      error: {
+        message: `${prefix}. Re-read the file, fix the syntax in new_string, then retry.`,
+        type: ToolErrorType.AST_SYNTAX_ERROR,
+      },
+    };
+  }
+
+  private buildApplySuccessMessage(
+    editData: CalculatedEdit,
+    summary: AstValidationSummary,
+    finalValidation: AstValidationResult,
+    preEditValidation: AstValidationResult | undefined,
+  ): string[] {
+    const parts: string[] = [
+      editData.isNewFile
+        ? `Successfully created file: ${this.params.file_path}`
+        : `Successfully applied edit to: ${this.params.file_path}`,
+    ];
+    if (!editData.isNewFile) {
+      parts.push(`- Changes: ${editData.occurrences} replacement(s) applied`);
+    }
+    parts.push(`- AST validation: ${summary.label}`);
+    // REQ-3035-4/5: only surface lingering pre-existing errors when the
+    // post-edit file is still invalid; a resolved error must not be reported as
+    // remaining, and retained pre-existing errors are reported at their CURRENT
+    // post-edit coordinates (which may have shifted due to a line-changing edit).
+    if (
+      preEditValidation &&
+      !preEditValidation.valid &&
+      !finalValidation.valid
+    ) {
+      parts.push(
+        `- Pre-existing syntax errors: Yes${formatValidationLineLabel(finalValidation.errors)} (not introduced by this edit)`,
+      );
+    }
+    return parts;
   }
 
   // @plan PLAN-20250212-LSP.P31
@@ -644,8 +726,9 @@ export class ASTEditToolInvocation
   private validateASTSyntax(
     filePath: string,
     content: string,
-  ): { valid: boolean; errors: string[] } {
-    return validateASTSyntax(filePath, content);
+    editRegion?: { startLine: number },
+  ): AstValidationResult {
+    return validateASTSyntax(filePath, content, editRegion);
   }
 
   protected async getFileLastModified(

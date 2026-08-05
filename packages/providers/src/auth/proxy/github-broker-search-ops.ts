@@ -13,12 +13,12 @@
  * @pseudocode 003-github-broker.md lines 38-55, 120-123
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
   extractNumber,
@@ -26,30 +26,20 @@ import {
   assertListShape,
 } from './github-broker-shaping.js';
 
-/**
- * The accepted parameters for search.issues.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 120-123
- */
-const SEARCH_ISSUES_PARAMS: Readonly<Record<string, ParamKind>> = {
-  query: 'freetext',
-  limit: 'limit',
-  repo: 'repo',
-};
+const SEARCH_ISSUES_SPEC: GithubOpSpec = GITHUB_OP_SPECS['search.issues'];
+const SEARCH_PRS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['search.prs'];
 
 /**
  * Validates parameters for search.issues.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
 export function validateSearchIssuesParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(SEARCH_ISSUES_PARAMS, params);
+  return validateParams(SEARCH_ISSUES_SPEC.params, params);
 }
 
 /**
@@ -161,9 +151,9 @@ function appendSearchQuery(
  */
 export const searchIssuesDescriptor: OpDescriptor = {
   name: 'search.issues',
-  requiredParams: ['query'],
-  mutating: false,
-  params: SEARCH_ISSUES_PARAMS,
+  requiredParams: SEARCH_ISSUES_SPEC.required,
+  mutating: SEARCH_ISSUES_SPEC.mutating,
+  params: SEARCH_ISSUES_SPEC.params,
   buildArgv: (params) => buildSearchIssuesArgv(params),
   shape: (rawJson) => ({ issues: shapeSearchResults(rawJson) }),
 };
@@ -171,29 +161,16 @@ export const searchIssuesDescriptor: OpDescriptor = {
 // ─── search.prs ──────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for search.prs.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 120-123
- */
-const SEARCH_PRS_PARAMS: Readonly<Record<string, ParamKind>> = {
-  query: 'freetext',
-  limit: 'limit',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for search.prs.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
 export function validateSearchPrsParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(SEARCH_PRS_PARAMS, params);
+  return validateParams(SEARCH_PRS_SPEC.params, params);
 }
 
 /**
@@ -227,9 +204,9 @@ export function buildSearchPrsArgv(params: Record<string, unknown>): string[] {
  */
 export const searchPrsDescriptor: OpDescriptor = {
   name: 'search.prs',
-  requiredParams: ['query'],
-  mutating: false,
-  params: SEARCH_PRS_PARAMS,
+  requiredParams: SEARCH_PRS_SPEC.required,
+  mutating: SEARCH_PRS_SPEC.mutating,
+  params: SEARCH_PRS_SPEC.params,
   buildArgv: (params) => buildSearchPrsArgv(params),
   shape: (rawJson) => ({ prs: shapeSearchResults(rawJson) }),
 };
