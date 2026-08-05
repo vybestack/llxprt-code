@@ -429,3 +429,26 @@ frame and then snapshotting once.
 
 Snapshot work from here must be verified with `CI=true` so a missing snapshot
 fails instead of being silently written.
+
+### Snapshots for previously-excluded files were re-recorded deliberately
+
+`MarkdownDisplay.test.tsx`, `SettingsDialog.interactions.test.tsx` and
+`InputPrompt.paste.test.tsx` were all excluded from the Vitest selection on
+`main` (`**/ui/utils/**/*.test.tsx` and `**/ui/components/*.test.tsx`), so their
+committed `.snap` files were stale artefacts from before those exclusions and
+had never been validated by a run. Restoring them from `main` therefore proves
+nothing, and the mismatches it produced were not regressions.
+
+For these three the snapshots were re-recorded from current rendering, then each
+recorded file was **scanned for error frames** before being kept. That check
+caught `InputPrompt.paste.test.tsx.snap`, whose recorded content contained
+`ERROR ... is not an object`: the component was throwing during render because
+its `mockBuffer` lacked `transformationsByLine` and `visualToTransformedMap`,
+the same defect found in `InputPrompt.vim.test.tsx`. That snapshot was discarded,
+the double fixed, and the file re-recorded.
+
+Verified with `CI=true`: `MarkdownDisplay` 30 snapshots / 0 fail,
+`SettingsDialog.interactions` 8 snapshots / 0 fail.
+
+`InputPrompt.paste` still has 10 content assertions failing (expecting `(r:)`
+and `→` in the frame) which are unrelated to rendering and need per-case triage.

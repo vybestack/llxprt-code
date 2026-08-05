@@ -1,6 +1,52 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`SettingsDialog Snapshot Tests should render 'accessibility settings enabled' correctly 1`] = `
+exports[`SettingsDialog Snapshot Tests should render default state correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  > Settings                                                                                      │
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Search to filter                                                                             │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│  ▲                                                                                               │
+│  ● Enable Loading Phrases                                                                  true  │
+│    Enable loading phrases during operations.                                                     │
+│                                                                                                  │
+│    Screen Reader Mode                                                                     false  │
+│    Render output in plain-text to be more screen reader accessible                               │
+│                                                                                                  │
+│    Experimental LSP Servers                                                               false  │
+│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
+│                                                                                                  │
+│    Emoji Filter                                                                            auto  │
+│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
+│                                                                                                  │
+│    Respect .gitignore                                                                      true  │
+│    Respect .gitignore files when searching                                                       │
+│                                                                                                  │
+│    Respect .llxprtignore                                                                   true  │
+│    Respect .llxprtignore files when searching                                                    │
+│                                                                                                  │
+│    Enable Recursive File Search                                                            true  │
+│    Enable recursive file search functionality                                                    │
+│                                                                                                  │
+│    Enable Fuzzy Search                                                                     true  │
+│    Enable fuzzy search when searching for files.                                                 │
+│                                                                                                  │
+│  ▼                                                                                               │
+│                                                                                                  │
+│    Apply To                                                                                      │
+│  ● User Settings                                                                                 │
+│    Workspace Settings                                                                            │
+│    System Settings                                                                               │
+│                                                                                                  │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render various boolean settings enabled correctly 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  > Settings                                                                                      │
@@ -46,7 +92,237 @@ exports[`SettingsDialog Snapshot Tests should render 'accessibility settings ena
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`SettingsDialog Snapshot Tests should render 'all boolean settings disabled' correctly 1`] = `
+exports[`SettingsDialog Snapshot Tests should render mixed boolean and number settings correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  > Settings                                                                                      │
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Search to filter                                                                             │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│  ▲                                                                                               │
+│  ● Enable Loading Phrases                                                                  true  │
+│    Enable loading phrases during operations.                                                     │
+│                                                                                                  │
+│    Screen Reader Mode                                                                     false  │
+│    Render output in plain-text to be more screen reader accessible                               │
+│                                                                                                  │
+│    Experimental LSP Servers                                                               false  │
+│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
+│                                                                                                  │
+│    Emoji Filter                                                                            auto  │
+│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
+│                                                                                                  │
+│    Respect .gitignore                                                                      true  │
+│    Respect .gitignore files when searching                                                       │
+│                                                                                                  │
+│    Respect .llxprtignore                                                                   true  │
+│    Respect .llxprtignore files when searching                                                    │
+│                                                                                                  │
+│    Enable Recursive File Search                                                            true  │
+│    Enable recursive file search functionality                                                    │
+│                                                                                                  │
+│    Enable Fuzzy Search                                                                     true  │
+│    Enable fuzzy search when searching for files.                                                 │
+│                                                                                                  │
+│  ▼                                                                                               │
+│                                                                                                  │
+│    Apply To                                                                                      │
+│  ● User Settings                                                                                 │
+│    Workspace Settings                                                                            │
+│    System Settings                                                                               │
+│                                                                                                  │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render focused on scope selector correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  > Settings                                                                                      │
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Search to filter                                                                             │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│  ▲                                                                                               │
+│  ● Enable Loading Phrases                                                                  true  │
+│    Enable loading phrases during operations.                                                     │
+│                                                                                                  │
+│    Screen Reader Mode                                                                     false  │
+│    Render output in plain-text to be more screen reader accessible                               │
+│                                                                                                  │
+│    Experimental LSP Servers                                                               false  │
+│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
+│                                                                                                  │
+│    Emoji Filter                                                                            auto  │
+│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
+│                                                                                                  │
+│    Respect .gitignore                                                                      true  │
+│    Respect .gitignore files when searching                                                       │
+│                                                                                                  │
+│    Respect .llxprtignore                                                                   true  │
+│    Respect .llxprtignore files when searching                                                    │
+│                                                                                                  │
+│    Enable Recursive File Search                                                            true  │
+│    Enable recursive file search functionality                                                    │
+│                                                                                                  │
+│    Enable Fuzzy Search                                                                     true  │
+│    Enable fuzzy search when searching for files.                                                 │
+│                                                                                                  │
+│  ▼                                                                                               │
+│                                                                                                  │
+│    Apply To                                                                                      │
+│  ● User Settings                                                                                 │
+│    Workspace Settings                                                                            │
+│    System Settings                                                                               │
+│                                                                                                  │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render accessibility settings enabled correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  > Settings                                                                                      │
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Search to filter                                                                             │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│  ▲                                                                                               │
+│  ● Enable Loading Phrases                                                                  true  │
+│    Enable loading phrases during operations.                                                     │
+│                                                                                                  │
+│    Screen Reader Mode                                                                     true*  │
+│    Render output in plain-text to be more screen reader accessible                               │
+│                                                                                                  │
+│    Experimental LSP Servers                                                               false  │
+│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
+│                                                                                                  │
+│    Emoji Filter                                                                            auto  │
+│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
+│                                                                                                  │
+│    Respect .gitignore                                                                      true  │
+│    Respect .gitignore files when searching                                                       │
+│                                                                                                  │
+│    Respect .llxprtignore                                                                   true  │
+│    Respect .llxprtignore files when searching                                                    │
+│                                                                                                  │
+│    Enable Recursive File Search                                                            true  │
+│    Enable recursive file search functionality                                                    │
+│                                                                                                  │
+│    Enable Fuzzy Search                                                                     true  │
+│    Enable fuzzy search when searching for files.                                                 │
+│                                                                                                  │
+│  ▼                                                                                               │
+│                                                                                                  │
+│    Apply To                                                                                      │
+│  ● User Settings                                                                                 │
+│    Workspace Settings                                                                            │
+│    System Settings                                                                               │
+│                                                                                                  │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render file filtering settings configured correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  > Settings                                                                                      │
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Search to filter                                                                             │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│  ▲                                                                                               │
+│  ● Enable Loading Phrases                                                                  true  │
+│    Enable loading phrases during operations.                                                     │
+│                                                                                                  │
+│    Screen Reader Mode                                                                     false  │
+│    Render output in plain-text to be more screen reader accessible                               │
+│                                                                                                  │
+│    Experimental LSP Servers                                                               false  │
+│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
+│                                                                                                  │
+│    Emoji Filter                                                                            auto  │
+│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
+│                                                                                                  │
+│    Respect .gitignore                                                                      true  │
+│    Respect .gitignore files when searching                                                       │
+│                                                                                                  │
+│    Respect .llxprtignore                                                                   true  │
+│    Respect .llxprtignore files when searching                                                    │
+│                                                                                                  │
+│    Enable Recursive File Search                                                            true  │
+│    Enable recursive file search functionality                                                    │
+│                                                                                                  │
+│    Enable Fuzzy Search                                                                     true  │
+│    Enable fuzzy search when searching for files.                                                 │
+│                                                                                                  │
+│  ▼                                                                                               │
+│                                                                                                  │
+│    Apply To                                                                                      │
+│  ● User Settings                                                                                 │
+│    Workspace Settings                                                                            │
+│    System Settings                                                                               │
+│                                                                                                  │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render tools and security settings correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  > Settings                                                                                      │
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ Search to filter                                                                             │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│  ▲                                                                                               │
+│  ● Enable Loading Phrases                                                                  true  │
+│    Enable loading phrases during operations.                                                     │
+│                                                                                                  │
+│    Screen Reader Mode                                                                     false  │
+│    Render output in plain-text to be more screen reader accessible                               │
+│                                                                                                  │
+│    Experimental LSP Servers                                                               false  │
+│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
+│                                                                                                  │
+│    Emoji Filter                                                                            auto  │
+│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
+│                                                                                                  │
+│    Respect .gitignore                                                                      true  │
+│    Respect .gitignore files when searching                                                       │
+│                                                                                                  │
+│    Respect .llxprtignore                                                                   true  │
+│    Respect .llxprtignore files when searching                                                    │
+│                                                                                                  │
+│    Enable Recursive File Search                                                            true  │
+│    Enable recursive file search functionality                                                    │
+│                                                                                                  │
+│    Enable Fuzzy Search                                                                     true  │
+│    Enable fuzzy search when searching for files.                                                 │
+│                                                                                                  │
+│  ▼                                                                                               │
+│                                                                                                  │
+│    Apply To                                                                                      │
+│  ● User Settings                                                                                 │
+│    Workspace Settings                                                                            │
+│    System Settings                                                                               │
+│                                                                                                  │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`SettingsDialog Snapshot Tests should render all boolean settings disabled correctly 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  > Settings                                                                                      │
@@ -60,282 +336,6 @@ exports[`SettingsDialog Snapshot Tests should render 'all boolean settings disab
 │    Enable loading phrases during operations.                                                     │
 │                                                                                                  │
 │    Screen Reader Mode                                                                    false*  │
-│    Render output in plain-text to be more screen reader accessible                               │
-│                                                                                                  │
-│    Experimental LSP Servers                                                               false  │
-│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
-│                                                                                                  │
-│    Emoji Filter                                                                            auto  │
-│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
-│                                                                                                  │
-│    Respect .gitignore                                                                      true  │
-│    Respect .gitignore files when searching                                                       │
-│                                                                                                  │
-│    Respect .llxprtignore                                                                   true  │
-│    Respect .llxprtignore files when searching                                                    │
-│                                                                                                  │
-│    Enable Recursive File Search                                                            true  │
-│    Enable recursive file search functionality                                                    │
-│                                                                                                  │
-│    Enable Fuzzy Search                                                                     true  │
-│    Enable fuzzy search when searching for files.                                                 │
-│                                                                                                  │
-│  ▼                                                                                               │
-│                                                                                                  │
-│    Apply To                                                                                      │
-│  ● User Settings                                                                                 │
-│    Workspace Settings                                                                            │
-│    System Settings                                                                               │
-│                                                                                                  │
-│  (Type to search, Esc to clear, Enter to navigate)                                               │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`SettingsDialog Snapshot Tests should render 'default state' correctly 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  > Settings                                                                                      │
-│                                                                                                  │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Search to filter                                                                             │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                  │
-│  ▲                                                                                               │
-│  ● Enable Loading Phrases                                                                  true  │
-│    Enable loading phrases during operations.                                                     │
-│                                                                                                  │
-│    Screen Reader Mode                                                                     false  │
-│    Render output in plain-text to be more screen reader accessible                               │
-│                                                                                                  │
-│    Experimental LSP Servers                                                               false  │
-│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
-│                                                                                                  │
-│    Emoji Filter                                                                            auto  │
-│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
-│                                                                                                  │
-│    Respect .gitignore                                                                      true  │
-│    Respect .gitignore files when searching                                                       │
-│                                                                                                  │
-│    Respect .llxprtignore                                                                   true  │
-│    Respect .llxprtignore files when searching                                                    │
-│                                                                                                  │
-│    Enable Recursive File Search                                                            true  │
-│    Enable recursive file search functionality                                                    │
-│                                                                                                  │
-│    Enable Fuzzy Search                                                                     true  │
-│    Enable fuzzy search when searching for files.                                                 │
-│                                                                                                  │
-│  ▼                                                                                               │
-│                                                                                                  │
-│    Apply To                                                                                      │
-│  ● User Settings                                                                                 │
-│    Workspace Settings                                                                            │
-│    System Settings                                                                               │
-│                                                                                                  │
-│  (Type to search, Esc to clear, Enter to navigate)                                               │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`SettingsDialog Snapshot Tests should render 'file filtering settings configured' correctly 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  > Settings                                                                                      │
-│                                                                                                  │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Search to filter                                                                             │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                  │
-│  ▲                                                                                               │
-│  ● Enable Loading Phrases                                                                  true  │
-│    Enable loading phrases during operations.                                                     │
-│                                                                                                  │
-│    Screen Reader Mode                                                                     false  │
-│    Render output in plain-text to be more screen reader accessible                               │
-│                                                                                                  │
-│    Experimental LSP Servers                                                               false  │
-│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
-│                                                                                                  │
-│    Emoji Filter                                                                            auto  │
-│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
-│                                                                                                  │
-│    Respect .gitignore                                                                      true  │
-│    Respect .gitignore files when searching                                                       │
-│                                                                                                  │
-│    Respect .llxprtignore                                                                   true  │
-│    Respect .llxprtignore files when searching                                                    │
-│                                                                                                  │
-│    Enable Recursive File Search                                                            true  │
-│    Enable recursive file search functionality                                                    │
-│                                                                                                  │
-│    Enable Fuzzy Search                                                                     true  │
-│    Enable fuzzy search when searching for files.                                                 │
-│                                                                                                  │
-│  ▼                                                                                               │
-│                                                                                                  │
-│    Apply To                                                                                      │
-│  ● User Settings                                                                                 │
-│    Workspace Settings                                                                            │
-│    System Settings                                                                               │
-│                                                                                                  │
-│  (Type to search, Esc to clear, Enter to navigate)                                               │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`SettingsDialog Snapshot Tests should render 'focused on scope selector' correctly 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  > Settings                                                                                      │
-│                                                                                                  │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Search to filter                                                                             │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                  │
-│  ▲                                                                                               │
-│  ● Enable Loading Phrases                                                                  true  │
-│    Enable loading phrases during operations.                                                     │
-│                                                                                                  │
-│    Screen Reader Mode                                                                     false  │
-│    Render output in plain-text to be more screen reader accessible                               │
-│                                                                                                  │
-│    Experimental LSP Servers                                                               false  │
-│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
-│                                                                                                  │
-│    Emoji Filter                                                                            auto  │
-│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
-│                                                                                                  │
-│    Respect .gitignore                                                                      true  │
-│    Respect .gitignore files when searching                                                       │
-│                                                                                                  │
-│    Respect .llxprtignore                                                                   true  │
-│    Respect .llxprtignore files when searching                                                    │
-│                                                                                                  │
-│    Enable Recursive File Search                                                            true  │
-│    Enable recursive file search functionality                                                    │
-│                                                                                                  │
-│    Enable Fuzzy Search                                                                     true  │
-│    Enable fuzzy search when searching for files.                                                 │
-│                                                                                                  │
-│  ▼                                                                                               │
-│                                                                                                  │
-│    Apply To                                                                                      │
-│  ● User Settings                                                                                 │
-│    Workspace Settings                                                                            │
-│    System Settings                                                                               │
-│                                                                                                  │
-│  (Type to search, Esc to clear, Enter to navigate)                                               │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`SettingsDialog Snapshot Tests should render 'mixed boolean and number settings' correctly 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  > Settings                                                                                      │
-│                                                                                                  │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Search to filter                                                                             │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                  │
-│  ▲                                                                                               │
-│  ● Enable Loading Phrases                                                                  true  │
-│    Enable loading phrases during operations.                                                     │
-│                                                                                                  │
-│    Screen Reader Mode                                                                     false  │
-│    Render output in plain-text to be more screen reader accessible                               │
-│                                                                                                  │
-│    Experimental LSP Servers                                                               false  │
-│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
-│                                                                                                  │
-│    Emoji Filter                                                                            auto  │
-│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
-│                                                                                                  │
-│    Respect .gitignore                                                                      true  │
-│    Respect .gitignore files when searching                                                       │
-│                                                                                                  │
-│    Respect .llxprtignore                                                                   true  │
-│    Respect .llxprtignore files when searching                                                    │
-│                                                                                                  │
-│    Enable Recursive File Search                                                            true  │
-│    Enable recursive file search functionality                                                    │
-│                                                                                                  │
-│    Enable Fuzzy Search                                                                     true  │
-│    Enable fuzzy search when searching for files.                                                 │
-│                                                                                                  │
-│  ▼                                                                                               │
-│                                                                                                  │
-│    Apply To                                                                                      │
-│  ● User Settings                                                                                 │
-│    Workspace Settings                                                                            │
-│    System Settings                                                                               │
-│                                                                                                  │
-│  (Type to search, Esc to clear, Enter to navigate)                                               │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`SettingsDialog Snapshot Tests should render 'tools and security settings' correctly 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  > Settings                                                                                      │
-│                                                                                                  │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Search to filter                                                                             │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                  │
-│  ▲                                                                                               │
-│  ● Enable Loading Phrases                                                                  true  │
-│    Enable loading phrases during operations.                                                     │
-│                                                                                                  │
-│    Screen Reader Mode                                                                     false  │
-│    Render output in plain-text to be more screen reader accessible                               │
-│                                                                                                  │
-│    Experimental LSP Servers                                                               false  │
-│    Enable experimental Language Server Protocol integration for real-time type-error d…          │
-│                                                                                                  │
-│    Emoji Filter                                                                            auto  │
-│    Filter emojis from AI-generated content and file operations. Options: allowed (no fi…         │
-│                                                                                                  │
-│    Respect .gitignore                                                                      true  │
-│    Respect .gitignore files when searching                                                       │
-│                                                                                                  │
-│    Respect .llxprtignore                                                                   true  │
-│    Respect .llxprtignore files when searching                                                    │
-│                                                                                                  │
-│    Enable Recursive File Search                                                            true  │
-│    Enable recursive file search functionality                                                    │
-│                                                                                                  │
-│    Enable Fuzzy Search                                                                     true  │
-│    Enable fuzzy search when searching for files.                                                 │
-│                                                                                                  │
-│  ▼                                                                                               │
-│                                                                                                  │
-│    Apply To                                                                                      │
-│  ● User Settings                                                                                 │
-│    Workspace Settings                                                                            │
-│    System Settings                                                                               │
-│                                                                                                  │
-│  (Type to search, Esc to clear, Enter to navigate)                                               │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`SettingsDialog Snapshot Tests should render 'various boolean settings enabled' correctly 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  > Settings                                                                                      │
-│                                                                                                  │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Search to filter                                                                             │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│                                                                                                  │
-│  ▲                                                                                               │
-│  ● Enable Loading Phrases                                                                  true  │
-│    Enable loading phrases during operations.                                                     │
-│                                                                                                  │
-│    Screen Reader Mode                                                                     true*  │
 │    Render output in plain-text to be more screen reader accessible                               │
 │                                                                                                  │
 │    Experimental LSP Servers                                                               false  │
