@@ -31,7 +31,11 @@ import type {
   ToolResult,
   FileDiff,
 } from '../index.js';
-import { ApplyPatchTool, ToolErrorType } from '../index.js';
+import {
+  ApplyPatchTool,
+  ToolConfirmationOutcome,
+  ToolErrorType,
+} from '../index.js';
 import type { ApplyPatchToolParams } from '../index.js';
 
 function createTempDir(prefix = 'llxprt-apply-patch-ax-'): {
@@ -73,24 +77,36 @@ interface FakeHostOptions {
   fileSystemService?: IToolHostFileSystemService;
 }
 
+/** Exposes the most recent mode passed to the fake host's setApprovalMode. */
+interface FakeToolHostRecorder {
+  /** undefined until setApprovalMode is called. */
+  recordedApprovalMode: ApprovalMode | undefined;
+}
+
 function createFakeToolHost(
   targetDir: string,
   options?: FakeHostOptions,
-): IToolHost {
-  const base = {
+): IToolHost & FakeToolHostRecorder {
+  const fileSystemService = options?.fileSystemService;
+  // Typed so recordedApprovalMode widens to ApprovalMode | undefined and a
+  // real mode written by setApprovalMode stays assignable (no type assertion).
+  const initialMode: ApprovalMode | undefined = undefined;
+  const host = {
+    recordedApprovalMode: initialMode,
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: (): ApprovalMode => options?.approvalMode ?? 'auto',
-    setApprovalMode: () => {},
+    setApprovalMode: (mode: ApprovalMode): void => {
+      host.recordedApprovalMode = mode;
+    },
     isInteractive: () => false,
     hasFeatureFlag: () => false,
     getEphemeralSettings: () => ({}),
+    getFileSystemService: fileSystemService
+      ? (): IToolHostFileSystemService => fileSystemService
+      : undefined,
   };
-  if (options?.fileSystemService) {
-    const fs = options.fileSystemService;
-    return { ...base, getFileSystemService: () => fs };
-  }
-  return base;
+  return host;
 }
 
 interface RunOptions {
@@ -169,6 +185,22 @@ function countOccurrences(haystack: string, needle: string): number {
   return count;
 }
 
+/**
+ * Narrows a ToolResult's llmContent to a string for assertions that need
+ * string semantics (.toLowerCase, indexOf, etc.). llmContent is a
+ * ContentPartListUnion (string | ContentPart | arrays thereof); the tool
+ * returns a string at runtime, but routing through here turns a future shape
+ * change into a clear test failure instead of a confusing TypeError.
+ */
+function llmContentAsString(content: ToolResult['llmContent']): string {
+  if (typeof content !== 'string') {
+    throw new Error(
+      `Expected ToolResult.llmContent to be a string, but got ${typeof content}.`,
+    );
+  }
+  return content;
+}
+
 /** A whole-file delete patch for the given basename. */
 function deletePatch(basename: string, lines: string[]): string {
   const body = lines.map((l) => `-${l}`).join('\n');
@@ -187,7 +219,9 @@ describe('issue #3033 AC1 — delete patches delete', () => {
     });
     expect(result.error).toBeUndefined();
     expect(existsSync(filePath)).toBe(false);
-    expect(result.llmContent.toLowerCase()).toContain('deleted');
+    expect(llmContentAsString(result.llmContent).toLowerCase()).toContain(
+      'deleted',
+    );
     expect(result.llmContent).toContain('target.txt');
     expect(isFileDisplay(result.returnDisplay)).toBe(true);
     if (isFileDisplay(result.returnDisplay)) {
@@ -424,7 +458,9 @@ describe('issue #3033 AC3 — path mismatch names both accepted forms', () => {
     expect(result.llmContent).toContain('other.txt');
     expect(result.llmContent).toContain('sub/target.txt');
     expect(result.llmContent).toContain('target.txt');
-    expect(result.llmContent.toLowerCase()).toContain('partial path');
+    expect(llmContentAsString(result.llmContent).toLowerCase()).toContain(
+      'partial path',
+    );
     expect(readFileSync(target, 'utf-8')).toBe('keep\n');
   });
 });
@@ -554,9 +590,15 @@ describe('issue #3033 AC5 — hunk count mismatch is translated', () => {
     });
     expect(result.error).toBeDefined();
     expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
-    expect(result.llmContent.toLowerCase()).toContain('unknown line');
-    expect(result.llmContent.toLowerCase()).not.toContain('declared');
-    expect(result.llmContent.toLowerCase()).not.toContain('actual');
+    expect(llmContentAsString(result.llmContent).toLowerCase()).toContain(
+      'unknown line',
+    );
+    expect(llmContentAsString(result.llmContent).toLowerCase()).not.toContain(
+      'declared',
+    );
+    expect(llmContentAsString(result.llmContent).toLowerCase()).not.toContain(
+      'actual',
+    );
   });
 
   it('does not misread a "--- "/"+++ " body pair as a file header; surfaces the parser error', async () => {
@@ -574,9 +616,13 @@ describe('issue #3033 AC5 — hunk count mismatch is translated', () => {
     });
     expect(result.error).toBeDefined();
     expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
-    expect(result.llmContent.toLowerCase()).toContain('unknown line');
-    expect(result.llmContent.toLowerCase()).not.toContain('declared');
-    expect(result.llmContent.toLowerCase()).not.toContain(
+    expect(llmContentAsString(result.llmContent).toLowerCase()).toContain(
+      'unknown line',
+    );
+    expect(llmContentAsString(result.llmContent).toLowerCase()).not.toContain(
+      'declared',
+    );
+    expect(llmContentAsString(result.llmContent).toLowerCase()).not.toContain(
       'actually has 0 old line',
     );
   });
@@ -624,11 +670,18 @@ describe('issue #3033 AC7 — single error prefix', () => {
     });
     expect(result.error).toBeDefined();
     expect(result.error?.type).toBe(ToolErrorType.PATCH_APPLY_FAILURE);
-    expect(countOccurrences(result.llmContent, 'Failed to apply patch:')).toBe(
-      1,
+    expect(
+      countOccurrences(
+        llmContentAsString(result.llmContent),
+        'Failed to apply patch:',
+      ),
+    ).toBe(1);
+    expect(llmContentAsString(result.llmContent).toLowerCase()).toContain(
+      'context',
     );
-    expect(result.llmContent.toLowerCase()).toContain('context');
-    expect(result.llmContent.toLowerCase()).toContain('re-read');
+    expect(llmContentAsString(result.llmContent).toLowerCase()).toContain(
+      're-read',
+    );
     expect(readFileSync(filePath, 'utf-8')).toBe('actual content\n');
   });
 });
@@ -755,6 +808,26 @@ describe('F5 — confirmation matches execution', () => {
     }
     // The file is untouched — confirmation is a preview only.
     expect(existsSync(filePath)).toBe(true);
+  });
+
+  it('switches the host to auto-approval when the user picks ProceedAlways on a delete preview', async () => {
+    const filePath = join(tempDir(), 'target.txt');
+    writeFileSync(filePath, 'a\nb\nc\n', 'utf-8');
+    // 'default' requires confirmation, so shouldConfirmExecute builds a preview.
+    const host = createFakeToolHost(tempDir(), { approvalMode: 'default' });
+    const tool = new ApplyPatchTool(host);
+    const invocation = tool.build({
+      absolute_path: filePath,
+      patch_content: deletePatch('target.txt', ['a', 'b', 'c']),
+    });
+    const confirmation = await invocation.shouldConfirmExecute(
+      new AbortController().signal,
+    );
+    expect(confirmation).not.toBe(false);
+    if (confirmation === false) return;
+    expect(host.recordedApprovalMode).toBeUndefined();
+    await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlways);
+    expect(host.recordedApprovalMode).toBe('auto');
   });
 });
 

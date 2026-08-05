@@ -272,6 +272,13 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     return this.buildEditConfirmation(filePath, currentContent, applied);
   }
 
+  /** ProceedAlways flips the host to auto-approval so later patches skip the prompt. */
+  private handleConfirmationOutcome(outcome: ToolConfirmationOutcome): void {
+    if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+      this.host.setApprovalMode('auto');
+    }
+  }
+
   private buildEditConfirmation(
     filePath: string,
     currentContent: string,
@@ -307,9 +314,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       originalContent: currentContent,
       newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
-        if (outcome === ToolConfirmationOutcome.ProceedAlways) {
-          this.host.setApprovalMode('auto');
-        }
+        this.handleConfirmationOutcome(outcome);
         if (ideConfirmation) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
@@ -345,7 +350,9 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       fileDiff,
       originalContent: currentContent,
       newContent: '',
-      onConfirm: async () => {},
+      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        this.handleConfirmationOutcome(outcome);
+      },
     };
     return confirmationDetails;
   }
