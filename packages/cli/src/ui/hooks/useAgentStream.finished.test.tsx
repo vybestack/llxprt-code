@@ -444,13 +444,16 @@ describe('useAgentStream', () => {
       // Setup mock to return a stream with ContextWindowWillOverflow event
       mockSendMessageStream.mockReturnValue(
         (async function* () {
-          // The dispatcher consumes 'context-warning' with the counts on the
-          // event itself. ServerEventType.ContextWindowWillOverflow is
-          // 'context_window_will_overflow', which nothing handles.
+          // The fake agent feeds this stream through the real event adapter,
+          // so it must carry the RAW server event. The adapter maps
+          // ContextWindowWillOverflow to the 'context-warning' agent event
+          // that the dispatcher consumes.
           yield {
-            type: 'context-warning',
-            estimatedRequestTokenCount: 100,
-            remainingTokenCount: 50,
+            type: 'context_window_will_overflow',
+            value: {
+              estimatedRequestTokenCount: 100,
+              remainingTokenCount: 50,
+            },
           };
         })(),
       );
