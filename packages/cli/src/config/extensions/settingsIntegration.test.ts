@@ -22,6 +22,48 @@ import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 // to its build output — so spy on the exact instance the source uses.
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
+// ExtensionSettingsStorage delegates every read and write to SecureStore, which
+// calls the @napi-rs/keyring native module. A GitHub Linux runner has no
+// keyring service and that native call segfaults the process; Bun surfaces it
+// as "panic(main thread): Segmentation fault", which reads like a Bun bug but
+// is an unmocked OS keychain call. SecureStore already accepts an injectable
+// keyring, so the real storage class is kept and only the keychain is swapped
+// for the in-memory adapter that test-bun/settingsStorage.bun.ts uses.
+vi.mock('./settingsStorage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./settingsStorage.js')>();
+  const entries = new Map<string, string>();
+  const keyring = {
+    async getPassword(service: string, account: string) {
+      return entries.get(`${service}:${account}`) ?? null;
+    },
+    async setPassword(service: string, account: string, password: string) {
+      entries.set(`${service}:${account}`, password);
+    },
+    async deletePassword(service: string, account: string) {
+      return entries.delete(`${service}:${account}`);
+    },
+    async findCredentials(service: string) {
+      return [...entries.entries()]
+        .filter(([key]) => key.startsWith(`${service}:`))
+        .map(([key, password]) => ({
+          account: key.slice(service.length + 1),
+          password,
+        }));
+    },
+  };
+  class InMemoryExtensionSettingsStorage extends actual.ExtensionSettingsStorage {
+    constructor(extensionName: string, extensionDir: string) {
+      super(extensionName, extensionDir, {
+        keyringLoader: async () => keyring,
+      });
+    }
+  }
+  return {
+    ...actual,
+    ExtensionSettingsStorage: InMemoryExtensionSettingsStorage,
+  };
+});
+
 vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../utils/gitUtils.js')>();
