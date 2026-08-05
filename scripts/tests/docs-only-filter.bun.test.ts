@@ -190,13 +190,20 @@ describe('docs-only-filter: GitHub API guards', () => {
     expect(result.docsOnly).toBe(false);
   });
 
-  it('a non-integer changed_files count fails closed rather than skipping the ceiling check', () => {
-    // A caller passing NaN (e.g. from an unguarded Number(...)) must not bypass
-    // the truncation guard and green an all-docs entry list.
+  // An unusable changed_files count must never let an all-docs entry list
+  // through: without a trustworthy total we cannot know the API returned every
+  // changed file. Each of these would otherwise be a fail-open.
+  it.each([
+    ['NaN', Number.NaN],
+    ['undefined', undefined],
+    ['negative', -1],
+    ['fractional', 3.5],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('an unusable changed_files count (%s) fails closed', (_label, count) => {
     const entries = [entry('docs/index.md')];
-    const result = classifyDocsOnly({ entries, changedFiles: Number.NaN });
+    const result = classifyDocsOnly({ entries, changedFiles: count });
     expect(result.docsOnly).toBe(false);
-    expect(result.reason).toContain('truncation');
+    expect(result.reason).toContain('unusable changed_files count');
   });
 });
 

@@ -69,8 +69,12 @@ export interface DocsOnlyResult {
 /** Parameters for {@link classifyDocsOnly}. */
 export interface ClassifyDocsOnlyParams {
   readonly entries: readonly ChangedFileEntry[];
-  /** Authoritative PR `changed_files` count; undefined skips the ceiling check. */
-  readonly changedFiles?: number;
+  /**
+   * Authoritative PR `changed_files` count. Deliberately a required key (not
+   * `?:`) so a caller cannot silently omit the ceiling check; an unusable
+   * count must be passed explicitly as `undefined` and fails closed.
+   */
+  readonly changedFiles: number | undefined;
 }
 
 /** Parsed CLI options. */
@@ -203,7 +207,8 @@ export function classifyEntry(entry: ChangedFileEntry): PathClassification {
  *
  * Fail-closed rules (docsOnly=false):
  * - zero entries
- * - `changedFiles` provided and not equal to the entry count (API truncation)
+ * - `changedFiles` is not a usable count (undefined, NaN, negative, fractional)
+ * - `changedFiles` not equal to the entry count (API truncation)
  * - any entry that is CODE, unclassifiable, or part of a non-docs rename
  */
 export function classifyDocsOnly({
@@ -218,10 +223,19 @@ export function classifyDocsOnly({
     };
   }
 
-  // No Number.isInteger() guard: a non-integer (NaN, 3.5) can never equal an
-  // integer entry count, so comparing directly fails closed. Skipping the
-  // comparison for such values would instead bypass the ceiling check.
-  if (changedFiles !== undefined && changedFiles !== entries.length) {
+  // An unusable count must fail closed rather than skip the ceiling check:
+  // without a trustworthy total there is no way to know the API returned every
+  // changed file (issue #342 R3). Note this rejects the value, it does not
+  // bypass the comparison — bypassing is exactly the fail-open being avoided.
+  if (!Number.isInteger(changedFiles) || (changedFiles as number) < 0) {
+    return {
+      docsOnly: false,
+      reason: `unusable changed_files count (${String(changedFiles)}); cannot verify the API returned every file — fail closed to full CI`,
+      pathReasons: [],
+    };
+  }
+
+  if (changedFiles !== entries.length) {
     return {
       docsOnly: false,
       reason: `API truncation: returned ${entries.length} entries but PR reports ${changedFiles} changed files — fail closed to full CI`,

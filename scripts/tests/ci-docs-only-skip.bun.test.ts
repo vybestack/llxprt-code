@@ -79,6 +79,14 @@ function runAggregateScript(
   expressions: readonly string[],
   values: readonly string[],
 ): SpawnSyncReturns<string> {
+  // Positional mapping: a drift between the two arrays would leave a `${{ }}`
+  // expression unsubstituted (silently comparing a literal) while an extra
+  // value went unused. Fail loudly here instead.
+  if (expressions.length !== values.length) {
+    throw new Error(
+      `aggregate harness mismatch: ${expressions.length} expressions but ${values.length} values`,
+    );
+  }
   let script = runText;
   expressions.forEach((expression, index) => {
     script = script.replaceAll(expression, `"$${index + 1}"`);
@@ -332,6 +340,22 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
       expect(result.stdout).toContain(
         'Test shards did not all succeed (result: skipped)',
       );
+    });
+
+    it('should_skip=true is green by design', () => {
+      // Parity with the lint aggregator: a duplicate run intentionally skips
+      // every downstream job, so the required Test check must stay green.
+      const result = runTestAggregate(testCheckRun, {
+        shouldSkip: 'true',
+        docsOnly: 'false',
+        selector: 'skipped',
+        hasTests: '',
+        shards: 'skipped',
+        nodeConsumerSmoke: 'skipped',
+        acp: 'skipped',
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('green by design');
     });
 
     it('does not evaluate shell syntax injected via a result value', () => {
