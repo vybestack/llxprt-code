@@ -362,3 +362,35 @@ temporary file, or over stdout with delimiters, would work on both runtimes.
 
 Deciding and implementing that transport is a product change beyond a
 test-runner migration, so it is recorded here rather than attempted.
+
+## `InputPrompt.vim.test.tsx` — `queued message editing` deleted (8 cases)
+
+The whole describe exercised `props.popAllMessages`. That prop appears exactly
+once in non-test source — as an optional field in
+`src/ui/components/inputPromptTypes.ts` — and nothing reads or calls it. The
+feature it drove has been removed from `InputPrompt`.
+
+The tests were also written against a different signature than the surviving
+type declares: the type is
+`(callback: (messages: string) => void) => void`, while the tests use
+`mockPopAllMessages.mockReturnValue('Message 1\n\nMessage 2')`, i.e. a function
+that returns the messages. So they could not have described current behaviour
+even if the prop were still wired.
+
+Behaviours lost:
+
+- up arrow on an empty prompt loads all queued messages
+- queued messages are not loaded when the prompt already has text
+- an undefined return from `popAllMessages` is handled
+- the NAVIGATION_UP binding behaves the same as the raw up arrow
+- a single queued message is handled
+- the check only fires when the buffer trims to empty
+- absence of `popAllMessages` is tolerated
+- input history is navigated when no queued messages exist
+
+The last of these — up arrow navigating input history — is still covered by
+`src/ui/hooks/useInputHistory.test.ts`.
+
+Note for whoever restores this: `handleSpecialInputKey` was instrumented during
+triage and the up arrow *does* arrive with `focus: true` and an empty buffer, so
+the dispatch path is healthy; only the consumer is missing.
