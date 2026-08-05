@@ -286,17 +286,31 @@ function renderLabelList(data: Data): string {
   return lines.join('\n');
 }
 
+/**
+ * Renders the truncation note for a shaped result.
+ *
+ * `truncated` is not one type across operations: pr.diff shapes it as
+ * `{ field, originalBytes }` or null, pr.reviews as a boolean. Rather than
+ * each renderer knowing which of the two its op happens to produce — and
+ * silently dropping the notice if that ever changes — this reads both forms
+ * and returns an empty string when nothing was cut.
+ */
+function truncationNote(value: unknown): string {
+  if (value === true) return '(truncated)';
+  const record = asRecord(value);
+  if (record === null) return '';
+  const bytes = asNum(record.originalBytes);
+  return bytes !== null ? `truncated at ${bytes} bytes` : '(truncated)';
+}
+
 /** Renders pr.diff. */
 function renderPrDiff(params: Params, data: Data): string {
   const n = asNum(params.number);
   const diff = asStr(data.diff);
   const lineCount = diff === '' ? 0 : diff.split('\n').length;
   const lines = [`Diff for PR #${n ?? '?'} — ${lineCount} lines`];
-  const truncatedRecord = asRecord(data.truncated);
-  if (truncatedRecord !== null) {
-    const bytes = asNum(truncatedRecord.originalBytes);
-    if (bytes !== null) lines.push(`truncated at ${bytes} bytes`);
-  }
+  const note = truncationNote(data.truncated);
+  if (note !== '') lines.push(note);
   if (diff !== '') {
     lines.push(capText(diff, MAX_DIFF_LINES));
   }
@@ -331,7 +345,8 @@ function renderPrReviews(data: Data): string {
   }
   const tail = moreTail(threads.length);
   if (tail) lines.push(tail);
-  if (data.truncated === true) lines.push('(truncated)');
+  const note = truncationNote(data.truncated);
+  if (note !== '') lines.push(note);
   return lines.join('\n');
 }
 

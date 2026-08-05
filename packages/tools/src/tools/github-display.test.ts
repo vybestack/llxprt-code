@@ -176,6 +176,16 @@ describe('github result rendering', () => {
       { diff, truncated: { field: 'diff', originalBytes: 70000 } },
     );
     expect(truncated).toContain('truncated at 70000 bytes');
+
+    // `truncated` is a boolean on pr.reviews and a record on pr.diff, so the
+    // note must read both shapes rather than the one its own op happens to
+    // produce today.
+    const booleanShape = renderGithubResult(
+      'pr.diff',
+      { number: 2317 },
+      { diff, truncated: true },
+    );
+    expect(booleanShape).toContain('(truncated)');
   });
 
   /**
