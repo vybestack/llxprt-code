@@ -295,11 +295,17 @@ describe('issue #3068: CLI bundle ships its runtime assets', () => {
  * redirect writes the child's stdio straight to files at the OS level, so the
  * files are the only reliable way to observe what the launched bundle prints.
  *
- * Finding A8 asked for plain `spawnSync`; that is a documented deviation here —
- * plain `spawnSync` makes the wasm/provider assertions vacuous, contradicting
- * A7's anti-vacuity requirement. The command is passed to `sh` as separate argv
- * consumed positionally (`"$0" "$@"`), so no shell quoting is needed and the
- * args are never re-parsed by the shell (injection-safe).
+ * Measured under `bun test v1.3.14`: a child's output is observable ONLY via a
+ * shell redirect. `spawnSync` with `encoding` (pipes), `spawnSync` with
+ * explicit file descriptors in `stdio`, and `Bun.spawnSync` with pipes all
+ * yield empty `stdout`/`stderr` (and, for the fd form, an empty file) while
+ * still reporting the correct exit status. Using plain `spawnSync` here would
+ * therefore make the wasm/provider absence assertions vacuous.
+ *
+ * The command string is a constant; the two values that vary (the Bun binary
+ * and the bundle path) travel through the environment and are expanded inside
+ * double quotes, so nothing is interpolated into the command and the shell
+ * cannot re-parse a path containing spaces or metacharacters.
  */
 function launchBundleProviderResolve(): {
   stdout: string;
@@ -337,19 +343,19 @@ function launchBundleProviderResolve(): {
     }
     env.__I3068_OUT = outFile;
     env.__I3068_ERR = errFile;
+    env.__I3068_BUN = process.execPath;
+    env.__I3068_BUNDLE = bundlePath;
+    // Every argument the shell sees is a compile-time constant: the two paths
+    // that vary (the Bun binary and the bundle) are passed through the
+    // environment and expanded inside double quotes, so nothing is ever
+    // interpolated into the command string and the shell cannot re-parse a
+    // path containing spaces or metacharacters.
     const result = spawnSync(
       'sh',
       [
         '-c',
-        '"$0" "$@" > "$__I3068_OUT" 2> "$__I3068_ERR"',
-        process.execPath,
-        bundlePath,
-        '--provider',
-        'openai',
-        '--model',
-        'gpt-4o',
-        '-p',
-        'hi',
+        '"$__I3068_BUN" "$__I3068_BUNDLE" --provider openai --model gpt-4o ' +
+          '-p hi > "$__I3068_OUT" 2> "$__I3068_ERR"',
       ],
       {
         cwd: repoRoot,

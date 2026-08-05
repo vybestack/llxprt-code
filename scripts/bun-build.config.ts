@@ -25,9 +25,15 @@
  * a2a-server build. Top-level execution is guarded by `import.meta.main`.
  */
 
-import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
 import { stageCliBundleAssets } from './copy_bundle_assets.js';
@@ -239,6 +245,23 @@ async function buildA2aServer(): Promise<readonly string[]> {
 }
 
 /**
+ * Removes every entry in the bundle directory except the just-emitted build
+ * outputs, leaving a clean slate for asset staging.
+ *
+ * A no-op when the directory does not exist yet (the first build).
+ */
+function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
+  if (!existsSync(bundleDir)) {
+    return;
+  }
+  for (const entry of readdirSync(bundleDir)) {
+    if (!keep.has(entry)) {
+      rmSync(join(bundleDir, entry), { recursive: true, force: true });
+    }
+  }
+}
+
+/**
  * Builds the prebuilt CLI bundle only (issue #2999).
  *
  * Kept separately invocable so `prepack` can produce the shipped bundle
@@ -249,14 +272,6 @@ async function buildA2aServer(): Promise<readonly string[]> {
  * failure, not as a hard kill of the test runner process.
  */
 export async function buildCliBundle(): Promise<readonly string[]> {
-  // Prune the bundle directory before building. Bun.build does not clean its
-  // outdir, and the asset stager only writes/overwrites — it never deletes —
-  // so an alias, policy, or template removed from source would otherwise linger
-  // in packages/cli/bundle/ and ship. Removing the directory here (before
-  // Bun.build repopulates it with llxprt.js) makes the staged set exactly match
-  // the source on every build. Bun.build recreates the outdir, so this ordering
-  // is safe.
-  rmSync(CLI_BUNDLE_DIR, { recursive: true, force: true });
   let cliResult: Awaited<ReturnType<typeof Bun.build>>;
   try {
     cliResult = await Bun.build(cliBundleConfig);
@@ -274,6 +289,15 @@ export async function buildCliBundle(): Promise<readonly string[]> {
     );
   }
   const outputs = cliResult.outputs.map((o) => `${o.path}=${o.size}`);
+  // Drop stale assets only once the build has succeeded, so a transient build
+  // failure leaves the previous bundle intact instead of deleting it. Bun.build
+  // does not clean its outdir and the stager only writes — never deletes — so
+  // without this an alias, policy, or template removed from source would linger
+  // and ship. The freshly emitted artifacts are preserved by name.
+  pruneStaleBundleEntries(
+    CLI_BUNDLE_DIR,
+    new Set(cliResult.outputs.map((o) => basename(o.path))),
+  );
   // Stage the runtime data assets the bundled code reads relative to the
   // bundle directory (issue #3068). Throws on a missing required asset so a
   // broken bundle can never be silently published; this propagates as a
