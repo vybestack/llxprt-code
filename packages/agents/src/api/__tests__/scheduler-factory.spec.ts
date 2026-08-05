@@ -26,7 +26,7 @@
  * event sequences and the real handle `disposed` boolean.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import {
   buildAgent,
   drain,

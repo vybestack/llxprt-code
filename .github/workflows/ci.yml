@@ -50,11 +50,20 @@ jobs:
   doc_change_filter:
     name: 'Detect doc-only changes'
     runs-on: 'ubuntu-latest'
+    # Every heavy job declares `needs: doc_change_filter`, so a stalled `gh api`
+    # call here would block the whole tier for the 6-hour Actions default. Cap
+    # it like shard_selector does; two API calls need nowhere near this.
+    timeout-minutes: 5
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     env:
       GH_TOKEN: '${{ github.token }}'
+    # Reads PR file metadata (issue #342); be explicit rather than relying on
+    # the repo being public. Matches how shard_selector declares permissions.
+    permissions:
+      contents: 'read'
+      pull-requests: 'read'
     outputs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
@@ -63,6 +72,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
       - name: 'Determine documentation-only PR'
         id: 'detect'
         env:
@@ -70,76 +84,41 @@ jobs:
             ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
         run: |
           set -euo pipefail
+          # Non-PR events (push, merge_group, workflow_dispatch) always run full CI.
           if [[ -z "${PR_NUMBER:-}" ]]; then
             echo "docs_only=false" >>"$GITHUB_OUTPUT"
             exit 0
           fi
 
-          files="$(gh api \
+          # Fetch the full structured PR file list as NDJSON (one entry per line
+          # across all pages, including status/previous_filename/patch so renames
+          # and the .gitignore carve-out are handled) and the authoritative
+          # changed_files count. `|| true` keeps an API blip from failing this
+          # job: the detector script then resolves to docs_only=false (run full
+          # CI) rather than skipping the six heavy jobs and wedging the PR.
+          files_json="${RUNNER_TEMP}/pr-files.ndjson"
+          : >"$files_json"
+          gh api \
             --paginate \
             -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename')"
+            --jq '.[]' >"$files_json" || true
 
-          if [[ -z "$files" ]]; then
-            echo "docs_only=false" >>"$GITHUB_OUTPUT"
-            {
-              echo "### Unable to determine doc-only status"
-              echo "GitHub API returned no files; running full CI to be safe."
-            } >>"$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          changed_files="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq '.changed_files' || true)"
 
-          gitignore_patch=''
-          if grep -Fxq '.gitignore' <<<"$files"; then
-            gitignore_patch="$(gh api \
-              --paginate \
-              -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-              --jq '.[] | select(.filename == ".gitignore") | .patch' || true)"
-          fi
-
-          docs_only=true
-          while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-            case "$file" in
-              # integration-tests/ fixtures (any extension) are never docs.
-              integration-tests/*)
-                docs_only=false
-                break
-                ;;
-              docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
-                ;;
-              CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
-                ;;
-              *.md|*.mdx|*.rst|*.txt|*.adoc)
-                ;;
-              .gitignore)
-                if [[ -z "$gitignore_patch" ]]; then
-                  docs_only=false
-                  break
-                fi
-                if printf '%s\n' "$gitignore_patch" \
-                  | grep -E '^[+-][^+-]' \
-                  | grep -Ev '^[+-](!docs/reference/|#.*docs/reference)' >/dev/null; then
-                  docs_only=false
-                  break
-                fi
-                ;;
-              *)
-                docs_only=false
-                break
-                ;;
-            esac
-          done <<<"$files"
-
-          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
-          if [[ "$docs_only" == "true" ]]; then
-            {
-              echo "### Documentation-only PR detected"
-              echo "Skipping automated test suites (unit + coverage) for this PR."
-            } >>"$GITHUB_STEP_SUMMARY"
-          fi
+          # The classifier (scripts/docs-only-filter.ts) is a conservative
+          # allowlist (issue #342): runtime .md/.txt inputs under packages/ are
+          # CODE, renames require both sides to be docs, and the changed_files
+          # count guards against the 3000-file API ceiling. It writes docs_only
+          # to GITHUB_OUTPUT and a summary to GITHUB_STEP_SUMMARY, always
+          # exiting 0 so a detector blip never wedges a PR.
+          node scripts/docs-only-filter.ts \
+            --files-json "$files_json" \
+            --changed-files "$changed_files" \
+            --output github-actions || true
   #
   # Lint: GitHub Actions
   #
@@ -618,12 +597,66 @@ jobs:
       - 'lint_javascript'
       - 'lint_shell'
       - 'lint_yaml'
-      # Gates the expensive test matrix behind a cheap npm build+smoke so a
-      # broken build fails fast on ubuntu instead of on every matrix leg.
+      # node_consumer_smoke provides a cheap package install/invocation gate.
+      # test_shard depends directly on it (issue #2877); lint retains the
+      # dependency here to preserve smoke coverage when the matrix is skipped.
       - 'node_consumer_smoke'
+      # doc_change_filter (issue #342) makes node_consumer_smoke skippable on
+      # docs-only PRs. skip_check makes every job skippable on duplicate runs.
+      # Both are read below so this required aggregator stays honest instead of
+      # being skipped by GitHub when a needed job is skipped.
+      - 'doc_change_filter'
+      - 'skip_check'
+    if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
-      - run: |-
+      - name: 'Check lint results'
+        run: |-
+          should_skip='${{ needs.skip_check.outputs.should_skip }}'
+          docs_only='${{ needs.doc_change_filter.outputs.docs_only }}'
+          lint_github_actions_result='${{ needs.lint_github_actions.result }}'
+          lint_javascript_result='${{ needs.lint_javascript.result }}'
+          lint_shell_result='${{ needs.lint_shell.result }}'
+          lint_yaml_result='${{ needs.lint_yaml.result }}'
+          node_consumer_smoke_result='${{ needs.node_consumer_smoke.result }}'
+
+          # Explicit duplicate-skip: skip_check said this run duplicates a
+          # passing one, so every downstream job was intentionally skipped.
+          # The required Lint check is green by design.
+          if [ "$should_skip" == "true" ]; then
+            echo "skip_check reported a duplicate passing run (should_skip=true). Lint check is green by design."
+            exit 0
+          fi
+
+          # Every linter must succeed regardless of PR type.
+          if [ "$lint_github_actions_result" != "success" ]; then
+            echo "::error::GitHub Actions lint did not succeed (result: $lint_github_actions_result)"
+            exit 1
+          fi
+          if [ "$lint_javascript_result" != "success" ]; then
+            echo "::error::JavaScript lint did not succeed (result: $lint_javascript_result)"
+            exit 1
+          fi
+          if [ "$lint_shell_result" != "success" ]; then
+            echo "::error::Shell lint did not succeed (result: $lint_shell_result)"
+            exit 1
+          fi
+          if [ "$lint_yaml_result" != "success" ]; then
+            echo "::error::YAML lint did not succeed (result: $lint_yaml_result)"
+            exit 1
+          fi
+
+          # node_consumer_smoke must succeed on code PRs. On docs-only PRs
+          # (issue #342) it is intentionally skipped, which is accepted here.
+          if [ "$node_consumer_smoke_result" != "success" ]; then
+            if [ "$docs_only" == "true" ] && [ "$node_consumer_smoke_result" == "skipped" ]; then
+              echo "docs-only PR: node_consumer_smoke intentionally skipped (issue #342)."
+            else
+              echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
+              exit 1
+            fi
+          fi
+
           echo 'All linters finished!'
 
   #
@@ -643,8 +676,11 @@ jobs:
     # fast instead of occupying a runner up to the 6-hour GitHub Actions default.
     timeout-minutes: 15
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change whether
+    # `bun install` resolves and links the workspaces.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -685,8 +721,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 15
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change native
+    # module load/operate behaviour under the Bun runtime.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -720,20 +759,24 @@ jobs:
   # Guards npm install/invocation compatibility: install with npm, then run the
   # installed bin directly. The bin is a POSIX sh launcher (issue #2603) that
   # execs the package-local Bun against packages/cli/index.ts — no Node process
-  # is started on the installed command path. Wired into the `lint` aggregator
-  # so the expensive test matrix waits for this fast install+smoke check first.
+  # is started on the installed command path. A direct dependency of test_shard
+  # (issue #2877) and of the lint aggregator, so broken package installs or CLI
+  # invocation fail before matrix fanout.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
     runs-on: 'ubuntu-latest'
     timeout-minutes: 15
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
-    # This job runs npm ci (executing third-party install scripts) and only
-    # needs to read the repo, so scope permissions to contents:read and drop
-    # credential persistence (matches bun_native_modules_smoke hardening). It
-    # validates the published npm entry path by running the installed launcher
-    # directly after install; the launcher execs Bun on TypeScript source.
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change npm
+    # package install/invocation compatibility.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
+    # This job installs the packed package with npm (executing third-party
+    # install scripts) and only needs to read the repo, so scope permissions to
+    # contents:read and drop credential persistence. It validates the published
+    # npm entry path by running the installed launcher directly after install;
+    # the launcher execs Bun on TypeScript source.
     permissions:
       contents: 'read'
     steps:
@@ -750,8 +793,8 @@ jobs:
           cache: 'npm'
 
       - name: 'Setup Bun'
-        # Must run before npm ci because lifecycle hooks and npm run build are
-        # Bun-backed after issue 2242, even though dependencies stay npm-based.
+        # The installed launcher executes Bun against the package's TypeScript
+        # sources even though the package itself is installed with npm.
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
@@ -786,8 +829,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 10
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change test
+    # orchestrator discovery/parsing/routing behaviour.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -809,30 +855,40 @@ jobs:
       - name: 'Run test orchestrator on a single workspace'
         # Runs the orchestrator against one workspace. --skip-pretest skips
         # pretest hooks (like the agents API-surface guard) to keep the smoke
-        # fast. The workspace's test phase still runs (vitest run), but
-        # test-utils has a tiny test suite. --skip-scripts skips the root
-        # script harness tests. The only failure modes that matter here are
-        # bugs in the orchestrator itself (discovery, parsing, routing).
+        # fast. The workspace's test phase still runs, but test-utils has a
+        # tiny test suite. --skip-scripts skips the root script harness tests.
+        # The only failure modes that matter here are bugs in the orchestrator
+        # itself (discovery, parsing, routing).
         run: |-
           bun scripts/test.ts --workspace test-utils --skip-scripts
 
       - name: 'Run script harness tests for the orchestrator'
         run: |-
-          bunx vitest run --config ./scripts/tests/vitest.config.ts scripts/tests/test-orchestrator.test.ts
+          bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
 
   #
-  # Bun-native test compatibility (issue #2475)
+  # Bun-native manifest discovery gate (issues #2475, #2847)
   #
-  # Runs representative tests from workspaces with supported Bun-native
-  # compatibility. Vitest-only workspaces remain covered by the primary test
-  # jobs and are intentionally excluded from this smoke gate.
+  # Resolves every root declared in scripts/bun-test-manifest.ts without
+  # executing anything: globs are expanded, and every selected file, preload,
+  # tsconfig override and global-setup module must exist. That is what proves
+  # no test file was dropped.
+  #
+  # It deliberately does NOT run the suite. `test_shard` already executes every
+  # root exactly once by invoking each workspace's own `test` script, so a
+  # second full run would double the CI bill for no extra signal. The one-owner
+  # invariant is enforced by scripts/tests/bun-manifest-root-ownership.bun.test.ts,
+  # which fails if a root gains a second executor or loses its only one.
   bun_native_test_parity:
     name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 30
+    timeout-minutes: 10
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change test
+    # manifest root resolution or file existence.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -858,9 +914,9 @@ jobs:
           bun install
           git checkout -- bun.lock
 
-      - name: 'Run Bun-native tests (manifest-based)'
+      - name: 'Resolve every Bun-native root (no execution)'
         run: |-
-          bun scripts/run_bun_tests.ts --timeout 30000
+          bun scripts/run_bun_tests.ts --dry-run
 
   #
   # Test: Node (Linux only — issue #2876)
@@ -899,7 +955,7 @@ jobs:
     # hung shard fails instead of occupying a runner for the 6h default.
     timeout-minutes: 45
     needs:
-      - 'lint'
+      - 'node_consumer_smoke'
       - 'doc_change_filter'
       - 'shard_selector'
       - 'skip_check'
@@ -1021,8 +1077,9 @@ jobs:
           # so local runs keep the signal; the env var is only set in CI.
           LLXPRT_COVERAGE: ${{ (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' && 'true' || 'false' }}
         # The orchestrator expands --shard to the shard's workspaces (or runs
-        # npm run test:scripts for the scripts shard). The tools, mcp, and storage
-        # workspaces run native Bun; all other packages use their configured runner.
+        # npm run test:scripts for the scripts shard). Each workspace's tests
+        # run under whichever runner its own `test` script selects — Bun-native
+        # for the migrated workspaces, Vitest for the rest (issue #2578).
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Report harness toolchain versions'
@@ -1055,10 +1112,9 @@ jobs:
         run: 'sleep 2'
 
       - name: 'Publish Test Report (for non-forks)'
-        # The scripts shard runs the root script harness, which has no
-        # per-workspace junit.xml output (scripts/tests/vitest.config.ts does
-        # not configure the junit reporter). Skip it to avoid a "no test
-        # report files found" error.
+        # The scripts shard runs the root script harness, which produces no
+        # per-workspace junit.xml. Skip it to avoid a "no test report files
+        # found" error.
         if: |-
           ${{ always() && matrix.shard != 'scripts' && (github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
@@ -1098,10 +1154,10 @@ jobs:
   # name while the real work fans out across the matrix.
   #
   # `if: always()` is essential: when a `test_shard` leg fails or is skipped
-  # (e.g. because an upstream `lint` dependency failed), GitHub would
-  # otherwise **skip** this job, and branch protection treats skipped checks
-  # as passing — a silent bypass. The explicit result check converts any
-  # non-success outcome (failure, skipped, cancelled) into a `failure`
+  # (e.g. because an upstream `node_consumer_smoke` dependency failed), GitHub
+  # would otherwise **skip** this job, and branch protection treats skipped
+  # checks as passing — a silent bypass. The explicit result check converts
+  # any non-success outcome (failure, skipped, cancelled) into a `failure`
   # conclusion on this required check.
   #
   # Issue #2709: the `test` job now also depends on `shard_selector`. When the
@@ -1125,8 +1181,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 20
     needs:
+      - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Skip on docs-only PRs (issue #342): a doc edit cannot change the
+    # built CLI's agent conformance behaviour.
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
     steps:
@@ -1224,16 +1283,20 @@ jobs:
       - 'test_shard'
       - 'shard_selector'
       - 'skip_check'
+      - 'node_consumer_smoke'
       - 'acp_conformance'
+      - 'doc_change_filter'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Check shard results'
         run: |-
           should_skip='${{ needs.skip_check.outputs.should_skip }}'
+          docs_only='${{ needs.doc_change_filter.outputs.docs_only }}'
           selector_result='${{ needs.shard_selector.result }}'
           has_tests='${{ needs.shard_selector.outputs.has_tests }}'
           shard_result='${{ needs.test_shard.result }}'
+          node_consumer_smoke_result='${{ needs.node_consumer_smoke.result }}'
           acp_result='${{ needs.acp_conformance.result }}'
 
           # Explicit duplicate-skip: skip_check said this run duplicates a
@@ -1244,10 +1307,31 @@ jobs:
             exit 0
           fi
 
+          # There is intentionally NO unconditional docs-only early return here
+          # (issue #342). shard_selector is an independent, stricter classifier
+          # than doc_change_filter; requiring it to succeed (and, when it reports
+          # tests, requiring the selected shards to succeed) means a
+          # misclassification by doc_change_filter fails closed instead of
+          # greening the required Test check. Only the docs-only-skippable jobs
+          # (node_consumer_smoke, acp_conformance) accept a `skipped` result when
+          # docs_only == 'true'; the selector/has_tests/test_shard logic below is
+          # unchanged.
+
           # Fail closed if the selector itself did not succeed.
           if [ "$selector_result" != "success" ]; then
             echo "::error::Shard selector did not succeed (result: $selector_result); cannot trust test selection."
             exit 1
+          fi
+
+          # node_consumer_smoke must succeed on code PRs. On docs-only PRs
+          # (issue #342) it is intentionally skipped, which is accepted here.
+          if [ "$node_consumer_smoke_result" != "success" ]; then
+            if [ "$docs_only" == "true" ] && [ "$node_consumer_smoke_result" == "skipped" ]; then
+              echo "docs-only PR: node_consumer_smoke intentionally skipped (issue #342)."
+            else
+              echo "::error::Node Consumer Smoke did not succeed (result: $node_consumer_smoke_result)"
+              exit 1
+            fi
           fi
 
           # Intentional no-test PR: selector succeeded and said has_tests=false.
@@ -1261,10 +1345,15 @@ jobs:
             fi
           fi
 
-          # ACP conformance must succeed (issue #2564).
+          # ACP conformance must succeed on code PRs. On docs-only PRs it is
+          # intentionally skipped (issue #342), which is accepted here.
           if [ "$acp_result" != "success" ]; then
-            echo "::error::ACP conformance job did not succeed (result: $acp_result)"
-            exit 1
+            if [ "$docs_only" == "true" ] && [ "$acp_result" == "skipped" ]; then
+              echo "docs-only PR: acp_conformance intentionally skipped (issue #342)."
+            else
+              echo "::error::ACP conformance job did not succeed (result: $acp_result)"
+              exit 1
+            fi
           fi
 
           echo 'All test shards finished!'

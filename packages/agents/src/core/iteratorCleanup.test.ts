@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from '../testApi.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
 
 const CLEANUP_TIMEOUT_MS = 1_000;

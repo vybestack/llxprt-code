@@ -45,9 +45,17 @@ import {
   getShellToolDescription,
   isShellToolHost,
   prepareShellExecution,
+  appendClampNoticeToResult,
+  formatShellTimeoutMessage,
   validateGrepFlags,
   validatePositiveInteger,
+  type StringContentToolResult,
 } from './shell-helpers.js';
+import {
+  resolveTimeout,
+  validateTimeoutSeconds,
+  type TimeoutResolution,
+} from '../utils/timeoutResolution.js';
 
 /** Throttle interval for shell output updates. */
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
@@ -201,13 +209,34 @@ export class ShellToolInvocation extends BaseToolInvocation<
     this.validateFilterParams();
 
     const strippedCommand = this.host.stripShellWrapper(this.params.command);
+    const resolution = this.resolveTimeoutResolution();
 
     if (this.shouldRunAsBackground(strippedCommand)) {
       const backgroundCommand = this.resolveBackgroundCommand(strippedCommand);
       return this.executeBackground(backgroundCommand);
     }
 
-    return this.executeForeground(strippedCommand, signal, updateOutput);
+    return this.executeForeground(
+      strippedCommand,
+      resolution,
+      signal,
+      updateOutput,
+    );
+  }
+
+  /**
+   * Resolves the timeout against the host's default and maximum bounds using
+   * the canonical ceiling semantics (Issue #3031). The host's
+   * `timeoutSeconds` field carries the configured MAXIMUM (a ceiling), not a
+   * request — see the doc comment on `IShellToolHost.getTimeoutConfig`.
+   */
+  private resolveTimeoutResolution(): TimeoutResolution {
+    const timeoutConfig = this.host.getTimeoutConfig();
+    return resolveTimeout(
+      this.params.timeout_seconds,
+      timeoutConfig.defaultTimeoutSeconds,
+      timeoutConfig.timeoutSeconds,
+    );
   }
 
   /**
@@ -239,8 +268,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
   /**
    * Launch a managed background job. The timeout/abort machinery is NOT
-   * wired in because a background job's lifetime is unbounded —
-   * `timeout_seconds` bounds launch only (#1995 slice 5).
+   * wired in: `launchBackgroundJob` receives no timeout and no signal, so
+   * `timeout_seconds` is not applied to a background job at all — neither to
+   * the launch nor to the job lifetime (#1995 slice 5). No clamp notice is
+   * reported, because no bound was applied (Issue #3031).
    */
   private executeBackground(backgroundCommand: string): ToolResult {
     const cwd = this.resolveCwd();
@@ -249,11 +280,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       cwd,
     });
 
-    const { llmContent, returnDisplay } = this.formatBackgroundResult(job);
-    return {
-      llmContent,
-      returnDisplay,
-    };
+    return this.formatBackgroundResult(job);
   }
 
   /**
@@ -315,15 +342,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
   private async executeForeground(
     strippedCommand: string,
+    resolution: TimeoutResolution,
     signal: AbortSignal,
     updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
-    const timeoutConfig = this.host.getTimeoutConfig();
-    const timeoutSeconds = this.resolveTimeoutSeconds(
-      this.params.timeout_seconds,
-      timeoutConfig.defaultTimeoutSeconds,
-      timeoutConfig.timeoutSeconds,
-    );
+    const timeoutSeconds = resolution.effectiveTimeoutSeconds;
     const timeoutMs =
       timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
     const timeoutController = new AbortController();
@@ -351,8 +374,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         strippedCommand,
         signal,
         timeoutController,
-        timeoutSeconds,
-        timeoutConfig.defaultTimeoutSeconds,
+        resolution,
         timeoutId,
         updateOutput,
       );
@@ -368,8 +390,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     strippedCommand: string,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
-    defaultTimeoutSeconds: number,
+    resolution: TimeoutResolution,
     _timeoutId: ReturnType<typeof setTimeout> | null,
     updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
@@ -409,8 +430,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         backgroundPIDs,
         pgid,
         timeoutTriggered,
-        timeoutSeconds,
-        defaultTimeoutSeconds,
+        resolution,
       );
 
       const displayWithFilter = this.applyFilterDescription(
@@ -430,11 +450,15 @@ export class ShellToolInvocation extends BaseToolInvocation<
         signal,
       );
 
-      return this.buildToolResult(
+      const toolResult = this.buildToolResult(
         llmPayload,
         displayWithFilter,
         executionError,
       );
+
+      // Append the durable clamp notice AFTER summarization and token
+      // limiting so it survives lossy processing (Issue #3031).
+      return appendClampNoticeToResult(toolResult, resolution);
     } finally {
       fs.rmSync(tempFilePath, { force: true });
     }
@@ -446,7 +470,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     executionError:
       | { error: { message: string; type: ToolErrorType } }
       | Record<string, never>,
-  ): ToolResult {
+  ): StringContentToolResult {
     const limitedResult = this.host.limitOutputTokens(llmPayload);
     if (limitedResult.wasTruncated) {
       return {
@@ -586,15 +610,14 @@ export class ShellToolInvocation extends BaseToolInvocation<
     backgroundPIDs: number[],
     pgid: number | null,
     timeoutTriggered: boolean,
-    timeoutSeconds: number | undefined,
-    defaultTimeoutSeconds: number,
+    resolution: TimeoutResolution,
   ): { llmContent: string; returnDisplayMessage: string } {
     let llmContent = '';
     let returnDisplayMessage = '';
 
     if (result.aborted === true) {
       if (timeoutTriggered) {
-        llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
+        llmContent = formatShellTimeoutMessage(resolution);
 
         if (rawOutput.trim() !== '') {
           llmContent += ` Partial output:\n${rawOutput}`;
@@ -629,7 +652,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
       ));
     }
 
-    return { llmContent, returnDisplayMessage };
+    return {
+      llmContent,
+      returnDisplayMessage,
+    };
   }
 
   private formatNormalOutput(
@@ -733,27 +759,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
     };
   }
 
-  private resolveTimeoutSeconds(
-    requestedTimeoutSeconds: number | undefined,
-    defaultTimeoutSeconds: number,
-    maxTimeoutSeconds: number | undefined,
-  ): number | undefined {
-    if (requestedTimeoutSeconds === -1 || defaultTimeoutSeconds === -1) {
-      return undefined;
-    }
-
-    const effectiveTimeout = requestedTimeoutSeconds ?? defaultTimeoutSeconds;
-    if (maxTimeoutSeconds === undefined || maxTimeoutSeconds === -1) {
-      return effectiveTimeout;
-    }
-
-    if (effectiveTimeout > maxTimeoutSeconds) {
-      return maxTimeoutSeconds;
-    }
-
-    return effectiveTimeout;
-  }
-
   private isInvocationAllowlisted(command: string): boolean {
     return this.host.isShellInvocationAllowlisted(command, ShellTool.Name);
   }
@@ -791,6 +796,10 @@ export class ShellTool extends BaseDeclarativeTool<
   ): string | null {
     if (!params.command.trim()) {
       return 'Command cannot be empty.';
+    }
+    const timeoutError = validateTimeoutSeconds(params.timeout_seconds);
+    if (timeoutError !== null) {
+      return timeoutError;
     }
     const commandCheck = this.host.isCommandAllowed(params.command);
     if (!commandCheck.allowed) {

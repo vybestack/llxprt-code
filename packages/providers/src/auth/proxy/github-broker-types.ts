@@ -18,6 +18,7 @@
  */
 
 import type { RequestHandler } from './github-broker-request-handler.js';
+import type { GithubParamKind } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 
 /**
  * A validation error produced when a request's parameters do not match an
@@ -36,29 +37,17 @@ export interface ValidationError {
 }
 
 /**
- * Specification for a single parameter accepted by an operation.
+ * The kind of a single parameter accepted by an operation.
  *
- * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
+ * This is now an alias for `GithubParamKind` from the shared catalog
+ * (`@vybestack/llxprt-code-tools`), so the broker and the tool layer share
+ * one source of truth and cannot drift.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
+ * @requirement REQ-002, REQ-008
  * @pseudocode 003-github-broker.md lines 16-24
  */
-export type ParamKind =
-  | 'repo'
-  | 'number'
-  | 'boolean'
-  | 'state'
-  | 'stateIssue'
-  | 'label'
-  | 'threadId'
-  | 'body'
-  | 'freetext'
-  | 'limit'
-  | 'closeReason'
-  | 'color'
-  | 'assignee'
-  | 'milestone'
-  | 'project'
-  | 'branch';
+export type ParamKind = GithubParamKind;
 
 /**
  * Runs one `gh` invocation on behalf of a multi-step operation.

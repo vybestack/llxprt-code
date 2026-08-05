@@ -4,7 +4,7 @@
  * @plan PLAN-20260211-ASTGREP.P07
  */
 
-import type { NapiConfig } from '@ast-grep/napi';
+import type { NapiConfig, SgNode } from '@ast-grep/napi';
 import type {
   ParsedFile,
   AnalysisResult,
@@ -13,36 +13,157 @@ import type {
 } from './types.js';
 import { escapeRegex, getFiles, parseFile, makeRelative } from './helpers.js';
 
-function searchDefinitionPatterns(
+function searchFunctionAndMethodDefinitions(
   parsed: ParsedFile,
   symbol: string,
   relPath: string,
   definitions: DefinitionEntry[],
 ): void {
-  const patterns = [
-    { pat: `${symbol}($$$PARAMS) { $$$BODY }`, kind: 'method' },
-    { pat: `function ${symbol}($$$PARAMS) { $$$BODY }`, kind: 'function' },
-    { pat: `class ${symbol} { $$$BODY }`, kind: 'class' },
-    { pat: `class ${symbol} extends $PARENT { $$$BODY }`, kind: 'class' },
+  const escaped = escapeRegex(symbol);
+  const rules: Array<{ kind: string; kindLabel: string; nameKind: string }> = [
+    {
+      kind: 'function_declaration',
+      kindLabel: 'function',
+      nameKind: 'identifier',
+    },
+    {
+      kind: 'generator_function_declaration',
+      kindLabel: 'function',
+      nameKind: 'identifier',
+    },
+    {
+      kind: 'method_definition',
+      kindLabel: 'method',
+      nameKind: 'property_identifier',
+    },
   ];
 
-  for (const { pat, kind } of patterns) {
-    try {
-      const matches = parsed.root.findAll(pat);
-      for (const m of matches) {
-        const range = m.range();
+  for (const { kind, kindLabel, nameKind } of rules) {
+    collectRuleDefinitions(
+      parsed,
+      { kind, nameKind, regex: `^${escaped}$` },
+      kindLabel,
+      relPath,
+      definitions,
+    );
+  }
+
+  collectVariableBoundFunctionDefinitions(
+    parsed,
+    escaped,
+    relPath,
+    definitions,
+  );
+}
+
+/**
+ * Kinds that, when they appear as a direct child of a variable_declarator,
+ * mean the declarator binds a function-like expression.
+ */
+const VARIABLE_BOUND_FUNCTION_KINDS = [
+  'arrow_function',
+  'function_expression',
+  'generator_function',
+] as const;
+
+/**
+ * Finds variable_declarator nodes that bind a function-like expression
+ * (arrow_function, function_expression, or generator_function) whose
+ * identifier matches `escapedSymbol`, and reports them with kind 'function'.
+ *
+ * Only DIRECT children are inspected — the function node is always a direct
+ * child of the declarator, even for type-annotated bindings (e.g.
+ * `const f: () => void = () => {}`); a descendant search would wrongly match
+ * functions nested inside the initialiser.
+ */
+function collectVariableBoundFunctionDefinitions(
+  parsed: ParsedFile,
+  escapedSymbol: string,
+  relPath: string,
+  definitions: DefinitionEntry[],
+): void {
+  try {
+    const declarators = parsed.root.findAll({
+      rule: {
+        kind: 'variable_declarator',
+        has: { kind: 'identifier', regex: `^${escapedSymbol}$` },
+      },
+    } as NapiConfig);
+    for (const d of declarators) {
+      const fn = d
+        .children()
+        .find((c: SgNode) =>
+          (VARIABLE_BOUND_FUNCTION_KINDS as readonly string[]).includes(
+            String(c.kind()),
+          ),
+        );
+      if (fn === undefined) continue;
+      const line = d.range().start.line + 1;
+      const exists = definitions.some(
+        (def) => def.file === relPath && def.line === line,
+      );
+      if (!exists) {
         definitions.push({
           file: relPath,
-          line: range.start.line + 1,
-          kind,
-          text: m.text().substring(0, 200),
+          line,
+          kind: 'function',
+          text: d.text().substring(0, 200),
         });
       }
-    } catch {
-      // Pattern may not be valid for all languages
+    }
+  } catch {
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
+  }
+}
+
+/**
+ * Runs a single AST kind + name rule and appends deduplicated definition
+ * entries. Isolated so the caller stays below the nesting limit.
+ */
+function collectRuleDefinitions(
+  parsed: ParsedFile,
+  rule: { kind: string; nameKind: string; regex: string },
+  kindLabel: string,
+  relPath: string,
+  definitions: DefinitionEntry[],
+): void {
+  let matches: SgNode[];
+  try {
+    matches = parsed.root.findAll({
+      rule: {
+        kind: rule.kind,
+        has: { kind: rule.nameKind, regex: rule.regex },
+      },
+    } as NapiConfig);
+  } catch {
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
+    return;
+  }
+  for (const m of matches) {
+    const line = m.range().start.line + 1;
+    const exists = definitions.some(
+      (d) => d.file === relPath && d.line === line,
+    );
+    if (!exists) {
+      definitions.push({
+        file: relPath,
+        line,
+        kind: kindLabel,
+        text: m.text().substring(0, 200),
+      });
     }
   }
 }
+
+/**
+ * Maps raw ast-grep declaration node kinds to the friendly labels used by the
+ * function/method path, so callers see 'class' not 'class_declaration'.
+ */
+const DECLARATION_KIND_LABELS: Record<string, string> = {
+  class_declaration: 'class',
+  interface_declaration: 'interface',
+  type_alias_declaration: 'type',
+};
 
 function searchDeclarationRules(
   parsed: ParsedFile,
@@ -84,16 +205,17 @@ function searchDeclarationRules(
         (d) => d.file === relPath && d.line === range.start.line + 1,
       );
       if (!exists) {
+        const rawKind = String(m.kind());
         definitions.push({
           file: relPath,
           line: range.start.line + 1,
-          kind: String(m.kind()),
+          kind: DECLARATION_KIND_LABELS[rawKind] ?? rawKind,
           text: m.text().substring(0, 200),
         });
       }
     }
   } catch {
-    // Rule may not apply
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
   }
 }
 
@@ -113,7 +235,7 @@ async function processDefinitionsFile(
   }
 
   const relPath = makeRelative(file, workspaceRoot);
-  searchDefinitionPatterns(parsed, symbol, relPath, definitions);
+  searchFunctionAndMethodDefinitions(parsed, symbol, relPath, definitions);
   searchDeclarationRules(parsed, symbol, relPath, definitions);
   return true;
 }

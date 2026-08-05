@@ -1,0 +1,1245 @@
+# Agents Bun probe: 34 failing files of 330
+
+==============================================================================
+FILE: src/agents/executor.execution.test.ts
+==============================================================================
+ementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.execution.test.ts:58:15)
+(fail) AgentExecutor run (Execution Loop and Logic) > should handle multiple calls to complete_task in the same turn (accept first, block rest) [0.03ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.execution.test.ts:58:15)
+(fail) AgentExecutor run (Execution Loop and Logic) > should execute parallel tool calls and then complete [0.04ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.execution.test.ts:58:15)
+(fail) AgentExecutor run (Execution Loop and Logic) > SECURITY: should block unauthorized tools and provide explicit failure to model [0.03ms]
+
+ 0 pass
+ 7 fail
+Ran 7 tests across 1 file. [1421.00ms]
+
+
+==============================================================================
+FILE: src/agents/executor.recovery.test.ts
+==============================================================================
+kReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.recovery.test.ts:60:15)
+(fail) AgentExecutor (Recovery Turn) > should terminate as ABORTED when parent aborts during active recovery [0.03ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.recovery.test.ts:60:15)
+(fail) AgentExecutor (Recovery Turn) > should sanitize grace_period_seconds=0 to default [0.03ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.recovery.test.ts:60:15)
+(fail) AgentExecutor (Recovery Turn) > should sanitize negative grace_period_seconds to default [0.03ms]
+
+ 0 pass
+ 16 fail
+Ran 16 tests across 1 file. [1391.00ms]
+
+
+==============================================================================
+FILE: src/agents/executor.stream-idle-timeout.test.ts
+==============================================================================
+olCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.stream-idle-timeout.test.ts:46:15)
+(fail) stream idle timeout behavioral tests > honors config setting: uses resolveStreamIdleTimeoutMs with config [14.39ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.stream-idle-timeout.test.ts:46:15)
+(fail) stream idle timeout behavioral tests > disabled path: setting 0 disables watchdog [0.07ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.stream-idle-timeout.test.ts:46:15)
+(fail) stream idle timeout behavioral tests > env var precedence: env var is checked first [0.05ms]
+
+ 0 pass
+ 3 fail
+Ran 3 tests across 1 file. [1253.00ms]
+
+
+==============================================================================
+FILE: src/agents/executor.termination-conditions.test.ts
+==============================================================================
+dChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.termination-conditions.test.ts:59:15)
+(fail) AgentExecutor run (Termination Conditions) > should terminate if timeout is reached [0.06ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.termination-conditions.test.ts:59:15)
+(fail) AgentExecutor run (Termination Conditions) > should actively abort a stalled response stream before the overall timeout expires [0.04ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.termination-conditions.test.ts:59:15)
+(fail) AgentExecutor run (Termination Conditions) > should terminate when AbortSignal is triggered [0.05ms]
+
+ 0 pass
+ 4 fail
+Ran 4 tests across 1 file. [1225.00ms]
+
+
+==============================================================================
+FILE: src/agents/executor.test.ts
+==============================================================================
+ckedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.test.ts:58:15)
+(fail) AgentExecutor > create (Initialization and Validation) > should create an isolated ToolRegistry for the agent [0.04ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.test.ts:58:15)
+(fail) AgentExecutor > run (Hook-filtered tool calls) > should not treat only hook-filtered function calls as successful completion [0.04ms]
+288 |   } = params;
+289 |   vi.resetAllMocks();
+290 |   mockSendMessageStream.mockReset();
+291 |   mockExecuteToolCall.mockReset();
+292 |
+293 |   MockedChatSession.mockImplementation(
+                          ^
+TypeError: MockedChatSession.mockImplementation is not a function. (In 'MockedChatSession.mockImplementation(() => ({
+    sendMessageStream: mockSendMessageStream
+  }))', 'MockedChatSession.mockImplementation' is undefined)
+      at setupExecutorFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor-test-helpers.ts:293:21)
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/agents/executor.test.ts:58:15)
+(fail) AgentExecutor > run (Hook-filtered tool calls) > should execute allowed function calls when the same response also has hook-filtered calls [0.04ms]
+
+ 0 pass
+ 5 fail
+Ran 5 tests across 1 file. [1.53s]
+
+
+==============================================================================
+FILE: src/api/__tests__/agent.approvalMode.behavior.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/api/__tests__/agent.approvalMode.behavior.test.ts:
+(fail) Agent approval mode delegation @plan:PLAN-20260622-COREAPIGAP.P03 @requirement:REQ-001 > T1 agent built with approvalMode:AUTO_EDIT (trusted) → agent.getApprovalMode() === ApprovalMode.AUTO_EDIT @requirement:REQ-001 @scenario:positive-live-read @given:a trusted agent built with approvalMode set to AUTO_EDIT @when:agent.getApprovalMode() @then:returns ApprovalMode.AUTO_EDIT (live read of the bound Config value) [5110.78ms]
+  ^ this test timed out after 5000ms.
+(pass) Agent approval mode delegation @plan:PLAN-20260622-COREAPIGAP.P03 @requirement:REQ-001 > T2 agent built with folderTrust:false → agent.setApprovalMode(YOLO) throws the real untrusted-folder error (faithful propagation, no catch) @requirement:REQ-001 @scenario:untrusted-throw @given:an agent built with folderTrust:false @when:agent.setApprovalMode(ApprovalMode.YOLO) @then:throws an Error whose message is exactly the untrusted-folder message [172.07ms]
+(pass) Agent approval mode delegation @plan:PLAN-20260622-COREAPIGAP.P03 @requirement:REQ-001 > T3 trusted agent → setApprovalMode(YOLO) then getApprovalMode() === YOLO (write-then-read parity, no cache) @requirement:REQ-001 @scenario:write-then-read @given:a trusted agent @when:setApprovalMode(YOLO) then getApprovalMode() @then:returns YOLO (live write reflected on next read via the public root) [6.79ms]
+(pass) Agent approval mode delegation @plan:PLAN-20260622-COREAPIGAP.P03 @requirement:REQ-001 > PROP round-trip: for any mode m in {DEFAULT,AUTO_EDIT,YOLO}, setApprovalMode(m) then getApprovalMode() === m @requirement:REQ-001 @scenario:property-round-trip @given:a trusted agent @when:setApprovalMode(m) then getApprovalMode() @then:returns m (round-trip equality over the full enum) [880.38ms]
+(pass) Agent approval mode delegation @plan:PLAN-20260622-COREAPIGAP.P03 @requirement:REQ-001 > PROP untrusted matrix: for any non-DEFAULT mode m with folderTrust:false, setApprovalMode(m) throws the untrusted-folder error; and setApprovalMode(DEFAULT) is always allowed with a DEFAULT post-condition @requirement:REQ-001 @scenario:property-untrusted-matrix @given:an agent built with folderTrust:false @when:setApprovalMode(m) for a non-DEFAULT m @then:throws the untrusted-folder message; and when setApprovalMode(DEFAULT) then getApprovalMode() === DEFAULT (DEFAULT is always allowed) [716.69ms]
+
+ 4 pass
+ 1 fail
+ 302 expect() calls
+Ran 5 tests across 1 file. [8.30s]
+
+
+==============================================================================
+FILE: src/api/__tests__/agent.sequenceModel.behavior.test.ts
+==============================================================================
+ass) getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003 > T9c resolveClient returns undefined (no client yet) → agent.getCurrentSequenceModel() returns null and does NOT throw @requirement:REQ-003 @scenario:null-guard @given:an agent whose resolveClient returns undefined @when:agent.getCurrentSequenceModel() @then:returns null without throwing [59.43ms]
+(pass) getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003 > T9d after rebind (resolveClient now returns a new client reporting "claude-x") → the SAME agent returns "claude-x" (no caching — R-CLIENT fresh-resolve) @requirement:REQ-003 @scenario:no-caching @given:an agent whose resolveClient closure captures a mutable client reporting "gpt-4o" @when:the captured client is reassigned to one reporting "claude-x" and getCurrentSequenceModel() is called again @then:returns "claude-x" on the SAME agent (proves fresh re-resolve, never cached) [1.98ms]
+(pass) getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003 > PROP round-trip: for any model string s, when the injected client reports s, agent.getCurrentSequenceModel() === s @requirement:REQ-003 @scenario:property-round-trip @given:a random non-empty model string s and an agent whose client reports s @when:agent.getCurrentSequenceModel() @then:returns s (round-trip equality) [9.39ms]
+(pass) getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003 > PROP consumer fallback: (agent.getCurrentSequenceModel() ?? agent.getModel()) equals the client reported sequence model when present, else equals agent.getModel() @requirement:REQ-003 @scenario:property-consumer-fallback @given:a random model string and an agent whose client reports it @when:a consumer computes seq ?? agent.getModel() @then:the result equals the reported model; and when the client reports null the result equals agent.getModel() [9.88ms]
+(pass) getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003 > T9b-real fromConfig-built agent over the fake seam returns null (genuine null contract, real client) @requirement:REQ-003 @scenario:null-contract-real @given:a real agent built via fromConfig over the fake-provider seam @when:agent.getCurrentSequenceModel() @then:returns null (the real fake-provider client reports no sequence model) [37.48ms]
+
+ 6 pass
+ 1 fail
+ 1513 expect() calls
+Ran 7 tests across 1 file. [7.67s]
+
+
+==============================================================================
+FILE: src/api/__tests__/capabilityGaps.integration.spec.ts
+==============================================================================
+ setDisabledHooks/enable round-trip (undefined-safe, no throw) [11.53ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > auth-detail: detailedStatus(openai) resolves to object with boolean authenticated [2.62ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > mcp: status() resolves (idle, no manager); details() servers is an empty array; authenticate(unknown) is authenticated===false with no throw [4.71ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > tool-keys: supported() is a NON-EMPTY array with string toolName each; save/status/delete/setKeyFile/getKeyFile are functions; status(exa).hasKey is boolean and maskedKey (if present) is not a raw secret [146.46ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > exercises every capability without a config-escape hatch [3.16ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > PROP approval round-trip: for any mode m in Object.values(ApprovalMode), setApprovalMode(m) then getApprovalMode() === m (trusted agent) [603.33ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > PROP hooks round-trip: for any uniqueArray of hook names (maxLength 5), setDisabledHooks(names) then getDisabledHooks() set-equals the input [10.63ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > PROP tasks projection: for any fresh agent, every element of list() and listRunning() omits abortController [562.69ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > PROP tool-keys registry: for any fresh agent, supported() is non-empty and every entry has a string toolName [475.41ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > PROP mcp undefined-safe: for any arbitrary server name, authenticate(name) resolves authenticated===false (no throw, no manager) [488.46ms]
+(pass) P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20 > PROP auth masked invariant: detailedStatus(openai) leaks no raw-secret field and no ≥20-char opaque string value [3.43ms]
+
+ 17 pass
+ 1 fail
+ 1135 expect() calls
+Ran 18 tests across 1 file. [9.08s]
+
+
+==============================================================================
+FILE: src/api/__tests__/core-history.spec.ts
+==============================================================================
+lan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 [330.65ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T8c2 onStats delivers an immediate stats frame at subscription time even when no turn ever runs @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 [50.21ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T14b addHistory / updateSystemInstruction / addDirectoryContext each take effect on the next turn @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 [230.95ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T22 chat() AgentResult carries text, toolCalls, finishReason, and optional usage/error for non-interactive output mapping @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001 @requirement:REQ-003 @requirement:REQ-021 [220.24ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T6r restoreHistory accepts curated IContent items and getHistory surfaces their text @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 [200.96ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T6s restoreHistory replaces any prior history rather than appending to it @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 [109.70ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T-seq getCurrentSequenceModel returns null (no active load-balancer sequence under the fake seam) @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-004 [3.80ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T-tier getUserTier returns the client tier value (undefined under the fake seam) @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001 [11.15ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T-mp getModelParams returns a frozen, null-prototype snapshot that reflects setModelParam/clearModelParam and is decoupled from the live state @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-004 [4.00ms]
+(pass) Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011 > T6p property: setHistory then getHistory round-trips an arbitrary generated message list @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 [1156.26ms]
+
+ 13 pass
+ 1 fail
+ 395 expect() calls
+Ran 14 tests across 1 file. [10.61s]
+
+
+==============================================================================
+FILE: src/api/__tests__/providerActivation.behavior.test.ts
+==============================================================================
+ime/providerSwitch.ts:833:3)
+      at executeAutoProvider (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/api/providerActivationExecutor.ts:390:34)
+-------------------------------
+
+(fail) fromConfig surfaces auth failure (#2374 finding 3) > fromConfig with intent whose provider switch fails reports the failure (auto mode, unknown provider) [5.88ms]
+(pass) fromConfig surfaces auth failure (#2374 finding 3) > fromConfig with intent for already-active provider with profile ephemerals resolves (ephemerals intact) [3.92ms]
+(pass) provider-or-oauth preserves profile-auth ephemerals across switch (#2374 finding 5) > ephemerals set + provider switch in provider-or-oauth mode → overrides still applied [8.36ms]
+(pass) executeProviderActivation surfaces switchError (#2374 finding 6) > executor with unknown provider in authMode none returns switchError [3.90ms]
+(pass) provider-or-oauth runtime overrides (Zed features) (#2374 finding 4) > (i) auth-keyfile ephemeral with ~ expansion → api key applied from file content [3.69ms]
+(pass) provider-or-oauth runtime overrides (Zed features) (#2374 finding 4) > (ii) base-url ephemeral applied to the active provider settings [1.99ms]
+(pass) provider-or-oauth runtime overrides (Zed features) (#2374 finding 4) > (ii-cont) base-url "none" is NOT applied — provider setting cleared [12.16ms]
+(pass) provider-or-oauth runtime overrides (Zed features) (#2374 finding 4) > (iv) merged modelParams applied to the active provider runtime [4.99ms]
+(pass) provider-or-oauth oauth branch (#2374 round-3 Fix 4) > takes the oauth branch when the manager has NO active provider: refreshAuth(oauth) runs, provider-branch side effects absent [0.27ms]
+(pass) provider-or-oauth oauth branch (#2374 round-3 Fix 4) > takes the provider branch when the manager HAS an active provider: refreshAuth(provider) runs [0.10ms]
+(pass) missing-credentials fallback precedence (#2374 round-3 Fix 4) > no provider in intent → defaultProvider activated, auth error swallowed, authFailed false, config usable [3.00ms]
+(pass) missing-credentials fallback precedence (#2374 round-3 Fix 4) > explicit provider with failing auth → authFailed true with authError populated [13.75ms]
+
+1 tests failed:
+(fail) fromConfig surfaces auth failure (#2374 finding 3) > fromConfig with intent whose provider switch fails reports the failure (auto mode, unknown provider) [5.88ms]
+
+ 26 pass
+ 1 fail
+ 1 error
+ 72 expect() calls
+Ran 27 tests across 1 file. [1034.00ms]
+
+
+==============================================================================
+FILE: src/core/MessageStreamOrchestrator.modelinfo.test.ts
+==============================================================================
+orEvent (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamTerminalHandler.ts:201:37)
+      at next (1:11)
+      at handleTerminalEvent (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamTerminalHandler.ts:300:19)
+      at next (1:11)
+      at _processStreamIteration (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:452:37)
+      at next (1:11)
+      at _runRetryLoop (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:366:50)
+      at next (1:11)
+      at execute (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:175:19)
+      at next (1:11)
+      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts:474:11)
+(fail) MessageStreamOrchestrator — ModelInfo emission (issue #1770) > does not log a generic pending estimate before the provider envelope exists [0.54ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > prefers currentSequenceModel, then routed getCurrentModel, then routed getDefaultModel, then config fallback [0.11ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > falls back to routed getDefaultModel when getCurrentModel is blank, then config fallback [0.05ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > returns the config fallback and routed provider name when the routed provider is undefined [0.02ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > issue #2544: never mixes a stale manager model with a routed provider name [0.03ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > does not evaluate provider models when the sequence model is available [0.02ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > uses the default model when the current model accessor fails [0.05ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > issue #1770 load-balancer: current selection wins over default [0.02ms]
+(pass) buildEffectiveModelIdentity — model precedence (issue #2544) > issue #1770 load-balancer: default wins when no active selection [0.02ms]
+
+ 8 pass
+ 11 fail
+ 13 expect() calls
+Ran 19 tests across 1 file. [443.00ms]
+
+
+==============================================================================
+FILE: src/core/MessageStreamOrchestrator.todoPause.test.ts
+==============================================================================
+te (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:175:19)
+      at next (1:11)
+      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts:396:13)
+(fail) MessageStreamOrchestrator — tool-call turns (issue #2657) > tool-call turns route through the generic finish path > does not call isSuccessfulTodoPauseResponse for tool-call turns [1.82ms]
+Error when talking to openai API Full report available at: /var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-client-error-Turn.run-sendMessageStream-2026-08-03T05-22-41-849Z.json
+196 |   const { config } = deps;
+197 |   const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
+198 |
+199 |   deps.logger.debug(() => `[stream:orchestrator] handling error event`, {
+200 |     errorStatus,
+201 |     continueOnFailedApiCall: config.getContinueOnFailedApiCall(),
+                                          ^
+TypeError: config.getContinueOnFailedApiCall is not a function. (In 'config.getContinueOnFailedApiCall()', 'config.getContinueOnFailedApiCall' is undefined)
+      at handleErrorEvent (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamTerminalHandler.ts:201:37)
+      at next (1:11)
+      at handleTerminalEvent (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamTerminalHandler.ts:300:19)
+      at next (1:11)
+      at _processStreamIteration (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:452:37)
+      at next (1:11)
+      at _runRetryLoop (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:366:50)
+      at next (1:11)
+      at execute (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.ts:175:19)
+      at next (1:11)
+      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts:411:28)
+(fail) MessageStreamOrchestrator — tool-call turns (issue #2657) > tool-call turns route through the generic finish path > completes the turn without calling sendMessageStream when AfterAgent hook is non-blocking [0.82ms]
+
+ 0 pass
+ 5 fail
+ 2 expect() calls
+Ran 5 tests across 1 file. [435.00ms]
+
+
+==============================================================================
+FILE: src/core/__tests__/compression-boundary.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/__tests__/compression-boundary.test.ts:
+(pass) Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) > should not push splitIndex past the end of history [1.47ms]
+(pass) Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) > should find valid split point when initial split is inside tool response sequence [0.22ms]
+(pass) Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) > should handle history with only tool calls and responses [0.12ms]
+(pass) Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should compress when context has tool-dominated history [41.74ms]
+(pass) Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should preserve tool call/response pairs in kept sections [2.14ms]
+(pass) Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should handle history with continuous tool call/response pairs [0.52ms]
+(pass) Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should handle edge case where split falls inside long tool sequence [0.48ms]
+(pass) Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should compress old tool pairs when recent history is all tool calls (reproduces issue #982) [0.94ms]
+448 |       vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+449 |
+450 |       // Should not throw - small history may or may not compress
+451 |       await expect(
+452 |         chat.performCompression('test-prompt-id'),
+453 |       ).resolves.not.toThrow();
+                           ^
+error: expect(received).not.toThrow()
+
+Thrown value: "noop"
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/__tests__/compression-boundary.test.ts:453:22)
+(fail) Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should not crash with edge case histories [2.22ms]
+
+ 8 pass
+ 1 fail
+ 23 expect() calls
+Ran 9 tests across 1 file. [627.00ms]
+
+
+==============================================================================
+FILE: src/core/chatSession.contextlimit.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/chatSession.contextlimit.test.ts:
+156 |     // Total: 40000 (history) + 50000 (pending) + 65536 (budget) = 155536
+157 |     // Limit: 190000 - 256 (safety margin) = 189744
+158 |     // 155536 < 189744, so should not throw
+159 |     await expect(
+160 |       chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
+161 |     ).resolves.not.toThrow();
+                         ^
+error: expect(received).not.toThrow()
+
+Thrown value: undefined
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.contextlimit.test.ts:161:20)
+(fail) ChatSession Context Limit Enforcement > should enforce context window using user-configured context-limit [8.55ms]
+206 |     const pendingTokens = 5000; // This should be within the limit
+207 |
+208 |     // Act: Should not trigger compression
+209 |     await expect(
+210 |       chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
+211 |     ).resolves.not.toThrow();
+                         ^
+error: expect(received).not.toThrow()
+
+Thrown value: undefined
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.contextlimit.test.ts:211:20)
+(fail) ChatSession Context Limit Enforcement > should not trigger compression when within context-limit [0.43ms]
+278 |     const pendingTokens = 5000;
+279 |
+280 |     // Act
+281 |     await expect(
+282 |       chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
+283 |     ).resolves.not.toThrow();
+                         ^
+error: expect(received).not.toThrow()
+
+Thrown value: undefined
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.contextlimit.test.ts:283:20)
+(fail) ChatSession Context Limit Enforcement > should use context-limit when available, falling back to default when not set [0.26ms]
+
+ 0 pass
+ 3 fail
+ 3 expect() calls
+Ran 3 tests across 1 file. [383.00ms]
+
+
+==============================================================================
+FILE: src/core/chatSession.promptEnvelopeEstimation.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/chatSession.promptEnvelopeEstimation.test.ts:
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A7: produces a pre-send estimate at the final send seam (non-streaming) [8.58ms]
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A6: a larger conversation history produces a larger estimate [1.16ms]
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A6: pending message content affects the estimate [0.46ms]
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A8: provider-reported promptTokens remain authoritative after success [0.25ms]
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A6: system instruction forwarded via ChatSession affects the estimate [0.46ms]
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A6: tools in the request affect the estimate [0.45ms]
+(pass) ChatSession prompt-envelope estimation (issue #2817) > A7: produces a pre-send estimate for streaming sends [3.00ms]
+
+
+==============================================================================
+FILE: src/core/chatSession.runtime.streaming.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/chatSession.runtime.streaming.test.ts:
+(pass) ChatSession runtime streaming and abort behavior > applies BeforeToolSelection to request-scoped streaming tools [12.73ms]
+
+
+==============================================================================
+FILE: src/core/chatSession.runtime.timeout.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/chatSession.runtime.timeout.test.ts:
+(pass) stream idle timeout behavioral tests for TurnProcessor and DirectMessageProcessor > TurnProcessor > honors config setting: uses resolveStreamIdleTimeoutMs with config from getConfig() [2.58ms]
+(pass) stream idle timeout behavioral tests for TurnProcessor and DirectMessageProcessor > TurnProcessor > disabled path: setting 0 disables watchdog [0.32ms]
+
+
+==============================================================================
+FILE: src/core/client.hooks.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/client.hooks.test.ts:
+(pass) Agent Client (client.ts) > BeforeAgent hook result handling > should yield Error event and return early when BeforeAgent hook returns blocking decision [6.56ms]
+348 |       );
+349 |       await fromAsync(stream);
+350 |
+351 |       // Assert
+352 |       // The request should include the additional context
+353 |       expect(capturedRequests.length).toBeGreaterThan(0);
+                                            ^
+error: expect(received).toBeGreaterThan(expected)
+
+Expected: > 0
+Received: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.hooks.test.ts:353:39)
+(fail) Agent Client (client.ts) > BeforeAgent hook result handling > should append additional context from BeforeAgent hook to request [3.43ms]
+
+ 1 pass
+ 1 fail
+ 5 expect() calls
+Ran 2 tests across 1 file. [665.00ms]
+
+
+==============================================================================
+FILE: src/core/client.model-profile.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/client.model-profile.test.ts:
+(pass) AgentClient (client.ts) > ModelProfileChanged resets sequence model (issue #1770) > resets currentSequenceModel when ModelProfileChanged fires [1.42ms]
+(pass) AgentClient (client.ts) > ModelProfileChanged resets sequence model (issue #1770) > invalidates active chat state when ModelProfileChanged fires so profile context-limit is rebuilt [0.21ms]
+(pass) AgentClient (client.ts) > ModelProfileChanged resets sequence model (issue #1770) > defers chat invalidation until active streams finish [0.48ms]
+(pass) AgentClient (client.ts) > ModelProfileChanged resets sequence model (issue #1770) > uses live chat history instead of a stale stored snapshot when reinitializing [0.11ms]
+(pass) AgentClient (client.ts) > ModelProfileChanged resets sequence model (issue #1770) > preserves stored conversation history when refreshing tools before the next turn [0.45ms]
+(pass) AgentClient (client.ts) > ModelProfileChanged resets sequence model (issue #1770) > also resets currentSequenceModel on ModelChanged [0.09ms]
+486 |
+487 |       const infos = await collectModelInfos(stream);
+488 |
+489 |       // First emission for the initial model, then exactly one additional
+490 |       // ModelInfo for the changed identity — no duplicates.
+491 |       expect(infos).toHaveLength(2);
+                          ^
+error: expect(received).toHaveLength(expected)
+
+Expected length: 2
+Received length: 1
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.model-profile.test.ts:491:21)
+(fail) AgentClient (client.ts) > ModelInfo during InvalidStream continuation when model changes mid-sequence (issue #1770) > emits exactly one additional ModelInfo when model changes during InvalidStream continuation [4.72ms]
+(pass) AgentClient (client.ts) > ModelInfo during InvalidStream continuation when model changes mid-sequence (issue #1770) > does not emit additional ModelInfo when identity is unchanged during continuation [0.46ms]
+(pass) AgentClient (client.ts) > ModelInfo during InvalidStream continuation when model changes mid-sequence (issue #1770) > keeps the routed provider stable during continuation [0.30ms]
+
+ 8 pass
+ 1 fail
+ 23 expect() calls
+Ran 9 tests across 1 file. [562.00ms]
+
+
+==============================================================================
+FILE: src/core/client.sendMessageStream-errors.test.ts
+==============================================================================
+nvalid_stream",
++     "type": "error",
++     "value": {
++       "error": {
++         "message": "this.chat.getConfig is not a function. (In 'this.chat.getConfig()', 'this.chat.getConfig' is undefined)",
++       },
++     },
+    },
+  ]
+
+- Expected  - 9
++ Received  + 11
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-errors.test.ts:417:34)
+(fail) Agent Client (client.ts) > sendMessageStream > does not retry after a InvalidStream follows a tool call [0.51ms]
+451 |       // Act
+452 |       const stream = client.sendMessageStream(initialRequest, signal, promptId);
+453 |       const events = await fromAsync(stream);
+454 |
+455 |       // Assert: model_info, then only the error event, no retry
+456 |       expect(events).toStrictEqual([
+                           ^
+error: expect(received).toStrictEqual(expected)
+
+  [
+    {
+      "type": "model_info",
+      "value": {
+        "displayLabel": "test-model",
+        "model": "test-model",
+        "profileName": null,
+        "providerName": "gemini",
+      },
+    },
+    {
+      "type": "error",
+      "value": {
+        "error": {
+-         "message": "Payload too large",
+-         "status": 413,
++         "message": "this.chat.getConfig is not a function. (In 'this.chat.getConfig()', 'this.chat.getConfig' is undefined)",
+        },
+      },
+    },
+  ]
+
+- Expected  - 2
++ Received  + 1
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-errors.test.ts:456:22)
+(fail) Agent Client (client.ts) > sendMessageStream > should not retry on 413 when getContinueOnFailedApiCall returns false [0.46ms]
+507 |       // Act
+508 |       const stream = client.sendMessageStream(initialRequest, signal, promptId);
+509 |       const events = await fromAsync(stream);
+510 |
+511 |       // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
+512 |       expect(events.length).toBe(3);
+                                  ^
+error: expect(received).toBe(expected)
+
+Expected: 3
+Received: 2
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-errors.test.ts:512:29)
+(fail) Agent Client (client.ts) > sendMessageStream > should stop recursing after one retry when 413 errors are repeatedly received [0.36ms]
+
+ 0 pass
+ 6 fail
+ 6 expect() calls
+Ran 6 tests across 1 file. [551.00ms]
+
+
+==============================================================================
+FILE: src/core/client.sendMessageStream-invalid-stream.test.ts
+==============================================================================
+qual([
+                           ^
+error: expect(received).toStrictEqual(expected)
+
+  [
+    {
+      "type": "model_info",
+      "value": {
+        "displayLabel": "test-model",
+        "model": "test-model",
+        "profileName": null,
+        "providerName": "gemini",
+      },
+    },
+    {
+-     "type": "invalid_stream",
++     "type": "error",
++     "value": {
++       "error": {
++         "message": "this.chat.getConfig is not a function. (In 'this.chat.getConfig()', 'this.chat.getConfig' is undefined)",
++       },
++     },
+    },
+  ]
+
+- Expected  - 1
++ Received  + 6
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-invalid-stream.test.ts:371:22)
+(fail) AgentClient (client.ts) > sendMessageStream - InvalidStream continuation > should not recursively call sendMessageStream with "Please continue." when InvalidStream event is received and flag is false [3.41ms]
+429 |         new AbortController().signal,
+430 |         'prompt-thinking-invalid-stream-no-continue',
+431 |       );
+432 |       const events = await fromAsync(stream);
+433 |
+434 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 1
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-invalid-stream.test.ts:434:29)
+(fail) AgentClient (client.ts) > sendMessageStream - InvalidStream continuation > should not trigger thinking-only continuation after InvalidStream when flag is false [1.45ms]
+494 |       const stream = client.sendMessageStream(initialRequest, signal, promptId);
+495 |       const events = await fromAsync(stream);
+496 |
+497 |       // Assert
+498 |       // We expect 1 ModelInfo + 2 InvalidStream events (original + 1 retry)
+499 |       expect(events.length).toBe(3);
+                                  ^
+error: expect(received).toBe(expected)
+
+Expected: 3
+Received: 2
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-invalid-stream.test.ts:499:29)
+(fail) AgentClient (client.ts) > sendMessageStream - InvalidStream continuation > should stop recursing after one retry when InvalidStream events are repeatedly received [1.94ms]
+
+ 0 pass
+ 5 fail
+ 5 expect() calls
+Ran 5 tests across 1 file. [628.00ms]
+
+
+==============================================================================
+FILE: src/core/client.sendMessageStream-overflow-compression.test.ts
+==============================================================================
+                                                                ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-overflow-compression.test.ts:689:69)
+(fail) AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755) > sendMessageStream > should leave configured-limit parity to finalized provider enforcement (issue 2755 A7) [0.41ms]
+732 |         ),
+733 |       );
+734 |
+735 |       const fitRemaining = MOCKED_TOKEN_LIMIT - fitBaseline;
+736 |       expect(exactEstimate).toBe(Math.floor(fitRemaining * THRESHOLD));
+737 |       expect(events).toContainEqual(
+                           ^
+error: expect(received).toContainEqual(expected)
+
+Expected to contain: ObjectContaining {
+  type: "content",
+  value: "ok",
+}
+Received: [
+  {
+    type: "model_info",
+    value: {
+      model: "test-model",
+      providerName: "gemini",
+      profileName: null,
+      displayLabel: "test-model",
+    },
+  }, {
+    type: "error",
+    value: {
+      error: {
+        message: "this.chat.getConfig is not a function. (In 'this.chat.getConfig()', 'this.chat.getConfig' is undefined)",
+      },
+    },
+  }
+]
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-overflow-compression.test.ts:737:22)
+(fail) AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755) > sendMessageStream > should proceed exactly at the threshold boundary where estimated equals remaining * 0.95 (issue 2755 A7 exact threshold) [0.34ms]
+777 |       );
+778 |
+779 |       const overflowEvents = events.filter(
+780 |         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+781 |       );
+782 |       expect(overflowEvents).toHaveLength(1);
+                                   ^
+error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-overflow-compression.test.ts:782:30)
+(fail) AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755) > sendMessageStream > should surface the deferred finalized-envelope overflow exactly once with metadata and no preflight duplicate (issue 2755 A3 surfacing) [0.28ms]
+
+ 0 pass
+ 13 fail
+ 21 expect() calls
+Ran 13 tests across 1 file. [564.00ms]
+
+
+==============================================================================
+FILE: src/core/client.sendMessageStream-overflow.test.ts
+==============================================================================
+st events = await fromAsync(stream);
+847 |
+848 |       // Assert
+849 |       expect(events).toStrictEqual([
+                           ^
+error: expect(received).toStrictEqual(expected)
+
+  [
+    {
+      "type": "model_info",
+      "value": {
+        "displayLabel": "test-model",
+        "model": "test-model",
+        "profileName": null,
+        "providerName": "gemini",
+      },
+    },
+    {
+-     "type": "invalid_stream",
++     "type": "error",
++     "value": {
++       "error": {
++         "message": "this.chat.getConfig is not a function. (In 'this.chat.getConfig()', 'this.chat.getConfig' is undefined)",
++       },
++     },
+    },
+  ]
+
+- Expected  - 1
++ Received  + 6
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-overflow.test.ts:849:22)
+(fail) AgentClient (client.ts) > sendMessageStream > should not recursively call sendMessageStream with "Please continue." when InvalidStream event is received and flag is false [0.47ms]
+903 |         new AbortController().signal,
+904 |         'prompt-thinking-invalid-stream-no-continue',
+905 |       );
+906 |       const events = await fromAsync(stream);
+907 |
+908 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 1
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-overflow.test.ts:908:29)
+(fail) AgentClient (client.ts) > sendMessageStream > should not trigger thinking-only continuation after InvalidStream when flag is false [0.65ms]
+965 |       const stream = client.sendMessageStream(initialRequest, signal, promptId);
+966 |       const events = await fromAsync(stream);
+967 |
+968 |       // Assert
+969 |       // We expect 1 ModelInfo + 2 InvalidStream events (original + 1 retry)
+970 |       expect(events.length).toBe(3);
+                                  ^
+error: expect(received).toBe(expected)
+
+Expected: 3
+Received: 2
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-overflow.test.ts:970:29)
+(fail) AgentClient (client.ts) > sendMessageStream > should stop recursing after one retry when InvalidStream events are repeatedly received [0.56ms]
+
+ 0 pass
+ 14 fail
+ 27 expect() calls
+Ran 14 tests across 1 file. [645.00ms]
+
+
+==============================================================================
+FILE: src/core/client.sendMessageStream-thinking.test.ts
+==============================================================================
+toHaveBeenCalledTimes(2);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 2
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-thinking.test.ts:293:29)
+(fail) AgentClient (client.ts) > sendMessageStream > should auto-continue when model generates thinking-only output [7.43ms]
+358 |         new AbortController().signal,
+359 |         'prompt-thinking-content',
+360 |       );
+361 |       await fromAsync(stream);
+362 |
+363 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 1
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-thinking.test.ts:363:29)
+(fail) AgentClient (client.ts) > sendMessageStream > should not auto-continue when model generates thinking plus content [0.58ms]
+408 |         new AbortController().signal,
+409 |         'prompt-thinking-tools',
+410 |       );
+411 |       await fromAsync(stream);
+412 |
+413 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 1
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-thinking.test.ts:413:29)
+(fail) AgentClient (client.ts) > sendMessageStream > should not auto-continue when model generates thinking plus tool calls [0.33ms]
+452 |         'prompt-thinking-max-retries',
+453 |       );
+454 |       const events = await fromAsync(stream);
+455 |
+456 |       // MAX_RETRIES is 3, so: initial call + 2 retries = 3 calls
+457 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(3);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 3
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream-thinking.test.ts:457:29)
+(fail) AgentClient (client.ts) > sendMessageStream > should respect MAX_RETRIES for thinking-only continuation [0.29ms]
+
+ 0 pass
+ 4 fail
+ 4 expect() calls
+Ran 4 tests across 1 file. [548.00ms]
+
+
+==============================================================================
+FILE: src/core/client.sendMessageStream.test.ts
+==============================================================================
+14 (0d9b296a)
+
+
+src/core/client.sendMessageStream.test.ts:
+345 |         new AbortController().signal,
+346 |         'prompt-no-tools',
+347 |       );
+348 |       await fromAsync(stream);
+349 |
+350 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(3);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 3
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream.test.ts:350:29)
+(fail) Agent Client (client.ts) > sendMessageStream > retries once when no tool work and todos unchanged [20.83ms]
+403 |         new AbortController().signal,
+404 |         'prompt-paused-current',
+405 |       );
+406 |       await fromAsync(stream);
+407 |
+408 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 1
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream.test.ts:408:29)
+(fail) Agent Client (client.ts) > sendMessageStream > does not retry with pending todos when paused for the current prompt [0.62ms]
+(pass) Agent Client (client.ts) > sendMessageStream > clears paused state at the start of a new prompt [0.30ms]
+536 |         new AbortController().signal,
+537 |         'prompt-pause',
+538 |       );
+539 |       const events = await fromAsync(stream);
+540 |
+541 |       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+                                  ^
+error: expect(received).toHaveBeenCalledTimes(expected)
+
+Expected number of calls: 1
+Received number of calls: 0
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/client.sendMessageStream.test.ts:541:29)
+(fail) Agent Client (client.ts) > sendMessageStream > does not retry after todo_pause [0.33ms]
+(pass) Agent Client (client.ts) > sendMessageStream > should add context if ideMode is enabled and there are open files but no active file [0.53ms]
+(pass) Agent Client (client.ts) > sendMessageStream > should return the turn instance after the stream is complete [0.30ms]
+(pass) Agent Client (client.ts) > sendMessageStream > should yield MaxSessionTurns and stop when session turn limit is reached [0.95ms]
+
+ 4 pass
+ 3 fail
+ 9 expect() calls
+Ran 7 tests across 1 file. [701.00ms]
+
+
+==============================================================================
+FILE: src/core/coreToolScheduler.hookRestrictedTelemetry.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/coreToolScheduler.hookRestrictedTelemetry.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+SyntaxError: Export named 'logToolCall' not found in module '/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/index.ts'.
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [403.00ms]
+
+
+==============================================================================
+FILE: src/core/subagent.buildParts.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/subagent.buildParts.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+707 |   }
+708 |
+709 |   // ── Internal compat pass-throughs (used by tests via `as never` casts) ──
+710 |
+711 |   get densityDirty(): boolean {
+712 |     return this.compressionHandler.densityDirty;
+                      ^
+TypeError: undefined is not an object (evaluating 'this.compressionHandler.densityDirty')
+      at densityDirty (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.ts:712:17)
+      at get (1:11)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+      at /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/subagent.buildParts.test.ts:46:4
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [479.00ms]
+
+
+==============================================================================
+FILE: src/core/subagent.create.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/subagent.create.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+707 |   }
+708 |
+709 |   // ── Internal compat pass-throughs (used by tests via `as never` casts) ──
+710 |
+711 |   get densityDirty(): boolean {
+712 |     return this.compressionHandler.densityDirty;
+                      ^
+TypeError: undefined is not an object (evaluating 'this.compressionHandler.densityDirty')
+      at densityDirty (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.ts:712:17)
+      at get (1:11)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+      at /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/subagent.create.test.ts:45:4
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [494.00ms]
+
+
+==============================================================================
+FILE: src/core/subagent.runNonInteractive-execution.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/subagent.runNonInteractive-execution.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+707 |   }
+708 |
+709 |   // ── Internal compat pass-throughs (used by tests via `as never` casts) ──
+710 |
+711 |   get densityDirty(): boolean {
+712 |     return this.compressionHandler.densityDirty;
+                      ^
+TypeError: undefined is not an object (evaluating 'this.compressionHandler.densityDirty')
+      at densityDirty (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.ts:712:17)
+      at get (1:11)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+      at /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/subagent.runNonInteractive-execution.test.ts:58:4
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [507.00ms]
+
+
+==============================================================================
+FILE: src/core/subagent.runNonInteractive-term.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/subagent.runNonInteractive-term.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+707 |   }
+708 |
+709 |   // ── Internal compat pass-throughs (used by tests via `as never` casts) ──
+710 |
+711 |   get densityDirty(): boolean {
+712 |     return this.compressionHandler.densityDirty;
+                      ^
+TypeError: undefined is not an object (evaluating 'this.compressionHandler.densityDirty')
+      at densityDirty (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.ts:712:17)
+      at get (1:11)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+      at /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/subagent.runNonInteractive-term.test.ts:45:4
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [487.00ms]
+
+
+==============================================================================
+FILE: src/core/subagent.runNonInteractive.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/subagent.runNonInteractive.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+707 |   }
+708 |
+709 |   // ── Internal compat pass-throughs (used by tests via `as never` casts) ──
+710 |
+711 |   get densityDirty(): boolean {
+712 |     return this.compressionHandler.densityDirty;
+                      ^
+TypeError: undefined is not an object (evaluating 'this.compressionHandler.densityDirty')
+      at densityDirty (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.ts:712:17)
+      at get (1:11)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+      at /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/subagent.runNonInteractive.test.ts:54:4
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [484.00ms]
+
+
+==============================================================================
+FILE: src/core/subagent.stream-idle.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/subagent.stream-idle.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+707 |   }
+708 |
+709 |   // ── Internal compat pass-throughs (used by tests via `as never` casts) ──
+710 |
+711 |   get densityDirty(): boolean {
+712 |     return this.compressionHandler.densityDirty;
+                      ^
+TypeError: undefined is not an object (evaluating 'this.compressionHandler.densityDirty')
+      at densityDirty (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/chatSession.ts:712:17)
+      at get (1:11)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:36)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:350:31)
+      at automockValue (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/test-setup/augment-bun-vi.ts:386:14)
+      at /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/subagent.stream-idle.test.ts:55:4
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 test across 1 file. [477.00ms]
+
+
+==============================================================================
+FILE: src/core/turn.abort-timeout.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/turn.abort-timeout.test.ts:
+(pass) Turn run - abort and idle timeout > should yield UserCancelled event if signal is aborted [6.04ms]
+(pass) Turn run - abort and idle timeout > should call return() on stream iterator when aborted [0.71ms]
+(pass) Turn run - abort and idle timeout > should allow subsequent calls after abort (sendPromise resolved) [11.75ms]
+(pass) Turn run - abort and idle timeout > should not crash when cancelled request has malformed error [0.64ms]
+
+
+==============================================================================
+FILE: src/core/turn.idle-timeout.test.ts
+==============================================================================
+bun test v1.3.14 (0d9b296a)
+
+
+src/core/turn.idle-timeout.test.ts:
+126 |
+127 |     await vi.advanceTimersByTimeAsync(29_999);
+128 |     await Promise.resolve();
+129 |     // First chunk arrived immediately (Content), but the inter-chunk idle
+130 |     // timeout (30s gap before the second chunk) has not yet elapsed.
+131 |     expect(events).toHaveLength(1);
+                         ^
+error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 2
+
+      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/packages/agents/src/core/turn.idle-timeout.test.ts:131:20)
+(fail) Turn - stream idle timeout behavioral tests > honors config setting: timeout fires after custom timeout value from getConfig() [9.01ms]
+(pass) Turn - stream idle timeout behavioral tests > honors config setting: no timeout when iterator yields within custom timeout [0.53ms]
+(pass) Turn - stream idle timeout behavioral tests > disabled path: no timeout when setting is 0, even after 30 minutes [0.44ms]
+(pass) Turn - stream idle timeout behavioral tests > env var precedence: env var overrides config setting [0.37ms]
+(pass) Turn - stream idle timeout behavioral tests > default-off: no watchdog timer when no env var and no ephemeral setting [0.31ms]
+
+ 4 pass
+ 1 fail
+ 12 expect() calls
+Ran 5 tests across 1 file. [532.00ms]

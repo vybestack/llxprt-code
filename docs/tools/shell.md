@@ -23,10 +23,11 @@ The command output is **not** returned inline. Use
 `'peek'`, or `'cancel'`) or the `/task list` / `/task end <id>` slash commands
 to inspect output or cancel a running job.
 
-The `timeout_seconds` parameter bounds only the launch, not the job's lifetime:
-a background job may run indefinitely, but may be cancelled (via
-`check_async_tasks` `action: 'cancel'`) or forcibly terminated by lifecycle
-management (`dispose`) or log-cap enforcement.
+The `timeout_seconds` parameter is **not** applied to background jobs at all —
+neither to the launch nor to the job's lifetime. A background job may run
+indefinitely, but may be cancelled (via `check_async_tasks` `action: 'cancel'`)
+or forcibly terminated by lifecycle management (`dispose`) or log-cap
+enforcement.
 
 ### POSIX Details
 

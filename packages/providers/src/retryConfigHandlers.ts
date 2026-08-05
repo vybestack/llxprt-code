@@ -60,3 +60,16 @@ export function getOnAuthErrorHandlerFromOptions(
     resolveOnAuthErrorHandlerFromConfig(options.config)
   );
 }
+
+/**
+ * Whether any auth-recovery mechanism that can change a retry's outcome is
+ * resolvable from the options: an onAuthError handler OR a bucket-failover
+ * handler. Used to avoid granting a refresh retry when no recovery can occur
+ * (issue #2917).
+ */
+export function hasAuthRecoveryHandler(options: GenerateChatOptions): boolean {
+  return (
+    getOnAuthErrorHandlerFromOptions(options) !== undefined ||
+    getBucketFailoverHandlerFromOptions(options) !== undefined
+  );
+}

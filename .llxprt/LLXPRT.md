@@ -11,3 +11,4 @@ Never add line or file counts for issue scope unless the user specifically asks 
 - Plan documents go in project-plans/, NEVER in dev-docs/. dev-docs/ holds durable engineering reference material (PLAN.md, RULES.md, architecture notes); project-plans/ holds per-issue and per-feature planning. Writing a plan to dev-docs/plans/ is wrong even though dev-docs/PLAN.md and dev-docs/PLAN-TEMPLATE.md live in dev-docs/ — those are the methodology you follow, not the destination you write to. This is enforced by scripts/check-doc-placement.ts, which fails if dev-docs/plans/ exists.
 - This project is moving to bun/Typescript so no new js files or vitest/node tests should be created, everything should be TS/Bun and a bun test.
 - check the current year before each new file you create, do not stamp last year on a new file's copyright.
+- Use the PR-creator skill when creating PRs if you have it available. 

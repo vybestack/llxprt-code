@@ -13,7 +13,7 @@
  * pruning sub-phase.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from '../../testApi.js';
 import type {
   IContent,
   ToolCallBlock,

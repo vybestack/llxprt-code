@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, type Mock } from 'vitest';
+import { describe, it, expect, vi, type Mock } from '../../testApi.js';
 import * as fc from 'fast-check';
 import {
   createFullLoopHarness,

@@ -24,7 +24,7 @@
  * so the control is constructed plainly with no type-defeating cast.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '../../testApi.js';
 import fc from 'fast-check';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';

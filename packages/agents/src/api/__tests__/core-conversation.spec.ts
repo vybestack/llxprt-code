@@ -22,7 +22,7 @@
  * continuation via stream/chat).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import * as fc from 'fast-check';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import {

@@ -17,7 +17,7 @@
  * used so diagnostics report the actual source field the caller set.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 import {
   STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,

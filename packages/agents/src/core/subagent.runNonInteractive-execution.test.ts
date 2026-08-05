@@ -8,8 +8,8 @@
  * SubAgentScope runNonInteractive: execution and tool use.
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -55,7 +55,16 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('./chatSession.js')) => ({
+    ...actual,
+    ChatSession: vi.fn(),
+  });
+  const result = importOriginal() as
+    | typeof import('./chatSession.js')
+    | Promise<typeof import('./chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -112,6 +121,7 @@ describe('subagent.ts', () => {
       mockReadTodos.mockReset();
       mockReadTodos.mockResolvedValue([]);
       TodoStoreMock.mockClear();
+      TodoStoreMock.mockImplementation(() => ({ readTodos: mockReadTodos }));
 
       vi.mocked(getEnvironmentContext).mockResolvedValue([
         { text: 'Env Context' },
@@ -181,6 +191,7 @@ describe('subagent.ts', () => {
         createMockStream(['stop', 'stop']),
       );
 
+      TodoStoreMock.mockClear();
       mockReadTodos
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
@@ -213,7 +224,7 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
       const firstCallMessage =
         mockSendMessageStream.mock.calls[0]?.[0]?.message;
       expect(firstCallMessage?.[0]?.text ?? '').toContain(

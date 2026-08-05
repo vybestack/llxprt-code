@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/HookSystem.js';
 import {
@@ -129,9 +129,7 @@ describe('ChatSession hook execution control', () => {
   describe('BeforeModel hook stop', () => {
     it('should emit stopped event and terminate when BeforeModel hook stops execution', async () => {
       // Mock BeforeModel hook to return stop
-      (
-        mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValueOnce(
+      mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
         new BeforeModelHookOutput({
           continue: false,
           stopReason: 'BeforeModel stopped execution',
@@ -161,9 +159,7 @@ describe('ChatSession hook execution control', () => {
 
   describe('BeforeModel hook block', () => {
     it('should emit blocked event then chunk when BeforeModel hook blocks with synthetic response', async () => {
-      (
-        mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValueOnce(
+      mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
         new BeforeModelHookOutput({
           decision: 'block',
           reason: 'BeforeModel blocked execution',
@@ -222,9 +218,7 @@ describe('ChatSession hook execution control', () => {
       });
 
       // Mock AfterModel hook to return stop
-      (
-        mockHookSystem.fireAfterModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(
+      mockHookSystem.fireAfterModelEvent.mockResolvedValue(
         new AfterModelHookOutput({
           continue: false,
           stopReason: 'AfterModel stopped execution',
@@ -264,9 +258,7 @@ describe('ChatSession hook execution control', () => {
       });
 
       // Mock AfterModel hook to return block
-      (
-        mockHookSystem.fireAfterModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(
+      mockHookSystem.fireAfterModelEvent.mockResolvedValue(
         new AfterModelHookOutput({
           decision: 'block',
           reason: 'AfterModel blocked execution',
@@ -298,9 +290,7 @@ describe('ChatSession hook execution control', () => {
   });
 
   it('emits a neutral blocked chunk carrying the reason when BeforeModel blocks (no tool calls leak)', async () => {
-    (
-      mockHookSystem.fireBeforeToolSelectionEvent as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce({
+    mockHookSystem.fireBeforeToolSelectionEvent.mockResolvedValueOnce({
       applyToolConfigModifications: () => ({
         toolConfig: { allowedFunctionNames: ['read_file'] },
       }),
@@ -309,9 +299,9 @@ describe('ChatSession hook execution control', () => {
       decision: 'block',
       reason: 'BeforeModel blocked execution',
     });
-    (
-      mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce(beforeModelOutput);
+    mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
+      beforeModelOutput,
+    );
     const chatWithTools = new ChatSession(
       (
         chat as unknown as {
@@ -358,9 +348,7 @@ describe('ChatSession hook execution control', () => {
   describe('Hook control does not enter retry loop', () => {
     it('should not retry when BeforeModel hook stops execution', async () => {
       let triggerCount = 0;
-      (
-        mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
-      ).mockImplementation(async () => {
+      mockHookSystem.fireBeforeModelEvent.mockImplementation(async () => {
         triggerCount++;
         return new BeforeModelHookOutput({
           continue: false,

@@ -141,7 +141,8 @@ export class ASTEditTool
           },
           force: {
             type: 'boolean',
-            description: 'Internal execution control. Managed automatically.',
+            description:
+              'Two-step operation control. Omit or set false to PREVIEW the edit without writing. Set true to APPLY the edit and write to disk. AST syntax validation is always enforced and is not skipped by force.',
             default: false,
           },
           last_modified: {

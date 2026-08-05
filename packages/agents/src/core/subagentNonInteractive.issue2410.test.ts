@@ -17,7 +17,7 @@
  * and empty arrays (stop cases), and true for non-empty arrays (continue case).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { hasNonInteractiveMessages } from './subagentNonInteractive.js';
 

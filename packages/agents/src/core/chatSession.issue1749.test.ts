@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from '../testApi.js';
 import { ChatSession } from './chatSession.js';
 import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';

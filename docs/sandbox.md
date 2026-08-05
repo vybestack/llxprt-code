@@ -71,10 +71,113 @@ llxprt --sandbox-engine podman "review this code"
   opt-in or design choices.
 - Network exfiltration of data that networking is left enabled for. If
   `network` is `on`, outbound network access is available to tool execution.
+- Reading the sandboxed CLI process's own memory. The credential never enters
+  the sandbox's filesystem, environment, or argv, but it does enter the sandbox
+  CLI process's address space whenever a provider call is made. In container
+  mode (Docker/Podman) the CLI marks itself non-dumpable (`prctl
+PR_SET_DUMPABLE 0`) on startup, so an in-container process running as the same
+  UID **cannot** read `/proc/<pid>/mem` — regardless of the host kernel's Yama
+  `ptrace_scope`. See
+  [Credential residency and process memory](#credential-residency-and-process-memory).
 
 The sandbox raises the bar for accidental damage and limits the blast radius of
 LLM-generated commands. It is a containment control, not a full security
 isolation boundary.
+
+## Credential residency and process memory
+
+The credential proxy keeps your stored secrets on the host. To be precise about
+what that does and does not guarantee:
+
+**Where the credential does not go:**
+
+- It is never written to the container's filesystem.
+- It is never placed in the container's environment or argv.
+- It is only returned over the proxy socket to a caller that presents the
+  per-session capability token; it is not broadcast or forwarded to arbitrary
+  network peers.
+
+**Where the credential does go:** the sandbox CLI process's own address space,
+whenever it must make a provider call. Resolving a named key through the proxy
+returns the raw key into that same address space so the CLI can authenticate.
+This is unavoidable: the CLI needs the credential to call the provider.
+
+**The consequence.** Anything that can read the CLI process's memory can read
+both the capability token and the credential. The agent's shell commands are
+**descendants** of the token-holding CLI process, so an attack vector is for a
+descendant to read an ancestor's memory via `/proc/<pid>/mem`.
+
+**In container mode this is blocked unconditionally.** The CLI process calls
+`prctl(PR_SET_DUMPABLE, 0)` at startup (before the CLI module is imported),
+which makes `/proc/<pid>/{maps,mem,...}` root-owned, so the kernel's
+`ptrace_may_access` check denies a same-UID in-container reader with `EACCES` —
+the read is refused at `maps`, before `mem` is ever reached. This holds
+**regardless of the host kernel's Yama `ptrace_scope`**: it holds at
+`ptrace_scope == 0` and on Docker Desktop for macOS, whose VM kernel reports no
+`ptrace_scope` at all — precisely the environments where the read used to
+succeed.
+
+This control composes with the privilege hardening shipped in
+[#3022](https://github.com/vybestack/llxprt-code/pull/3022): every container run
+drops `--cap-drop=ALL` (removing `CAP_SYS_PTRACE`) and sets
+`--security-opt no-new-privileges`. `PR_SET_DUMPABLE(0)` alone denies an ordinary
+same-UID reader — it makes the proc files root-owned so `ptrace_may_access`
+returns false. `CAP_SYS_PTRACE` is a privileged override that bypasses the
+dumpable check, so the #3022 capability drop is what prevents that override.
+Dropping the capability alone does NOT deny the ordinary reader: a dumpable
+process is still readable by same-UID without any capability. The two controls
+compose — `PR_SET_DUMPABLE` denies the ordinary reader, and the capability drop
+denies the privileged override — and together they close the vector
+unconditionally and vector-agnostically: it does not matter whether the attacker
+reached code execution through the shell tool, an MCP server, a hook, an
+extension, or a malicious `npm postinstall` — the OS boundary denies the read,
+not an allowlist that has to stay exhaustive. It also covers the credential, not
+just the token: the provider API key resides in the same address space, so both
+are protected.
+
+This was confirmed empirically against real containers (see issues
+[#2902](https://github.com/vybestack/llxprt-code/issues/2902) and
+[#3028](https://github.com/vybestack/llxprt-code/issues/3028)): with
+`--cap-drop=ALL` + `no-new-privileges` but the process still dumpable, a
+descendant recovered the secret from the CLI's heap; adding
+`prctl(PR_SET_DUMPABLE, 0)` made the descendant's open of `/proc/<pid>/maps`
+fail with `EACCES`. The behavioral test in
+`integration-tests/sandboxPrivilege.real.test.ts` reproduces this in a real
+container and fails if the `prctl` call is removed.
+
+The capability token remains a meaningful secret in its own right: it persists
+for the session and can fetch a credential from the proxy at a time when no
+credential is yet resident in memory. Once a credential is resident, however,
+both live in the same address space.
+
+**Surviving non-goal — in-process attackers.** Code executing **inside** the CLI
+process itself — a malicious dependency, a compromised in-process extension, or
+any other code sharing the CLI's address space — can still read the token and
+the credential directly from its own heap. `PR_SET_DUMPABLE` is an OS boundary
+against _other_ processes; it cannot defend against code running _within_ this
+one. This is the same non-goal it has always been (see issue
+[#1954](https://github.com/vybestack/llxprt-code/issues/1954)).
+
+**Trade-offs.** Marking the CLI non-dumpable disables core dumps for the CLI
+process and prevents external ptrace-attach debugging of the CLI inside the
+container. (`--inspect` is socket-based and unaffected.) It is applied on Linux
+when the process is running inside a container sandbox (`SANDBOX` set to a
+non-`sandbox-exec` value) **or** when it is credential-bearing
+(`LLXPRT_CAPABILITY_FD` or `LLXPRT_CREDENTIAL_SOCKET` is set); the Seatbelt
+(macOS-host) path is unchanged. On a user-supplied non-glibc sandbox image,
+`prctl` cannot be resolved from libc; in that case:
+
+- If the process is **credential-bearing**, the CLI **fails closed** — it prints
+  a fatal error and refuses to start, because it cannot protect the credential
+  in memory. Use the official Debian bookworm / glibc sandbox image.
+- If the process is **not credential-bearing** (e.g. a tokenless custom image),
+  the CLI writes a visible warning to stderr and continues, and the in-container
+  memory read is not blocked.
+
+The sandbox therefore defends against a prompt-injected agent that reads files,
+inspects the environment, scans argv, speaks the proxy protocol, or — in
+container mode — attempts to read the CLI process's memory from another
+in-container process.
 
 ## Using GitHub from a Sandbox
 
@@ -209,6 +312,53 @@ consume your machine's resources.
 
 Container mode runs in a separate process namespace. Seatbelt runs directly on
 your host with macOS kernel restrictions applied via `sandbox-exec`.
+
+### Privilege hardening (container mode)
+
+Every Docker and Podman sandbox run is started with two privilege-hardening
+flags by default:
+
+- **`--cap-drop=ALL`** — drops every Linux capability, so the sandboxed process
+  starts with an empty capability set. It cannot perform privileged operations
+  such as `mount`, changing network configuration, or overriding file
+  permissions. (Whether binding to privileged ports requires a capability is
+  kernel/sysctl dependent: modern Docker sets
+  `net.ipv4.ip_unprivileged_port_start=0` in containers, so a non-root process
+  can bind low ports even with no capabilities. `--publish` port forwarding is
+  handled by the runtime and is unaffected.)
+- **`--security-opt no-new-privileges`** — forbids the process from gaining new
+  privileges. Setuid-root binaries the image ships (such as `su`, `mount`, and
+  `passwd`) execute **without** their setuid effect, so an agent command cannot
+  escalate to root through them. This was verified against a real setuid-root
+  binary inside the sandbox image: under these flags the effective uid stays the
+  caller's, whereas without `no-new-privileges` it becomes 0.
+
+These defaults are applied **before** any `SANDBOX_FLAGS`, so `SANDBOX_FLAGS`
+can still extend or override them (see
+[Extra container flags](#extra-container-flags)). Note that adding a capability
+back with `--cap-add` only widens the bounding set; whether the final process
+actually holds it depends on the runtime and path.
+
+#### Current-user path capability add-backs
+
+On Linux distributions where the container is mapped to your host UID/GID
+(Debian/Ubuntu by default, or any host with `SANDBOX_SET_UID_GID=true`), the
+sandbox starts as root, creates a matching user with `groupadd`/`useradd`, and
+then drops to your UID/GID via `su`. That setup needs a small, fixed set of
+capabilities, so exactly these three are added back on this path — and no others
+(proven by leave-one-out testing; `DAC_OVERRIDE` and `FOWNER` are not required):
+
+- `CHOWN` — `groupadd`/`useradd` write to `/etc/gshadow` and `/etc/shadow`.
+- `SETUID`, `SETGID` — create the matching UID/GID and let `su` drop to them.
+
+`--security-opt no-new-privileges` does not interfere with this path: `su` is
+invoked by root (already uid 0), so no setuid escalation is required. The three
+capabilities are the verified minimum; removing any one of them makes
+`groupadd`/`useradd` fail to write the shadow files or `su` unable to
+authenticate.
+
+These capability flags do **not** change the memory-read boundary above: reading
+`/proc/<pid>/mem` of a same-UID process requires no capability.
 
 ## Per-engine limitations
 
@@ -665,6 +815,27 @@ Pass additional flags to the container runtime:
 ```bash
 export SANDBOX_FLAGS="--security-opt label=disable"
 ```
+
+`SANDBOX_FLAGS` are applied **after** the default hardening flags
+(`--cap-drop=ALL` and `--security-opt no-new-privileges`) and survive into the
+container argv, so they can extend or override the defaults:
+
+```bash
+# Applied after --cap-drop=ALL, so it appears later in the argv
+export SANDBOX_FLAGS="--cap-add=NET_ADMIN"
+```
+
+> **Warning — `--cap-add` only widens the bounding set.** On Docker the image's
+> non-root user receives an added capability only in the **bounding** set (the
+> permitted/effective/ambient sets stay empty), and on the current-user path
+> `su` clears effective/permitted/ambient capabilities on both runtimes. So
+> `--cap-add` alone does **not** guarantee the final process actually holds the
+> capability — that depends on the runtime and on whether the current-user `su`
+> path is in use. The defaults drop all capabilities on purpose; only widen them
+> when you understand the exposure, and remove `SANDBOX_FLAGS` afterward so the
+> hardened default is restored. If a workflow genuinely needs elevated
+> privileges, `--security-opt no-new-privileges=false` and `--privileged` exist
+> as explicit, security-reducing escape hatches.
 
 > **Warning — `label=disable` turns off SELinux labelling.** The flag
 > `--security-opt label=disable` removes the SELinux process label (MCS/MLS

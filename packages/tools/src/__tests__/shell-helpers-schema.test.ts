@@ -4,19 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
   ShellResult,
 } from '../interfaces/index.js';
-import { buildCommandToExecute } from '../tools/shell-helpers.js';
+import {
+  buildCommandToExecute,
+  singleQuoteForShell,
+} from '../tools/shell-helpers.js';
 
 const { mockPlatform } = vi.hoisted(() => ({
   mockPlatform: vi.fn(() => 'darwin'),
 }));
 
-vi.mock('node:os', async (importOriginal) => {
+void vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     default: { platform: mockPlatform, EOL: actual.EOL },
@@ -166,16 +169,18 @@ describe('buildCommandToExecute foreground wrapping (non-Windows)', () => {
     mockPlatform.mockReturnValue('darwin');
   });
 
-  it('wraps a foreground command in the expected group wrapper', () => {
-    expect(buildCommandToExecute('npm run dev', false, '/tmp/t')).toBe(
-      '{ npm run dev; }; __code=$?; pgrep -g 0 >/tmp/t 2>&1; exit $__code;',
-    );
+  it('wraps a foreground command in an EXIT trap followed by the trimmed body', () => {
+    const built = buildCommandToExecute('npm run dev', false, '/tmp/t');
+    const action = `__code=$?; pgrep -g 0 >${singleQuoteForShell('/tmp/t')} 2>&1; exit $__code`;
+    expect(built).toBe(`trap ${singleQuoteForShell(action)} EXIT
+npm run dev`);
   });
 
-  it('normalises a single trailing ; in the command body', () => {
+  it('keeps a caller-supplied trailing ; in the body verbatim', () => {
     const built = buildCommandToExecute('echo hi;', false, '/tmp/t');
-    expect(built).toContain('{ echo hi; }');
-    expect(built).not.toContain(';;');
+    const newline = String.fromCharCode(10);
+    expect(built.endsWith(`${newline}echo hi;`)).toBe(true);
+    expect(built).not.toContain('{ echo hi');
   });
 });
 
@@ -242,5 +247,74 @@ describe('ShellTool description mentions managed background jobs', () => {
     expect(description).toContain('managed background job');
     expect(description).toContain('check_async_tasks');
     expect(description).toContain('daemonizes');
+  });
+});
+
+describe('ShellTool timeout_seconds description (Issue #3031)', () => {
+  function getTimeoutDescription(): string {
+    const properties = getObjectProperty(
+      createShellTool().schema.parametersJsonSchema,
+      'properties',
+    );
+    const property = getObjectProperty(properties, 'timeout_seconds');
+    const description = getObjectProperty(property, 'description');
+    return typeof description === 'string' ? description : '';
+  }
+
+  it('names the configured default setting', () => {
+    mockPlatform.mockReturnValue('darwin');
+    expect(getTimeoutDescription()).toContain('shell-default-timeout-seconds');
+  });
+
+  it('names the configured maximum setting', () => {
+    mockPlatform.mockReturnValue('darwin');
+    expect(getTimeoutDescription()).toContain('shell-max-timeout-seconds');
+  });
+
+  it('documents the -1 semantics', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description).toContain('-1');
+    expect(description.toLowerCase()).toContain('maximum');
+  });
+
+  it('states the accepted domain: -1 or a finite number greater than zero', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description.toLowerCase()).toContain('greater than zero');
+    expect(description).toContain('-1');
+  });
+
+  it('states that 0 and other non-positive values are rejected', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description.toLowerCase()).toContain('non-positive');
+    expect(description.toLowerCase()).toContain('reject');
+  });
+
+  it('states that a short positive request is honoured exactly', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description.toLowerCase()).toContain('honoured exactly');
+  });
+
+  it('states that a request above the maximum is clamped', () => {
+    mockPlatform.mockReturnValue('darwin');
+    expect(getTimeoutDescription().toLowerCase()).toContain('clamp');
+  });
+
+  it('gives the model a cue to set an explicit timeout', () => {
+    mockPlatform.mockReturnValue('darwin');
+    expect(getTimeoutDescription().toLowerCase()).toContain('explicit timeout');
+  });
+
+  it('does not bake in the current numeric default (300)', () => {
+    mockPlatform.mockReturnValue('darwin');
+    expect(getTimeoutDescription()).not.toContain('300');
+  });
+
+  it('does not bake in the current numeric maximum (900)', () => {
+    mockPlatform.mockReturnValue('darwin');
+    expect(getTimeoutDescription()).not.toContain('900');
   });
 });

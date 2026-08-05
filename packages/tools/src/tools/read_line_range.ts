@@ -6,6 +6,7 @@
 
 import path from 'path';
 import { type ContentPartUnion } from '../types/wire-types.js';
+import { ToolErrorType } from '../types/tool-error.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -119,6 +120,25 @@ function formatWithGitChanges(
   return formattedLines.join('\n');
 }
 
+/**
+ * A processed read result narrowed to carry the numeric line-range fields that
+ * text reads always populate. Used to avoid non-null assertions when reading
+ * `linesShown`/`originalLineCount` (issue #3036).
+ */
+type LineRangeResult = ProcessedFileReadResult & {
+  linesShown: [number, number];
+  originalLineCount: number;
+};
+
+function hasLineRange(
+  result: ProcessedFileReadResult,
+): result is LineRangeResult {
+  return (
+    Array.isArray(result.linesShown) &&
+    typeof result.originalLineCount === 'number'
+  );
+}
+
 class ReadLineRangeToolInvocation extends BaseToolInvocation<
   ReadLineRangeToolParams,
   ToolResult
@@ -198,42 +218,55 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
     return `${headerParts.join('\n')}\n\n${llmContent}`;
   }
 
-  private buildTruncatedLlmContent(
-    result: ProcessedFileReadResult,
+  private buildRangeLlmContent(
+    content: string,
+    range: LineRangeResult,
+    shortened: boolean,
     gitWarning: string | undefined,
     markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
     deletionAfterLines: Set<number> | undefined,
   ): ContentPartUnion {
-    const [start, end] = result.linesShown!;
-    const total = result.originalLineCount!;
+    const [start, end] = range.linesShown;
+    const total = range.originalLineCount;
 
     const formattedContent = this.applyTextFormatting(
-      result.llmContent as string,
+      content,
       this.params.start_line,
       markersByLine,
       deletionAfterLines,
     );
 
-    const gitLegend =
-      this.params.showGitChanges === true
-        ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
-        : '';
-    const gitWarningText =
-      this.params.showGitChanges === true && gitWarning !== undefined
-        ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
-        : '';
+    const headerParts: string[] = [];
+    if (this.params.showGitChanges === true) {
+      if (gitWarning !== undefined) {
+        headerParts.push(
+          `NOTE: Failed to read git change status: ${gitWarning}`,
+        );
+      }
+      headerParts.push(
+        'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
+      );
+    }
+    if (shortened) {
+      headerParts.push(
+        'NOTE: Some lines were shortened because they exceed the maximum line length.',
+      );
+    }
+    headerParts.push(
+      `Status: Showing lines ${start}-${end} of ${total} total lines.`,
+    );
 
-    return `\nIMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${formattedContent}`;
+    return `${headerParts.join('\n')}\n\n${formattedContent}`;
   }
 
   private buildFullLlmContent(
-    result: ProcessedFileReadResult,
+    content: string,
     gitWarning: string | undefined,
     markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
     deletionAfterLines: Set<number> | undefined,
   ): ContentPartUnion {
     const formatted = this.applyTextFormatting(
-      result.llmContent as string,
+      content,
       this.params.start_line,
       markersByLine,
       deletionAfterLines,
@@ -255,6 +288,47 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
     void filePath;
   }
 
+  private startBeyondEofResult(totalLines: number): ToolResult {
+    const lineWord = totalLines === 1 ? 'line' : 'lines';
+    const message = `start_line ${this.params.start_line} is beyond end of file (${totalLines} ${lineWord})`;
+    return {
+      llmContent: message,
+      returnDisplay: message,
+      error: {
+        message,
+        type: ToolErrorType.INVALID_TOOL_PARAMS,
+      },
+    };
+  }
+
+  private assembleContent(
+    result: ProcessedFileReadResult,
+    gitWarning: string | undefined,
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
+    deletionAfterLines: Set<number> | undefined,
+  ): ContentPartUnion {
+    if (typeof result.llmContent !== 'string') {
+      return result.llmContent;
+    }
+    const content = result.llmContent;
+    if (result.isTruncated === true && hasLineRange(result)) {
+      return this.buildRangeLlmContent(
+        content,
+        result,
+        result.linesShortened === true,
+        gitWarning,
+        markersByLine,
+        deletionAfterLines,
+      );
+    }
+    return this.buildFullLlmContent(
+      content,
+      gitWarning,
+      markersByLine,
+      deletionAfterLines,
+    );
+  }
+
   async execute(): Promise<ToolResult> {
     const offset = this.params.start_line - 1;
     const limit = this.params.end_line - this.params.start_line + 1;
@@ -274,40 +348,21 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       };
     }
 
-    let gitWarning: string | undefined;
-    let markersByLine:
-      | Map<number, Exclude<GitLineChangeMarker, '░'>>
-      | undefined;
-    let deletionAfterLines: Set<number> | undefined;
-
-    const shouldAnnotateGit =
-      this.params.showGitChanges === true &&
-      typeof result.llmContent === 'string';
-
-    if (shouldAnnotateGit) {
-      ({ gitWarning, markersByLine, deletionAfterLines } =
-        await this.fetchGitAnnotations(this.params.absolute_path));
+    if (
+      typeof result.llmContent === 'string' &&
+      hasLineRange(result) &&
+      this.params.start_line > result.originalLineCount
+    ) {
+      return this.startBeyondEofResult(result.originalLineCount);
     }
 
-    let llmContent: ContentPartUnion;
-
-    if (typeof result.llmContent !== 'string') {
-      llmContent = result.llmContent;
-    } else if (result.isTruncated === true) {
-      llmContent = this.buildTruncatedLlmContent(
-        result,
-        gitWarning,
-        markersByLine,
-        deletionAfterLines,
-      );
-    } else {
-      llmContent = this.buildFullLlmContent(
-        result,
-        gitWarning,
-        markersByLine,
-        deletionAfterLines,
-      );
-    }
+    const gitAnnotations = await this.loadGitAnnotations(result);
+    const llmContent = this.assembleContent(
+      result,
+      gitAnnotations.gitWarning,
+      gitAnnotations.markersByLine,
+      gitAnnotations.deletionAfterLines,
+    );
 
     this.recordReadMetric(result.llmContent, this.params.absolute_path);
 
@@ -315,6 +370,24 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       llmContent,
       returnDisplay: result.returnDisplay || '',
     };
+  }
+
+  private async loadGitAnnotations(result: ProcessedFileReadResult): Promise<{
+    gitWarning: string | undefined;
+    markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined;
+    deletionAfterLines: Set<number> | undefined;
+  }> {
+    if (
+      this.params.showGitChanges !== true ||
+      typeof result.llmContent !== 'string'
+    ) {
+      return {
+        gitWarning: undefined,
+        markersByLine: undefined,
+        deletionAfterLines: undefined,
+      };
+    }
+    return this.fetchGitAnnotations(this.params.absolute_path);
   }
 }
 

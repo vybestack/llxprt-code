@@ -24,6 +24,7 @@ import {
   convertToFunctionResponse,
   extractAgentIdFromMetadata,
   createErrorResponse,
+  extractModelFacingErrorText,
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   DEFAULT_MAX_TOKENS,
@@ -343,9 +344,10 @@ export class ResultAggregator {
   ): Promise<void> {
     const { result, callId, toolName, scheduledCall } = buffered;
 
+    const outputConfig =
+      this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
+
     if (result.error === undefined) {
-      const outputConfig =
-        this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
       const responseParts = convertToFunctionResponse(
         toolName,
         callId,
@@ -379,6 +381,7 @@ export class ResultAggregator {
         scheduledCall.request,
         error,
         result.error.type,
+        extractModelFacingErrorText(result.llmContent, toolName, outputConfig),
       );
       this.callbacks.setError(callId, errorResponse);
     }

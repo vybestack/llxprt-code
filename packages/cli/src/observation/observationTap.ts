@@ -86,10 +86,26 @@ function mapToolStatus(
   }
 }
 
+function isTerminalPhase(phase: JspToolPhase): boolean {
+  return phase === 'succeeded' || phase === 'failed' || phase === 'cancelled';
+}
+
 /** Mutable correlation state scoped to a single turn. */
 interface TurnScope {
   readonly toolLabels: Map<string, string>;
   readonly awaitingConfirmation: Set<string>;
+  /**
+   * Call ids that already reported a terminal phase this turn.
+   *
+   * The first terminal phase observed for a call id is sticky: a cancelled
+   * tool still emits a terminal `tool-result`, and
+   * `projectToolResult` derives `isError` as
+   * `status === 'error' || (status === 'cancelled' && outcome === Cancel)`,
+   * so a tool cancelled by abort (not by an explicit Cancel confirmation
+   * outcome) yields `isError: false` and would otherwise be rewritten from
+   * `cancelled` to `succeeded` by the later `tool-result`.
+   */
+  readonly terminalTools: Set<string>;
 }
 
 function routeToolEvent(
@@ -99,9 +115,18 @@ function routeToolEvent(
 ): void {
   if (event.type === 'tool-status') {
     const label = scope.toolLabels.get(event.update.id) ?? event.update.name;
-    target.onToolPhaseChanged(label, mapToolStatus(event.update.status));
+    const phase = mapToolStatus(event.update.status);
+    if (!scope.terminalTools.has(event.update.id)) {
+      target.onToolPhaseChanged(label, phase);
+      if (isTerminalPhase(phase)) {
+        scope.terminalTools.add(event.update.id);
+      }
+    }
+    // Suppression above covers only the phase emission. A suppressed event
+    // still has to clear a pending approval, or an observer would be left
+    // showing a wait that can never resolve.
     if (
-      mapToolStatus(event.update.status) !== 'awaiting_approval' &&
+      phase !== 'awaiting_approval' &&
       scope.awaitingConfirmation.delete(event.update.id) &&
       scope.awaitingConfirmation.size === 0
     ) {
@@ -110,10 +135,12 @@ function routeToolEvent(
     return;
   }
   const label = scope.toolLabels.get(event.result.id) ?? event.result.name;
-  target.onToolPhaseChanged(
-    label,
-    event.result.isError === true ? 'failed' : 'succeeded',
-  );
+  const phase: JspToolPhase =
+    event.result.isError === true ? 'failed' : 'succeeded';
+  if (!scope.terminalTools.has(event.result.id)) {
+    target.onToolPhaseChanged(label, phase);
+    scope.terminalTools.add(event.result.id);
+  }
   scope.toolLabels.delete(event.result.id);
   if (
     scope.awaitingConfirmation.delete(event.result.id) &&
@@ -181,6 +208,7 @@ export function createObservationTap(
   const scope: TurnScope = {
     toolLabels: new Map<string, string>(),
     awaitingConfirmation: new Set<string>(),
+    terminalTools: new Set<string>(),
   };
 
   /**
@@ -195,6 +223,7 @@ export function createObservationTap(
     const hadPendingApproval = scope.awaitingConfirmation.size > 0;
     scope.toolLabels.clear();
     scope.awaitingConfirmation.clear();
+    scope.terminalTools.clear();
     if (hadPendingApproval) {
       target.onWaitResolved();
     }

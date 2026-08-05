@@ -31,6 +31,11 @@ import { DEFAULT_CREATE_PATCH_OPTIONS } from '../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
+import {
+  splitFileLines,
+  joinFileLines,
+  type SplitFileLines,
+} from '../utils/lineEditing.js';
 
 /**
  * Parameters for the InsertAtLine tool
@@ -61,6 +66,32 @@ function splitInsertContent(content: string): string[] {
   return content.endsWith('\n')
     ? content.slice(0, -1).split('\n')
     : content.split('\n');
+}
+
+/**
+ * Rebuilds file content after splicing the inserted lines in at `insertIndex`.
+ * Shared by execute() and shouldConfirmExecute() so the confirmation preview is
+ * byte-identical to the written bytes.
+ *
+ * A zero-line file (a non-existent file being created, or a truly empty file)
+ * must always be written newline-terminated. Before issue #3036 the phantom
+ * trailing '' from content.split('\n') guaranteed this; splitFileLines models an
+ * empty file as zero lines with no trailing newline, so the zero-line case is
+ * handled here rather than in lineEditing.ts (which delete_line_range depends
+ * on to empty a file without a stray newline).
+ */
+function buildInsertedContent(
+  split: SplitFileLines,
+  insertIndex: number,
+  insertedLines: readonly string[],
+): string {
+  const resultLines = [
+    ...split.lines.slice(0, insertIndex),
+    ...insertedLines,
+    ...split.lines.slice(insertIndex),
+  ];
+  const zeroLineFile = split.lines.length === 0;
+  return joinFileLines(resultLines, zeroLineFile || split.hadTrailingNewline);
 }
 
 class InsertAtLineToolInvocation extends BaseToolInvocation<
@@ -118,8 +149,8 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
       }
     }
 
-    const lines = originalContent.split('\n');
-    const totalLines = lines.length;
+    const split = splitFileLines(originalContent);
+    const totalLines = split.lines.length;
 
     if (fileExists && this.params.line_number > totalLines + 1) {
       return false;
@@ -130,10 +161,8 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
     }
 
     const insertIndex = this.params.line_number - 1;
-    const newLines = splitInsertContent(this.params.content);
-    const resultLines = [...lines];
-    resultLines.splice(insertIndex, 0, ...newLines);
-    const newContent = resultLines.join('\n');
+    const insertedLines = splitInsertContent(this.params.content);
+    const newContent = buildInsertedContent(split, insertIndex, insertedLines);
 
     const relativePath = makeRelative(filePath, this.host.getTargetDir());
     const fileName = path.basename(filePath);
@@ -174,25 +203,24 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
     const state = await this.readFileState();
     if (!state.ok) return state.result;
 
-    const lines = state.content.split('\n');
-    const totalLines = lines.length;
+    const split = splitFileLines(state.content);
+    const totalLines = split.lines.length;
     if (state.fileExists && this.params.line_number > totalLines + 1) {
       return {
         llmContent: `Cannot insert at line ${this.params.line_number}: exceeds file length (${totalLines}). Use line_number <= ${totalLines + 1} to append.`,
         returnDisplay: `Cannot insert at line ${this.params.line_number}: exceeds file length (${totalLines})`,
         error: {
-          message: `line_number ${this.params.line_number} exceeds file length (${totalLines})`,
+          message: `line_number ${this.params.line_number} exceeds file length (${totalLines}); use line_number <= ${totalLines + 1} to append`,
           type: ToolErrorType.INVALID_TOOL_PARAMS,
         },
       };
     }
 
     const insertIndex = this.params.line_number - 1;
-    const newLines = splitInsertContent(this.params.content);
-    lines.splice(insertIndex, 0, ...newLines);
-    const newContent = lines.join('\n');
+    const insertedLines = splitInsertContent(this.params.content);
+    const newContent = buildInsertedContent(split, insertIndex, insertedLines);
 
-    return this.buildWriteResult(state.fileExists, newContent, newLines);
+    return this.buildWriteResult(state.fileExists, newContent, insertedLines);
   }
 
   private async readFileState(): Promise<
@@ -323,7 +351,7 @@ export class InsertAtLineTool extends BaseDeclarativeTool<
     super(
       InsertAtLineTool.Name,
       'InsertAtLine',
-      `Inserts new content at a specific line in a file. This is the "paste" operation for refactoring. The 'line_number' is 1-based. The new content will be inserted *before* this line number. To prepend to the top of a file, use 'line_number: 1'. If 'line_number' is greater than the total lines, the content will be appended to the end of the file.`,
+      `Inserts new content at a specific line in a file. This is the "paste" operation for refactoring. The 'line_number' is 1-based. The new content will be inserted *before* this line number. To prepend to the top of a file, use 'line_number: 1'. The valid range is 1 .. totalLines + 1; setting 'line_number' to totalLines + 1 appends the content after the last line. A 'line_number' greater than totalLines + 1 is an error.`,
       Kind.Edit,
       {
         properties: {

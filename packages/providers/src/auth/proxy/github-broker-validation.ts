@@ -7,11 +7,16 @@
 /**
  * Generic parameter validation for the GitHub broker op registry.
  *
- * Extracted from github-broker-ops.ts so that per-op modules can share
- * validation without bloating any single file past the 800-line lint cap.
+ * The per-kind value rules live in the shared catalog
+ * (`validateGithubParamValue` in `github-ops.ts`), so the tool boundary and
+ * the broker reject the same invalid values with the same messages. This
+ * module keeps the broker's exported surface (`validateParams`,
+ * `resolveLimit`, `MAX_LIMIT`, `DEFAULT_LIMIT`) and delegates the per-kind
+ * path to the shared function.
  *
  * Rules (pseudocode lines 13-31):
  * - unknown params are rejected (not ignored)
+ * - required params must be present
  * - string params beginning with `-` are rejected (flag injection defense)
  * - each param kind has its own validation
  * - limit kind: positive integer 1..100
@@ -22,27 +27,24 @@
  */
 
 import type { ParamKind, ValidationError } from './github-broker-types.js';
-
-/**
- * Regex for the repo parameter: `owner/name` where owner and name each
- * match `[A-Za-z0-9._-]+`.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002, REQ-009
- * @pseudocode 003-github-broker.md line 17
- */
-const REPO_REGEX = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+import {
+  validateGithubParamValue,
+  GITHUB_LIMIT_MAX,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 
 /**
  * Hard maximum for list/search `limit` params. Anything above this is
  * rejected with INVALID_PARAM to avoid exceeding the frame budget with
  * a large list of bodies.
  *
+ * Sourced from the catalog (`GITHUB_LIMIT_MAX`) so the cap is a single
+ * value across both layers.
+ *
  * @plan PLAN-20260731-GHBROKER.P10
  * @requirement REQ-013
  * @pseudocode 003-github-broker.md lines 120-123
  */
-export const MAX_LIMIT = 100;
+export const MAX_LIMIT = GITHUB_LIMIT_MAX;
 
 /**
  * Default limit applied when no `limit` is provided by the caller.
@@ -61,7 +63,7 @@ export const DEFAULT_LIMIT = 30;
  * - unknown params are rejected (not ignored)
  * - required params must be present
  * - string params beginning with `-` are rejected (flag injection defense)
- * - each param kind has its own validation
+ * - each param kind has its own validation (delegated to the shared catalog)
  *
  * Required params matter because builders interpolate positionals directly:
  * without this check `issue.close` with no number produces the argv
@@ -77,10 +79,16 @@ export function validateParams(
   required?: readonly string[],
 ): ValidationError | null {
   for (const key of Object.keys(params)) {
-    if (!(key in spec)) {
+    // `in` walks the prototype chain, so `{ constructor: 'x' }`,
+    // `{ toString: 'x' }` and an own `__proto__` key would all pass an
+    // unknown-key check here and then never reach the per-kind loop (which
+    // iterates the spec's own entries). `hasOwnProperty` restricts the check
+    // to the spec's own declared parameters, so prototype names are rejected
+    // like any other unknown parameter instead of being silently ignored.
+    if (!Object.prototype.hasOwnProperty.call(spec, key)) {
       return {
         code: 'INVALID_PARAM',
-        message: `Unknown parameter: ${key}`,
+        message: unknownParamMessage(key, spec, required),
       };
     }
   }
@@ -88,319 +96,92 @@ export function validateParams(
     if (params[key] === undefined) {
       return {
         code: 'INVALID_PARAM',
-        message: `Missing required parameter: ${key}`,
+        message: missingParamMessage(key, spec, required),
       };
     }
   }
   for (const [key, kind] of Object.entries(spec)) {
     const value = params[key];
     if (value === undefined) continue;
-    const err = validateParamValue(key, value, kind);
-    if (err) return err;
-  }
-  return null;
-}
-
-/**
- * Validates a single parameter value against its declared kind.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md lines 16-31
- */
-function validateParamValue(
-  key: string,
-  value: unknown,
-  kind: ParamKind,
-): ValidationError | null {
-  if (typeof value === 'string' && value.startsWith('-')) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must not begin with '-'`,
-    };
-  }
-  return validateByKind(key, value, kind);
-}
-
-/**
- * Validates a value against its kind, dispatching to the right validator.
- *
- * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md lines 16-31
- */
-function validateByKind(
-  key: string,
-  value: unknown,
-  kind: ParamKind,
-): ValidationError | null {
-  switch (kind) {
-    case 'repo':
-      return validateRepoParam(key, value);
-    case 'number':
-      return validateNumberParam(key, value);
-    case 'boolean':
-      return validateBooleanParam(key, value);
-    case 'state':
-      return validateStateParam(key, value, [
-        'open',
-        'closed',
-        'merged',
-        'all',
-      ]);
-    case 'stateIssue':
-      return validateStateParam(key, value, ['open', 'closed', 'all']);
-    case 'label':
-      return validateLabelParam(key, value);
-    case 'threadId':
-      return validateThreadIdParam(key, value);
-    case 'limit':
-      return validateLimitParam(key, value);
-    case 'closeReason':
-      return validateCloseReasonParam(key, value);
-    case 'color':
-      return validateColorParam(key, value);
-    case 'assignee':
-      return validateAssigneeParam(key, value);
-    case 'milestone':
-    case 'project':
-    case 'branch':
-      return validateStringParam(key, value);
-    case 'body':
-    case 'freetext':
-      return validateStringParam(key, value);
-    default:
-      // Exhaustiveness check. Returning null here would mean a ParamKind
-      // added later silently bypasses ALL validation for that parameter -
-      // failing open on the boundary this module exists to enforce. The
-      // never assignment makes that a compile error instead.
-      return assertUnreachableKind(kind, key);
-  }
-}
-
-/**
- * Fails the build if a ParamKind gains a variant without a validator, and
- * rejects at runtime if one somehow reaches here.
- *
- * @plan PLAN-20260731-GHBROKER.P19
- * @requirement REQ-002
- */
-function assertUnreachableKind(kind: never, key: string): ValidationError {
-  return {
-    code: 'INVALID_PARAM',
-    message: `Parameter ${key} has an unvalidated kind: ${String(kind)}`,
-  };
-}
-
-/**
- * Validates a repo parameter: must be "owner/name" matching the regex.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002, REQ-009
- * @pseudocode 003-github-broker.md line 17
- */
-function validateRepoParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'string' || !REPO_REGEX.test(value)) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be "owner/name"`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates a number parameter: must be a positive integer.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md line 18
- */
-function validateNumberParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a positive integer`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates a boolean parameter.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002
- */
-function validateBooleanParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'boolean') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a boolean`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates a state parameter against an allowed-values list.
- *
- * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md line 19
- */
-function validateStateParam(
-  key: string,
-  value: unknown,
-  allowed: readonly string[],
-): ValidationError | null {
-  if (typeof value !== 'string') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a string`,
-    };
-  }
-  if (!allowed.includes(value)) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be one of: ${allowed.join(', ')}`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates a label parameter: string or array of strings.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md line 20
- */
-function validateLabelParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (Array.isArray(value)) {
-    return validateLabelArray(key, value);
-  }
-  if (typeof value !== 'string') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a string or array of strings`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates that every element of a label array is a string that cannot be
- * read as a flag.
- *
- * The leading-dash check must be applied per ELEMENT, not just to the
- * top-level value: array elements are pushed straight into the gh argv by
- * the repeatable-flag helpers, so checking only the container would let
- * `{ label: ['--some-flag'] }` through and silently contradict the
- * flag-injection invariant this module documents.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002
- */
-function validateLabelArray(
-  key: string,
-  value: unknown[],
-): ValidationError | null {
-  for (const el of value) {
-    if (typeof el !== 'string') {
-      return {
-        code: 'INVALID_PARAM',
-        message: `Parameter ${key} must be an array of strings`,
-      };
-    }
-    if (el.startsWith('-')) {
-      return {
-        code: 'INVALID_PARAM',
-        message: `Parameter ${key} may not contain a value beginning with '-'`,
-      };
+    const msg = validateGithubParamValue(key, value, kind);
+    if (msg !== null) {
+      return { code: 'INVALID_PARAM', message: msg };
     }
   }
   return null;
 }
 
 /**
- * Validates a threadId parameter: must match /^[A-Za-z0-9_=-]+$/.
+ * Builds the self-correcting message for an unknown parameter.
  *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md line 21
+ * Names the offending parameter, the parameters the operation DOES accept
+ * (in the descriptor's declaration order, i.e. `Object.keys` of the spec),
+ * and — only when a non-empty `required` list was supplied — the required
+ * ones. The old `Unknown parameter: <key>` message named only what was
+ * wrong, leaving a caller no recovery path; for `pr.resolve-thread` called
+ * with only `number` it also hid the missing required `threadId`.
+ *
+ * Unknown parameters are still REJECTED, never accepted or ignored: the
+ * accepted-parameter text describes how to retry correctly, it does not
+ * broaden what the op accepts.
+ *
+ * @plan issue-3019-github-unknown-parameter
+ * @requirement AB1
+ * @issue 3019
  */
-function validateThreadIdParam(
+function unknownParamMessage(
   key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'string' || !/^[A-Za-z0-9_=-]+$/.test(value)) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} contains invalid characters`,
-    };
-  }
-  return null;
+  spec: Readonly<Record<string, ParamKind>>,
+  required: readonly string[] | undefined,
+): string {
+  return withParamCatalogue(`Unknown parameter: ${key}.`, spec, required);
 }
 
 /**
- * Validates a generic string parameter (body, freetext).
+ * Builds the self-correcting message for a missing required parameter.
  *
- * @plan PLAN-20260731-GHBROKER.P08
+ * `Missing required parameter: body` named the gap but not the shape of a
+ * correct call, so a caller that guessed wrong once had nothing new to go
+ * on. It carries the same accepted/required catalogue as the unknown-
+ * parameter message, for the same reason.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
- * @pseudocode 003-github-broker.md lines 22-24
+ * @issue 3030
  */
-function validateStringParam(
+function missingParamMessage(
   key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'string') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a string`,
-    };
-  }
-  return null;
+  spec: Readonly<Record<string, ParamKind>>,
+  required: readonly string[] | undefined,
+): string {
+  return withParamCatalogue(
+    `Missing required parameter: ${key}.`,
+    spec,
+    required,
+  );
 }
 
 /**
- * Validates a limit parameter: must be a positive integer between 1 and
- * MAX_LIMIT (100). Values above MAX_LIMIT are rejected with INVALID_PARAM
- * rather than silently clamped, so the caller learns the cap.
+ * Appends the operation's accepted parameters (in declaration order) and,
+ * when it declares any, its required ones to a rejection message.
  *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-002, REQ-013
- * @pseudocode 003-github-broker.md lines 120-123
+ * Value-level rejections deliberately do NOT get this: the caller already
+ * knows the parameter is accepted, so the catalogue would be noise.
+ *
+ * @plan issue-3019-github-unknown-parameter
+ * @requirement AB1
  */
-function validateLimitParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a positive integer`,
-    };
+function withParamCatalogue(
+  base: string,
+  spec: Readonly<Record<string, ParamKind>>,
+  required: readonly string[] | undefined,
+): string {
+  const accepted = Object.keys(spec).join(', ');
+  const withAccepted = `${base} Accepted parameters: ${accepted}.`;
+  if (required !== undefined && required.length > 0) {
+    return `${withAccepted} Required: ${required.join(', ')}.`;
   }
-  if (value > MAX_LIMIT) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must not exceed ${MAX_LIMIT}`,
-    };
-  }
-  return null;
+  return withAccepted;
 }
 
 /**
@@ -421,109 +202,4 @@ export function resolveLimit(params: Record<string, unknown>): number {
     return Math.min(limit, MAX_LIMIT);
   }
   return DEFAULT_LIMIT;
-}
-
-/**
- * Allowed close-reason values for `gh issue close`.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-const CLOSE_REASONS = ['completed', 'not planned'] as const;
-
-/**
- * Validates a closeReason parameter: must be one of the allowed values.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-function validateCloseReasonParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'string') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a string`,
-    };
-  }
-  if (!CLOSE_REASONS.includes(value as (typeof CLOSE_REASONS)[number])) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be one of: ${CLOSE_REASONS.join(', ')}`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates a color parameter: must be a hex color like `#RRGGBB` or `RRGGBB`.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-/**
- * Accepts both 6- and 3-digit hex, with or without a leading hash. GitHub
- * and every colour picker people paste from accept the short form, so
- * rejecting it turned a valid label colour into an INVALID_PARAM.
- *
- * @plan PLAN-20260731-GHBROKER.P19
- * @requirement REQ-002
- */
-function validateColorParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (typeof value !== 'string') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a string`,
-    };
-  }
-  if (!/^#?(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value)) {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a hex color like #RRGGBB`,
-    };
-  }
-  return null;
-}
-
-/**
- * Validates an assignee parameter: must be a string or array of strings.
- * Same validation as label, but semantically different.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-function validateAssigneeParam(
-  key: string,
-  value: unknown,
-): ValidationError | null {
-  if (Array.isArray(value)) {
-    for (const el of value) {
-      if (typeof el !== 'string') {
-        return {
-          code: 'INVALID_PARAM',
-          message: `Parameter ${key} must be a string or array of strings`,
-        };
-      }
-      // Per-element, for the same reason as labels: the generic check at
-      // the top of validateParamValue only sees the array container.
-      if (el.startsWith('-')) {
-        return {
-          code: 'INVALID_PARAM',
-          message: `Parameter ${key} may not contain a value beginning with '-'`,
-        };
-      }
-    }
-    return null;
-  }
-  if (typeof value !== 'string') {
-    return {
-      code: 'INVALID_PARAM',
-      message: `Parameter ${key} must be a string or array of strings`,
-    };
-  }
-  return null;
 }

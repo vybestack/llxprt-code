@@ -17,15 +17,21 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { extractString } from './github-broker-shaping.js';
 import { shapeCreatedUrl } from './github-broker-issue-write-ops.js';
 import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
+
+const PR_CREATE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.create'];
+const PR_COMMENT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.comment'];
+const PR_EDIT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.edit'];
+const PR_READY_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.ready'];
+const LABEL_CREATE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['label.create'];
 
 /**
  * Shapes a response carrying only the operated-on number.
@@ -41,26 +47,16 @@ function shapeNumberOnly(params: Record<string, unknown>): {
 
 // ─── pr.create ───────────────────────────────────────────────────────────────
 
-/** Accepted parameters for pr.create. */
-const PR_CREATE_PARAMS: Readonly<Record<string, ParamKind>> = {
-  title: 'freetext',
-  body: 'body',
-  base: 'branch',
-  head: 'branch',
-  draft: 'boolean',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for pr.create.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validatePrCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_CREATE_PARAMS, params);
+  return validateParams(PR_CREATE_SPEC.params, params);
 }
 
 /**
@@ -83,9 +79,9 @@ export function buildPrCreateArgv(params: Record<string, unknown>): string[] {
 /** The pr.create operation descriptor. */
 export const prCreateDescriptor: OpDescriptor = {
   name: 'pr.create',
-  requiredParams: ['title'],
-  mutating: true,
-  params: PR_CREATE_PARAMS,
+  requiredParams: PR_CREATE_SPEC.required,
+  mutating: PR_CREATE_SPEC.mutating,
+  params: PR_CREATE_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildPrCreateArgv(params),
@@ -94,23 +90,16 @@ export const prCreateDescriptor: OpDescriptor = {
 
 // ─── pr.comment ──────────────────────────────────────────────────────────────
 
-/** Accepted parameters for pr.comment. */
-const PR_COMMENT_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  body: 'body',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for pr.comment.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validatePrCommentParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_COMMENT_PARAMS, params);
+  return validateParams(PR_COMMENT_SPEC.params, params);
 }
 
 /**
@@ -129,9 +118,9 @@ export function buildPrCommentArgv(params: Record<string, unknown>): string[] {
 /** The pr.comment operation descriptor. */
 export const prCommentDescriptor: OpDescriptor = {
   name: 'pr.comment',
-  requiredParams: ['number', 'body'],
-  mutating: true,
-  params: PR_COMMENT_PARAMS,
+  requiredParams: PR_COMMENT_SPEC.required,
+  mutating: PR_COMMENT_SPEC.mutating,
+  params: PR_COMMENT_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildPrCommentArgv(params),
@@ -140,28 +129,16 @@ export const prCommentDescriptor: OpDescriptor = {
 
 // ─── pr.edit ─────────────────────────────────────────────────────────────────
 
-/** Accepted parameters for pr.edit. */
-const PR_EDIT_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  title: 'freetext',
-  body: 'body',
-  addLabel: 'label',
-  removeLabel: 'label',
-  addAssignee: 'assignee',
-  milestone: 'milestone',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for pr.edit.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validatePrEditParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_EDIT_PARAMS, params);
+  return validateParams(PR_EDIT_SPEC.params, params);
 }
 
 /**
@@ -185,9 +162,9 @@ export function buildPrEditArgv(params: Record<string, unknown>): string[] {
 /** The pr.edit operation descriptor. */
 export const prEditDescriptor: OpDescriptor = {
   name: 'pr.edit',
-  requiredParams: ['number'],
-  mutating: true,
-  params: PR_EDIT_PARAMS,
+  requiredParams: PR_EDIT_SPEC.required,
+  mutating: PR_EDIT_SPEC.mutating,
+  params: PR_EDIT_SPEC.params,
   bodyParams: ['body'],
   rawOutput: true,
   buildArgv: (params) => buildPrEditArgv(params),
@@ -196,22 +173,16 @@ export const prEditDescriptor: OpDescriptor = {
 
 // ─── pr.ready ────────────────────────────────────────────────────────────────
 
-/** Accepted parameters for pr.ready. */
-const PR_READY_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for pr.ready.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validatePrReadyParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_READY_PARAMS, params);
+  return validateParams(PR_READY_SPEC.params, params);
 }
 
 /**
@@ -229,9 +200,9 @@ export function buildPrReadyArgv(params: Record<string, unknown>): string[] {
 /** The pr.ready operation descriptor. */
 export const prReadyDescriptor: OpDescriptor = {
   name: 'pr.ready',
-  requiredParams: ['number'],
-  mutating: true,
-  params: PR_READY_PARAMS,
+  requiredParams: PR_READY_SPEC.required,
+  mutating: PR_READY_SPEC.mutating,
+  params: PR_READY_SPEC.params,
   rawOutput: true,
   buildArgv: (params) => buildPrReadyArgv(params),
   shape: (_rawText, params) => shapeNumberOnly(params),
@@ -239,25 +210,16 @@ export const prReadyDescriptor: OpDescriptor = {
 
 // ─── label.create ────────────────────────────────────────────────────────────
 
-/** Accepted parameters for label.create. */
-const LABEL_CREATE_PARAMS: Readonly<Record<string, ParamKind>> = {
-  name: 'freetext',
-  color: 'color',
-  description: 'freetext',
-  force: 'boolean',
-  repo: 'repo',
-};
-
 /**
  * Validates parameters for label.create.
  *
- * @plan PLAN-20260731-GHBROKER.P11
+ * @plan PLAN-20260731-GHBROKER.P11, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  */
 export function validateLabelCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(LABEL_CREATE_PARAMS, params);
+  return validateParams(LABEL_CREATE_SPEC.params, params);
 }
 
 /**
@@ -280,9 +242,9 @@ export function buildLabelCreateArgv(
 /** The label.create operation descriptor. */
 export const labelCreateDescriptor: OpDescriptor = {
   name: 'label.create',
-  requiredParams: ['name'],
-  mutating: true,
-  params: LABEL_CREATE_PARAMS,
+  requiredParams: LABEL_CREATE_SPEC.required,
+  mutating: LABEL_CREATE_SPEC.mutating,
+  params: LABEL_CREATE_SPEC.params,
   rawOutput: true,
   buildArgv: (params) => buildLabelCreateArgv(params),
   shape: (_rawText, params) => ({

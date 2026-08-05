@@ -32,6 +32,7 @@ import {
   type Envelope,
 } from './envelope.js';
 import { verifyKeyringWrite } from './keyring-write-verification.js';
+import { isKeychainGrantPersistenceBroken as isKeychainGrantPersistenceBrokenState } from './keychain-grant-persistence.js';
 import {
   assertRuntimeNotReplaced,
   RUNTIME_REPLACED_REMEDIATION,
@@ -64,7 +65,7 @@ export {
 } from './secure-store-errors.js';
 export type { SecureStoreErrorCode } from './secure-store-errors.js';
 
-import { SecureStoreError } from './secure-store-errors.js';
+import { SecureStoreError, isSecureStoreError } from './secure-store-errors.js';
 import type { SecureStoreErrorCode } from './secure-store-errors.js';
 
 // ─── Adapter Interface ───────────────────────────────────────────────────────
@@ -106,10 +107,27 @@ function isErrorWithCode(value: unknown): value is { code: string } {
 }
 
 function classifyError(error: unknown): SecureStoreErrorCode {
+  // A SecureStoreError already carries an authoritative classification.
+  // RUNTIME_REPLACED in particular matches none of the message heuristics
+  // below and would be downgraded to UNAVAILABLE, which the get()/has()
+  // fallback paths are allowed to swallow — absorbing a terminal error that
+  // the runtime-replaced invariant requires callers to rethrow.
+  if (isSecureStoreError(error)) {
+    return error.code;
+  }
   const msg =
     error instanceof Error
       ? error.message.toLowerCase()
       : String(error).toLowerCase();
+  // "Couldn't access platform storage: PermissionDenied" is what the keyring
+  // crate reports when the machine has no Secret Service at all — a headless
+  // Linux box, container, ssh session or WSL. Despite the wording it means "no
+  // credential backend here", not "you lack permission to use one", so it has
+  // to be classified UNAVAILABLE and degrade to the encrypted file. Checked
+  // before the generic denied/permission test below, which would otherwise
+  // match on the substring and turn a routine no-keyring machine into a hard
+  // error.
+  if (msg.includes('access platform storage')) return 'UNAVAILABLE';
   if (msg.includes('locked')) return 'LOCKED';
   if (msg.includes('denied') || msg.includes('permission')) return 'DENIED';
   if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
@@ -143,6 +161,15 @@ function getRemediation(code: SecureStoreErrorCode): string {
 
 function isTransientError(error: unknown): boolean {
   return classifyError(error) === 'TIMEOUT';
+}
+
+/**
+ * Keyring read classifications that may be safely degraded to the encrypted
+ * fallback file by both `get()` and `has()`. Centralizing this set keeps the
+ * two read paths from diverging on which errors are fallbackable.
+ */
+function isFallbackableKeyringReadError(code: SecureStoreErrorCode): boolean {
+  return code === 'UNAVAILABLE' || code === 'NOT_FOUND' || code === 'TIMEOUT';
 }
 
 // ─── SecureStore Class ───────────────────────────────────────────────────────
@@ -336,6 +363,22 @@ export class SecureStore {
     }
   }
 
+  /**
+   * Reports whether the discarded macOS Keychain "Always Allow" grant has been
+   * detected this process (issue #3020). Terminal: once true, always true.
+   *
+   * This proxies **process-wide** state shared across every SecureStore
+   * instance and every service/account — it is NOT scoped to this store
+   * instance or to this service. The detector correlates by credential, but
+   * the resulting predicate is global: once any credential triggers it, every
+   * store's accessor reports true for the rest of the process.
+   *
+   * @plan PLAN-20260805-ISSUE3020
+   */
+  isKeychainGrantPersistenceBroken(): boolean {
+    return isKeychainGrantPersistenceBrokenState();
+  }
+
   private async deleteFallbackFiles(key: string): Promise<boolean> {
     const currentPath = this.getFallbackFilePath(key);
     const legacyPath = this.getLegacyFallbackFilePath(key);
@@ -476,11 +519,7 @@ export class SecureStore {
           () =>
             `[get] key='${key}' keyring read failed (${classified}): ${msg}`,
         );
-        if (
-          classified !== 'UNAVAILABLE' &&
-          classified !== 'NOT_FOUND' &&
-          classified !== 'TIMEOUT'
-        ) {
+        if (!isFallbackableKeyringReadError(classified)) {
           throw new SecureStoreError(
             msg,
             classified,
@@ -525,6 +564,8 @@ export class SecureStore {
   private async deleteLocked(key: string): Promise<boolean> {
     let deletedFromKeyring = false;
     let deletedFromFile = false;
+    let keyringFailure: { code: SecureStoreErrorCode; message: string } | null =
+      null;
 
     const adapter = await this.getKeyring();
     if (adapter !== null) {
@@ -533,12 +574,44 @@ export class SecureStore {
           this.serviceName,
           key,
         );
-      } catch {
-        // Keyring delete failed
+        this.recordKeyringSuccess();
+      } catch (error) {
+        keyringFailure = {
+          code: classifyError(error),
+          message: error instanceof Error ? error.message : String(error),
+        };
+        // A thrown NOT_FOUND means the keyring responded correctly but had
+        // nothing to delete — the delete-path analogue of get() returning
+        // null, which records neither success nor failure. Treating it as a
+        // keyring failure would wrongly erode the probe cache for a healthy
+        // keyring.
+        if (keyringFailure.code !== 'NOT_FOUND') {
+          this.recordKeyringFailure();
+        }
+        this.logger.debug(
+          () =>
+            `[delete] key='${key}' keyring delete failed (${keyringFailure!.code}): ${keyringFailure!.message}`,
+        );
       }
     }
 
+    // Always attempt fallback cleanup regardless of the keyring outcome, so a
+    // failed keyring delete does not *additionally* leave the encrypted local
+    // copy behind. This is best-effort: deleteFallbackFiles swallows every
+    // non-ENOENT unlink failure, so a copy can survive an unlink error — it
+    // only guarantees the keyring failure itself does not skip cleanup.
     deletedFromFile = await this.deleteFallbackFiles(key);
+
+    // NOT_FOUND means the keyring simply had nothing to delete, so the result
+    // is driven by the fallback cleanup. Any other failure must surface: the
+    // secret may still be in the keyring and reporting success would mask that.
+    if (keyringFailure !== null && keyringFailure.code !== 'NOT_FOUND') {
+      throw new SecureStoreError(
+        keyringFailure.message,
+        keyringFailure.code,
+        getRemediation(keyringFailure.code),
+      );
+    }
 
     this.logger.debug(
       () =>
@@ -621,13 +694,20 @@ export class SecureStore {
       try {
         const value = await adapter.getPassword(this.serviceName, key);
         if (value !== null) {
+          this.recordKeyringSuccess();
           return true;
         }
       } catch (error) {
+        this.recordKeyringFailure();
         const classified = classifyError(error);
-        if (classified !== 'NOT_FOUND') {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          () =>
+            `[has] key='${key}' keyring read failed (${classified}): ${msg}`,
+        );
+        if (!isFallbackableKeyringReadError(classified)) {
           throw new SecureStoreError(
-            error instanceof Error ? error.message : String(error),
+            msg,
             classified,
             getRemediation(classified),
           );

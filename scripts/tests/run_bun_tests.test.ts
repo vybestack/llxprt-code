@@ -6,16 +6,9 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  rmSync,
-  existsSync,
-} from 'node:fs';
-import { tmpdir, platform } from 'node:os';
-import { join, resolve } from 'node:path';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   isChildSuccess,
   formatFailureDiagnostic,
@@ -23,12 +16,15 @@ import {
   resolveTsconfigOverride,
   runBunTests,
   reapStaleBunTestProcesses,
+  processTimeoutFor,
+  applyExclusions,
+  applyFilters,
+  collectGlobalSetups,
+  type BunGlobalSetupModule,
   type BunTestRunnerDependencies,
   type BunTestSpawnOptions,
   type ChildExitInfo,
 } from '../run_bun_tests.js';
-
-const repoRoot = resolve(__dirname, '..', '..');
 
 describe('isChildSuccess', () => {
   it('returns true for exit code 0 with null signal', () => {
@@ -296,15 +292,27 @@ describe('resolveTsconfigOverride', () => {
   });
 });
 
+/** Global setup loader stub for runs whose entries declare none. */
+const noGlobalSetup = async (): Promise<BunGlobalSetupModule> => ({});
+
 describe('runBunTests', () => {
-  it('executes every entry with exact argv, cwd, and env and reports all failure modes', () => {
+  it('executes every entry with exact argv, cwd, and env and reports all failure modes', async () => {
     const environment = { RUNNER_TEST: '1' };
     const entries = [
-      { cwd: '/repo/packages/one', file: '/repo/packages/one/one.test.ts' },
-      { cwd: '/repo/packages/two', file: '/repo/packages/two/two.test.ts' },
+      {
+        cwd: '/repo/packages/one',
+        file: '/repo/packages/one/one.test.ts',
+        preloads: [],
+      },
+      {
+        cwd: '/repo/packages/two',
+        file: '/repo/packages/two/two.test.ts',
+        preloads: [],
+      },
       {
         cwd: '/repo/packages/three',
         file: '/repo/packages/three/three.test.ts',
+        preloads: [],
       },
     ];
     const results: ChildExitInfo[] = [
@@ -337,11 +345,12 @@ describe('runBunTests', () => {
         }
         return result;
       },
+      loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     };
 
-    const status = runBunTests(
+    const status = await runBunTests(
       [
         '--workspace',
         'selected',
@@ -387,7 +396,7 @@ describe('runBunTests', () => {
     expect(status).toBe(1);
   });
 
-  it('reports a spawn exception for its file and continues with later entries', () => {
+  it('reports a spawn exception for its file and continues with later entries', async () => {
     const stdout: string[] = [];
     const stderr: string[] = [];
     let spawnCount = 0;
@@ -397,8 +406,8 @@ describe('runBunTests', () => {
       executable: '/bin/bun',
       environment: {},
       resolveFiles: () => [
-        { cwd: '/repo/one', file: '/repo/one/throws.test.ts' },
-        { cwd: '/repo/two', file: '/repo/two/passes.test.ts' },
+        { cwd: '/repo/one', file: '/repo/one/throws.test.ts', preloads: [] },
+        { cwd: '/repo/two', file: '/repo/two/passes.test.ts', preloads: [] },
       ],
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => {
@@ -410,11 +419,12 @@ describe('runBunTests', () => {
         }
         return { exitCode: 0, signalCode: null };
       },
+      loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
       stderr: (line) => stderr.push(line),
     };
 
-    const status = runBunTests([], dependencies);
+    const status = await runBunTests([], dependencies);
 
     expect(spawnCount).toBe(2);
     expect(stderr).toHaveLength(1);
@@ -428,316 +438,267 @@ describe('runBunTests', () => {
     expect(status).toBe(1);
   });
 
-  it('returns success and reports the complete passing summary', () => {
+  it('returns success and reports the complete passing summary', async () => {
     const stdout: string[] = [];
     const dependencies: BunTestRunnerDependencies = {
       repoRoot: '/repo',
       invocationDirectory: '/invoke',
       executable: '/bin/bun',
       environment: {},
-      resolveFiles: () => [{ cwd: '/repo/core', file: '/repo/core/test.ts' }],
+      resolveFiles: () => [
+        { cwd: '/repo/core', file: '/repo/core/test.ts', preloads: [] },
+      ],
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => ({ exitCode: 0, signalCode: null }),
+      loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
       stderr: () => {},
     };
 
-    const status = runBunTests([], dependencies);
+    const status = await runBunTests([], dependencies);
 
     expect(stdout.at(-1)).toBe('Passed 1/1 isolated native Bun test files');
     expect(status).toBe(0);
   });
 
-  it('rejects a fractional --timeout value before any child is spawned', () => {
+  it('rejects a fractional --timeout value before any child is spawned', async () => {
     const dependencies: BunTestRunnerDependencies = {
       repoRoot: '/repo',
       invocationDirectory: '/invoke',
       executable: '/bin/bun',
       environment: {},
-      resolveFiles: () => [{ cwd: '/repo/core', file: '/repo/core/test.ts' }],
+      resolveFiles: () => [
+        { cwd: '/repo/core', file: '/repo/core/test.ts', preloads: [] },
+      ],
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => ({ exitCode: 0, signalCode: null }),
+      loadGlobalSetup: noGlobalSetup,
       stdout: () => {},
       stderr: () => {},
     };
 
-    expect(() => runBunTests(['--timeout', '1.5'], dependencies)).toThrow(
-      'Invalid --timeout value: 1.5',
+    await expect(
+      runBunTests(['--timeout', '1.5'], dependencies),
+    ).rejects.toThrow('Invalid --timeout value: 1.5');
+  });
+
+  it('passes every declared preload and the entry tsconfig to the child', async () => {
+    const calls: Array<readonly string[]> = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/ws',
+          file: '/repo/ws/a.test.ts',
+          preloads: ['/repo/shared/augment.ts', '/repo/ws/setup.ts'],
+          tsconfig: '/repo/ws/tsconfig.bun-test.json',
+          timeout: 300_000,
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: (command) => {
+        calls.push(command);
+        return { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    await runBunTests([], dependencies);
+
+    expect(calls[0]).toEqual([
+      '/bin/bun',
+      'test',
+      '--tsconfig-override',
+      '/repo/ws/tsconfig.bun-test.json',
+      '--max-concurrency',
+      '1',
+      '--timeout',
+      '300000',
+      '--preload',
+      '/repo/shared/augment.ts',
+      '--preload',
+      '/repo/ws/setup.ts',
+      '/repo/ws/a.test.ts',
+    ]);
+  });
+
+  it('retries a failing file up to its retry budget and passes on a later attempt', async () => {
+    let attempts = 0;
+    const stdout: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/flaky.test.ts',
+          preloads: [],
+          retries: 2,
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        attempts++;
+        return attempts < 3
+          ? { exitCode: 1, signalCode: null }
+          : { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: (line) => stdout.push(line),
+      stderr: () => {},
+    };
+
+    const status = await runBunTests([], dependencies);
+
+    expect(attempts).toBe(3);
+    expect(status).toBe(0);
+    expect(stdout.at(-1)).toBe('Passed 1/1 isolated native Bun test files');
+  });
+
+  it('stops retrying once the budget is exhausted and reports the failure', async () => {
+    let attempts = 0;
+    const stderr: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/e2e',
+          file: '/repo/e2e/broken.test.ts',
+          preloads: [],
+          retries: 1,
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        attempts++;
+        return { exitCode: 1, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: () => {},
+      stderr: (line) => stderr.push(line),
+    };
+
+    const status = await runBunTests([], dependencies);
+
+    expect(attempts).toBe(2);
+    expect(status).toBe(1);
+    expect(stderr.at(-1)).toBe(
+      'Native Bun test failed: /repo/e2e/broken.test.ts (exit code: 1)',
     );
   });
 });
 
-describe('actual child process signal shape', () => {
-  // Signal semantics differ between platforms: on POSIX systems, a child
-  // killed by a signal reports exitCode=null and signal='SIGTERM'. On
-  // Windows, process.kill with a signal name may translate to exit code 1
-  // rather than producing a signal. These tests are POSIX-specific.
-  const isPosix = platform() !== 'win32';
+describe('applyExclusions', () => {
+  const entry = (file: string) => ({ cwd: '/repo/e2e', file, preloads: [] });
 
-  it.runIf(isPosix)(
-    'produces exitCode null and a string signalCode when a child is killed by a signal',
-    () => {
-      // The child kills itself with SIGTERM. spawnSync blocks until the child
-      // has terminated, so we cannot kill it from the parent after the call
-      // returns; the child must signal itself. Node's spawnSync has the same
-      // exit/signal semantics as Bun's spawnSync.
-      const child = spawnSync(process.execPath, [
-        '-e',
-        'process.kill(process.pid, "SIGTERM")',
-      ]);
-
-      // After a signal kill, status is null and signal is the signal name
-      const signalChild: ChildExitInfo = {
-        exitCode: child.status,
-        signalCode: child.signal,
-      };
-
-      expect(signalChild.exitCode).toBe(null);
-      expect(signalChild.signalCode).toBe('SIGTERM');
-      expect(isChildSuccess(signalChild)).toBe(false);
-      expect(formatFailureDiagnostic(signalChild)).toBe(' (signal: SIGTERM)');
-    },
-  );
-
-  it('produces exitCode 0 and null signalCode when a child exits normally', () => {
-    const child = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
-
-    const successChild: ChildExitInfo = {
-      exitCode: child.status,
-      signalCode: child.signal,
-    };
-
-    expect(successChild.exitCode).toBe(0);
-    expect(successChild.signalCode).toBe(null);
-    expect(isChildSuccess(successChild)).toBe(true);
-    expect(formatFailureDiagnostic(successChild)).toBe('');
+  it('returns every file when no pattern is given', () => {
+    const files = [entry('/repo/e2e/a.test.ts'), entry('/repo/e2e/b.test.ts')];
+    expect(applyExclusions(files, [])).toEqual(files);
   });
 
-  it('produces a nonzero exitCode and null signalCode when a child exits with failure', () => {
-    const child = spawnSync(process.execPath, ['-e', 'process.exit(3)']);
+  it('drops files matching a leading-wildcard pattern', () => {
+    const files = [
+      entry('/repo/e2e/todo-continuation.e2e.test.ts'),
+      entry('/repo/e2e/write_file.test.ts'),
+    ];
+    expect(
+      applyExclusions(files, ['**/todo-continuation.e2e.test.ts']).map(
+        (f) => f.file,
+      ),
+    ).toEqual(['/repo/e2e/write_file.test.ts']);
+  });
 
-    const failChild: ChildExitInfo = {
-      exitCode: child.status,
-      signalCode: child.signal,
-    };
-
-    expect(failChild.exitCode).toBe(3);
-    expect(failChild.signalCode).toBe(null);
-    expect(isChildSuccess(failChild)).toBe(false);
-    expect(formatFailureDiagnostic(failChild)).toBe(' (exit code: 3)');
+  it('applies every pattern, not just the first', () => {
+    const files = [
+      entry('/repo/e2e/todo-continuation.e2e.test.ts'),
+      entry('/repo/e2e/run_shell_command.test.ts'),
+      entry('/repo/e2e/write_file.test.ts'),
+    ];
+    expect(
+      applyExclusions(files, [
+        '**/todo-continuation.e2e.test.ts',
+        '**/run_shell_command.test.ts',
+      ]).map((f) => f.file),
+    ).toEqual(['/repo/e2e/write_file.test.ts']);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: real Bun subprocess execution with a script path containing spaces
-// ---------------------------------------------------------------------------
-// These tests isolate the generic main-guard pattern by spawning a copied
-// fixture whose path contains spaces. They do not execute or validate the
-// production runner; the dry-run subprocess test below provides that coverage.
-//
-// The production runner (run_bun_tests.ts) requires Bun. When these tests
-// run under Bun's own test runner, process.execPath is Bun. When they run
-// under Vitest (Node), process.execPath is Node, which cannot execute the
-// ESM fixture correctly (top-level await, import.meta.url differences). We
-// resolve the actual Bun binary by checking the BUN_EXEC env var, then
-// node_modules/.bin/bun relative to the repo root, then PATH lookup. The
-// fixture is always ESM (.mjs) using `import` syntax, imported via
-// pathToFileURL for cross-platform path handling.
+describe('applyFilters', () => {
+  const entry = (file: string) => ({ cwd: '/repo/e2e', file, preloads: [] });
 
-/**
- * Finds the Bun binary needed for subprocess tests. Resolution order:
- * 1. process.execPath if it is Bun itself (when the test runs under Bun)
- * 2. BUN_EXEC environment variable
- * 3. node_modules/.bin/bun relative to the repo root (npm/bun-installed)
- * 4. "bun" from PATH (cross-platform spawnSync lookup)
- *
- * Returns null if Bun cannot be found, in which case the Bun-only
- * integration tests are skipped via it.skipIf.
- */
-function resolveBunBinary(): string | null {
-  // Under Bun, process.execPath is the Bun binary — no lookup needed.
-  if (typeof Bun !== 'undefined') {
-    return process.execPath;
-  }
+  it('returns every file when no filter is given', () => {
+    const files = [entry('/repo/e2e/a.test.ts'), entry('/repo/e2e/b.test.ts')];
+    expect(applyFilters(files, [])).toEqual(files);
+  });
 
-  // Under Node (Vitest), find Bun elsewhere.
-  const fromEnv = process.env['BUN_EXEC'];
-  if (fromEnv && existsSync(fromEnv)) {
-    return fromEnv;
-  }
+  it('keeps only files whose path contains a bare path argument', () => {
+    const files = [
+      entry('/repo/integration-tests/run_shell_command.test.ts'),
+      entry('/repo/integration-tests/write_file.test.ts'),
+    ];
+    expect(
+      applyFilters(files, ['integration-tests/run_shell_command.test.ts']).map(
+        (f) => f.file,
+      ),
+    ).toEqual(['/repo/integration-tests/run_shell_command.test.ts']);
+  });
 
-  const localBin = join(repoRoot, 'node_modules', '.bin', 'bun');
-  if (existsSync(localBin)) {
-    return localBin;
-  }
-
-  // Cross-platform PATH lookup (no dependency on POSIX `which`).
-  const cmd = platform() === 'win32' ? 'where' : 'which';
-  const result = spawnSync(cmd, ['bun'], { encoding: 'utf8' });
-  if (result.status === 0) {
-    const found = result.stdout.trim().split('\n')[0];
-    if (found && existsSync(found)) {
-      return found;
-    }
-  }
-
-  return null;
-}
-
-/**
- * The resolved Bun binary path, or null if Bun was not found.
- */
-const bunBinary = resolveBunBinary();
-
-describe('production Bun native test runner', () => {
-  it.skipIf(!bunBinary)(
-    'executes the real runner in dry-run mode from a different cwd',
-    () => {
-      const child = spawnSync(
-        bunBinary!,
-        [
-          resolve(repoRoot, 'scripts/run_bun_tests.ts'),
-          '--workspace',
-          'core',
-          '--dry-run',
-        ],
-        {
-          cwd: tmpdir(),
-          encoding: 'utf8',
-          env: process.env,
-        },
-      );
-
-      expect(child.status, child.stderr).toBe(0);
-      expect(child.stdout).toContain('Dry run: 1 files would be executed:');
-      expect(child.stdout).toContain('packages/core/src/utils/errors.test.ts');
-    },
-  );
-
-  it.skipIf(!bunBinary)(
-    'forwards an invocation-relative tsconfig to a real isolated Bun test',
-    () => {
-      const child = spawnSync(
-        bunBinary!,
-        [
-          resolve(repoRoot, 'scripts/run_bun_tests.ts'),
-          '--workspace',
-          'core',
-          '--tsconfig',
-          resolve(repoRoot, 'tsconfig.json'),
-        ],
-        {
-          cwd: tmpdir(),
-          encoding: 'utf8',
-          env: process.env,
-        },
-      );
-
-      expect(child.status, child.stderr).toBe(0);
-      expect(child.stdout).toContain(
-        'Passed 1/1 isolated native Bun test files',
-      );
-    },
-  );
+  it('keeps a file matched by any one of several filters', () => {
+    const files = [
+      entry('/repo/e2e/a.test.ts'),
+      entry('/repo/e2e/b.test.ts'),
+      entry('/repo/e2e/c.test.ts'),
+    ];
+    expect(
+      applyFilters(files, ['a.test.ts', 'c.test.ts']).map((f) => f.file),
+    ).toEqual(['/repo/e2e/a.test.ts', '/repo/e2e/c.test.ts']);
+  });
 });
 
-/**
- * ESM fixture source. Uses `import { pathToFileURL } from 'node:url'` and
- * `import.meta.url` — the same main-guard pattern used by run_bun_tests.ts.
- * Prints "MAIN_RAN" only when executed as the main module.
- */
-function buildFixtureSource(): string {
-  return `import { pathToFileURL } from 'node:url';
-
-function main() {
-  console.log('MAIN_RAN');
-}
-
-const isMain =
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isMain) {
-  main();
-}
-`;
-}
-
-describe('Bun subprocess main-guard integration (path with spaces)', () => {
-  let fixtureDir: string;
-
-  function createFixtureDirWithSpaces(): string {
-    const tempBase = mkdtempSync(join(tmpdir(), 'bun-main-guard-'));
-    // Create a subdirectory with spaces in the name.
-    const dirWithSpaces = join(tempBase, 'path with spaces');
-    mkdirSync(dirWithSpaces, { recursive: true });
-    return dirWithSpaces;
-  }
-
-  function writeFixtureScript(dir: string): string {
-    const scriptPath = join(dir, 'main-guard-script.mjs');
-    writeFileSync(scriptPath, buildFixtureSource(), 'utf8');
-    return scriptPath;
-  }
-
-  beforeEach((): void => {
-    fixtureDir = createFixtureDirWithSpaces();
+describe('processTimeoutFor', () => {
+  it('keeps the default process budget for ordinary per-test timeouts', () => {
+    expect(processTimeoutFor(30_000)).toBe(120_000);
   });
 
-  afterEach((): void => {
-    if (fixtureDir && existsSync(fixtureDir)) {
-      rmSync(fixtureDir, { recursive: true, force: true });
-    }
+  it('scales past the default when a root declares a long per-test timeout', () => {
+    expect(processTimeoutFor(300_000)).toBe(600_000);
   });
+});
 
-  // These tests require the actual Bun binary. When Bun is not available
-  // (e.g. CI with only Node), they are skipped rather than failing.
-  it.skipIf(!bunBinary)('executes main when the script is run directly', () => {
-    const binary = bunBinary!;
-    const scriptPath = writeFixtureScript(fixtureDir);
-    const child = spawnSync(binary, [scriptPath], {
-      encoding: 'utf8',
-      env: process.env,
-    });
-
-    const result: ChildExitInfo = {
-      exitCode: child.status,
-      signalCode: child.signal,
-    };
-
-    expect(isChildSuccess(result)).toBe(true);
-    expect(child.stdout).toContain('MAIN_RAN');
+describe('collectGlobalSetups', () => {
+  it('returns each distinct setup module once, in first-seen order', () => {
+    expect(
+      collectGlobalSetups([
+        {
+          cwd: '/a',
+          file: '/a/1.test.ts',
+          preloads: [],
+          globalSetup: '/a/s.ts',
+        },
+        {
+          cwd: '/a',
+          file: '/a/2.test.ts',
+          preloads: [],
+          globalSetup: '/a/s.ts',
+        },
+        { cwd: '/b', file: '/b/1.test.ts', preloads: [] },
+        {
+          cwd: '/c',
+          file: '/c/1.test.ts',
+          preloads: [],
+          globalSetup: '/c/s.ts',
+        },
+      ]),
+    ).toEqual(['/a/s.ts', '/c/s.ts']);
   });
-
-  it.skipIf(!bunBinary)(
-    'does not execute main when the script is imported (not run directly)',
-    () => {
-      const binary = bunBinary!;
-      const scriptPath = writeFixtureScript(fixtureDir);
-      // Create an importer script that imports the fixture via pathToFileURL,
-      // ensuring cross-platform path handling for paths with spaces.
-      const importerPath = join(fixtureDir, 'importer.mjs');
-      const importUrl = pathToFileURL(scriptPath).href;
-      writeFileSync(
-        importerPath,
-        `await import('${importUrl}');\nconsole.log('IMPORTER_DONE');\n`,
-        'utf8',
-      );
-
-      const child = spawnSync(binary, [importerPath], {
-        encoding: 'utf8',
-        env: process.env,
-      });
-
-      const result: ChildExitInfo = {
-        exitCode: child.status,
-        signalCode: child.signal,
-      };
-
-      expect(isChildSuccess(result)).toBe(true);
-      expect(child.stdout).toContain('IMPORTER_DONE');
-      // The fixture's main() must NOT have run during import.
-      expect(child.stdout).not.toContain('MAIN_RAN');
-    },
-  );
 });

@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   todoEvents,
+  FatalConfigError,
   type Todo,
   type TodoUpdateEvent,
 } from '@vybestack/llxprt-code-core';
@@ -45,6 +46,24 @@ export function createTodoObservationSubscription(
   return () => todoEvents.offTodoUpdated(listener);
 }
 
+/**
+ * Load and validate the JSP bootstrap file declared on the environment.
+ *
+ * A bootstrap file is present only when a supervisor has deliberately opted
+ * this process into observation, so a misconfiguration must fail fast and
+ * legibly: silently degrading turns a broken observation setup into an
+ * invisible "agent never appears in the observer" failure with no local
+ * signal. Issue 2779's non-blocking guarantee is scoped to the post-startup
+ * path (transport outage or queue pressure degrading telemetry without failing
+ * the foreground); startup configuration validation is the distinct P1 row and
+ * is deliberately fail-fast. Each failure throws `FatalConfigError` so the CLI
+ * entry point renders a single actionable line rather than an
+ * unexpected-critical stack trace.
+ *
+ * The messages intentionally name only the environment variable and the
+ * failure category: this file is credential-bearing, and the message is
+ * written to stderr where a supervisor may log it.
+ */
 export function loadBootstrapFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): JspBootstrap | null {
@@ -56,17 +75,23 @@ export function loadBootstrapFromEnv(
   try {
     raw = readFileSync(filePath, 'utf8');
   } catch {
-    throw new Error('JSP bootstrap file could not be read');
+    throw new FatalConfigError(
+      `JSP bootstrap file named by ${BOOTSTRAP_ENV} could not be read`,
+    );
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error('JSP bootstrap file is malformed JSON');
+    throw new FatalConfigError(
+      `JSP bootstrap file named by ${BOOTSTRAP_ENV} is malformed JSON`,
+    );
   }
   const result = parseBootstrap(parsed);
   if (!result.ok) {
-    throw new Error(`JSP bootstrap rejected (${result.error.code})`);
+    throw new FatalConfigError(
+      `JSP bootstrap file named by ${BOOTSTRAP_ENV} was rejected (${result.error.code})`,
+    );
   }
   return result.value;
 }

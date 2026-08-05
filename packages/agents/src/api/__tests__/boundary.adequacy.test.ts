@@ -24,7 +24,7 @@
  * plain string ops).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '../../testApi.js';
 import * as fc from 'fast-check';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, basename } from 'node:path';

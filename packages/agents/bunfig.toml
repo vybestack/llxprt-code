@@ -1,2 +1,15 @@
+# Bun test configuration for the agents workspace (issue #2845).
+#
+# `preload` replaces the Vitest `setupFiles` entry: `bun test` does not run
+# Vitest setup files, so the Bun/Vitest compatibility shim and the Storage-root
+# isolation must be preloaded before any test module is imported.
+#
+# The per-test timeout is deliberately NOT set here. Bun 1.3.14 ignores a
+# `[test] timeout` key in bunfig.toml and falls back to its 5s default; the
+# 30s timeout that matches the previous Vitest `testTimeout` is passed on the
+# command line by run-bun-tests.ts instead.
 [test]
-preload = ["../../test-setup/augment-bun-vi.ts"]
+preload = [
+  "../../test-setup/augment-bun-vi.ts",
+  "./test-setup-storage-isolation.ts",
+]
