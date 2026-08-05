@@ -87,7 +87,9 @@ vi.mock('../utils/clipboardUtils.js', () => ({
 let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
-vi.mock('../hooks/useKeypress.ts', () => ({
+// Must match the specifier the consumer imports ('.js'), not the file on disk:
+// Bun's mock.module keys on the specifier string.
+vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (
     handler: (key: Record<string, unknown>) => void,
     _options?: unknown,

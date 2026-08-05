@@ -452,3 +452,31 @@ Verified with `CI=true`: `MarkdownDisplay` 30 snapshots / 0 fail,
 
 `InputPrompt.paste` still has 10 content assertions failing (expecting `(r:)`
 and `→` in the frame) which are unrelated to rendering and need per-case triage.
+
+### `InputPrompt` buffer doubles were missing render fields — three files
+
+`inputPromptRender` indexes `buffer.transformationsByLine` and treats
+`buffer.visualToTransformedMap` as a number. Three test files built a
+`mockBuffer` without either field, so `InputPrompt` **threw while rendering**.
+Ink caught the throw and rendered an error frame, which meant no keypress
+subscription was ever created — the symptom looked like "keys are being
+dropped", and was misdiagnosed that way for several rounds.
+
+Fixed in `InputPrompt.vim.test.tsx`, `InputPrompt.paste.test.tsx` and
+`InputPrompt.test.tsx`. `InputPrompt.paste.spec.tsx` and
+`InputPrompt.completion.test.tsx` already had the fields.
+
+Results: `vim` 0 fail; `paste` 13 -> 10 fail; `InputPrompt.test` 16 -> 20 pass.
+
+### `InputPrompt.paste.spec.tsx` — still failing (6)
+
+The file mocks `'../hooks/useKeypress.ts'` to capture the keypress handler, but
+every consumer imports `'../hooks/useKeypress.js'`. Bun's `mock.module` keys on
+the specifier string, so the mock never intercepted anything and
+`keypressHandler` stayed null. Corrected the specifier — provably right
+regardless of outcome, since mocking a specifier nothing imports cannot work.
+
+That alone did not fix the file. Deferring the `InputPrompt` import until after
+the `vi.mock` call (the pattern used elsewhere in this migration) also changed
+nothing, so it was reverted rather than left in as plausible-looking churn.
+Whatever prevents the mock from applying is still unidentified.
