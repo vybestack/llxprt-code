@@ -277,13 +277,23 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.UP_ARROW);
       });
 
+      // BaseSelectionList marks the selected row with '●' and unselected rows
+      // with a space, so only one marker exists per frame. Rather than depend
+      // on the list's length or its trailing entry name, assert the round trip:
+      // up from the first row must leave it, and a following down must return
+      // to it. That only holds if up wrapped to the last row.
       await vi.waitFor(() => {
-        // Wrapping moves the selection off the first entry. Asserted on the
-        // selection marker rather than on a specific trailing setting name,
-        // which changes whenever the settings list does.
         expect(lastFrame()).not.toMatch(
           testRegex('● Enable Loading Phrases', ''),
         );
+      });
+
+      act(() => {
+        stdin.write(TerminalKeys.DOWN_ARROW);
+      });
+
+      await vi.waitFor(() => {
+        expect(lastFrame()).toMatch(testRegex('● Enable Loading Phrases', ''));
       });
 
       unmount();
