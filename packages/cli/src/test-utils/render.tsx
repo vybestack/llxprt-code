@@ -171,9 +171,15 @@ export const renderWithProviders = (
   {
     settings = mockSettings,
     uiState = baseMockUiState,
+    mouseEventsEnabled = false,
   }: {
     settings?: LoadedSettings;
     uiState?: Partial<UIState>;
+    /**
+     * MouseProvider only attaches its stdin listener when this is true, so
+     * tests that drive SGR mouse sequences have to opt in.
+     */
+    mouseEventsEnabled?: boolean;
   } = {},
 ): ReturnType<typeof render> =>
   render(
@@ -181,7 +187,7 @@ export const renderWithProviders = (
       <UIStateContext.Provider value={uiState as UIState}>
         <MockRuntimeContextProvider>
           <KeypressProvider>
-            <MouseProvider>
+            <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
               <ShellCommandDisplayProvider
                 alwaysDisplayFullShellCommand={
                   settings.merged.ui.alwaysDisplayFullShellCommand ?? true
