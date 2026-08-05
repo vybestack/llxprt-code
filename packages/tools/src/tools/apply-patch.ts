@@ -229,6 +229,11 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
 
   /**
    * Handles the confirmation prompt for the ApplyPatch tool.
+   *
+   * Returns `false` for every input `execute` rejects so the caller reaches
+   * `execute`, which emits the actionable error. The same predicates and
+   * validation helpers `execute` uses are reused here directly (no parallel
+   * re-implementation), keeping preview and execution in lockstep.
    */
   override async shouldConfirmExecute(
     _abortSignal: AbortSignal,
@@ -239,38 +244,42 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     }
 
     const filePath = this.getFilePath();
-    let currentContent = '';
 
-    try {
-      currentContent = await this.readTextFile(filePath);
-    } catch (err: unknown) {
-      // File doesn't exist yet - will be created
-      if (!isNodeError(err) || err.code !== 'ENOENT') {
-        throw err;
-      }
-    }
+    const parsed = this.parsePatchContent();
+    if (!Array.isArray(parsed)) return false;
+    const [patch] = parsed;
 
-    // Parse and apply patch to get preview. Use the same validation path as
-    // execute so previews match execution behavior.
-    const patches = Diff.parsePatch(this.params.patch_content);
-    if (patches.length === 0) {
-      return false;
-    }
-    if (patches.length > 1) {
-      return false;
-    }
-    const newContentResult = Diff.applyPatch(currentContent, patches[0]);
-
-    if (typeof newContentResult !== 'string') {
+    if (this.checkPatchHeader(patch) !== null) return false;
+    if (
+      validatePatchHeader(patch, filePath, getTargetDirCompat(this.host)) !==
+      null
+    ) {
       return false;
     }
 
-    const newContent = newContentResult;
+    const { currentContent, fileExists } =
+      await this.readCurrentContent(filePath);
+    if (!fileExists && !isCreationPatch(patch)) return false;
 
+    const applied = this.applyPatchToContent(currentContent, patch);
+    if (typeof applied !== 'string') return false;
+
+    if (isDeletePatch(patch)) {
+      return applied === ''
+        ? this.buildDeleteConfirmation(filePath, currentContent)
+        : false;
+    }
+    return this.buildEditConfirmation(filePath, currentContent, applied);
+  }
+
+  private buildEditConfirmation(
+    filePath: string,
+    currentContent: string,
+    newContent: string,
+  ): ToolCallConfirmationDetails | false {
     const relativePath = makeRelative(filePath, getTargetDirCompat(this.host));
     const fileName = path.basename(filePath);
-
-    const fileDiffResult = Diff.createPatch(
+    const fileDiff = Diff.createPatch(
       fileName,
       currentContent,
       newContent,
@@ -278,12 +287,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       'Proposed',
       DEFAULT_CREATE_PATCH_OPTIONS,
     );
-
-    if (!fileDiffResult) {
-      return false;
-    }
-
-    const fileDiff = fileDiffResult;
+    if (!fileDiff) return false;
 
     const ideConfirmation =
       this.ideService !== undefined &&
@@ -304,16 +308,42 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.host.setApprovalMode('auto');
         }
-
         if (ideConfirmation) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
-            // User modified content in IDE - we'd need to regenerate patch
-            // For now, we don't support this flow for apply_patch
+            // IDE edit flow unsupported for apply_patch
           }
         }
       },
       ideConfirmation,
+    };
+    return confirmationDetails;
+  }
+
+  /** A delete preview presents the removal (new content empty), not an edit. */
+  private buildDeleteConfirmation(
+    filePath: string,
+    currentContent: string,
+  ): ToolCallConfirmationDetails {
+    const relativePath = makeRelative(filePath, getTargetDirCompat(this.host));
+    const fileName = path.basename(filePath);
+    const fileDiff = Diff.createPatch(
+      fileName,
+      currentContent,
+      '',
+      'Current',
+      'Deleted',
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    );
+    const confirmationDetails: ToolEditConfirmationDetails = {
+      type: 'edit',
+      title: `Confirm Delete via Patch: ${shortenPath(relativePath)}`,
+      fileName,
+      filePath,
+      fileDiff,
+      originalContent: currentContent,
+      newContent: '',
+      onConfirm: async () => {},
     };
     return confirmationDetails;
   }
@@ -393,6 +423,19 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       return;
     }
     await fs.writeFile(filePath, content, 'utf8');
+  }
+
+  private async deleteTextFile(filePath: string): Promise<void> {
+    const fileSystemService = this.host.getFileSystemService?.();
+    if (fileSystemService?.deleteFile !== undefined) {
+      await fileSystemService.deleteFile(filePath);
+      return;
+    }
+    // The abstraction's paths are real filesystem paths (AcpFileSystemService
+    // itself falls back to a local service for unsupported ops), so unlink
+    // targets the right file for every in-tree host when no host delete is
+    // supplied.
+    await fs.unlink(filePath);
   }
 
   private async readCurrentContent(
@@ -481,7 +524,19 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     appliedResult: string,
   ): Promise<ToolResult> {
     if (appliedResult !== '') return buildDeletePartialResult(appliedResult);
-    await fs.unlink(filePath);
+    try {
+      await this.deleteTextFile(filePath);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        llmContent: `Error deleting file: ${errorMsg}`,
+        returnDisplay: `Error deleting file: ${errorMsg}`,
+        error: {
+          message: errorMsg,
+          type: ToolErrorType.FILE_WRITE_FAILURE,
+        },
+      };
+    }
     const gitStats = await this.trackGitStats(filePath, currentContent, '');
     const result = buildDeleteDisplay(
       path.basename(filePath),
@@ -548,8 +603,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
         modifiedByUser: this.params.modified_by_user === true,
       });
 
-      const classification = classifyPatchOperations([patch]);
-      await this.appendLspDiagnostics(filePath, classification, parts);
+      await this.appendLspDiagnostics(filePath, parts);
 
       const result: ToolResult = {
         llmContent: parts.join('\n\n'),
@@ -598,7 +652,6 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   // @requirement REQ-DIAG-010
   private async appendLspDiagnostics(
     filePath: string,
-    classification: { contentWriteFiles: string[] },
     llmParts: string[],
   ): Promise<void> {
     try {
@@ -666,7 +719,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
       'ApplyPatch',
       `Applies a unified diff patch to exactly one target file per call.
 
-      A "---"/"+++" file header is required; the header path must be the workspace-relative path or the bare file name (a partial path is not accepted). Use "--- /dev/null" as the old header to create a file and "+++ /dev/null" as the new header to delete one. In each "@@" hunk the line numbers are tolerant but the old/new line counts are strict. The Codex "*** Begin Patch" envelope is not accepted; provide a standard unified diff.`,
+      A "---"/"+++" file header is required. For ordinary edits the header path must be the workspace-relative path or the bare file name (a partial path is not accepted); for create and delete patches (using /dev/null) only the basename is matched. Use "--- /dev/null" as the old header to create a file and "+++ /dev/null" as the new header to delete one. In each "@@" hunk the line numbers are tolerant but the old/new line counts are strict. The Codex "*** Begin Patch" envelope is not accepted; provide a standard unified diff.`,
       Kind.Edit,
       {
         properties: {
@@ -675,12 +728,12 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
               (process.platform === 'win32'
                 ? "The absolute path to the file to modify (e.g., 'C:\\Users\\project\\file.txt'). Must be an absolute path. "
                 : "The absolute path to the file to modify (e.g., '/home/user/project/file.txt'). Must start with '/'. ") +
-              'Exactly one of absolute_path or file_path is required.',
+              'At least one of absolute_path or file_path is required; absolute_path takes precedence when both are supplied.',
             type: 'string',
           },
           file_path: {
             description:
-              'Alternative parameter name for absolute_path (for backward compatibility). The absolute path to the file to modify. Exactly one of absolute_path or file_path is required.',
+              'Alternative parameter name for absolute_path (for backward compatibility). The absolute path to the file to modify. At least one of absolute_path or file_path is required; absolute_path takes precedence when both are supplied.',
             type: 'string',
           },
           patch_content: {

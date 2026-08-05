@@ -105,7 +105,15 @@ line counts are strict; the Codex `*** Begin Patch` envelope is not accepted.
 - Changing ambiguity resolution to reject like `replace` does. The issue asks
   for the ambiguity to be *announced*, not for the strategy to change.
 - Adding a delete method to the cross-package `FileSystemService` abstraction.
-- Any change outside `packages/tools`.
+- Any change outside `packages/tools`, except the two required cross-package
+  seams already in scope:
+  - Registering the new test file in
+    `scripts/bun-test-manifest-data-tools.ts` (the tools workspace uses an
+    explicit file list, so an unregistered test never runs).
+  - The optional `deleteFile?(filePath: string): Promise<void>` seam added to
+    `IToolHostFileSystemService` in `packages/tools/src/interfaces/IToolHost.ts`
+    so deletion can route through the host filesystem service (no existing host
+    breaks, since the member is optional).
 
 ## Verification
 

@@ -97,8 +97,23 @@ function splitLines(content: string): string[] {
   return parts;
 }
 
-function formatLanding(newStart: number, newLines: number): string {
-  if (newLines <= 1) {
+/**
+ * Renders where a landed hunk sits in the RESULTING file. A pure deletion
+ * yields `newLines === 0`, in which case `newStart` names a line that no longer
+ * exists; describe the boundary where content was removed instead so the
+ * evidence never names a nonexistent line.
+ */
+function formatLanding(
+  newStart: number,
+  newLines: number,
+  resultLineCount: number,
+): string {
+  if (newLines === 0) {
+    return newStart > resultLineCount
+      ? 'content removed at end of file'
+      : `content removed before line ${newStart}`;
+  }
+  if (newLines === 1) {
     return `line ${newStart}`;
   }
   return `lines ${newStart}-${newStart + newLines - 1}`;
@@ -133,10 +148,12 @@ function splitPatchLines(patchContent: string): string[] {
 /**
  * True when the line at `index` ends the current hunk's body. A `--- ` line is
  * a real file-section boundary only as the first half of the `--- X` / `+++ Y`
- * header pair; on its own it may be a removed line whose content begins with
- * `-- ` (rendered as `--- X`). A lone `+++ ` line is never a terminator: as a
- * header it is consumed by the pair on the preceding line, as content it is an
- * added line.
+ * header pair, and that pair is ALWAYS followed by a `@@` hunk header. A removed
+ * line whose content begins with `-- ` (rendered `--- X`) next to an added line
+ * whose content begins with `++ ` (rendered `+++ Y`) serialises to the same two
+ * leading lines, so the `@@` on the third line is the disambiguator. A lone
+ * `+++ ` line is never a terminator: as a header it is consumed by the pair on
+ * the preceding line, as content it is an added line.
  */
 function isHunkTerminator(lines: string[], index: number): boolean {
   const line = lines[index];
@@ -144,7 +161,11 @@ function isHunkTerminator(lines: string[], index: number): boolean {
     return true;
   }
   if (line.startsWith('--- ')) {
-    return index + 1 < lines.length && lines[index + 1].startsWith('+++ ');
+    return (
+      index + 2 < lines.length &&
+      lines[index + 1].startsWith('+++ ') &&
+      lines[index + 2].startsWith('@@')
+    );
   }
   return false;
 }
@@ -275,8 +296,9 @@ export function buildModifyEvidence(
     '',
     { context: 0 },
   );
+  const resultLineCount = splitLines(newContent).length;
   const ranges = landing.hunks.map((h) =>
-    formatLanding(h.newStart, h.newLines),
+    formatLanding(h.newStart, h.newLines, resultLineCount),
   );
   const where = ranges.length > 0 ? ranges.join('; ') : 'no change';
   const summary = `Patch declared ${declaredHunks} hunk(s). The applied change landed at ${where}.`;
@@ -346,10 +368,8 @@ export function validatePatchHeader(
   const newHeader = newHeaderOf(patch);
   const oldHeader = oldHeaderOf(patch);
 
-  const isNewFileFromNull =
-    oldHeader === '/dev/null' && newHeader !== '' && newHeader !== '/dev/null';
-  const isDeleteToNull =
-    newHeader === '/dev/null' && oldHeader !== '' && oldHeader !== '/dev/null';
+  const isNewFileFromNull = isCreationPatch(patch);
+  const isDeleteToNull = isDeletePatch(patch);
 
   if (isNewFileFromNull || isDeleteToNull) {
     if (isNewFileFromNull && path.basename(newHeader) === targetName) {
