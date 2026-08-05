@@ -197,7 +197,7 @@ describe('Codex Responses WebSocket transport', () => {
 
     expect(harness.sockets).toHaveLength(2);
     expect(harness.urls[1]).toBe('ws://localhost:8080/responses');
-    expect(harness.sockets[0].closed).toBe(true);
+    expect(harness.sockets[0].closedByClient).toBe(true);
   });
 
   it('closes a connecting socket and rejects AbortError', async () => {
@@ -217,7 +217,7 @@ describe('Codex Responses WebSocket transport', () => {
     controller.abort();
 
     await expect(result).rejects.toMatchObject({ name: 'AbortError' });
-    expect(harness.sockets[0].closed).toBe(true);
+    expect(harness.sockets[0].closedByClient).toBe(true);
   });
 
   it('closes and rejects when the handshake stalls', async () => {
@@ -233,7 +233,7 @@ describe('Codex Responses WebSocket transport', () => {
     // Wait for the handshake timeout (HANDSHAKE_TIMEOUT_MS = 10s) to fire
     await new Promise((resolve) => setTimeout(resolve, 10_500));
     expect(await assertion).toBe('StreamInterruptionError');
-    expect(harness.sockets[0].closed).toBe(true);
+    expect(harness.sockets[0].closedByClient).toBe(true);
   });
 
   it('closes a streaming socket on abort and reconnects later', async () => {
@@ -256,7 +256,7 @@ describe('Codex Responses WebSocket transport', () => {
     controller.abort();
 
     await expect(result).rejects.toMatchObject({ name: 'AbortError' });
-    expect(harness.sockets[0].closed).toBe(true);
+    expect(harness.sockets[0].closedByClient).toBe(true);
     await drain(transport.streamResponse(request(), options()));
     expect(harness.sockets).toHaveLength(2);
   });
@@ -356,7 +356,7 @@ describe('Codex Responses WebSocket transport', () => {
 
     transport.close();
 
-    expect(harness.sockets[0].closed).toBe(true);
+    expect(harness.sockets[0].closedByClient).toBe(true);
   });
 
   it('treats response.incomplete as an accepted terminal, preserving text and metadata (defect 1)', async () => {
@@ -614,7 +614,7 @@ describe('Codex Responses WebSocket transport', () => {
     await expect(
       drain(transport.streamResponse(request(), options())),
     ).rejects.toMatchObject({ name: 'StreamInterruptionError' });
-    expect(harness.sockets[0].closed).toBe(true);
+    expect(harness.sockets[0].closedByClient).toBe(true);
   });
 
   it('invokes the caller-supplied onResponseEvent through streamOverWebSocketOrFallback (defect 5)', async () => {

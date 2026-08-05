@@ -359,7 +359,11 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     expect(caught?.message).toBe('server overloaded');
     expect(caught).toMatchObject({
       details: {
-        providerError: { message: 'server overloaded', code: 'overloaded' },
+        providerError: {
+          message: 'server overloaded',
+          code: 'overloaded',
+          param: null,
+        },
       },
     });
   });
@@ -384,6 +388,39 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
         }
       })(),
     ).rejects.toThrow('top-level wins');
+  });
+
+  /**
+   * Top-level message/code and a nested error.type must both reach diagnostics:
+   * top-level wins for message/code, nested type survives (issue #3034 review).
+   */
+  it('preserves nested error.type alongside winning top-level message/code', async () => {
+    const chunks = [
+      'data: {"type":"error","message":"top message","code":"err_code","error":{"message":"nested message","type":"rate_limit_error"}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let caught: Error | undefined;
+    try {
+      for await (const _message of parseResponsesStream(stream)) {
+        void _message;
+      }
+    } catch (error) {
+      if (error instanceof Error) caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toBe('top message');
+    expect(caught).toMatchObject({
+      details: {
+        providerError: {
+          message: 'top message',
+          code: 'err_code',
+          type: 'rate_limit_error',
+        },
+      },
+    });
   });
 
   /**

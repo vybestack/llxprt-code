@@ -32,12 +32,18 @@ export class FakeSocket implements TransportSocket {
   readonly OPEN = 1;
   readyState = this.CONNECTING;
   readonly sent: string[] = [];
-  closed = false;
+  // Records a transport (client) initiated close specifically; serverClose()
+  // does not set this, so tests can prove which side closed the socket.
+  closedByClient = false;
   onSend: ((data: string) => void) | undefined;
   private readonly openListeners = new Set<Listener<void>>();
   private readonly messageListeners = new Set<Listener<unknown>>();
   private readonly closeListeners = new Set<Listener<CloseInfo>>();
   private readonly errorListeners = new Set<Listener<void>>();
+  // Shared idempotency guard: once close listeners have run (from either a
+  // client close or a server close) they must never run again, matching a real
+  // WebSocket which fires exactly one close event.
+  private closeDispatched = false;
 
   send(data: string): void {
     this.sent.push(data);
@@ -45,8 +51,15 @@ export class FakeSocket implements TransportSocket {
   }
 
   close(): void {
-    this.closed = true;
+    this.closedByClient = true;
     this.readyState = 3;
+    if (this.closeDispatched) return;
+    this.closeDispatched = true;
+    // A real WebSocket dispatches a clean close event asynchronously.
+    const info: CloseInfo = { code: 1000, reason: '', wasClean: true };
+    queueMicrotask(() => {
+      for (const listener of this.closeListeners) listener(info);
+    });
   }
 
   onOpen(listener: Listener<void>): () => void {
@@ -80,6 +93,8 @@ export class FakeSocket implements TransportSocket {
 
   serverClose(info: CloseInfo = {}): void {
     this.readyState = 3;
+    if (this.closeDispatched) return;
+    this.closeDispatched = true;
     for (const listener of this.closeListeners) listener(info);
   }
 

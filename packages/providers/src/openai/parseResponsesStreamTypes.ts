@@ -8,6 +8,7 @@ export type ResponsesApiError = {
   message?: string;
   type?: string;
   code?: string;
+  param?: string | null;
 };
 
 export type ResponsesEvent = {

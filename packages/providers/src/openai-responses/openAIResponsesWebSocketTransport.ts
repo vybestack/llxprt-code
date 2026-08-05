@@ -583,6 +583,10 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       );
       if (abortSignal !== undefined) {
         abortSignal.addEventListener('abort', onAbort, { once: true });
+        // Per the DOM spec, a listener added to an ALREADY-aborted signal is
+        // never invoked, so this is not a double-invocation. The re-check
+        // covers an abort that lands between the early `aborted` check at the
+        // top of open() and listener registration above.
         if (abortSignal.aborted) onAbort();
       }
     });

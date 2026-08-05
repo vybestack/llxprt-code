@@ -324,15 +324,26 @@ function createTerminalStreamError(
 }
 
 // OpenAI's ResponseErrorEvent carries message/code/param at the top level.
-// Prefer those (the documented protocol shape); fall back to a legacy nested
-// error object for compatibility with older/test fixtures.
+// Merge the two shapes so the documented top-level fields win for message/code
+// while anything already modelled on the nested error object (notably type)
+// still survives. Returns undefined only when neither source has anything.
 function topLevelErrorPayload(
   event: ResponsesEvent,
 ): ResponsesApiError | undefined {
-  if (event.message !== undefined || event.code !== undefined) {
-    return { message: event.message, code: event.code };
-  }
-  return event.error;
+  const nested = event.error;
+  const hasTopLevel =
+    event.message !== undefined ||
+    event.code !== undefined ||
+    event.param !== undefined;
+  if (nested === undefined && !hasTopLevel) return undefined;
+  return {
+    message: event.message ?? nested?.message,
+    type: nested?.type,
+    code: event.code ?? nested?.code,
+    // `null` is a meaningful value (no offending param): preserve it rather
+    // than treating it as a fallback trigger.
+    param: event.param !== undefined ? event.param : nested?.param,
+  };
 }
 
 function getIncompleteReason(
