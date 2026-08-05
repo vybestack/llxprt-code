@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { simpleGit } from 'simple-git';
 import { SettingScope, loadSettings } from './settings.js';
+import { getLoadSettings } from './extensionLoaderSettingsRef.js';
 import {
   isWorkspaceTrusted,
   loadTrustedFolders,
@@ -319,26 +320,12 @@ export function loadExtensionsFromRoots(
   return out;
 }
 
-/**
- * Testing seam: allows tests to override the loadSettings reference used by
- * extensionLoaderDeps. Under Bun's mock.module, module namespace patches
- * applied after extension.ts has already loaded do not retroactively update
- * the destructured binding captured at module scope. This indirection lets
- * tests inject a mock loadSettings that is consulted at call time.
- */
-let _loadSettingsRef: typeof loadSettings = loadSettings;
-export function __setLoadSettingsForTesting(
-  fn: typeof loadSettings | null,
-): void {
-  _loadSettingsRef = fn ?? loadSettings;
-}
-
 const extensionLoaderDeps = {
   configFileName: EXTENSIONS_CONFIG_FILENAME,
   fallbackConfigFileName: EXTENSIONS_CONFIG_FILENAME_FALLBACK,
   installMetadataFileName: INSTALL_METADATA_FILENAME,
   fallbackInstallMetadataFileName: INSTALL_METADATA_FILENAME_FALLBACK,
-  loadSettings: (workspaceDir: string) => _loadSettingsRef(workspaceDir),
+  loadSettings: (workspaceDir: string) => getLoadSettings()(workspaceDir),
   validateName,
   reportError: (message: string) => globalThis.console.error(message),
   reportWarning: (message: string) => globalThis.console.warn(message),

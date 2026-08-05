@@ -19,7 +19,6 @@ import { JSDOM } from 'jsdom';
 import { join } from 'node:path';
 import React from 'react';
 import {
-  mock,
   afterEach,
   afterAll,
   beforeAll,

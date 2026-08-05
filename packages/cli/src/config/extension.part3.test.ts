@@ -18,8 +18,8 @@ import {
   loadExtensionConfig,
   loadExtensions,
   uninstallExtension,
-  __setLoadSettingsForTesting,
 } from './extension.js';
+import { __setLoadSettingsForTesting } from './extensionLoaderSettingsRef.js';
 import {
   ExtensionUninstallEvent,
   ExtensionDisableEvent,

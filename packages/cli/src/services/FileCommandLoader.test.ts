@@ -17,16 +17,15 @@ import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
 import type { CommandContext } from '../ui/commands/types.js';
-import { FsMockContext, mockSymlink } from './__testhelpers__/mockFs.js';
+import { FsMockContext } from './__testhelpers__/mockFs.js';
 
 function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) {
+  if (condition === undefined || condition === null || condition === false) {
     throw new Error(message);
   }
 }
 
 const mockShellProcess = vi.hoisted(() => vi.fn());
-const mockAtFileProcess = vi.hoisted(() => vi.fn());
 
 vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({
@@ -66,17 +65,12 @@ vi.mock('glob', () => ({
 // factory eagerly at vi.mock() call time). Use vi.hoisted with createRequire
 // to create the FsMockContext and settingsMock first, then reference them in
 // the mock factory.
-const settingsMockHoisted = vi.hoisted(() => {
-  const { createRequire } =
-    require('node:module') as typeof import('node:module');
-  const req = createRequire(import.meta.url);
-  const { FsMockContext } = req(
-    './__testhelpers__/mockFs.ts',
-  ) as typeof import('./__testhelpers__/mockFs.js');
-  const ctx = new FsMockContext();
-  return { ctx, mock: ctx.settingsMock() };
-});
-const fsMock = settingsMockHoisted.ctx;
+// Bun does not hoist vi.mock, so the static import above is already evaluated
+// by the time this runs and FsMockContext can be used directly. The previous
+// createRequire indirection existed only for Vitest's hoisting, which this
+// workspace no longer uses.
+const fsMock = new FsMockContext();
+const settingsMockHoisted = { mock: fsMock.settingsMock() };
 
 vi.mock('@vybestack/llxprt-code-settings', () => settingsMockHoisted.mock);
 
@@ -149,10 +143,9 @@ describe('FileCommandLoader', () => {
         'test.toml': 'prompt = "This is a test prompt"',
       });
       // Create symlink from userCommandsDir to realCommandsDir
-      const { symlinkSync, existsSync, rmSync } = await import('node:fs');
-      if (existsSync(fsMock.userCommandsDir)) {
-        rmSync(fsMock.userCommandsDir, { recursive: true, force: true });
-      }
+      const { symlinkSync, rmSync } = await import('node:fs');
+      // force makes this idempotent, so no existence check is needed.
+      rmSync(fsMock.userCommandsDir, { recursive: true, force: true });
       symlinkSync(realCommandsDir, fsMock.userCommandsDir, 'dir');
 
       const loader = new FileCommandLoader(null);
@@ -176,12 +169,11 @@ describe('FileCommandLoader', () => {
         'my-test.toml': 'prompt = "This is a test prompt"',
       });
       // Create the user commands dir with a symlinked subdirectory
-      const { symlinkSync, existsSync, rmSync } = await import('node:fs');
+      const { symlinkSync, rmSync } = await import('node:fs');
       // fsMock.mock() already ensures userCommandsDir exists as a real dir.
       const symlinkPath = path.join(fsMock.userCommandsDir, 'namespaced');
-      if (existsSync(symlinkPath)) {
-        rmSync(symlinkPath, { recursive: true, force: true });
-      }
+      // force makes this idempotent, so no existence check is needed.
+      rmSync(symlinkPath, { recursive: true, force: true });
       symlinkSync(realNamespacedDir, symlinkPath, 'dir');
 
       const loader = new FileCommandLoader(null);
