@@ -64,10 +64,10 @@ let warned = false;
 
 /**
  * Opt-out state propagated from CLI settings
- * (`security.disableOsKeyring`). The env var is read directly (below) so it
- * always wins without a setter call. Storage is a low-level package and must
- * not read CLI settings, so the CLI pushes this boolean in during settings
- * load (R3.2).
+ * (`security.disableOsKeyring`). The env var is a separate, independent
+ * opt-out read directly (below), so it works without a setter call. Storage is
+ * a low-level package and must not read CLI settings, so the CLI pushes this
+ * boolean in during settings load (R3.2).
  */
 let disabledBySetting = false;
 
@@ -92,9 +92,14 @@ export function isOsKeyringDisabledBySetting(): boolean {
 
 /**
  * Pushes the settings-derived opt-out into process-wide state. Called by the
- * CLI during settings load. The env var wins when both are present because it
- * is read directly in {@link isOsKeyringSessionDisabled} and in the adapter
- * factory, independent of this flag.
+ * CLI during settings load.
+ *
+ * The env var and this setting are INDEPENDENT opt-out paths, ORed together in
+ * {@link isOsKeyringSessionDisabled} — neither takes precedence over the other,
+ * and either alone disables the keyring. The env var is read directly there and
+ * in the adapter factory, so it works with zero CLI involvement and without
+ * this setter ever being called.
+ *
  * @plan PLAN-20260805-ISSUE2928
  * @requirement R3.2
  */

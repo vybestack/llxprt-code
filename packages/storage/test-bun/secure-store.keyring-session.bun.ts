@@ -418,25 +418,30 @@ describe('R2 — process-wide latch', () => {
     const dir = temp.fallbackDir();
     const stderrSpy = vi.spyOn(process.stderr, 'write');
 
-    const store = new SecureStore(SERVICE, {
-      keyringLoader: async () =>
-        adapterThrowingOnSet(new Error('Permission denied by user')),
-      fallbackDir: dir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: async () => null,
-    });
+    // try/finally: an assertion or async rejection before mockRestore() would
+    // otherwise leave the spy attached to process.stderr.write and pollute
+    // every later test in this Bun process.
+    try {
+      const store = new SecureStore(SERVICE, {
+        keyringLoader: async () =>
+          adapterThrowingOnSet(new Error('Permission denied by user')),
+        fallbackDir: dir,
+        fallbackPolicy: 'allow',
+        machineSecretLoader: async () => null,
+      });
 
-    for (let i = 0; i < 3; i++) {
-      await store.set(`k${i}`, `v${i}`);
+      for (let i = 0; i < 3; i++) {
+        await store.set(`k${i}`, `v${i}`);
+      }
+
+      expect(hasOsKeyringWarningBeenEmitted()).toBe(true);
+      const notice = stderrSpy.mock.calls.map((c) => String(c[0])).join('');
+      const occurrences = notice.split(OS_KEYRING_UNUSABLE_MESSAGE).length - 1;
+      expect(occurrences).toBe(1);
+      expect(notice).toContain(OS_KEYRING_UNUSABLE_REMEDIATION);
+    } finally {
+      stderrSpy.mockRestore();
     }
-
-    expect(hasOsKeyringWarningBeenEmitted()).toBe(true);
-    const notice = stderrSpy.mock.calls.map((c) => String(c[0])).join('');
-    const occurrences = notice.split(OS_KEYRING_UNUSABLE_MESSAGE).length - 1;
-    expect(occurrences).toBe(1);
-    expect(notice).toContain(OS_KEYRING_UNUSABLE_REMEDIATION);
-
-    stderrSpy.mockRestore();
   });
 
   // Case 7
@@ -747,20 +752,22 @@ describe('R3 — explicit opt-out', () => {
   });
 
   // Case 15
-  it('the settings setter produces the same behavior as the env var, and the env var wins when both are present', async () => {
-    // Setting-only: behaves like the env var.
+  it('the env var and the setting are independent opt-out paths: either alone disables the keyring', async () => {
+    // Setting alone (env unset) disables.
     setOsKeyringDisabledBySetting(true);
     expect(isOsKeyringSessionDisabled()).toBe(true);
-    const adapter = await createDefaultKeyringAdapter();
-    expect(adapter).toBeNull();
+    expect(await createDefaultKeyringAdapter()).toBeNull();
     setOsKeyringDisabledBySetting(false);
 
-    // Env wins when both are present (env=1, setting=false → disabled).
+    // Env alone (setting explicitly false) disables — the env var is read
+    // directly, so it does not depend on the setter ever being called.
     env.set('1');
-    setOsKeyringDisabledBySetting(false);
     expect(isOsKeyringSessionDisabled()).toBe(true);
-    const adapter2 = await createDefaultKeyringAdapter();
-    expect(adapter2).toBeNull();
+    expect(await createDefaultKeyringAdapter()).toBeNull();
+
+    // Neither set: the session is enabled again.
+    env.set(undefined);
+    expect(isOsKeyringSessionDisabled()).toBe(false);
   });
 
   // Case 16 (R3 migration, post-R3.4-removal): a v:2 envelope written while a

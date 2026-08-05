@@ -228,8 +228,8 @@ calls, so they cannot pass merely by hitting the same denied adapter again).
 18. With the flag set, `getMachineSecret()` resolves from the file only; an injected
     counting keyring loader (delegating to the real factory) records zero native/adapter
     calls on both the generating and read-only paths.
-19. The settings setter produces the same behavior as the env var, and the env var wins
-    when both are present.
+19. The env var and the setting are independent opt-out paths ORed together: either one
+    alone disables the keyring, and with neither set the session is enabled.
 20. **Migration (post-R3.4-removal):** a v:2 envelope written while a file-resident
     machine secret exists is still readable in disabled mode — a genuine round-trip
     through the opt-out, not a file-existence check.

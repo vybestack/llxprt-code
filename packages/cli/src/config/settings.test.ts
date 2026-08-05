@@ -177,6 +177,7 @@ describe('Settings Loading and Merging', () => {
       });
       expect(settings.merged.security).toStrictEqual({
         disableYoloMode: false,
+        disableOsKeyring: false,
         folderTrust: { enabled: false },
         auth: {},
         blockGitExtensions: false,
