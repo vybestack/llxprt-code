@@ -35,7 +35,6 @@ import type {
   GhRunner,
 } from './github-broker-types.js';
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
-import { describeGithubOpParams } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { withBodyFiles } from './github-broker-body-file.js';
 import {
   classifyStderr,
@@ -366,10 +365,13 @@ export async function executeGitHubOp(
     descriptor.requiredParams,
   );
   if (validationError !== null) {
+    // `validateParams` already names the operation's accepted and required
+    // parameters on structural rejections, so nothing is appended here:
+    // repeating the catalogue produced the same list twice in one message.
     throw new BrokerErrorException(
       makeBrokerError(
         validationError.code as BrokerError['code'],
-        `${op}: ${validationError.message} ${describeGithubOpParams(op)}`,
+        validationError.message,
       ),
     );
   }

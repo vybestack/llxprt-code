@@ -81,14 +81,16 @@ describe('broker registry consumes the shared catalog', () => {
   });
 
   /**
-   * A validation failure must name the operation and its accepted parameters
-   * so a caller (including the model over the sandbox socket) can fix the
-   * request without guessing.
+   * A missing-required failure must name the gap AND the shape of a correct
+   * call, so a caller (including a model over the sandbox socket) can fix the
+   * request without guessing — the exact loop reported in #3030, where
+   * "Missing required parameter: body" said nothing about what else the
+   * operation takes.
    *
    * @plan PLAN-20260731-GHBROKER.P15
    * @requirement REQ-008
    */
-  it('executeGitHubOp enriches a missing-required failure with the op and accepted params', async () => {
+  it('executeGitHubOp names the accepted and required params on a missing-required failure', async () => {
     let caught: unknown;
     try {
       await executeGitHubOp(
@@ -104,9 +106,9 @@ describe('broker registry consumes the shared catalog', () => {
       BrokerErrorException,
     );
     const msg = asBrokerError(caught).brokerError.message;
-    expect(msg).toContain('issue.comment');
-    expect(msg).toContain('body');
-    expect(msg).toContain('accepts');
+    expect(msg).toBe(
+      'Missing required parameter: body. Accepted parameters: number, body, repo. Required: number, body.',
+    );
   });
 
   /**

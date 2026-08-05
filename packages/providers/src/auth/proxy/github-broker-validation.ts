@@ -96,7 +96,7 @@ export function validateParams(
     if (params[key] === undefined) {
       return {
         code: 'INVALID_PARAM',
-        message: `Missing required parameter: ${key}`,
+        message: missingParamMessage(key, spec, required),
       };
     }
   }
@@ -134,12 +134,54 @@ function unknownParamMessage(
   spec: Readonly<Record<string, ParamKind>>,
   required: readonly string[] | undefined,
 ): string {
+  return withParamCatalogue(`Unknown parameter: ${key}.`, spec, required);
+}
+
+/**
+ * Builds the self-correcting message for a missing required parameter.
+ *
+ * `Missing required parameter: body` named the gap but not the shape of a
+ * correct call, so a caller that guessed wrong once had nothing new to go
+ * on. It carries the same accepted/required catalogue as the unknown-
+ * parameter message, for the same reason.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
+ * @requirement REQ-002
+ * @issue 3030
+ */
+function missingParamMessage(
+  key: string,
+  spec: Readonly<Record<string, ParamKind>>,
+  required: readonly string[] | undefined,
+): string {
+  return withParamCatalogue(
+    `Missing required parameter: ${key}.`,
+    spec,
+    required,
+  );
+}
+
+/**
+ * Appends the operation's accepted parameters (in declaration order) and,
+ * when it declares any, its required ones to a rejection message.
+ *
+ * Value-level rejections deliberately do NOT get this: the caller already
+ * knows the parameter is accepted, so the catalogue would be noise.
+ *
+ * @plan issue-3019-github-unknown-parameter
+ * @requirement AB1
+ */
+function withParamCatalogue(
+  base: string,
+  spec: Readonly<Record<string, ParamKind>>,
+  required: readonly string[] | undefined,
+): string {
   const accepted = Object.keys(spec).join(', ');
-  const base = `Unknown parameter: ${key}. Accepted parameters: ${accepted}.`;
+  const withAccepted = `${base} Accepted parameters: ${accepted}.`;
   if (required !== undefined && required.length > 0) {
-    return `${base} Required: ${required.join(', ')}.`;
+    return `${withAccepted} Required: ${required.join(', ')}.`;
   }
-  return base;
+  return withAccepted;
 }
 
 /**

@@ -378,7 +378,11 @@ export function validateGithubOpParams(
   }
   const spec: GithubOpSpec = GITHUB_OP_SPECS[op];
   for (const key of Object.keys(params)) {
-    if (!(key in spec.params)) {
+    // `in` walks the prototype chain, so `constructor`, `toString` and an own
+    // `__proto__` key would read as known parameters here and then never be
+    // validated — silently ignored, which is what the fail-fast invariant
+    // forbids. `hasOwnProperty` confines the check to the op's own params.
+    if (!Object.prototype.hasOwnProperty.call(spec.params, key)) {
       return `${op}: unknown parameter "${key}". ${describeGithubOpParams(op)}`;
     }
   }
