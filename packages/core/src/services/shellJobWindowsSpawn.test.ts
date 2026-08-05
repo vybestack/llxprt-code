@@ -179,245 +179,257 @@ describe('buildWindowsBackgroundBootstrap', () => {
 // Real-process behavioral tests — Windows only
 // ---------------------------------------------------------------------------
 
-describe.skipIf(os.platform() !== 'win32')('spawnWindowsBackground', () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-spawn-test-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  function makeLogPaths(): { logPath: string; errLogPath: string } {
-    const logPath = path.join(tempDir, 'stdout.log');
-    const errLogPath = path.join(tempDir, 'stderr.log');
-    // Create empty files so Start-Process redirects work
-    fs.writeFileSync(logPath, '');
-    fs.writeFileSync(errLogPath, '');
-    return { logPath, errLogPath };
+function isExeAvailable(exe: string): boolean {
+  try {
+    const result = spawnSync(exe, ['-NoProfile', '-Command', 'echo ok'], {
+      encoding: 'utf8',
+      timeout: POWERSHELL_PROBE_TIMEOUT_MS,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
   }
+}
 
-  function getPowerShellExecutable(): string {
-    // Prefer pwsh if available, fall back to powershell.exe. spawnSync throws
-    // synchronously (ENOENT) when pwsh is not on PATH; keep the fallback
-    // behaviour identical while surfacing the reason via debugLogger.
-    try {
-      const result = spawnSync('pwsh', ['-NoProfile', '-Command', 'echo ok'], {
-        encoding: 'utf8',
-        timeout: POWERSHELL_PROBE_TIMEOUT_MS,
-      });
-      if (result.status === 0) {
-        return 'pwsh';
-      }
-    } catch (e) {
-      // pwsh not available on PATH (ENOENT) or the spawn failed — fall back to
-      // powershell.exe, but log the reason so a missing pwsh is diagnosable.
-      debugLogger.debug(
-        '[shellJobWindowsSpawn.test] pwsh probe failed, falling back to powershell.exe:',
-        e instanceof Error ? e.message : String(e),
-      );
-    }
-    return 'powershell.exe';
-  }
+// Probe only on Windows: on POSIX these spawns are guaranteed to fail, and
+// running them at module scope would add process launches to every non-Windows
+// test run for no benefit.
+const isWindows = os.platform() === 'win32';
+const availablePowerShellExes = isWindows
+  ? ['powershell.exe', 'pwsh'].filter(isExeAvailable)
+  : [];
 
-  function isExeAvailable(exe: string): boolean {
-    try {
-      const result = spawnSync(exe, ['-NoProfile', '-Command', 'echo ok'], {
-        encoding: 'utf8',
-        timeout: POWERSHELL_PROBE_TIMEOUT_MS,
-      });
-      return result.status === 0;
-    } catch {
-      return false;
-    }
-  }
+describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
+  'spawnWindowsBackground',
+  () => {
+    let tempDir: string;
 
-  const availablePowerShellExes = ['powershell.exe', 'pwsh'].filter(
-    isExeAvailable,
-  );
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-spawn-test-'));
+    });
 
-  async function runAndWait(
-    command: string,
-    executable?: string,
-  ): Promise<{
-    exitCode: number | null;
-    stdout: string;
-    stderr: string;
-  }> {
-    const { logPath, errLogPath } = makeLogPaths();
-    const exe = executable ?? getPowerShellExecutable();
-    const spawned = spawnWindowsBackground(
-      exe,
-      command,
-      tempDir,
-      { ...process.env },
-      logPath,
-      errLogPath,
-    );
-    const exitInfo = await spawned.exited;
-    const stdout = fs.existsSync(logPath)
-      ? fs.readFileSync(logPath, 'utf8')
-      : '';
-    const stderr = fs.existsSync(errLogPath)
-      ? fs.readFileSync(errLogPath, 'utf8')
-      : '';
-    return { exitCode: exitInfo.exitCode, stdout, stderr };
-  }
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
 
-  // --- §2.2 adversarial cases ---
-
-  it('round-trips single quotes in the model command', async () => {
-    const result = await runAndWait("Write-Host 'it''s working'");
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe("it's working");
-  });
-
-  it('round-trips double quotes in the model command', async () => {
-    const result = await runAndWait('Write-Host "hello world"');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('hello world');
-  });
-
-  it('round-trips mixed quotes, ampersand, and backslashes', async () => {
-    const result = await runAndWait(
-      'Write-Host "path: C:\\Users\\Test & more"; Write-Host \'two\'',
-    );
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('path: C:\\Users\\Test & more');
-    expect(result.stdout).toContain('two');
-  });
-
-  it('round-trips $ expansion and backtick literal', async () => {
-    const result = await runAndWait('$x = 5; Write-Host "val=$x `$literal"');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('val=5 $literal');
-  });
-
-  it('round-trips pipe characters', async () => {
-    const result = await runAndWait('"a|b" | Write-Host');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('a|b');
-  });
-
-  it('round-trips embedded newlines', async () => {
-    const result = await runAndWait("Write-Host 'l1'\nWrite-Host 'l2'");
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('l1');
-    expect(result.stdout).toContain('l2');
-  });
-
-  it('captures native-exe stdout and stderr separately', async () => {
-    const result = await runAndWait(
-      'cmd /c "echo native-out & echo native-err 1>&2"',
-    );
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('native-out');
-    expect(result.stderr).toContain('native-err');
-  });
-
-  it('handles empty output without error', async () => {
-    const result = await runAndWait('"" | Out-Null');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('');
-  });
-
-  // --- §2.3 exit-code propagation (guards $null = $p.Handle) ---
-
-  it('propagates exit 3 as exit code 3 (regression for $p.Handle fix)', async () => {
-    const result = await runAndWait('exit 3');
-    expect(result.exitCode).toBe(3);
-  });
-
-  it('propagates exit 7 as exit code 7', async () => {
-    const result = await runAndWait('exit 7');
-    expect(result.exitCode).toBe(7);
-  });
-
-  it('reports exit 0 for a clean run', async () => {
-    const result = await runAndWait("Write-Host 'clean'");
-    expect(result.exitCode).toBe(0);
-  });
-
-  it('reports exit 1 for a throw', async () => {
-    const result = await runAndWait("throw 'kaboom'");
-    expect(result.exitCode).toBe(1);
-  });
-
-  // --- §2.4 $ProgressPreference (clean run leaves stderr empty) ---
-
-  it.each(availablePowerShellExes)(
-    'leaves the stderr log empty for a clean run (%s)',
-    async (exe) => {
-      const result = await runAndWait("Write-Output 'clean'", exe);
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('clean');
-      expect(result.stderr.trim()).toBe('');
-    },
-  );
-
-  // --- lifecycle ---
-
-  it('returns a non-negative pid', async () => {
-    const { logPath, errLogPath } = makeLogPaths();
-    const spawned = spawnWindowsBackground(
-      getPowerShellExecutable(),
-      "Write-Host 'pid-test'",
-      tempDir,
-      { ...process.env },
-      logPath,
-      errLogPath,
-    );
-    expect(spawned.pid).toBeGreaterThan(0);
-    await spawned.exited;
-  });
-
-  it('does not keep the spawner alive (unref)', async () => {
-    const unrefDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-unref-'));
-    const logPath = path.join(unrefDir, 'out.log');
-    const errLogPath = path.join(unrefDir, 'err.log');
-    const scriptPath = path.join(unrefDir, 'spawn-exit.ts');
-    const pidFilePath = path.join(unrefDir, 'spawned.pid');
-    try {
+    function makeLogPaths(): { logPath: string; errLogPath: string } {
+      const logPath = path.join(tempDir, 'stdout.log');
+      const errLogPath = path.join(tempDir, 'stderr.log');
+      // Create empty files so Start-Process redirects work
       fs.writeFileSync(logPath, '');
       fs.writeFileSync(errLogPath, '');
-
-      const modulePath = path
-        .join(__dirname, 'shellJobSpawn.ts')
-        .replace(/\\/g, '/');
-      const script = [
-        `import { spawnWindowsBackground } from '${modulePath}';`,
-        `const p = spawnWindowsBackground(`,
-        `  'powershell.exe',`,
-        `  'Start-Sleep -Seconds ${UNREF_SLEEP_SECONDS}',`,
-        `  ${JSON.stringify(os.tmpdir())},`,
-        `  { ...process.env },`,
-        `  ${JSON.stringify(logPath)},`,
-        `  ${JSON.stringify(errLogPath)},`,
-        `);`,
-        `require('fs').writeFileSync(${JSON.stringify(pidFilePath)}, String(p.pid));`,
-      ].join('\n');
-      fs.writeFileSync(scriptPath, script);
-
-      // If unref() is present, the spawner exits as soon as the import + spawn
-      // completes (well under the elapsed bound). If unref() is removed, the
-      // spawned child keeps the event loop alive and the spawner hangs for the
-      // full UNREF_SLEEP_SECONDS, which UNREF_SPAWN_TIMEOUT_MS kills.
-      const start = Date.now();
-      const result = spawnSync('npx', ['tsx', scriptPath], {
-        timeout: UNREF_SPAWN_TIMEOUT_MS,
-        encoding: 'utf8',
-        shell: true,
-      });
-      const elapsed = Date.now() - start;
-
-      expect(result.status).toBe(0);
-      expect(elapsed).toBeLessThan(UNREF_ELAPSED_BOUND_MS);
-    } finally {
-      // Reap the spawned 30s process tree so it does not survive the test run.
-      reapPidFile(pidFilePath);
-      fs.rmSync(unrefDir, { recursive: true, force: true });
+      return { logPath, errLogPath };
     }
-  });
-});
+
+    function getPowerShellExecutable(): string {
+      // Prefer pwsh if available, fall back to powershell.exe. spawnSync throws
+      // synchronously (ENOENT) when pwsh is not on PATH; keep the fallback
+      // behaviour identical while surfacing the reason via debugLogger.
+      try {
+        const result = spawnSync(
+          'pwsh',
+          ['-NoProfile', '-Command', 'echo ok'],
+          {
+            encoding: 'utf8',
+            timeout: POWERSHELL_PROBE_TIMEOUT_MS,
+          },
+        );
+        if (result.status === 0) {
+          return 'pwsh';
+        }
+      } catch (e) {
+        // pwsh not available on PATH (ENOENT) or the spawn failed — fall back to
+        // powershell.exe, but log the reason so a missing pwsh is diagnosable.
+        debugLogger.debug(
+          '[shellJobWindowsSpawn.test] pwsh probe failed, falling back to powershell.exe:',
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+      return 'powershell.exe';
+    }
+
+    async function runAndWait(
+      command: string,
+      executable?: string,
+    ): Promise<{
+      exitCode: number | null;
+      stdout: string;
+      stderr: string;
+    }> {
+      const { logPath, errLogPath } = makeLogPaths();
+      const exe = executable ?? getPowerShellExecutable();
+      const spawned = spawnWindowsBackground(
+        exe,
+        command,
+        tempDir,
+        { ...process.env },
+        logPath,
+        errLogPath,
+      );
+      const exitInfo = await spawned.exited;
+      const stdout = fs.existsSync(logPath)
+        ? fs.readFileSync(logPath, 'utf8')
+        : '';
+      const stderr = fs.existsSync(errLogPath)
+        ? fs.readFileSync(errLogPath, 'utf8')
+        : '';
+      return { exitCode: exitInfo.exitCode, stdout, stderr };
+    }
+
+    // --- §2.2 adversarial cases ---
+
+    it('round-trips single quotes in the model command', async () => {
+      const result = await runAndWait("Write-Host 'it''s working'");
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe("it's working");
+    });
+
+    it('round-trips double quotes in the model command', async () => {
+      const result = await runAndWait('Write-Host "hello world"');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('hello world');
+    });
+
+    it('round-trips mixed quotes, ampersand, and backslashes', async () => {
+      const result = await runAndWait(
+        'Write-Host "path: C:\\Users\\Test & more"; Write-Host \'two\'',
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('path: C:\\Users\\Test & more');
+      expect(result.stdout).toContain('two');
+    });
+
+    it('round-trips $ expansion and backtick literal', async () => {
+      const result = await runAndWait('$x = 5; Write-Host "val=$x `$literal"');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('val=5 $literal');
+    });
+
+    it('round-trips pipe characters', async () => {
+      const result = await runAndWait('"a|b" | Write-Host');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('a|b');
+    });
+
+    it('round-trips embedded newlines', async () => {
+      const result = await runAndWait("Write-Host 'l1'\nWrite-Host 'l2'");
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('l1');
+      expect(result.stdout).toContain('l2');
+    });
+
+    it('captures native-exe stdout and stderr separately', async () => {
+      const result = await runAndWait(
+        'cmd /c "echo native-out & echo native-err 1>&2"',
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('native-out');
+      expect(result.stderr).toContain('native-err');
+    });
+
+    it('handles empty output without error', async () => {
+      const result = await runAndWait('"" | Out-Null');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('');
+    });
+
+    // --- §2.3 exit-code propagation (guards $null = $p.Handle) ---
+
+    it('propagates exit 3 as exit code 3 (regression for $p.Handle fix)', async () => {
+      const result = await runAndWait('exit 3');
+      expect(result.exitCode).toBe(3);
+    });
+
+    it('propagates exit 7 as exit code 7', async () => {
+      const result = await runAndWait('exit 7');
+      expect(result.exitCode).toBe(7);
+    });
+
+    it('reports exit 0 for a clean run', async () => {
+      const result = await runAndWait("Write-Host 'clean'");
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('reports exit 1 for a throw', async () => {
+      const result = await runAndWait("throw 'kaboom'");
+      expect(result.exitCode).toBe(1);
+    });
+
+    // --- §2.4 $ProgressPreference (clean run leaves stderr empty) ---
+
+    it.each(availablePowerShellExes)(
+      'leaves the stderr log empty for a clean run (%s)',
+      async (exe) => {
+        const result = await runAndWait("Write-Output 'clean'", exe);
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBe('clean');
+        expect(result.stderr.trim()).toBe('');
+      },
+    );
+
+    // --- lifecycle ---
+
+    it('returns a non-negative pid', async () => {
+      const { logPath, errLogPath } = makeLogPaths();
+      const spawned = spawnWindowsBackground(
+        getPowerShellExecutable(),
+        "Write-Host 'pid-test'",
+        tempDir,
+        { ...process.env },
+        logPath,
+        errLogPath,
+      );
+      expect(spawned.pid).toBeGreaterThan(0);
+      await spawned.exited;
+    });
+
+    it('does not keep the spawner alive (unref)', async () => {
+      const unrefDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-unref-'));
+      const logPath = path.join(unrefDir, 'out.log');
+      const errLogPath = path.join(unrefDir, 'err.log');
+      const scriptPath = path.join(unrefDir, 'spawn-exit.ts');
+      const pidFilePath = path.join(unrefDir, 'spawned.pid');
+      try {
+        fs.writeFileSync(logPath, '');
+        fs.writeFileSync(errLogPath, '');
+
+        const modulePath = path
+          .join(__dirname, 'shellJobSpawn.ts')
+          .replace(/\\/g, '/');
+        const powershellExe = getPowerShellExecutable();
+        const script = [
+          `import { spawnWindowsBackground } from '${modulePath}';`,
+          `const p = spawnWindowsBackground(`,
+          `  ${JSON.stringify(powershellExe)},`,
+          `  'Start-Sleep -Seconds ${UNREF_SLEEP_SECONDS}',`,
+          `  ${JSON.stringify(os.tmpdir())},`,
+          `  { ...process.env },`,
+          `  ${JSON.stringify(logPath)},`,
+          `  ${JSON.stringify(errLogPath)},`,
+          `);`,
+          `require('fs').writeFileSync(${JSON.stringify(pidFilePath)}, String(p.pid));`,
+        ].join('\n');
+        fs.writeFileSync(scriptPath, script);
+
+        // If unref() is present, the spawner exits as soon as the import + spawn
+        // completes (well under the elapsed bound). If unref() is removed, the
+        // spawned child keeps the event loop alive and the spawner hangs for the
+        // full UNREF_SLEEP_SECONDS, which UNREF_SPAWN_TIMEOUT_MS kills.
+        const start = Date.now();
+        const result = spawnSync('npx', ['tsx', scriptPath], {
+          timeout: UNREF_SPAWN_TIMEOUT_MS,
+          encoding: 'utf8',
+          shell: true,
+        });
+        const elapsed = Date.now() - start;
+
+        expect(result.status).toBe(0);
+        expect(elapsed).toBeLessThan(UNREF_ELAPSED_BOUND_MS);
+      } finally {
+        // Reap the spawned 30s process tree so it does not survive the test run.
+        reapPidFile(pidFilePath);
+        fs.rmSync(unrefDir, { recursive: true, force: true });
+      }
+    });
+  },
+);

@@ -764,7 +764,8 @@ export class ShellJobManager {
       if (!stillLive) return [];
 
       await new Promise<void>((resolve) => {
-        setTimeout(resolve, VERIFY_DELAY_MS);
+        const verifyTimer = setTimeout(resolve, VERIFY_DELAY_MS);
+        verifyTimer.unref();
       });
 
       for (const [id, entry] of Array.from(this.survivors.entries())) {

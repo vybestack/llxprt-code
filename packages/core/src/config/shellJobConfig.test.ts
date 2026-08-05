@@ -35,6 +35,11 @@ function isPidAliveWindows(pid: number): boolean {
     ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
     { encoding: 'utf8', timeout: 5000 },
   );
+  if (result.error !== undefined) {
+    throw new Error(
+      `isPidAliveWindows: tasklist failed to spawn for pid ${pid}: ${result.error.message}`,
+    );
+  }
   return result.stdout.includes(String(pid));
 }
 
@@ -57,8 +62,11 @@ function isProcessGone(pid: number): boolean {
   try {
     process.kill(-pgid, 0);
     return false;
-  } catch {
-    return true;
+  } catch (e: unknown) {
+    if (e instanceof Error && 'code' in e && e.code === 'ESRCH') {
+      return true;
+    }
+    throw e;
   }
 }
 

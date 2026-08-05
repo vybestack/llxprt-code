@@ -32,14 +32,17 @@ describe('ShellJobLogStore — openLogPaths', () => {
   });
 
   it.each(['job-2.log', 'job-2.err.log'])(
-    'cleans up every file created before the second open throws (pre-existing: %s)',
+    'cleans up every file created before EEXIST is raised (pre-existing: %s)',
     (preExistingName) => {
       const dir = store.ensureDir();
       const preExistingPath = path.join(dir, preExistingName);
 
-      // Pre-create the named file so whichever openSync('wx') encounters it
-      // first throws EEXIST, exercising the cleanup contract regardless of
-      // which file openLogPaths creates first.
+      // Pre-create the named file so openLogPaths hits EEXIST. When it is
+      // job-2.log the FIRST openSync('wx') throws before any file is created,
+      // so nothing needs cleaning up. When it is job-2.err.log the SECOND
+      // openSync('wx') throws and the catch block removes the already-created
+      // job-2.log. In both cases only the pre-existing file remains, so the
+      // cleanup contract holds regardless of which file is pre-created.
       fs.writeFileSync(preExistingPath, '', { mode: 0o600 });
 
       let caught: unknown;

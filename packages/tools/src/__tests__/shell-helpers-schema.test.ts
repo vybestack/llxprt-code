@@ -199,6 +199,7 @@ describe('ShellTool schema is_background property', () => {
       'properties',
     );
     const isBackground = getObjectProperty(properties, 'is_background');
+    expect(isBackground).toBeDefined();
     expect(getObjectProperty(isBackground, 'type')).toBe('boolean');
     const description = getObjectProperty(isBackground, 'description');
     expect(typeof description).toBe('string');
@@ -219,6 +220,7 @@ describe('ShellTool schema is_background property', () => {
       'properties',
     );
     const isBackground = getObjectProperty(properties, 'is_background');
+    expect(isBackground).toBeDefined();
     expect(getObjectProperty(isBackground, 'type')).toBe('boolean');
     const description = getObjectProperty(isBackground, 'description');
     expect(typeof description).toBe('string');

@@ -46,7 +46,7 @@ function isTransientRemovalError(e: unknown): boolean {
  * With 9 inter-iteration delays of 50ms (450ms), the worst-case total was
  * 10 × 750ms + 450ms = 7950ms ≈ 7.95s.
  */
-export const LOG_DESTROY_BUDGET_MS = 2000;
+const LOG_DESTROY_BUDGET_MS = 2000;
 
 /** Delay between removal attempts during the Windows retry window. */
 const LOG_DESTROY_RETRY_DELAY_MS = 50;
@@ -175,8 +175,9 @@ export class ShellJobLogStore {
    *
    * POSIX path is synchronous (identical to the original): a single rmSync with
    * no retries, no delay. The signature remains async because callers already
-   * await it (ShellJobManager.dispose), but no Promise is created on the POSIX
-   * path.
+   * await it (ShellJobManager.dispose); since the method is async it always
+   * returns a Promise, but the POSIX cleanup branch executes synchronously,
+   * before that Promise resolves.
    *
    * On Windows, redirected stdout/stderr log handles are released by the OS a
    * short time after the child process exits, so a removal issued immediately
@@ -215,7 +216,14 @@ export class ShellJobLogStore {
         return;
       } catch (e: unknown) {
         if (!isTransientRemovalError(e) || Date.now() >= deadline) {
-          return; // best-effort: give up silently for log files alone
+          const reason =
+            Date.now() >= deadline
+              ? 'retry budget expired'
+              : 'non-transient removal error';
+          debugLogger.warn(
+            `[shellJobLogStore] best-effort give up on ${target}: ${reason}`,
+          );
+          return; // best-effort: give up for log files alone
         }
         await new Promise((resolve) =>
           setTimeout(resolve, LOG_DESTROY_RETRY_DELAY_MS),
