@@ -583,3 +583,47 @@ The rename was correct and stands. Two incidental findings for #3046:
   pass real settings, and is misleading to read;
 - the original test name claimed a default that had already changed, so it had
   been describing the wrong behaviour before this migration touched it.
+
+## Stale `dist/` masked two real failures after merging main
+
+Merging `origin/main` (34 commits, including #3043 and the agents Bun migration
+#2989) left `packages/cli/dist` and `bundle/llxprt.js` built from the pre-merge
+tree. Three files were newly failing, and the cause was not any source change:
+
+- `zedIntegration.terminal.test.ts` failed 6/14 and was **unaffected by
+  reverting every differing file individually** — the zed sources are byte
+  identical to main. Rebuilding fixed it outright (14/14). The test exercises
+  the shell wrapper that #3043 changed, against a stale build artefact.
+
+The rebuild then exposed a second, opposite problem.
+
+### Spawned-CLI profile tests were passing against a stale bundle
+
+`cli-args.integration.test.ts` and `cli-args.profile-flag.integration.test.ts`
+spawn the built CLI. An earlier fix in this branch made them write profiles to
+`Storage.getGlobalConfigDir()` and pass `LLXPRT_CONFIG_HOME` to the child. That
+made them pass — against the **old** bundle. With a current build they fail.
+
+Reproduced with no test harness at all:
+
+    LLXPRT_CONFIG_HOME=/tmp/probe-config node packages/cli/dist/index.js \
+      --profile-load probe --prompt hi
+    -> Error: Profile 'probe' not found
+
+    HOME=/tmp/probe-home node packages/cli/dist/index.js \
+      --profile-load probe --prompt hi
+    -> Error: Profile 'probe' is invalid: missing required fields
+
+The second error is later in the flow, so the profile **was** found. The bundled
+CLI resolves profiles from `HOME/.llxprt/profiles` and ignores
+`LLXPRT_CONFIG_HOME`, even though `Storage.getGlobalConfigDir()` in-process
+honours it.
+
+Either the tests must seed `HOME/.llxprt/profiles` and pass `HOME`, or the
+bundled CLI should honour `LLXPRT_CONFIG_HOME` the way in-process storage does.
+The second reading is the more likely product bug: two entry points into the
+same storage disagree about where configuration lives.
+
+**Method note:** these tests validate against a build artefact, so they are only
+meaningful after `npm run build`. Verifying them without rebuilding gives a
+false pass — the same class of error as recording a snapshot of an error frame.
