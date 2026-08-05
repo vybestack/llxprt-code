@@ -27,9 +27,23 @@ export interface WaitForScheduler {
 }
 
 let activeScheduler: WaitForScheduler | null = null;
+let defaultScheduler: WaitForScheduler | null = null;
 
 export function setWaitForScheduler(scheduler: WaitForScheduler | null): void {
   activeScheduler = scheduler;
+}
+
+/**
+ * Installs a fallback scheduler used when `activeScheduler` is null (e.g.
+ * after a test calls `setWaitForScheduler(null)` in cleanup). This lets
+ * `waitFor` detect fake timers without an explicitly installed scheduler,
+ * which is needed under Bun where `vi.waitFor` IS this shim and must work
+ * even when the test temporarily clears the active scheduler.
+ */
+export function setDefaultWaitForScheduler(
+  scheduler: WaitForScheduler | null,
+): void {
+  defaultScheduler = scheduler;
 }
 
 /**
@@ -184,6 +198,22 @@ function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
 
 /**
  * Async polling helper matching Vitest 3.2.6's waitFor state machine.
+ *
+ * Under real timers, Vitest and Bun both use setInterval polling — the
+ * interval fires on real time and checkCallback runs periodically. Under
+ * fake timers, Vitest auto-advances timers internally so the interval fires
+ * without manual intervention. Bun's fake timers, however, intercept the
+ * captured `safeSetInterval` reference but do NOT auto-advance — the
+ * interval callback only fires when someone explicitly calls
+ * `vi.advanceTimersByTime()`. Since the waitFor implementation itself owns
+ * the scheduler advancement, the interval callback and the timer advancement
+ * form a circular dependency that deadlocks under Bun.
+ *
+ * The fix: when fake timers are active, use a synchronous polling loop that
+ * advances timers by `interval` and checks the callback, repeating until the
+ * callback resolves or the total elapsed time reaches `timeout`. This matches
+ * Vitest's observable behavior (callback attempts at t=0, interval, 2*interval,
+ * ... up to timeout) without depending on interval timers firing.
  */
 export function waitFor<T>(
   callback: () => T | Promise<T>,
@@ -193,6 +223,11 @@ export function waitFor<T>(
     typeof options === 'number' ? { timeout: options } : options;
   const interval = normalizedOptions.interval ?? DEFAULT_INTERVAL_MS;
   const timeout = normalizedOptions.timeout ?? DEFAULT_TIMEOUT_MS;
+
+  const scheduler = activeScheduler ?? defaultScheduler;
+  if (scheduler?.isFakeTimers()) {
+    return waitForWithFakeTimers(callback, interval, timeout, scheduler);
+  }
 
   return new Promise<T>((resolve, reject) => {
     let lastError: unknown;
@@ -214,9 +249,6 @@ export function waitFor<T>(
     };
 
     const checkCallback = (): true | undefined => {
-      if (activeScheduler?.isFakeTimers()) {
-        activeScheduler.advanceTimersByTime(interval);
-      }
       if (promiseStatus === 'pending') return undefined;
 
       try {
@@ -247,6 +279,110 @@ export function waitFor<T>(
     timerIds.timeout = safeSetTimeout(handleTimeout, timeout);
     timerIds.interval = safeSetInterval(checkCallback, interval);
   });
+}
+
+/**
+ * Fake-timer polling implementation. Advances the fake clock by `interval`
+ * on each attempt and checks the callback. When the callback returns a
+ * Promise, the advancement stops and awaits the microtask queue to let the
+ * promise settle. If the promise rejects (callback throws), the next attempt
+ * fires after advancing `interval` again. If the total elapsed time reaches
+ * `timeout`, the last error (or a default timeout message) is rejected.
+ */
+async function waitForWithFakeTimers<T>(
+  callback: () => T | Promise<T>,
+  interval: number,
+  timeout: number,
+  scheduler: WaitForScheduler = activeScheduler ?? defaultScheduler!,
+): Promise<T> {
+  let lastError: unknown;
+  let hasPending = false;
+  let pendingResolved = false;
+  let pendingValue: T | undefined;
+  let pendingRejected = false;
+
+  let elapsed = 0;
+  for (;;) {
+    if (!hasPending) {
+      // Advance before the first callback, not after it. Under fake timers
+      // nothing else moves the clock, so a callback waiting on a scheduled
+      // effect would observe t=0 and fail on its first attempt; this mirrors
+      // the pre-existing Bun scheduler contract asserted by
+      // `test-setup/stub-helpers.bun.test.ts`.
+      scheduler!.advanceTimersByTime(interval);
+      elapsed += interval;
+
+      let result: T | Promise<T>;
+      try {
+        result = callback();
+      } catch (error: unknown) {
+        lastError = error;
+        if (elapsed >= timeout) {
+          throw lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE);
+        }
+        // Yield to the microtask queue before retrying. Advancing the fake
+        // clock only fires the timer callbacks; the promise chains they
+        // resume (e.g. a retry backoff awaiting its delay) still need a
+        // microtask turn before the next assertion can observe their effect.
+        await Promise.resolve();
+        continue;
+      }
+
+      if (isPromiseLike(result)) {
+        hasPending = true;
+        pendingResolved = false;
+        pendingRejected = false;
+        (result as Promise<T>).then(
+          (value: T) => {
+            pendingResolved = true;
+            pendingValue = value;
+          },
+          (error: unknown) => {
+            pendingRejected = true;
+            lastError = error;
+          },
+        );
+        // Yield once to let already-resolved promises (e.g. Promise.resolve())
+        // settle their .then handlers synchronously
+        await Promise.resolve();
+        if (pendingResolved) {
+          return pendingValue as T;
+        }
+        if (pendingRejected) {
+          hasPending = false;
+          if (elapsed >= timeout) {
+            throw lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE);
+          }
+        }
+      } else {
+        return result;
+      }
+    }
+
+    if (hasPending) {
+      // Advance timers while waiting for the pending promise
+      scheduler!.advanceTimersByTime(interval);
+      elapsed += interval;
+      await Promise.resolve();
+      if (pendingResolved) {
+        return pendingValue as T;
+      }
+      if (pendingRejected) {
+        hasPending = false;
+        if (elapsed >= timeout) {
+          throw lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE);
+        }
+        // The clock already advanced for this cycle; going back to the top
+        // without this guard would advance a second time before the callback
+        // is retried, doubling the effective interval.
+        continue;
+      }
+    }
+
+    if (elapsed >= timeout) {
+      throw lastError || new Error(WAIT_FOR_TIMEOUT_MESSAGE);
+    }
+  }
 }
 
 /**

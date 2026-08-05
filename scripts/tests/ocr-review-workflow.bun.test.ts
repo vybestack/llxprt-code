@@ -112,12 +112,11 @@ describe('.github/workflows/ocr-review.yml', () => {
     return asOptionalRecord(step?.with);
   }
 
-  it('is discovered by the scripts Vitest configuration used in CI', () => {
-    const vitestConfig = readRootFile('scripts/tests/vitest.config.ts');
+  it('is discovered by the scripts test root used in CI', () => {
+    const manifest = readRootFile('scripts/bun-test-manifest.ts');
 
-    expect(vitestConfig).toContain(
-      "include: ['scripts/tests/**/*.test.{js,ts}']",
-    );
+    expect(manifest).toContain("workspace: 'scripts-tests'");
+    expect(manifest).toContain("'scripts/tests/**/*.test.ts'");
   });
 
   it('uses authorization-aware workflow concurrency around the complete run', () => {

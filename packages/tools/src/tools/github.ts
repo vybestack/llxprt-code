@@ -103,6 +103,9 @@ Examples:
   { "op": "pr.checks", "number": 2317, "watch": true }
 
 Notes:
+- Parameters are per-operation: an operation rejects any parameter it does
+  not accept and names the accepted ones in the error. pr.resolve-thread
+  identifies its target by threadId alone (no number).
 - pr.reviews with actionable:true omits resolved and outdated threads, leaving
   only review comments that still need action. The returned thread id is what
   pr.resolve-thread takes, so the two compose.
@@ -177,7 +180,7 @@ const BOUNDED_PARAMS: Readonly<
   number: {
     minimum: 1,
     description:
-      'Issue or pull request number (positive integer). Required by issue.view, issue.comment, issue.edit, issue.close, pr.view, pr.diff, pr.checks, pr.reviews, pr.comment, pr.edit, pr.ready.',
+      'Issue or pull request number (positive integer). Required by issue.view, issue.comment, issue.edit, issue.close, pr.view, pr.diff, pr.checks, pr.reviews, pr.comment, pr.edit, pr.ready. pr.resolve-thread does NOT take a number — it identifies its target by threadId — and any operation that does not accept number rejects it.',
   },
   limit: {
     minimum: 1,
@@ -257,7 +260,7 @@ function textHintFor(name: string): string {
     base: 'Base branch for the pull request. Accepted by pr.create.',
     head: 'Head branch for the pull request. Accepted by pr.create.',
     threadId:
-      'Review thread id (returned by pr.reviews). Required by pr.resolve-thread.',
+      'Review-thread node id returned by pr.reviews. Required by pr.resolve-thread, which identifies its target with this rather than a pull request number.',
     query: 'GitHub search query. Required by search.issues and search.prs.',
     branch: 'Branch name to filter runs by. Accepted by run.list.',
     name: 'Label name. Required by label.create.',
@@ -318,6 +321,7 @@ export interface GithubToolParams {
   op: string;
   repo?: string;
   number?: number;
+  threadId?: string;
   [key: string]: unknown;
 }
 

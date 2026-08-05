@@ -10,25 +10,35 @@ import {
   expect,
   vi,
   afterEach,
+  beforeAll,
   beforeEach,
-  type Mock,
 } from 'vitest';
-import { getIdeProcessInfo } from './process-utils.js';
-import os from 'node:os';
 
 const mockedExec = vi.hoisted(() => vi.fn());
 vi.mock('node:util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
-vi.mock('node:os', () => ({
-  default: {
-    platform: vi.fn(),
-    homedir: vi.fn(),
-  },
+vi.mock('util', () => ({
+  promisify: vi.fn().mockReturnValue(mockedExec),
+}));
+const mockedOs = vi.hoisted(() => ({
+  platform: vi.fn(),
   homedir: vi.fn(),
 }));
+vi.mock('node:os', () => ({ default: mockedOs, ...mockedOs }));
+vi.mock('os', () => ({ default: mockedOs, ...mockedOs }));
+
+// `process-utils.js` calls `promisify(exec)` at module scope, so it must be
+// loaded only after the module mocks above are registered. A static import
+// would evaluate it first and capture the real `promisify`.
+let getIdeProcessInfo: typeof import('./process-utils.js').getIdeProcessInfo;
+const os = mockedOs;
 
 describe('getIdeProcessInfo', () => {
+  beforeAll(async () => {
+    ({ getIdeProcessInfo } = await import('./process-utils.js'));
+  });
+
   beforeEach(() => {
     Object.defineProperty(process, 'pid', { value: 1000, configurable: true });
     mockedExec.mockReset();
@@ -40,7 +50,7 @@ describe('getIdeProcessInfo', () => {
 
   describe('on Unix', () => {
     it('should traverse up to find the shell and return grandparent process info', async () => {
-      (os.platform as Mock).mockReturnValue('linux');
+      os.platform.mockReturnValue('linux');
       // process (1000) -> shell (800) -> IDE (700)
       mockedExec
         .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000 (find shell)
@@ -56,7 +66,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should return parent process info if grandparent lookup fails', async () => {
-      (os.platform as Mock).mockReturnValue('linux');
+      os.platform.mockReturnValue('linux');
       mockedExec
         .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000
         .mockRejectedValueOnce(new Error('ps failed')) // ps -o ppid=,command= -p 800 fails
@@ -69,7 +79,7 @@ describe('getIdeProcessInfo', () => {
 
   describe('on Windows', () => {
     it('should return the IDE executable ancestor instead of a fixed great-grandchild offset', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process (1000) -> powershell (900) -> code (800) -> wininit (700) -> root (0)
       // Ancestors (nearest first): [1000, 900, 800, 700]
       // The IDE executable is code.exe at PID 800; it must win over the
@@ -111,7 +121,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should return the real IDE process (Code.exe main) when wrapper and shell sit between CLI and Code main (issue #2656)', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // Tree from the issue (CLI is process.pid):
       //   CLI(15604) -> start.ts(23676) -> pwsh(29180) -> Code util(26336)
       //     -> Code main(29396) -> wininit(1000) -> root(0)
@@ -180,7 +190,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should pick the nearest main IDE ancestor when multiple Code.exe main windows exist in the tree', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process(1000) -> shell(900) -> Code main window A(800, plain Code.exe)
       //   -> Code main window B(700, plain Code.exe) -> root(0)
       // Neither Code.exe is a VS Code child process (no --type=), so both are
@@ -224,7 +234,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should match IDE executables case-insensitively', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process(1000) -> shell(900) -> code.exe (lowercase, 800) -> root(0)
       const processes = [
         {
@@ -253,7 +263,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should match an IDE ancestor whose CommandLine is a quoted Windows path with spaces (Name does not match)', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process(1000) -> shell(900) -> Code main(800) -> wininit(700) -> root(0).
       // The Code process has an empty/non-IDE Name and a *quoted* CommandLine
       // containing spaces:
@@ -296,7 +306,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should not exclude a main IDE whose command path contains --type= as a substring but not as a switch', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process(1000) -> shell(900) -> Code main(800) -> wininit(700) -> root(0).
       // The Code CommandLine includes the substring `--type=` inside an
       // unrelated argument (`C:\work\project--type=demo-notes`), which is NOT
@@ -337,7 +347,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should still exclude a VS Code utility child whose command has --type= as a real switch', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process(1000) -> Code utility(900, Code.exe --type=utility)
       //   -> Code main(800, Code.exe) -> root(0)
       // The utility child carries the real `--type=utility` switch (a distinct
@@ -372,7 +382,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should fall back to the top-level ancestor when no IDE executable matches', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process(1000) -> foo(900) -> bar(800) -> wininit(700, root)
       // No name matches a known IDE; fall back to the top-level reachable
       // ancestor (700), preserving current best-effort behavior.
@@ -409,7 +419,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should handle short process chains', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process (1000) -> root (0)
       const processes = [
         {
@@ -426,7 +436,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should handle PowerShell failure gracefully', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       mockedExec.mockRejectedValueOnce(new Error('PowerShell failed'));
       // Fallback to getProcessInfo for current PID
       mockedExec.mockResolvedValueOnce({ stdout: '' }); // ps command fails on windows
@@ -436,7 +446,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should handle malformed JSON output gracefully', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       mockedExec.mockResolvedValueOnce({ stdout: '{"invalid":json}' });
       // Fallback to getProcessInfo for current PID
       mockedExec.mockResolvedValueOnce({ stdout: '' });
@@ -446,7 +456,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should handle single process output from ConvertTo-Json', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       const process = {
         ProcessId: 1000,
         ParentProcessId: 0,
@@ -460,7 +470,7 @@ describe('getIdeProcessInfo', () => {
     });
 
     it('should handle missing process in map during traversal', async () => {
-      (os.platform as Mock).mockReturnValue('win32');
+      os.platform.mockReturnValue('win32');
       // process (1000) -> parent (900) -> missing (800)
       const processes = [
         {

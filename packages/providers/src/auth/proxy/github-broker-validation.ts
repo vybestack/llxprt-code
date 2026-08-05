@@ -79,10 +79,16 @@ export function validateParams(
   required?: readonly string[],
 ): ValidationError | null {
   for (const key of Object.keys(params)) {
-    if (!(key in spec)) {
+    // `in` walks the prototype chain, so `{ constructor: 'x' }`,
+    // `{ toString: 'x' }` and an own `__proto__` key would all pass an
+    // unknown-key check here and then never reach the per-kind loop (which
+    // iterates the spec's own entries). `hasOwnProperty` restricts the check
+    // to the spec's own declared parameters, so prototype names are rejected
+    // like any other unknown parameter instead of being silently ignored.
+    if (!Object.prototype.hasOwnProperty.call(spec, key)) {
       return {
         code: 'INVALID_PARAM',
-        message: `Unknown parameter: ${key}`,
+        message: unknownParamMessage(key, spec, required),
       };
     }
   }
@@ -103,6 +109,37 @@ export function validateParams(
     }
   }
   return null;
+}
+
+/**
+ * Builds the self-correcting message for an unknown parameter.
+ *
+ * Names the offending parameter, the parameters the operation DOES accept
+ * (in the descriptor's declaration order, i.e. `Object.keys` of the spec),
+ * and — only when a non-empty `required` list was supplied — the required
+ * ones. The old `Unknown parameter: <key>` message named only what was
+ * wrong, leaving a caller no recovery path; for `pr.resolve-thread` called
+ * with only `number` it also hid the missing required `threadId`.
+ *
+ * Unknown parameters are still REJECTED, never accepted or ignored: the
+ * accepted-parameter text describes how to retry correctly, it does not
+ * broaden what the op accepts.
+ *
+ * @plan issue-3019-github-unknown-parameter
+ * @requirement AB1
+ * @issue 3019
+ */
+function unknownParamMessage(
+  key: string,
+  spec: Readonly<Record<string, ParamKind>>,
+  required: readonly string[] | undefined,
+): string {
+  const accepted = Object.keys(spec).join(', ');
+  const base = `Unknown parameter: ${key}. Accepted parameters: ${accepted}.`;
+  if (required !== undefined && required.length > 0) {
+    return `${base} Required: ${required.join(', ')}.`;
+  }
+  return base;
 }
 
 /**
