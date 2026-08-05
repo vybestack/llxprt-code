@@ -18,7 +18,7 @@
  *   - client.lifecycle.test.ts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCompressSplitPoint, isThinkingSupported } from './client.js';
 

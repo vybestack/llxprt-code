@@ -8,14 +8,14 @@
  * Shared helpers for subagent test files. Extracted from the original
  * monolithic subagent.test.ts so no file-level max-lines disable is needed.
  *
- * IMPORTANT: vi.mock() calls are file-scoped and hoisted by vitest above
+ * IMPORTANT: vi.mock() calls are file-scoped and hoisted by the test runner above
  * all imports. Each test file that exercises SubAgentScope must declare
  * its own vi.mock() calls. The helpers here are pure functions that can
  * be imported.
  */
 
-import type { Mock } from 'vitest';
-import { vi } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi } from '../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';

@@ -13,7 +13,7 @@ by hand.
 | Root                          | Bun-native files | Primary runner               |
 | ----------------------------- | ---------------- | ---------------------------- |
 | packages/a2a-server           | 21               | Bun (manifest)               |
-| packages/agents               | 3                | **Vitest** (#2578)           |
+| packages/agents               | all              | Bun (`run-bun-tests.ts`)     |
 | packages/auth                 | all              | Bun (`run-bun-tests.ts`)     |
 | packages/cli                  | 24               | **Vitest** (#2578)           |
 | packages/core                 | 1                | Bun (`run-bun-tests.ts`)     |
@@ -33,15 +33,14 @@ by hand.
 | evals                         | 1                | Bun (manifest, credentialed) |
 | integration-tests             | 31               | Bun (manifest, credentialed) |
 
-`agents` and `core` carry small manifest entries alongside a different primary
-runner. Those files are excluded from the primary selection, so nothing runs
-twice within a workspace.
+`core` carries a small manifest entry alongside a different primary runner.
+Those files are excluded from the primary selection, so nothing runs twice
+within a workspace.
 
 ### Where Vitest still executes
 
 | Path                                                                     | Invoked by                                      |
 | ------------------------------------------------------------------------ | ----------------------------------------------- |
-| `packages/agents` `test` / `test:ci`                                     | the `agents` shard via `scripts/test.ts`        |
 | `packages/cli` `test` / `test:ci` (+ integration, covered, fast, legacy) | the `cli` shard via `scripts/test.ts`           |
 | `packages/storage` `test:vitest`                                         | `secure_store_backend` in `ci.yml`, and nightly |
 | `packages/test-utils/src/quota-guard-vitest-integration.test.ts`         | itself — it is the test _of_ Vitest integration |
@@ -66,6 +65,43 @@ which gives one isolated process per file; a few predate it and call
 All 21 test files are Bun-native. Uses a storage-isolation preload that calls
 `isolateStorageRoots()` before any test module imports Storage, plus the
 shared Vitest-compatibility shim.
+
+### packages/agents
+
+**Command:** `bun run-bun-tests.ts`
+
+All 331 test files are Bun-native and the workspace `test`/`test:ci` scripts run
+Bun. **Vitest is gone from this workspace entirely** — no `test:vitest` fallback,
+no `vitest.config.ts`, no `vitest` devDependency, and no test file imports it.
+The test API comes from `src/testApi.ts`, which re-exports `bun:test` with the
+corrections the compat shim actually installs at runtime.
+
+The Stryker mutation gate (`test:mutation:api`) was dropped with it: Stryker has
+no Bun runner, and its Vitest runner cannot execute suites that import
+`bun:test`.
+
+`run-bun-tests.ts` discovers every `src/**/*.{test,spec}.{ts,tsx}` file and runs
+each in its own `bun test` process. Per-file processes are required rather than
+merely preferred: Bun's `mock.module` registry is process-wide, and 69 agents
+files register module mocks. There is deliberately no exclusion list.
+
+Two Bun behaviours the runner works around:
+
+- Bun 1.3.14 ignores a `[test] timeout` key in `bunfig.toml` and falls back to
+  its 5s default, so the 30s budget matching the previous Vitest `testTimeout`
+  is passed as `--timeout` on the command line.
+- File concurrency is kept below the core count (half the cores, clamped to
+  [2, 4], overridable via `LLXPRT_AGENTS_TEST_CONCURRENCY`), because every file
+  re-executes the whole agents module graph in a fresh process.
+
+Each child writes its own Bun JUnit report and the runner merges them, so CI
+keeps per-test names rather than a file-level summary.
+
+The `bunfig.toml` preloads the compat shim and `test-setup-storage-isolation.ts`,
+which isolates Storage roots and sets `LLXPRT_TEST_DISABLE_OS_KEYRING=1` so
+suites use the encrypted-file fallback instead of the developer's real OS
+keychain. The real keyring stays covered by the dedicated `secure_store_backend`
+CI job.
 
 ### packages/core
 
@@ -152,12 +188,21 @@ All 6 test files are Bun-native. The `research/` directory is excluded via
 
 ## Manifest-based Bun-native test files
 
-These files run under Bun via `scripts/run_bun_tests.ts` but their workspace
-primary `test` script still uses Vitest for the bulk of files.
+These files run under Bun via `scripts/run_bun_tests.ts` separately from their
+workspace's primary selection — either because that workspace's primary `test`
+script still uses Vitest for the bulk of its files, or because the files are
+Bun-only fixtures the primary selection does not match.
 
-### packages/agents (2 files)
+### packages/agents (3 files)
+
+The workspace runs all of its `*.test.ts` / `*.spec.ts` files through
+`bun run-bun-tests.ts` (see above). These entries stay in the manifest so the
+`Bun Native Test Compatibility` job also covers them, and because the two
+`test-bun/*.bun.ts` files are Bun-only fixtures that the workspace runner's
+`*.test.*` / `*.spec.*` discovery does not match.
 
 - `src/core/CompressionProfileResolver.proxyKeyStorage.test.ts`
+- `test-bun/generatingModelStamp.issue2511.bun.ts`
 - `test-bun/subagentAnthropicTextSettings.issue1738.bun.ts`
 
 ### packages/cli (12 files)
@@ -284,8 +329,7 @@ issue is resolved, the workspace `test` script can switch to `bun test`.
 
 Two workspaces still execute their full suite under Vitest, tracked by #2578:
 
-1. **packages/agents** (~349 files)
-2. **packages/cli** (~659 files)
+1. **packages/cli** (~659 files)
 
 Every other root listed in the summary is Bun-native. `settings`,
 `ide-integration`, `vscode-ide-companion`, `a2a-server`, `policy`,
@@ -299,8 +343,8 @@ second does not execute at all.
 
 **Still executes:**
 
-1. **`packages/agents` and `packages/cli`** — primary `test`/`test:ci`
-   scripts, run by their shards through `scripts/test.ts`.
+1. **`packages/cli`** — primary `test`/`test:ci` scripts, run by its shard
+   through `scripts/test.ts`.
 
 2. **`packages/storage` `test:vitest`** — the `secure_store_backend` job (and
    its nightly twin) needs the two backend-specific configs

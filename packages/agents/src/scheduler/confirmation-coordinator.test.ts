@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
-// Module-scope mock for modifiable-tool — hoisted by vitest before imports.
+// Module-scope mock for modifiable-tool — hoisted by the test runner before imports.
 // Per-test behavior can be overridden via vi.mocked().
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const mod =

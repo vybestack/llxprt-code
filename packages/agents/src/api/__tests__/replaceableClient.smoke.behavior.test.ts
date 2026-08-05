@@ -31,7 +31,7 @@
  * theater.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '../../testApi.js';
 import {
   fromConfig,
   type Agent,
@@ -52,7 +52,7 @@ import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 /**
  * Re-throw a captured teardown error (e.g. from agent.dispose()) so a real
  * teardown bug still fails the test, while keeping the capture/rethrow
- * conditional OUT of the test body (vitest/no-conditional-in-test). Pass
+ * conditional OUT of the test body (the no-conditional-in-test lint rule). Pass
  * `undefined` when no error occurred — a no-op in that case.
  *
  * Defined at module scope (not inside `it`) so the conditional it contains is

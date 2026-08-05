@@ -17,7 +17,7 @@
  * seam). No mock theater — only value assertions on the public ProviderStatus.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import { buildAgent } from './helpers/agentHarness.js';
 
 describe('getProviderStatus winner projection @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {

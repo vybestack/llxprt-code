@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { Turn } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { FunctionCall } from '../agents/types.js';

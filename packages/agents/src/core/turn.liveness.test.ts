@@ -16,7 +16,7 @@
  * patterns). No mock theater: real Turn + real timers where feasible.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type {
   ServerAgentStreamEvent,
   ServerStreamIdleTimeoutEvent,

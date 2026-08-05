@@ -132,4 +132,70 @@ describe('SecureStore encrypted-file fallback', () => {
   it('reports the keyring as unavailable when no adapter is loaded', async () => {
     expect(await createStore().isKeychainAvailable()).toBe(false);
   });
+
+  describe('platform credential store absent', () => {
+    /**
+     * A machine with no Secret Service (headless Linux, container, ssh session,
+     * WSL) reports this exact message. Despite its wording it means "there is
+     * no credential backend here", not "you lack permission to use one", so it
+     * must degrade to the encrypted file rather than surface as a hard error.
+     */
+    const NO_PLATFORM_STORE_MESSAGE =
+      "Couldn't access platform storage: PermissionDenied";
+
+    function createStoreWithAbsentPlatformStore(service: string): SecureStore {
+      return new SecureStore(service, {
+        keyringLoader: async () => ({
+          getPassword: async () => {
+            throw new Error(NO_PLATFORM_STORE_MESSAGE);
+          },
+          setPassword: async () => {
+            throw new Error(NO_PLATFORM_STORE_MESSAGE);
+          },
+          deletePassword: async () => {
+            throw new Error(NO_PLATFORM_STORE_MESSAGE);
+          },
+        }),
+        fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
+        fallbackPolicy: 'allow',
+        machineSecretLoader: async () => MACHINE_SECRET,
+      });
+    }
+
+    it('reads a previously stored value from the encrypted file instead of throwing', async () => {
+      const service = 'absent-platform-store-read';
+      // Seed through a store that has no keyring at all, so the value only
+      // exists in the encrypted fallback file.
+      const seeding = new SecureStore(service, {
+        keyringLoader: async () => null,
+        fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
+        fallbackPolicy: 'allow',
+        machineSecretLoader: async () => MACHINE_SECRET,
+      });
+      await seeding.set('api-key', 'secret-value');
+
+      const store = createStoreWithAbsentPlatformStore(service);
+
+      expect(await store.get('api-key')).toBe('secret-value');
+    });
+
+    it('reports a missing key as null rather than a DENIED error', async () => {
+      const store = createStoreWithAbsentPlatformStore(
+        'absent-platform-store-missing',
+      );
+
+      expect(await store.get('never-stored')).toBeNull();
+    });
+
+    it('still writes new values to the encrypted file', async () => {
+      const service = 'absent-platform-store-write';
+      const store = createStoreWithAbsentPlatformStore(service);
+
+      await store.set('api-key', 'written-value');
+
+      expect(await store.get('api-key')).toBe('written-value');
+    });
+  });
 });

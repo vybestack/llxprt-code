@@ -8,7 +8,7 @@
  * @plan PLAN-20251202-THINKING.P16
  * @requirement REQ-THINK-003
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { mockChunk } from '../turn-test-helpers.js';
 

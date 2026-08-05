@@ -13,7 +13,7 @@
  * on every terminal path, and that heartbeats never pollute content/history.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { TaskTool } from './task.js';
 import {
   createLivenessStatus,

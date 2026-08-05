@@ -12,7 +12,7 @@
  * These tests document EXISTING behavior prior to ToolExecutor extraction.
  */
 
-import { describe, it, expect, vi, type Mock } from 'vitest';
+import { describe, it, expect, vi, type Mock } from '../testApi.js';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { expectSuccessful } from './coreToolScheduler-test-helpers.js';

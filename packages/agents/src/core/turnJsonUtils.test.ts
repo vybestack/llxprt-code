@@ -10,7 +10,7 @@
  * isAbortSignalActive must use strict checks without type assertions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import { safeJsonStringify, isAbortSignalActive } from './turnJsonUtils.js';
 
 describe('safeJsonStringify', () => {

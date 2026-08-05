@@ -14,7 +14,7 @@
  * classification and must not trigger a re-send.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { readProviderStreamResponse } from './turnLogging.js';

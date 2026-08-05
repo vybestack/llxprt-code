@@ -8,7 +8,7 @@
  * the workspace tsconfig compiles it under tsc --noEmit. The tsconfig exclude
  * list drops only files with a ".test.ts" or ".spec.ts" suffix. It is excluded
  * from the shipped build by tsconfig.build.json (which excludes the __tests__
- * directory tree) and is not run by vitest (whose default matcher targets files
+ * directory tree) and is not run by the test runner (whose discovery targets files
  * with a ".test." or ".spec." segment). All runtime assertions live in the
  * sibling nonBreaking.exports.test.ts file.
  *

@@ -16,11 +16,11 @@ import type {
   ContentBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Mock } from 'vitest';
+import type { Mock } from '../testApi.js';
 
 export type MockedChatInstance = {
-  sendMessageStream: Mock;
-  getHistory: Mock;
+  sendMessageStream: Mock<(...args: never[]) => AsyncIterable<unknown>>;
+  getHistory: Mock<(...args: never[]) => unknown>;
   getConfig: () =>
     | { getEphemeralSetting: (key: string) => unknown }
     | undefined;

@@ -13,8 +13,15 @@
  * compression-retry.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { MockInstance } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+} from '../../testApi.js';
+import type { Mock } from '../../testApi.js';
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../core/turn.js';
@@ -48,7 +55,7 @@ let restoreStrategyFactory: (() => void) | undefined;
 interface EmptySummaryFallbackSetup {
   chat: ChatSession;
   historyService: HistoryService;
-  addSpy: MockInstance<HistoryService['add']>;
+  addSpy: Mock<HistoryService['add']>;
   getFallbackCalled: () => boolean;
   getPrimaryCallCount: () => number;
   restore: () => void;

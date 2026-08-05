@@ -14,7 +14,7 @@
  * @requirement:REQ-002.6
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import {
   afterModelModifiedToChunk,
   afterModelModifiedToModelOutput,

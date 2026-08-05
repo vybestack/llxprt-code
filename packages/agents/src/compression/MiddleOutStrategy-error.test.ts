@@ -13,7 +13,7 @@
  * (issue #2333 — reasoning model burns budget on thinking, returns no text).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import {
   EmptySummaryError,

@@ -8,8 +8,8 @@
  * SubAgentScope create tests: toolConfig preservation, stateless runtime enforcement.
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi, describe, it, expect, beforeEach } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -42,7 +42,16 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('./chatSession.js')) => ({
+    ...actual,
+    ChatSession: vi.fn(),
+  });
+  const result = importOriginal() as
+    | typeof import('./chatSession.js')
+    | Promise<typeof import('./chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -284,7 +293,8 @@ describe('subagent.ts', () => {
       const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
-      if (!generationConfig) throw new Error('generationConfig is undefined');
+      if (generationConfig === undefined)
+        throw new Error('generationConfig is undefined');
       return generationConfig;
     };
 

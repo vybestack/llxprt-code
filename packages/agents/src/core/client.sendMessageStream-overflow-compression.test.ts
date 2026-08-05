@@ -11,7 +11,7 @@
  * file-level max-lines).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -124,15 +124,23 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
     LocalTodoStore: mockTodoStoreConstructor,
   };
 });
-vi.mock('./turn', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+vi.mock('./turn', (importOriginal) => {
+  const result = importOriginal() as
+    | typeof import('./turn.js')
+    | Promise<typeof import('./turn.js')>;
   class MockTurn {
-    pendingToolCalls = [];
+    pendingToolCalls: unknown[] = [];
     run = mockTurnRunFn;
     constructor() {}
   }
+  if (result instanceof Promise) {
+    return result.then((actual) => ({
+      ...actual,
+      Turn: MockTurn,
+    }));
+  }
   return {
-    ...actual,
+    ...result,
     Turn: MockTurn,
   };
 });

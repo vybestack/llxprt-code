@@ -19,7 +19,7 @@
  * These tests verify behavioral correctness (final output) and efficiency
  * (no quadratic growth) using real chunk streams.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';

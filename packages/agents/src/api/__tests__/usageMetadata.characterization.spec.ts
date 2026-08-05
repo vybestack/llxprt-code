@@ -25,7 +25,7 @@
  * INTERNAL (neutral) shape only.
  */
 
-import { describe, it, expect, vi, type Mock } from 'vitest';
+import { describe, it, expect, vi, type Mock } from '../../testApi.js';
 import * as fc from 'fast-check';
 import {
   createFullLoopHarness,

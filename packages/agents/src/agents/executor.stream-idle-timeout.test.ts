@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ChatSession } from '../core/chatSession.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,
@@ -13,20 +12,22 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockExecuteToolCall: vi.fn(),
-}));
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
+  vi.hoisted(() => ({
+    MockedChatSession: vi.fn(),
+    mockSendMessageStream: vi.fn(),
+    mockExecuteToolCall: vi.fn(),
+  }));
 
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
-  return {
+vi.mock('../core/chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('../core/chatSession.js')) => ({
     ...actual,
-    ChatSession: vi.fn().mockImplementation(() => ({
-      sendMessageStream: mockSendMessageStream,
-    })),
-  };
+    ChatSession: MockedChatSession,
+  });
+  const result = importOriginal() as
+    | typeof import('../core/chatSession.js')
+    | Promise<typeof import('../core/chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
 });
 
 vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
@@ -35,7 +36,6 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
-const MockedChatSession = vi.mocked(ChatSession);
 const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 describe('stream idle timeout behavioral tests', () => {

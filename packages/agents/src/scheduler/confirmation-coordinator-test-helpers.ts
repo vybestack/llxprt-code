@@ -11,10 +11,10 @@
  *
  * Note: vi.mock('@vybestack/llxprt-code-tools', ...) must be duplicated in each
  * test file that exercises the modify-with-editor flow because vi.mock is
- * hoisted by vitest on a per-file basis and cannot be shared.
+ * hoisted by the test runner on a per-file basis and cannot be shared.
  */
 
-import { vi } from 'vitest';
+import { vi } from '../testApi.js';
 import {
   ConfirmationCoordinator,
   type StatusMutator,

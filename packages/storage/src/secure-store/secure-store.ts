@@ -118,6 +118,15 @@ function classifyError(error: unknown): SecureStoreErrorCode {
     error instanceof Error
       ? error.message.toLowerCase()
       : String(error).toLowerCase();
+  // "Couldn't access platform storage: PermissionDenied" is what the keyring
+  // crate reports when the machine has no Secret Service at all — a headless
+  // Linux box, container, ssh session or WSL. Despite the wording it means "no
+  // credential backend here", not "you lack permission to use one", so it has
+  // to be classified UNAVAILABLE and degrade to the encrypted file. Checked
+  // before the generic denied/permission test below, which would otherwise
+  // match on the substring and turn a routine no-keyring machine into a hard
+  // error.
+  if (msg.includes('access platform storage')) return 'UNAVAILABLE';
   if (msg.includes('locked')) return 'LOCKED';
   if (msg.includes('denied') || msg.includes('permission')) return 'DENIED';
   if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
