@@ -374,7 +374,7 @@ export function getShellToolDescription(): string {
   const returnedInfo = `\n\n      The following information is returned:\n\n      Command: Executed command.\n      Directory: Directory (relative to project root) where command was executed, or \`(root)\`.\n      Stdout: Output on stdout stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Stderr: Output on stderr stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Error: Error or \`(none)\` if no error was reported for the subprocess.\n      Exit Code: Exit code or \`(none)\` if terminated by signal.\n      Signal: Signal number or \`(none)\` if no signal was received.\n      Background PIDs: List of background processes started or \`(none)\`.\n      Process Group PGID: Process group started or \`(none)\``;
 
   if (os.platform() === 'win32') {
-    return `This tool executes a given shell command using PowerShell (\`powershell.exe\` or \`pwsh\`) with \`-NoProfile -Command <command>\`. Use PowerShell-compatible syntax: quote paths containing spaces with single quotes (for example, \`New-Item -ItemType Directory -Force -Path 'C:\\My Folder'\`) and represent an apostrophe inside a single-quoted path with two single quotes. Independent background processes can be started with \`Start-Process\`.${returnedInfo}`;
+    return `This tool executes a given shell command using PowerShell (\`powershell.exe\` or \`pwsh\`) with \`-NoProfile -Command <command>\`. Use PowerShell-compatible syntax: quote paths containing spaces with single quotes (for example, \`New-Item -ItemType Directory -Force -Path 'C:\\My Folder'\`) and represent an apostrophe inside a single-quoted path with two single quotes. Independent background processes can be started with \`Start-Process\`. When \`is_background\` is true the command is launched as a managed background job via \`Start-Process\` and the tool returns immediately with a stable job id; use \`check_async_tasks\` to inspect output or cancel the job. A managed background job can also be terminated with \`taskkill /T /F /PID <pid>\` where \`<pid>\` is the job's process id (available from \`check_async_tasks\` with \`action: 'peek'\`).${returnedInfo}`;
   }
   return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`: a trailing \`&\` is detected via AST parsing and the command is launched as a managed background job with a stable job id (use check_async_tasks to inspect or cancel it). Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`. Note: a command that daemonizes (e.g. setsid or double-fork) escapes the process group and cannot be stopped by job cancellation.${returnedInfo}`;
 }
@@ -394,8 +394,11 @@ export function getCommandDescription(): string {
   );
 }
 
-/** Description for the `is_background` schema property (non-Windows only). */
+/** Description for the `is_background` schema property. */
 export function getBackgroundParamDescription(): string {
+  if (os.platform() === 'win32') {
+    return `When true, the command is launched as a managed background job via Start-Process and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. timeout_seconds bounds only the launch, not the job lifetime: a background job may run indefinitely, but may be cancelled (via check_async_tasks) or forcibly terminated by lifecycle management or log-cap enforcement. On Windows a job can be terminated with taskkill /T /F /PID <pid> where <pid> is available from check_async_tasks with action: 'peek'.`;
+  }
   return 'When true, the command is launched as a managed background job and the tool returns immediately with a job id. The command output is NOT returned inline; use check_async_tasks to inspect output or cancel the job by id. A background job runs until it exits on its own — timeout_seconds bounds only the launch, not the job lifetime.';
 }
 
@@ -431,12 +434,10 @@ export function buildShellSchema(): {
         '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
     },
   };
-  if (os.platform() !== 'win32') {
-    properties['is_background'] = {
-      type: 'boolean',
-      description: getBackgroundParamDescription(),
-    };
-  }
+  properties['is_background'] = {
+    type: 'boolean',
+    description: getBackgroundParamDescription(),
+  };
   return {
     type: 'object',
     properties,

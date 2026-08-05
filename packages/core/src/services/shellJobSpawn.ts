@@ -211,3 +211,126 @@ function spawnWithNodeChildProcess(
     },
   };
 }
+
+// spawn('powershell.exe', [...], { detached: true }) NEVER executes the
+// command on Windows (exits 0 with empty output). The outer process is
+// therefore spawned WITHOUT detached:true and unref()'d instead.
+
+/**
+ * Escape a value for safe interpolation into a PowerShell single-quoted
+ * string literal. Every embedded single quote is doubled (`'` → `''`) and the
+ * result is wrapped in single quotes.
+ */
+export function escapePowerShellSingleQuoted(value: string): string {
+  return `'${value.split("'").join("''")}'`;
+}
+
+/**
+ * Encode a command for PowerShell's -EncodedCommand parameter: base64 of
+ * UTF-16LE. The payload is prefixed with `$ProgressPreference = 'SilentlyContinue';`
+ * so PowerShell 5.1 does not write CLIXML progress records into the stderr log.
+ */
+export function encodePowerShellCommand(command: string): string {
+  const payload = `$ProgressPreference = 'SilentlyContinue';\n${command}`;
+  return Buffer.from(payload, 'utf16le').toString('base64');
+}
+
+/** Parameters for {@link buildWindowsBackgroundBootstrap}. */
+export interface WindowsBootstrapParams {
+  /** PowerShell executable path (e.g. "powershell.exe" or "pwsh"). */
+  executable: string;
+  /** Base64-encoded inner command (from {@link encodePowerShellCommand}). */
+  encodedCommand: string;
+  /** Path for stdout redirect. */
+  logPath: string;
+  /** Path for stderr redirect (must differ from logPath). */
+  errLogPath: string;
+  /** Working directory for the inner process. */
+  cwd: string;
+}
+
+/**
+ * Assemble the single-line PowerShell bootstrap script that launches the
+ * inner process via Start-Process, caches the process handle (required for
+ * ExitCode to be available), waits for exit, and propagates the exit code.
+ *
+ * All interpolated values are single-quote escaped via
+ * {@link escapePowerShellSingleQuoted}.
+ */
+export function buildWindowsBackgroundBootstrap(
+  params: WindowsBootstrapParams,
+): string {
+  const exe = escapePowerShellSingleQuoted(params.executable);
+  const encoded = escapePowerShellSingleQuoted(params.encodedCommand);
+  const log = escapePowerShellSingleQuoted(params.logPath);
+  const errLog = escapePowerShellSingleQuoted(params.errLogPath);
+  const cwd = escapePowerShellSingleQuoted(params.cwd);
+  return (
+    `$ProgressPreference = 'SilentlyContinue'; ` +
+    `$p = Start-Process -FilePath ${exe} ` +
+    `-ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand',${encoded}) ` +
+    `-RedirectStandardOutput ${log} ` +
+    `-RedirectStandardError ${errLog} ` +
+    `-WorkingDirectory ${cwd} -WindowStyle Hidden -PassThru; ` +
+    `$null = $p.Handle; $p.WaitForExit(); exit $p.ExitCode`
+  );
+}
+
+/**
+ * Spawn a Windows background job using Start-Process semantics.
+ *
+ * The outer PowerShell process is spawned WITHOUT `detached: true` (which is
+ * broken on Windows — see file header) but `unref()`'d with all-stdio ignored
+ * so it never holds the parent open. The inner command runs via Start-Process
+ * with -EncodedCommand, writing stdout and stderr to separate log files.
+ *
+ * The returned `pid` is the outer PowerShell PID; `taskkill /T /F /PID <pid>`
+ * reliably reaps the entire process tree.
+ */
+export function spawnWindowsBackground(
+  executable: string,
+  command: string,
+  cwd: string,
+  env: Record<string, string | undefined>,
+  logPath: string,
+  errLogPath: string,
+): SpawnedProcess {
+  const encodedCommand = encodePowerShellCommand(command);
+  const bootstrap = buildWindowsBackgroundBootstrap({
+    executable,
+    encodedCommand,
+    logPath,
+    errLogPath,
+    cwd,
+  });
+
+  const child = cpSpawn(
+    executable,
+    ['-NoProfile', '-NonInteractive', '-Command', bootstrap],
+    {
+      cwd,
+      env,
+      shell: false,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    },
+  );
+
+  // Detach the child from the parent's event loop so background jobs do not
+  // keep the process alive.
+  child.unref();
+
+  const exited = new Promise<ProcessExitInfo>((resolve) => {
+    child.on('exit', (code, signal) => {
+      resolve({ exitCode: code, signal });
+    });
+  });
+
+  return {
+    pid: child.pid ?? -1,
+    child,
+    exited,
+    onError: (handler) => {
+      child.on('error', handler);
+    },
+  };
+}

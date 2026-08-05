@@ -29,7 +29,27 @@ function pgidOf(pid: number): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function isProcessGroupGone(pid: number): boolean {
+function isPidAliveWindows(pid: number): boolean {
+  const result = spawnSync(
+    'tasklist',
+    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
+    { encoding: 'utf8', timeout: 5000 },
+  );
+  return result.stdout.includes(String(pid));
+}
+
+/**
+ * Returns true when the launched job's process is no longer alive.
+ *
+ * On POSIX this inspects the process group (the manager launches a detached
+ * group); on Windows the job record holds the outer PowerShell PID and
+ * dispose() reaps the tree via `taskkill /T /F`, so checking that single PID
+ * is sufficient.
+ */
+function isProcessGone(pid: number): boolean {
+  if (os.platform() === 'win32') {
+    return !isPidAliveWindows(pid);
+  }
   const pgid = pgidOf(pid);
   if (pgid === null) {
     return true;
@@ -40,6 +60,16 @@ function isProcessGroupGone(pid: number): boolean {
   } catch {
     return true;
   }
+}
+
+/** A command that stays alive long enough to observe a `running` job. */
+function longRunningCommand(): string {
+  return os.platform() === 'win32' ? 'Start-Sleep -Seconds 60' : 'sleep 60';
+}
+
+/** A command that writes `bye` to stdout and exits immediately. */
+function echoByeCommand(): string {
+  return os.platform() === 'win32' ? 'Write-Output bye' : 'echo bye';
 }
 
 function makeFakeSettingsService(values: Record<string, unknown> = {}): {
@@ -55,7 +85,7 @@ function makeFakeSettingsService(values: Record<string, unknown> = {}): {
   };
 }
 
-describe.skipIf(os.platform() === 'win32')('Shell job config wiring', () => {
+describe('Shell job config wiring', () => {
   describe('normalizeShellMaxBackgroundJobs', () => {
     it('returns the number when valid positive integer', () => {
       expect(normalizeShellMaxBackgroundJobs(10)).toBe(10);
@@ -176,19 +206,22 @@ describe.skipIf(os.platform() === 'win32')('Shell job config wiring', () => {
     });
 
     afterEach(async () => {
+      // dispose() owns baseDir (ShellJobLogStore.destroy() removes it), so an
+      // explicit rmSync here is redundant and, on Windows, races with
+      // file-handle release right after taskkill /F /T (EPERM). The manager
+      // is the owner and best-effort removes the directory on dispose.
       await manager.dispose();
-      fs.rmSync(baseDir, { recursive: true, force: true });
     });
 
     it('dispose cancels a running job and removes the temp dir', async () => {
       const job = manager.launch({
-        command: 'sleep 60',
+        command: longRunningCommand(),
         cwd: os.tmpdir(),
       });
 
       // Verify the job is running
       expect(manager.get(job.id)?.state).toBe('running');
-      expect(isProcessGroupGone(job.pid)).toBe(false);
+      expect(isProcessGone(job.pid)).toBe(false);
 
       await manager.dispose();
 
@@ -197,12 +230,12 @@ describe.skipIf(os.platform() === 'win32')('Shell job config wiring', () => {
       // After dispose, jobs map is cleared, so get returns undefined.
       // The proof is that the process group is gone.
       expect(terminal).toBeUndefined();
-      expect(isProcessGroupGone(job.pid)).toBe(true);
+      expect(isProcessGone(job.pid)).toBe(true);
     });
 
     it('dispose removes the temp directory', async () => {
       manager.launch({
-        command: 'echo bye',
+        command: echoByeCommand(),
         cwd: os.tmpdir(),
       });
       // Give it a moment to write
