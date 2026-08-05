@@ -28,6 +28,10 @@ import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 import { isRuntimeReplaced } from './runtime-identity.js';
 import { assertRuntimeNotReplaced } from './runtime-replaced-errors.js';
+import {
+  isOsKeyringSessionDisabled,
+  noteKeyringError,
+} from './keyring-session-state.js';
 import { verifyKeyringDelete } from './keyring-delete-verification.js';
 import { SecureStoreError } from './secure-store-errors.js';
 import type { KeyringAdapter } from './secure-store.js';
@@ -155,20 +159,59 @@ function resolveKeyringModule(namespace: unknown): KeyringModuleShape | null {
 }
 
 /**
- * Wraps an adapter so that every method re-checks the replaced-runtime state
- * immediately before entering native code. This guarantees R2 even for
- * adapters cached before the transition — the guard fires on every call.
+ * Throws a SecureStoreError (UNAVAILABLE) when the OS keyring has been latched
+ * unusable or opted out for this session. Called inside the guarded adapter
+ * BEFORE entering native code, so zero OS keychain operations occur after the
+ * transition — including for an adapter a consumer cached before the latch
+ * (R2.3).
+ *
+ * @plan PLAN-20260805-ISSUE2928
+ * @requirement R2.3
+ */
+function assertKeyringSessionEnabled(): void {
+  if (isOsKeyringSessionDisabled()) {
+    throw new SecureStoreError(
+      'The OS keyring is disabled for this session (denied/locked earlier, or opted out). No OS keychain operations are permitted.',
+      'UNAVAILABLE',
+      'Restart LLxprt after unlocking your keyring / granting access, or clear the OS keyring opt-out (security.disableOsKeyring / LLXPRT_DISABLE_OS_KEYRING), to retry.',
+    );
+  }
+}
+
+/**
+ * Wraps an adapter so that every method:
+ *   1. re-checks the terminal replaced-runtime state (RUNTIME_REPLACED);
+ *   2. re-checks the session latch/opt-out (R2.3 — zero native entry after the
+ *      transition, even for adapters cached before the latch);
+ *   3. routes any thrown native error through {@link noteKeyringError} (the
+ *      single classification + latch chokepoint, R2.1/R2.5) and rethrows it
+ *      unchanged — never swallowed, never altered.
+ *
+ * This is the ONE real chokepoint: every consumer's adapter comes from
+ * {@link createDefaultKeyringAdapter}, so SecureStore, MCP KeychainTokenStorage
+ * and machine-secret all route through here and cannot bypass the latch.
+ *
+ * Exported so tests can wrap an injected counting/raw adapter with the exact
+ * guard used in production and assert the boundary behavior (zero native entry
+ * after a latch; errors latch even when the caller swallows them).
  *
  * @plan PLAN-20260801-ISSUE2926
+ * @plan PLAN-20260805-ISSUE2928
  * @requirement R2
  */
-function createGuardedAdapter(inner: KeyringAdapter): KeyringAdapter {
+export function createGuardedAdapter(inner: KeyringAdapter): KeyringAdapter {
   const guardedGet = async (
     service: string,
     account: string,
   ): Promise<string | null> => {
     assertRuntimeNotReplaced();
-    return inner.getPassword(service, account);
+    assertKeyringSessionEnabled();
+    try {
+      return await inner.getPassword(service, account);
+    } catch (error) {
+      noteKeyringError(error);
+      throw error;
+    }
   };
   const guardedSet = async (
     service: string,
@@ -176,14 +219,26 @@ function createGuardedAdapter(inner: KeyringAdapter): KeyringAdapter {
     password: string,
   ): Promise<void> => {
     assertRuntimeNotReplaced();
-    await inner.setPassword(service, account, password);
+    assertKeyringSessionEnabled();
+    try {
+      await inner.setPassword(service, account, password);
+    } catch (error) {
+      noteKeyringError(error);
+      throw error;
+    }
   };
   const guardedDelete = async (
     service: string,
     account: string,
   ): Promise<boolean> => {
     assertRuntimeNotReplaced();
-    return inner.deletePassword(service, account);
+    assertKeyringSessionEnabled();
+    try {
+      return await inner.deletePassword(service, account);
+    } catch (error) {
+      noteKeyringError(error);
+      throw error;
+    }
   };
   const adapter: KeyringAdapter = {
     getPassword: guardedGet,
@@ -194,25 +249,43 @@ function createGuardedAdapter(inner: KeyringAdapter): KeyringAdapter {
     const innerFind = inner.findCredentials;
     adapter.findCredentials = async (service: string) => {
       assertRuntimeNotReplaced();
-      return innerFind(service);
+      assertKeyringSessionEnabled();
+      try {
+        return await innerFind(service);
+      } catch (error) {
+        noteKeyringError(error);
+        throw error;
+      }
     };
   }
   return adapter;
 }
 
-function withFindCredentials(
+/**
+ * Degrades a guarded adapter's findCredentials to return [] on error. Applied
+ * OUTSIDE the guard so the guard (and therefore {@link noteKeyringError}) sees
+ * and classifies + latches the error first (R2.1), while SecureStore.list()
+ * still observes [] and never throws. Without this layer list()'s own
+ * try/catch would also prevent the throw; kept for observable parity with the
+ * prior behavior and any other findCredentials caller.
+ *
+ * @plan PLAN-20260805-ISSUE2928
+ * @requirement R2.1
+ */
+function degradeFindCredentialsToEmpty(
   adapter: KeyringAdapter,
-  findCredentialsFn: FindCredentialsFunction | undefined,
 ): KeyringAdapter {
-  if (findCredentialsFn !== undefined) {
-    adapter.findCredentials = async (service: string) => {
-      try {
-        return await findCredentialsFn(service);
-      } catch {
-        return [];
-      }
-    };
+  if (adapter.findCredentials === undefined) {
+    return adapter;
   }
+  const inner = adapter.findCredentials;
+  adapter.findCredentials = async (service: string) => {
+    try {
+      return await inner(service);
+    } catch {
+      return [];
+    }
+  };
   return adapter;
 }
 
@@ -242,6 +315,21 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
     return null;
   }
   if (isOsKeyringDisabledForTests()) {
+    return null;
+  }
+  // Production opt-out (R3.1) AND the runtime latch (R2.3): checked BEFORE
+  // importing @napi-rs/keyring so zero Keychain operations occur — including
+  // for llxprt-code-machine-secret and MCP token storage, which both route
+  // through this factory (R3.3). Deliberately distinct from
+  // isOsKeyringDisabledForTests(): test suites isolate their storage roots but
+  // may still need the genuine keyring.
+  //
+  // The latch must be part of this check, not just the env/setting flags.
+  // Returning a guarded adapter after a latch would hand callers an object
+  // whose every method throws; machine-secret's readFromKeyring catches that
+  // and reports 'unusable', which aborts its resolve WITHOUT trying the file
+  // fallback. Returning null instead routes it straight to the file.
+  if (isOsKeyringSessionDisabled()) {
     return null;
   }
   try {
@@ -308,8 +396,18 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
         return deleted;
       },
     };
-    const withFindCreds = withFindCredentials(adapter, findCredentialsFn);
-    return createGuardedAdapter(withFindCreds);
+    // Attach the raw findCredentials (which can throw) BEFORE guarding, so the
+    // guard's findCredentials wrapper sees the error, classifies it via
+    // noteKeyringError, and latches the session if it is DENIED/LOCKED.
+    if (findCredentialsFn !== undefined) {
+      adapter.findCredentials = findCredentialsFn;
+    }
+    const guarded = createGuardedAdapter(adapter);
+    // Apply the [] degradation OUTSIDE the guard: SecureStore.list() must still
+    // observe [] (never throw), but the guard has already classified + latched
+    // the underlying error. Ordering is critical — the [] layer must NOT sit
+    // between the native call and the guard, or noteKeyringError never fires.
+    return degradeFindCredentialsToEmpty(guarded);
   } catch (error) {
     if (!isKeyringModuleMissingError(error) && process.env.DEBUG) {
       const message = isErrorWithMessage(error) ? error.message : String(error);

@@ -44,6 +44,10 @@ export {
   isSecureStoreError,
   isRuntimeReplacedError,
 } from './secure-store/secure-store-errors.js';
+// OS keyring opt-out setter for the CLI settings bridge (issue #2928 R3.2).
+// Storage is a low-level package and must not read CLI settings; the CLI
+// pushes the resolved setting in here.
+export { setOsKeyringDisabledBySetting } from './secure-store/keyring-session-state.js';
 export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,

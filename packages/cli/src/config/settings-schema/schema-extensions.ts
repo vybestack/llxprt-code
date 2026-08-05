@@ -19,6 +19,16 @@ export const EXTENSION_SETTINGS_SCHEMA = {
         description: 'Disable YOLO mode, even if enabled by a flag.',
         showInDialog: true,
       },
+      disableOsKeyring: {
+        type: 'boolean',
+        label: 'Disable OS Keyring',
+        category: 'Security',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Disable use of the OS keyring/keychain for credential storage and use the encrypted file fallback. Can also be set with the LLXPRT_DISABLE_OS_KEYRING=1 environment variable.',
+        showInDialog: true,
+      },
       enablePermanentToolApproval: {
         type: 'boolean',
         label: 'Allow Permanent Tool Approval',

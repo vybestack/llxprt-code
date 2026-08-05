@@ -19,6 +19,7 @@ export const STORAGE_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'test-bun/secure-store.fallback-hardening.bun.ts',
     'test-bun/secure-store.concurrent-write.bun.ts',
     'test-bun/secure-store.runtime-replaced.bun.ts',
+    'test-bun/secure-store.keyring-session.bun.ts',
     'test-bun/storage.bun.ts',
     'src/secure-store/provider-key-storage.test.ts',
     'src/secure-store/secure-store-integration.test.ts',

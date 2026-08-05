@@ -551,9 +551,14 @@ describe('SecureStore fallback hardening — consecutive-failure tracking erodes
   });
 
   it('invalidates the cached probe after 3 consecutive failing delete() calls with a non-NOT_FOUND error', async () => {
+    // UNAVAILABLE (non-latching, non-NOT_FOUND): since issue #2928 a LOCKED/
+    // DENIED classification latches the keyring unusable for the process,
+    // which would short-circuit getKeyring() before the threshold could ever
+    // be reached. UNAVAILABLE exercises the consecutive-failure counter
+    // without latching.
     const { adapter, probeCount } = makeProbeableAdapter({
       deleteThrowsFor: new Set(['fail-delete']),
-      deleteError: new Error('Keyring locked'),
+      deleteError: new Error('dbus connection refused'),
     });
     const store = new SecureStore(SERVICE, {
       fallbackDir: env.dir(),

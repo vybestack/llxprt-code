@@ -14,6 +14,7 @@ import {
   type Config,
   type ImageOperationBackend,
 } from '@vybestack/llxprt-code-core';
+import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type {
@@ -684,6 +685,18 @@ function finalizeMetadata(input: PostConfigInput): void {
  * Step 17: finalizeMetadata() — seed default disabled tools, store model params, store bootstrap args, log warnings
  */
 export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
+  // Propagate security.disableOsKeyring into the storage package's process-wide
+  // opt-out (issue #2928 R3.2) BEFORE any profile/auth application. Profile
+  // auth wiring (applyProfileToRuntime → createProviderKeyStorage().getKey())
+  // performs a real SecureStore read during steps 12-13 below, so this MUST run
+  // first to suppress the OS keyring before that first read — otherwise a user
+  // who sets security.disableOsKeyring still gets a Keychain prompt at startup.
+  // The env var LLXPRT_DISABLE_OS_KEYRING=1 is independent and read directly in
+  // storage, so it keeps working with zero CLI involvement.
+  setOsKeyringDisabledBySetting(
+    input.profileSettingsWithTools.security?.disableOsKeyring === true,
+  );
+
   // Step 10-11: Set runtime context + re-register provider infra
   await setupRuntimeContext(input);
 
