@@ -10,6 +10,7 @@ import {
   resolveTimeoutSeconds,
   describeTimeoutClamp,
   describeTimeoutTermination,
+  requireEffectiveTimeoutSeconds,
   validateTimeoutSeconds,
 } from './timeoutResolution.js';
 
@@ -177,16 +178,22 @@ describe('describeTimeoutTermination (issue #3031)', () => {
     expect(message).toContain('task-default-timeout-seconds');
     expect(message).toContain('timeout_seconds');
   });
+});
 
-  it('names the effective value when unbounded (undefined)', () => {
-    const message = describeTimeoutTermination(undefined, {
-      defaultSetting: 'shell-default-timeout-seconds',
-      maxSetting: 'shell-max-timeout-seconds',
-    });
+describe('requireEffectiveTimeoutSeconds (issue #3031)', () => {
+  it('returns the effective seconds when the resolution is bounded', () => {
+    const resolution = resolveTimeout(300, 900, 1800);
+    expect(requireEffectiveTimeoutSeconds(resolution)).toBe(300);
+  });
 
-    expect(message).toContain('undefined');
-    expect(message).toContain('shell-max-timeout-seconds');
-    expect(message).toContain('shell-default-timeout-seconds');
+  it('throws when the resolution is unbounded (no ceiling, unbounded ask)', () => {
+    const resolution = resolveTimeout(-1, 900, -1);
+    // Sanity: this resolution is genuinely unbounded.
+    expect(resolution.effectiveTimeoutSeconds).toBeUndefined();
+
+    expect(() => requireEffectiveTimeoutSeconds(resolution)).toThrow(
+      /finite effective timeout/,
+    );
   });
 });
 

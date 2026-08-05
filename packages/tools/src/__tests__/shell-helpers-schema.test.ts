@@ -240,6 +240,26 @@ describe('ShellTool timeout_seconds description (Issue #3031)', () => {
     expect(description.toLowerCase()).toContain('maximum');
   });
 
+  it('states the accepted domain: -1 or a finite number greater than zero', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description.toLowerCase()).toContain('greater than zero');
+    expect(description).toContain('-1');
+  });
+
+  it('states that 0 and other non-positive values are rejected', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description.toLowerCase()).toContain('non-positive');
+    expect(description.toLowerCase()).toContain('reject');
+  });
+
+  it('states that a short positive request is honoured exactly', () => {
+    mockPlatform.mockReturnValue('darwin');
+    const description = getTimeoutDescription();
+    expect(description.toLowerCase()).toContain('honoured exactly');
+  });
+
   it('states that a request above the maximum is clamped', () => {
     mockPlatform.mockReturnValue('darwin');
     expect(getTimeoutDescription().toLowerCase()).toContain('clamp');

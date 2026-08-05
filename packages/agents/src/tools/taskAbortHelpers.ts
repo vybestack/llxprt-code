@@ -10,6 +10,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   resolveTimeout as resolveSharedTimeout,
   describeTimeoutTermination,
+  requireEffectiveTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
@@ -260,7 +261,7 @@ export function handleBackgroundAbort(
   if (timedOut) {
     asyncTaskManager.failTask(
       agentId,
-      describeTimeoutTermination(resolution.effectiveTimeoutSeconds, {
+      describeTimeoutTermination(requireEffectiveTimeoutSeconds(resolution), {
         defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
         maxSetting: TASK_TIMEOUT_MAX_SETTING,
       }),

@@ -49,6 +49,7 @@ import {
   formatShellTimeoutMessage,
   validateGrepFlags,
   validatePositiveInteger,
+  type StringContentToolResult,
 } from './shell-helpers.js';
 import {
   resolveTimeout,
@@ -473,7 +474,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     executionError:
       | { error: { message: string; type: ToolErrorType } }
       | Record<string, never>,
-  ): ToolResult {
+  ): StringContentToolResult {
     const limitedResult = this.host.limitOutputTokens(llmPayload);
     if (limitedResult.wasTruncated) {
       return {

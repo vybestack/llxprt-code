@@ -122,13 +122,39 @@ export function describeTimeoutClamp(
 }
 
 /**
+ * Returns the effective timeout seconds for a resolution, failing fast when
+ * the resolution is unbounded. A timeout termination is only reachable when a
+ * timer was actually armed — i.e. the resolution is bounded — so an unbounded
+ * resolution reaching a timeout formatter is a broken invariant, not a state
+ * to paper over. Every timeout-message path must read the effective seconds
+ * through this accessor rather than `effectiveTimeoutSeconds` directly, so the
+ * finite-timeout invariant is enforced at the type boundary (Issue #3031).
+ */
+export function requireEffectiveTimeoutSeconds(
+  resolution: TimeoutResolution,
+): number {
+  const effective = resolution.effectiveTimeoutSeconds;
+  if (effective === undefined) {
+    throw new Error(
+      'Timeout invariant violated: a timeout termination requires a finite ' +
+        'effective timeout, but the resolution is unbounded ' +
+        '(effectiveTimeoutSeconds is undefined). An unbounded run arms no ' +
+        'timer and cannot time out.',
+    );
+  }
+  return effective;
+}
+
+/**
  * Builds the legible timeout-termination message naming the termination
  * reason (TIMEOUT), the effective timeout applied, and the parameter +
- * settings that would raise it. Shared by the agents `task` tool and the core
- * `CoreSubagentServiceAdapter` so the wording cannot drift (Issue #3031).
+ * settings that would raise it. The effective timeout is a finite `number`:
+ * a timeout termination cannot be unbounded, because an unbounded run arms no
+ * timer and therefore can never fire. Shared by the agents `task` tool and the
+ * core `CoreSubagentServiceAdapter` so the wording cannot drift (Issue #3031).
  */
 export function describeTimeoutTermination(
-  effectiveTimeoutSeconds: number | undefined,
+  effectiveTimeoutSeconds: number,
   settings: { readonly defaultSetting: string; readonly maxSetting: string },
 ): string {
   return (

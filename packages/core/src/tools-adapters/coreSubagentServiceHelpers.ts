@@ -22,6 +22,7 @@ import {
   resolveTimeout as sharedResolveTimeout,
   describeTimeoutClamp,
   describeTimeoutTermination,
+  requireEffectiveTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 import type { Config } from '../config/config.js';
@@ -258,10 +259,13 @@ ${clamp}`;
 
 /** Builds the legible timeout-termination message (shared wording). */
 export function describeTaskTimeout(resolution: TimeoutResolution): string {
-  return describeTimeoutTermination(resolution.effectiveTimeoutSeconds, {
-    defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
-    maxSetting: TASK_TIMEOUT_MAX_SETTING,
-  });
+  return describeTimeoutTermination(
+    requireEffectiveTimeoutSeconds(resolution),
+    {
+      defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+      maxSetting: TASK_TIMEOUT_MAX_SETTING,
+    },
+  );
 }
 
 /**

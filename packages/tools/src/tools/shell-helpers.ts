@@ -98,13 +98,29 @@ export function formatShellTimeoutMessage(
 }
 
 /**
+ * A `ToolResult` whose `llmContent` and `returnDisplay` are both plain strings.
+ * The only caller of {@link appendClampNoticeToResult} is the foreground shell
+ * path, where `buildToolResult` always constructs both as strings, so the
+ * string-ness is a type-level guarantee rather than something to re-check at
+ * runtime (Issue #3031).
+ */
+export type StringContentToolResult = ToolResult & {
+  readonly llmContent: string;
+  readonly returnDisplay: string;
+};
+
+/**
  * Appends the durable clamp notice to BOTH `llmContent` and `returnDisplay`
  * of a foreground shell `ToolResult`. This is applied AFTER all lossy
  * processing (summarization and token limiting) so the notice survives even
  * when the underlying content is replaced or truncated (Issue #3031).
+ *
+ * The input is a {@link StringContentToolResult}: the foreground path always
+ * constructs both fields as strings, so the notice is appended unconditionally
+ * rather than silently dropped by a `typeof` guard that could never be false.
  */
 export function appendClampNoticeToResult(
-  result: ToolResult,
+  result: StringContentToolResult,
   resolution: TimeoutResolution,
 ): ToolResult {
   const clamp = describeTimeoutClamp(resolution, {
@@ -119,14 +135,8 @@ export function appendClampNoticeToResult(
 ${clamp}`;
   return {
     ...result,
-    llmContent:
-      typeof result.llmContent === 'string'
-        ? `${result.llmContent}${suffix}`
-        : result.llmContent,
-    returnDisplay:
-      typeof result.returnDisplay === 'string'
-        ? `${result.returnDisplay}${suffix}`
-        : result.returnDisplay,
+    llmContent: `${result.llmContent}${suffix}`,
+    returnDisplay: `${result.returnDisplay}${suffix}`,
   };
 }
 
@@ -526,15 +536,17 @@ export function buildShellSchema(): {
       type: 'number',
       description:
         '(OPTIONAL) Maximum time the command may run, in seconds. ' +
+        'Allowed values are -1 or a finite number of seconds greater than ' +
+        'zero (0 and any other non-positive value is rejected). ' +
         'Precedence: this explicit value, then the shell-default-timeout-seconds ' +
         'setting, bounded upward by the shell-max-timeout-seconds setting (both are ' +
-        'overridable ephemeral settings, so do not assume fixed numbers). A value at ' +
-        'or below the maximum is honoured exactly, however small. -1 means "as long as ' +
-        'the configured maximum allows" — it resolves to the maximum and is NOT ' +
-        'unbounded unless the maximum itself is -1. A request above the maximum (or a ' +
-        'request of -1 under a finite maximum) is clamped to the maximum, and the ' +
-        'result will state that clamping occurred. Give long-running work (full test ' +
-        'suites, builds, installs) an explicit timeout rather than relying on the ' +
+        'overridable ephemeral settings, so do not assume fixed numbers). A short ' +
+        'positive request is honoured exactly. -1 means "as long as the configured ' +
+        'maximum allows" — it resolves to the maximum and is NOT unbounded unless ' +
+        'the maximum itself is -1. A request above the maximum (or a request of -1 ' +
+        'under a finite maximum) is clamped to the maximum, and the result will ' +
+        'state that clamping occurred. Give long-running work (full test suites, ' +
+        'builds, installs) an explicit timeout rather than relying on the ' +
         'default. For background jobs (is_background or a trailing &), ' +
         'timeout_seconds is NOT applied — the job runs until it exits on its own.',
     },

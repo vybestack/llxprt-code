@@ -51,15 +51,17 @@ export const taskToolSchema = {
       type: 'number',
       description:
         'Optional maximum time the subagent may run, in seconds. ' +
+        'Allowed values are -1 or a finite number of seconds greater than ' +
+        'zero (0 and any other non-positive value is rejected). ' +
         'Precedence: this explicit value, then the task-default-timeout-seconds ' +
         'setting, bounded upward by the task-max-timeout-seconds setting (both are ' +
-        'overridable ephemeral settings, so do not assume fixed numbers). A value at ' +
-        'or below the maximum is honoured exactly, however small — short runs are ' +
-        'legitimate (racing subagents, self-imposed deadlines). -1 means "as long as ' +
-        'the configured maximum allows" — it resolves to the maximum and is NOT ' +
-        'unbounded unless the maximum itself is -1. A request above the maximum (or a ' +
-        'request of -1 under a finite maximum) is clamped to the maximum, and the ' +
-        'result will state that clamping occurred. Give long-running work (full-suite ' +
+        'overridable ephemeral settings, so do not assume fixed numbers). A short ' +
+        'positive request is honoured exactly — short runs are legitimate (racing ' +
+        'subagents, self-imposed deadlines). -1 means "as long as the configured ' +
+        'maximum allows" — it resolves to the maximum and is NOT unbounded unless ' +
+        'the maximum itself is -1. A request above the maximum (or a request of -1 ' +
+        'under a finite maximum) is clamped to the maximum, and the result will ' +
+        'state that clamping occurred. Give long-running work (full-suite ' +
         'verification, code review, multi-file implementation) an explicit timeout ' +
         'rather than relying on the default, because such work routinely outlives it.',
     },

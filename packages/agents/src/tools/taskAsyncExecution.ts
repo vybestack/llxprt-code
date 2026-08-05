@@ -35,6 +35,7 @@ import {
 } from './taskResultHelpers.js';
 import {
   describeTimeoutTermination,
+  requireEffectiveTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
@@ -237,7 +238,7 @@ function effectiveTimeoutMs(resolution: TimeoutResolution): number | undefined {
  */
 function createLaunchTimeoutResult(resolution: TimeoutResolution): ToolResult {
   return attachTimeoutMetadata(
-    createTimeoutResult(resolution.effectiveTimeoutSeconds),
+    createTimeoutResult(requireEffectiveTimeoutSeconds(resolution)),
     resolution,
     {
       defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
@@ -445,10 +446,13 @@ export function executeInBackground(
         // from the raw AbortError text.
         asyncTaskManager.failTask(
           agentId,
-          describeTimeoutTermination(resolution.effectiveTimeoutSeconds, {
-            defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
-            maxSetting: TASK_TIMEOUT_MAX_SETTING,
-          }),
+          describeTimeoutTermination(
+            requireEffectiveTimeoutSeconds(resolution),
+            {
+              defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+              maxSetting: TASK_TIMEOUT_MAX_SETTING,
+            },
+          ),
         );
         return;
       }

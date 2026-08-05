@@ -142,10 +142,13 @@ export function createCancelledResult(
 /**
  * Builds a timeout `ToolResult`. The message names the termination reason
  * (TIMEOUT), the effective timeout applied, and the parameter + settings that
- * would raise it (Issue #3031).
+ * would raise it (Issue #3031). The timeout is a finite `number`: a timeout
+ * termination cannot be unbounded, because an unbounded run arms no timer and
+ * therefore can never fire — callers obtain the value via
+ * `requireEffectiveTimeoutSeconds`.
  */
 export function createTimeoutResult(
-  timeoutSeconds: number | undefined,
+  timeoutSeconds: number,
   output?: OutputObject,
   agentId?: string,
 ): ToolResult {

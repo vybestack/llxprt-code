@@ -25,7 +25,11 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { validateTimeoutSeconds } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+import {
+  requireEffectiveTimeoutSeconds,
+  validateTimeoutSeconds,
+  type TimeoutResolution,
+} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 import {
   createAbortState,
   createTimeoutControllers,
@@ -277,13 +281,8 @@ class TaskToolInvocation extends BaseToolInvocation<
     updateOutput: ((update: LiveOutputUpdate) => void) | undefined,
     controllers: TimeoutControllers,
   ): Promise<ToolResult> {
-    const {
-      timeoutMs,
-      timeoutSeconds,
-      timeoutController,
-      timeoutId,
-      onUserAbort,
-    } = controllers;
+    const { timeoutMs, timeoutController, timeoutId, onUserAbort } =
+      controllers;
 
     if (signal.aborted) {
       onUserAbort();
@@ -320,7 +319,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchRequest,
       signal,
       timeoutController,
-      timeoutSeconds,
+      controllers.resolution,
       onUserAbort,
       timeoutId,
       updateOutput,
@@ -332,7 +331,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchRequest: SubagentLaunchRequest,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
     updateOutput?: (update: LiveOutputUpdate) => void,
@@ -356,7 +355,6 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchRequest,
       signal,
       timeoutController,
-      timeoutSeconds,
       onUserAbort,
       timeoutId,
       abortState,
@@ -372,7 +370,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         );
       }
       if (abortState.aborted.timedOut) {
-        return createTimeoutResult(timeoutSeconds);
+        return createTimeoutResult(requireEffectiveTimeoutSeconds(resolution));
       }
       return createCancelledResult('Task aborted during launch.');
     }
@@ -381,7 +379,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchResult,
       signal,
       timeoutController,
-      timeoutSeconds,
+      resolution,
       onUserAbort,
       timeoutId,
       abortState,
@@ -401,7 +399,6 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchRequest: SubagentLaunchRequest,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
     abortState: {
@@ -469,7 +466,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
     abortState: {
@@ -521,7 +518,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         agentId,
         signal,
         timeoutController,
-        timeoutSeconds,
+        resolution,
         teardown,
         abortState.aborted,
       );
@@ -530,7 +527,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         error,
         signal,
         timeoutController,
-        timeoutSeconds,
+        resolution,
         agentId,
         scope,
         teardown,
@@ -602,7 +599,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     error: unknown,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     agentId: string,
     scope: SubAgentScope,
     teardown: () => Promise<void>,
@@ -612,7 +609,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       isTimeoutErrorHelper(signal, timeoutController, isAbortErrorHelper, error)
     ) {
       await teardown();
-      return createTimeoutResult(timeoutSeconds, scope.output, agentId);
+      return createTimeoutResult(
+        requireEffectiveTimeoutSeconds(resolution),
+        scope.output,
+        agentId,
+      );
     }
 
     if (isAbortErrorHelper(error) || abortedState.aborted || signal.aborted) {
@@ -640,7 +641,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     agentId: string,
     signal: AbortSignal,
     timeoutController: AbortController,
-    timeoutSeconds: number | undefined,
+    resolution: TimeoutResolution,
     teardown: () => Promise<void>,
     abortedState: { aborted: boolean; timedOut: boolean },
   ): Promise<ToolResult> {
@@ -655,7 +656,10 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
     if (isTimeoutErrorHelper(signal, timeoutController, isAbortErrorHelper)) {
       await teardown();
-      return createTimeoutResult(timeoutSeconds, scope.output);
+      return createTimeoutResult(
+        requireEffectiveTimeoutSeconds(resolution),
+        scope.output,
+      );
     }
     const output = scope.output;
     taskLogger.debug(
