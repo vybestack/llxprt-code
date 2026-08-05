@@ -102,7 +102,10 @@ export async function parseFile(
 const FUNCTION_CONTAINER_KINDS = new Set([
   'method_definition',
   'function_declaration',
+  'generator_function_declaration',
   'arrow_function',
+  'function_expression',
+  'generator_function',
 ]);
 
 export function isFunctionContainerKind(kind: string): boolean {
@@ -112,8 +115,9 @@ export function isFunctionContainerKind(kind: string): boolean {
 /**
  * Extract a name from a function-like container node.
  * - method_definition: first property_identifier child
- * - function_declaration: first identifier child
- * - arrow_function: name from parent variable_declarator's identifier
+ * - function_declaration/generator_function_declaration: first identifier child
+ * - arrow_function/function_expression/generator_function: name from parent
+ *   variable_declarator's identifier
  */
 export function getContainerName(node: SgNode): string | null {
   const kind = String(node.kind());
@@ -125,14 +129,21 @@ export function getContainerName(node: SgNode): string | null {
     return nameNode?.text() ?? null;
   }
 
-  if (kind === 'function_declaration') {
+  if (
+    kind === 'function_declaration' ||
+    kind === 'generator_function_declaration'
+  ) {
     const nameNode = node
       .children()
       .find((c: SgNode) => String(c.kind()) === 'identifier');
     return nameNode?.text() ?? null;
   }
 
-  if (kind === 'arrow_function') {
+  if (
+    kind === 'arrow_function' ||
+    kind === 'function_expression' ||
+    kind === 'generator_function'
+  ) {
     const parent = node.parent();
     if (parent && String(parent.kind()) === 'variable_declarator') {
       const nameNode = parent

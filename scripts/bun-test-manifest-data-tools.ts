@@ -28,6 +28,8 @@ export const TOOLS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/tools/check-async-tasks.test.ts',
     'src/tools/list-subagents.test.ts',
     'src/tools/codesearch.test.ts',
+    'src/tools/codesearch-endpoint.bun.test.ts',
+    'src/tools/structural-analysis/structural-analysis-modes.bun.test.ts',
     'src/tools/memoryTool.test.ts',
     'src/tools/write-file.test.ts',
     'src/tools/tools.test.ts',
