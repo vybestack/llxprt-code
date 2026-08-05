@@ -394,3 +394,38 @@ The last of these — up arrow navigating input history — is still covered by
 Note for whoever restores this: `handleSpecialInputKey` was instrumented during
 triage and the up arrow *does* arrive with `focus: true` and an empty buffer, so
 the dispatch path is healthy; only the consumer is missing.
+
+## Self-audit: fabricated snapshots committed during migration
+
+Bun records a snapshot when one is missing and the run is not in CI. During the
+early rounds of this migration, failing renders were recorded as new snapshot
+entries before the practice of reverting `.snap` files after every run was
+adopted. Comparing entry counts against `main` found five affected files:
+
+| file | main | branch (before cleanup) |
+| --- | --- | --- |
+| `InputPrompt.vim.test.tsx.snap` | 8 | 16 |
+| `InputPrompt.paste.test.tsx.snap` | 4 | 8 |
+| `SettingsDialog.interactions.test.tsx.snap` | 8 | 16 |
+| `MarkdownDisplay.test.tsx.snap` | 30 | 56 |
+| `App.components.test.tsx.snap` | 0 | 1 (orphan; its test was deleted) |
+
+All five have been restored from `main` with keys converted to Bun's format, and
+the orphan deleted. Verified with `CI=true`, which makes Bun compare instead of
+write.
+
+**Consequence to be honest about:** with the fabricated entries removed, three
+of these files now fail — `InputPrompt.paste` (14), `SettingsDialog.interactions`
+(8) and `MarkdownDisplay` (28). Those tests had been counted as passing in
+earlier progress reports in this effort. They were passing against snapshots
+this migration had itself recorded, which is not evidence of anything. The
+failures are real and are now visible.
+
+`InputPrompt.vim.test.tsx` also had a distinct defect that caused runaway
+snapshot growth: `await waitFor(() => expect(stdout.lastFrame()).toMatchSnapshot())`
+records a **new numbered snapshot on every poll attempt**, so the stored index
+depended on retry timing (observed reaching `... 21`). Fixed by waiting for a
+frame and then snapshotting once.
+
+Snapshot work from here must be verified with `CI=true` so a missing snapshot
+fails instead of being silently written.
