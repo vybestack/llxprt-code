@@ -58,6 +58,7 @@ describe('contentGeneratorAdapters tool-failure (issue #3076)', () => {
 
     expect(response?.status).toBe('error');
     expect(response?.error).toBe('boom');
+    expect(response?.result).toEqual({ output: 'partial data' });
   });
 
   it('toGenerateContentParameters emits a byte-identical raw response for a successful tool_response (regression guard)', () => {

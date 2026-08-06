@@ -288,7 +288,10 @@ export class ContentConverters {
    * Returns null for any non-envelope response so the caller keeps the
    * existing string/JSON coercion path untouched. The envelope's `result`
    * is restored verbatim — it must NOT go through parseFunctionResponseResult,
-   * the whole point being fidelity to the original block.
+   * the whole point being fidelity to the original block. The one normalization
+   * is the omitted-key case: an original `result` of `undefined` is not encoded
+   * at all and comes back as `{}`, matching the pre-existing empty-response
+   * convention.
    */
   private static decodeFailureEnvelope(
     response: unknown,
