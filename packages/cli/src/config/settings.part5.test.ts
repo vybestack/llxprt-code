@@ -48,6 +48,7 @@ import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
+  type Settings,
   loadSettings,
   USER_SETTINGS_PATH,
   SettingScope,
@@ -372,7 +373,9 @@ describe('Settings Loading and Merging', () => {
       expect(loadedSettings.user.settings.chatCompression).toStrictEqual({
         strategy: 'high-density',
         profile: 'balanced',
-      });
+        // InferSettings types strategy/profile as `undefined` (schema default is
+        // undefined) even though their runtime values are strings.
+      } as unknown as NonNullable<Settings['chatCompression']>);
       expect(loadedSettings.user.settings.ui?.accessibility).toStrictEqual({
         screenReader: true,
       });
@@ -574,7 +577,7 @@ describe('Settings Loading and Merging', () => {
         'DEBUG',
         'DEBUG_MODE',
       ]);
-      expect(process.env.GEMINI_API_KEY).toBe('test-key');
+      expect(process.env.GEMINI_API_KEY ?? '').toBe('test-key');
       expect(process.env.DEBUG).toBeUndefined();
       expect(process.env.DEBUG_MODE).toBeUndefined();
     });

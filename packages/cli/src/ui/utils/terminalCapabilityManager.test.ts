@@ -334,11 +334,11 @@ describe('TerminalCapabilityManager', () => {
     expect(
       (writeSync as unknown as Mock<typeof writeSync>).mock.calls,
     ).toStrictEqual([
-      [stdout.fd, '\x1b[<u'],
-      [stdout.fd, '\x1b[?1049l'],
-      [stdout.fd, '\x1b[<u'],
-      [stdout.fd, '\x1b[=0;1u'],
-      [stdout.fd, '\x1b[?1006l'],
+      [stdout.fd as number, '\x1b[<u'],
+      [stdout.fd as number, '\x1b[?1049l'],
+      [stdout.fd as number, '\x1b[<u'],
+      [stdout.fd as number, '\x1b[=0;1u'],
+      [stdout.fd as number, '\x1b[?1006l'],
     ]);
   });
 

@@ -369,12 +369,12 @@ describe('Multi-Provider Conversation Logging', () => {
     mockProvider = createMockProvider('openai');
     config = createConfigWithLogging(true);
 
-    // Mock the logging function to throw an error
-    vi.spyOn(telemetryLoggers, 'logConversationRequest').mockImplementation(
-      () => {
-        throw new Error('Logging service unavailable');
-      },
-    );
+    // Mock the logging function to throw an error. telemetryLoggers.logConversationRequest
+    // is itself a vi.fn(), so configure it directly rather than via vi.spyOn (whose
+    // mockImplementation would be typed against the nested Mock generic).
+    telemetryLoggers.logConversationRequest.mockImplementation(() => {
+      throw new Error('Logging service unavailable');
+    });
 
     const wrapper = new MockLoggingProviderWrapper(
       mockProvider,

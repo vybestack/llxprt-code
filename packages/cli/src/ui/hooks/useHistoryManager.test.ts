@@ -92,7 +92,9 @@ describe('useHistoryManager', () => {
       ...initialItem,
       id: itemId,
       text: updatedText,
-    });
+      // HistoryItem is a discriminated union; the spread `type` widens to the
+      // full union so the literal must be asserted back to HistoryItem.
+    } as unknown as HistoryItem);
   });
 
   it('should not change history if updateHistoryItem is called with a nonexistent ID', () => {

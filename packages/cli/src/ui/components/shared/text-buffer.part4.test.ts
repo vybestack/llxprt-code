@@ -432,7 +432,10 @@ describe('multi-line text', () => {
   ])(
     'should return $expected for $desc (offset $offset)',
     ({ offset, expected }) => {
-      expect(offsetToLogicalPos(text, offset)).toStrictEqual(expected);
+      // it.each types the table tuples as readonly; the actual is mutable.
+      expect(offsetToLogicalPos(text, offset)).toStrictEqual(
+        expected as [number, number],
+      );
     },
   );
 });

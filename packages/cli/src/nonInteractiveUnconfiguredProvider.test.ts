@@ -26,7 +26,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Mock } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,

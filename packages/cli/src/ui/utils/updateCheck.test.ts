@@ -10,6 +10,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
+import type { UpdateInfo } from 'update-notifier';
 import type { LoadedSettings } from '../../config/settings.js';
 
 const getPackageJson = vi.fn();
@@ -106,7 +107,8 @@ describe('checkForUpdates', () => {
     expect(result?.update).toStrictEqual({
       current: '1.0.0',
       latest: '1.1.0',
-    });
+      // UpdateInfo also requires type/name which the mock omits.
+    } as unknown as UpdateInfo);
   });
 
   it('should return null if the latest version is the same as the current version', async () => {

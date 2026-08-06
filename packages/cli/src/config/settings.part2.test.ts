@@ -48,6 +48,7 @@ import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
+  type Settings,
   loadSettings,
   USER_SETTINGS_PATH,
   getSystemDefaultsPath,
@@ -359,12 +360,14 @@ describe('Settings Loading and Merging', () => {
         contextPercentageThreshold: 0.5,
         strategy: 'high-density',
         profile: 'balanced',
-      });
+        // InferSettings types strategy/profile as `undefined` (schema default is
+        // undefined) even though their runtime values are strings.
+      } as unknown as NonNullable<Settings['chatCompression']>);
       expect(settings.merged.chatCompression).toStrictEqual({
         contextPercentageThreshold: 0.5,
         strategy: 'high-density',
         profile: 'balanced',
-      });
+      } as unknown as NonNullable<Settings['chatCompression']>);
     });
 
     it('should keep workspace and user model precedence over system model settings', () => {

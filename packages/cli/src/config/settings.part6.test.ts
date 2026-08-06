@@ -48,6 +48,7 @@ import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
+  type Settings,
   type SettingsFile,
   loadSettings,
   saveSettings,
@@ -494,7 +495,9 @@ describe('Settings Loading and Merging', () => {
         theme: 'dark',
         sandbox: true,
         contextFileName: 'CONTEXT.md',
-      });
+        // theme/sandbox/contextFileName are freeform user values not modelled in
+        // the InferSettings type, though they are persisted at runtime.
+      } as unknown as Settings);
       expect(dynamicSettings(loadedSettings).merged.theme).toBe('dark');
       expect(loadedSettings.merged.sandbox).toBe(true);
       expect(dynamicSettings(loadedSettings).merged.contextFileName).toBe(

@@ -300,8 +300,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // The prompt sent to the Agent is from the command, not the raw input.
     expect(agentState.streamInput).toStrictEqual([
+      // Command content blocks are forwarded as-is without a TextBlock `type`
+      // discriminator at runtime.
       { text: 'Prompt from command' },
-    ]);
+    ] as unknown as AgentInput);
     expect(processStdoutSpy).toHaveBeenCalledWith('Response from command');
   });
 

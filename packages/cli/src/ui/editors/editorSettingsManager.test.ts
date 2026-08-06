@@ -19,13 +19,16 @@ import {
   editorSettingsManager,
   EDITOR_DISPLAY_NAMES,
 } from './editorSettingsManager.js';
+import type { EditorType } from '@vybestack/llxprt-code-core';
 
 describe('editorSettingsManager', () => {
   it('should include every EditorType from EDITOR_DISPLAY_NAMES in available editors', () => {
     const displays = editorSettingsManager.getAvailableEditorDisplays();
     const displayTypes = new Set(displays.map((d) => d.type));
 
-    for (const editorType of Object.keys(EDITOR_DISPLAY_NAMES)) {
+    for (const editorType of Object.keys(
+      EDITOR_DISPLAY_NAMES,
+    ) as EditorType[]) {
       expect(displayTypes).toContain(editorType);
     }
   });

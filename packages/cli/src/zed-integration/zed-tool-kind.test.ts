@@ -28,7 +28,7 @@ describe('inferToolKind (issue #1605: ToolKind mapping)', () => {
       expect(kind).toBe(expected);
       // Every table entry — including future additions — must be a REAL ACP
       // ToolKind, so an invalid wire value cannot hide in an untested entry.
-      expect(ACP_TOOL_KINDS).toContain(kind);
+      expect(ACP_TOOL_KINDS).toContain(kind as NonNullable<typeof kind>);
     },
   );
 

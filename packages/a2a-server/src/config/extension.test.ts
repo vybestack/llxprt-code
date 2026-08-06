@@ -29,6 +29,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 
 const loggerErrorSpy = vi.fn();
 vi.mock('../utils/logger.js', () => ({
@@ -178,7 +179,7 @@ describe('A2A extension loader', () => {
         httpUrl: 'https://example.test/http',
         headers: { Authorization: 'Bearer token' },
         tcp: 'localhost:9000',
-        type: 'http',
+        type: 'http' as const,
         timeout: 4500,
         description: 'Canonical MCP server',
         includeTools: ['read'],
@@ -220,7 +221,9 @@ describe('A2A extension loader', () => {
       });
 
       expect(extensions[0]?.mcpServers?.canonical).toStrictEqual(
-        expectedServer,
+        // expectedServer has several literal-union fields (type,
+        // authProviderType, ...) that widen to string; cast to MCPServerConfig.
+        expectedServer as unknown as MCPServerConfig,
       );
     });
 

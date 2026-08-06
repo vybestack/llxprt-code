@@ -116,7 +116,9 @@ describe('createLoadBalancerProfileDefinition', () => {
     expect(profile.contextLimit).toBe(2048);
     expect(profile.ephemeralSettings).toStrictEqual({
       temperature: 0.5,
-    });
+      // EphemeralSettings is a fixed-key interface but arbitrary keys are
+      // accepted and persisted at runtime.
+    } as unknown as typeof profile.ephemeralSettings);
   });
 
   it('omits contextLimit when undefined', () => {

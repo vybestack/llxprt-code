@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import type { ImageOperationRunner } from '@vybestack/llxprt-code-core';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -118,7 +119,10 @@ describe('buildSlashCommandRuntime image capability', () => {
     const adapter = buildSlashCommandRuntime(source);
 
     expect(typeof adapter.getRunImageOperation).toBe('function');
-    expect(adapter.getRunImageOperation?.()).toBe(runner);
+    expect(adapter.getRunImageOperation?.()).toBe(
+      // runner is a minimal stand-in for the full ImageOperationRunner type.
+      runner as unknown as ImageOperationRunner,
+    );
   });
 
   it('omits getRunImageOperation when the source does not expose it', () => {

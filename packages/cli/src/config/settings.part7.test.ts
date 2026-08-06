@@ -45,6 +45,7 @@ import {
 import * as fs from 'fs'; // fs will be mocked separately
 import stripJsonComments from 'strip-json-comments'; // Will be mocked separately
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
+import { HookType } from '@vybestack/llxprt-code-core';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
@@ -204,7 +205,7 @@ describe('Settings Loading and Merging', () => {
         BeforeTool: [
           {
             matcher: 'ReadFile',
-            hooks: [{ type: 'command', command: 'user-before.sh' }],
+            hooks: [{ type: HookType.Command, command: 'user-before.sh' }],
           },
         ],
       };
@@ -212,7 +213,7 @@ describe('Settings Loading and Merging', () => {
         AfterTool: [
           {
             matcher: 'WriteFile',
-            hooks: [{ type: 'command', command: 'workspace-after.sh' }],
+            hooks: [{ type: HookType.Command, command: 'workspace-after.sh' }],
           },
         ],
       };
@@ -246,7 +247,7 @@ describe('Settings Loading and Merging', () => {
         BeforeTool: [
           {
             matcher: 'ReadFile',
-            hooks: [{ type: 'command', command: 'user-before.sh' }],
+            hooks: [{ type: HookType.Command, command: 'user-before.sh' }],
           },
         ],
       };
@@ -254,7 +255,7 @@ describe('Settings Loading and Merging', () => {
         BeforeTool: [
           {
             matcher: 'WriteFile',
-            hooks: [{ type: 'command', command: 'workspace-before.sh' }],
+            hooks: [{ type: HookType.Command, command: 'workspace-before.sh' }],
           },
         ],
       };
@@ -373,7 +374,7 @@ describe('Settings Loading and Merging', () => {
           BeforeTool: [
             {
               matcher: 'ReadFile',
-              hooks: [{ type: 'command', command: 'user-before.sh' }],
+              hooks: [{ type: HookType.Command, command: 'user-before.sh' }],
             },
           ],
         },
@@ -386,7 +387,9 @@ describe('Settings Loading and Merging', () => {
           AfterTool: [
             {
               matcher: 'WriteFile',
-              hooks: [{ type: 'command', command: 'workspace-after.sh' }],
+              hooks: [
+                { type: HookType.Command, command: 'workspace-after.sh' },
+              ],
             },
           ],
         },

@@ -872,7 +872,7 @@ describe('#3081 current-user container-home agreement', () => {
     expect(configHome).toBe(
       getContainerPath(Storage.getGlobalConfigDir()) as string,
     );
-    expect(volumeDestinations(args)).toContain(configHome);
+    expect(volumeDestinations(args)).toContain(configHome as string);
 
     // The current-user branch was actually taken (the other branch is covered
     // by the #3081 canonical config mount describe above).

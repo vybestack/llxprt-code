@@ -457,10 +457,11 @@ describe('FileCommandLoader (processors)', () => {
       // Mock glob to throw an AbortError
       const abortError = new DOMException('Aborted', 'AbortError');
       (glob.glob as unknown as Mock<typeof glob.glob>).mockImplementation(
-        async () => {
+        // The throwing impl is a subset of glob's overloaded+namespaced type.
+        (async () => {
           controller.abort(); // Ensure the signal is aborted when the service checks
           throw abortError;
-        },
+        }) as unknown as typeof glob.glob,
       );
 
       await loader.loadCommands(abortSignal);

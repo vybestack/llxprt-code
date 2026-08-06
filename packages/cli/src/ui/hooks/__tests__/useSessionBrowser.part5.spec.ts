@@ -230,10 +230,13 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(resumedTarget).not.toBeNull();
       });
 
-      expect(resumedTarget).toStrictEqual({
+      // resumedTarget is assigned inside an async onSelect callback, so TS
+      // narrows it back to null here; widen to the declared union and assert the
+      // expected against ContinueTarget.
+      expect(resumedTarget as ContinueTarget | null).toStrictEqual({
         kind: 'session',
         session: expect.objectContaining({ sessionId }),
-      });
+      } as unknown as ContinueTarget);
     });
 
     /**

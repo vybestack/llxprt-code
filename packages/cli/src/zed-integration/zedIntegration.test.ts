@@ -9,7 +9,10 @@ import {
   createSessionScopedConfig,
   parseZedAuthMethodId,
 } from './zedIntegration.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 
 const mockFromConfig = vi.fn();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
@@ -69,9 +72,16 @@ describe('createSessionScopedConfig', () => {
       readTextFile: vi.fn(async (_path: string) => 'replacement'),
       writeTextFile: vi.fn(async () => undefined),
     };
-    const baseProviderManager = { id: 'base' };
-    const firstProviderManager = { id: 'first' };
-    const secondProviderManager = { id: 'second' };
+    // Minimal stand-ins; Config's getters type them as RuntimeProviderManager.
+    const baseProviderManager = {
+      id: 'base',
+    } as unknown as RuntimeProviderManager;
+    const firstProviderManager = {
+      id: 'first',
+    } as unknown as RuntimeProviderManager;
+    const secondProviderManager = {
+      id: 'second',
+    } as unknown as RuntimeProviderManager;
     const baseConfig = {
       getFileSystemService: () => baseFileSystemService,
       setFileSystemService: vi.fn(),
@@ -127,8 +137,13 @@ describe('createSessionScopedConfig', () => {
       readTextFile: vi.fn(async () => 'replacement'),
       writeTextFile: vi.fn(async () => undefined),
     };
-    const baseProviderManager = { id: 'base' };
-    const replacementProviderManager = { id: 'replacement' };
+    // Minimal stand-ins; Config's getters type them as RuntimeProviderManager.
+    const baseProviderManager = {
+      id: 'base',
+    } as unknown as RuntimeProviderManager;
+    const replacementProviderManager = {
+      id: 'replacement',
+    } as unknown as RuntimeProviderManager;
     const baseConfig = {
       getFileSystemService: () => baseFileSystemService,
       setFileSystemService: vi.fn(),
@@ -172,9 +187,16 @@ describe('ZedAgent.newSession', () => {
         };
       },
     );
-    const baseProviderManager = { id: 'base' };
-    const firstProviderManager = { id: 'first' };
-    const secondProviderManager = { id: 'second' };
+    // Minimal stand-ins; Config's getters type them as RuntimeProviderManager.
+    const baseProviderManager = {
+      id: 'base',
+    } as unknown as RuntimeProviderManager;
+    const firstProviderManager = {
+      id: 'first',
+    } as unknown as RuntimeProviderManager;
+    const secondProviderManager = {
+      id: 'second',
+    } as unknown as RuntimeProviderManager;
     const baseConfig = {
       getFileSystemService: () => ({
         readTextFile: vi.fn(async () => 'base'),
