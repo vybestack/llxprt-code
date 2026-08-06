@@ -8,62 +8,47 @@ const realInstallationInfoModule = {
   ...(await import('./../utils/installationInfo.js')),
 };
 
-vi.mock('../ui/commands/profileCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    profileCommand: {
-      name: 'profile',
-      description: 'Profile command',
-      kind: CommandKind.BUILT_IN,
-    },
-  };
-});
+vi.mock('../ui/commands/profileCommand.js', () => ({
+  profileCommand: {
+    name: 'profile',
+    description: 'Profile command',
+    kind: CommandKind.BUILT_IN,
+  },
+}));
 
-vi.mock('../ui/commands/uiprofileCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    uiprofileCommand: {
-      name: 'uiprofile',
-      description: 'UI Profile command',
-      kind: CommandKind.BUILT_IN,
-    },
-  };
-});
+vi.mock('../ui/commands/uiprofileCommand.js', () => ({
+  uiprofileCommand: {
+    name: 'uiprofile',
+    description: 'UI Profile command',
+    kind: CommandKind.BUILT_IN,
+  },
+}));
 
-vi.mock('../ui/commands/aboutCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    aboutCommand: {
-      name: 'about',
-      description: 'About the CLI',
-      kind: CommandKind.BUILT_IN,
-    },
-  };
-});
+vi.mock('../ui/commands/aboutCommand.js', () => ({
+  aboutCommand: {
+    name: 'about',
+    description: 'About the CLI',
+    kind: CommandKind.BUILT_IN,
+  },
+}));
 
-vi.mock('../ui/commands/ideCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    ideCommand: vi.fn().mockReturnValue({
-      name: 'ide',
-      description: 'IDE command',
-      kind: CommandKind.BUILT_IN,
-    }),
-  };
-});
+vi.mock('../ui/commands/ideCommand.js', () => ({
+  ideCommand: vi.fn().mockReturnValue({
+    name: 'ide',
+    description: 'IDE command',
+    kind: CommandKind.BUILT_IN,
+  }),
+}));
 vi.mock('../ui/commands/restoreCommand.js', () => ({
   restoreCommand: vi.fn(),
 }));
-vi.mock('../ui/commands/permissionsCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    permissionsCommand: {
-      name: 'permissions',
-      description: 'Permissions command',
-      kind: CommandKind.BUILT_IN,
-    },
-  };
-});
+vi.mock('../ui/commands/permissionsCommand.js', () => ({
+  permissionsCommand: {
+    name: 'permissions',
+    description: 'Permissions command',
+    kind: CommandKind.BUILT_IN,
+  },
+}));
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
@@ -89,16 +74,13 @@ vi.mock('../ui/commands/modelCommand.js', () => ({
 }));
 vi.mock('../ui/commands/privacyCommand.js', () => ({ privacyCommand: {} }));
 vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-vi.mock('../ui/commands/quotaCommand.js', async () => {
-  const { CommandKind } = await import('../ui/commands/types.js');
-  return {
-    quotaCommand: {
-      name: 'quota',
-      description: 'Quota command',
-      kind: CommandKind.BUILT_IN,
-    },
-  };
-});
+vi.mock('../ui/commands/quotaCommand.js', () => ({
+  quotaCommand: {
+    name: 'quota',
+    description: 'Quota command',
+    kind: CommandKind.BUILT_IN,
+  },
+}));
 vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
 vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));

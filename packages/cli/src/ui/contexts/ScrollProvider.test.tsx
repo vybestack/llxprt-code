@@ -17,8 +17,9 @@ import {
 import type { MouseEvent } from '../utils/mouse.js';
 
 const mockUseMouseCallbacks = new Set<(event: MouseEvent) => void | boolean>();
-vi.mock('../hooks/useMouse.js', async () => {
-  const React = await import('react');
+const React = await import('react');
+
+vi.mock('../hooks/useMouse.js', () => {
   return {
     useMouse: (callback: (event: MouseEvent) => void | boolean) => {
       React.useLayoutEffect(() => {

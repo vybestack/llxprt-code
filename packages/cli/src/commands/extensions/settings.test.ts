@@ -22,7 +22,7 @@ const mockGetExtensionAndConfig: Mock<
 > = vi.fn();
 const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
-vi.mock('../../config/extensions/settingsIntegration.js', async () => ({
+vi.mock('../../config/extensions/settingsIntegration.js', () => ({
   updateSetting: mockUpdateSetting,
   getEnvContents: mockGetEnvContents,
   ExtensionSettingScope: {

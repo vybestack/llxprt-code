@@ -12,10 +12,11 @@ import { waitFor } from '../../test-utils/async.js';
 // Mock the providers runtime barrel to avoid the broken dist dependency
 // chain, but delegate parseEphemeralSettingValue to the REAL source
 // implementation so tests exercise actual parsing/validation behavior.
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', async () => {
-  const real = await import(
-    '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
-  );
+const real = await import(
+  '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
+);
+
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   return {
     parseEphemeralSettingValue: real.parseEphemeralSettingValue,
     ephemeralSettingHelp: real.ephemeralSettingHelp,

@@ -21,7 +21,11 @@ const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
 const mockToggleOAuthEnabled = vi.fn();
 
-vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+const realRealInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
+
+vi.mock('ink', () => realRealInkModule);
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({

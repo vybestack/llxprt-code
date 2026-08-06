@@ -10,7 +10,11 @@ import { act } from 'react';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 
-vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+const realRealInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
+
+vi.mock('ink', () => realRealInkModule);
 
 import {
   PoliciesDialog,

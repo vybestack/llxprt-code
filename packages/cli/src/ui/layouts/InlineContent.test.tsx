@@ -26,10 +26,15 @@ const activeRenders: Array<ReturnType<typeof render>> = [];
 //
 // The factory imports the real Ink module via a direct file path (re-exported
 // from test-utils/real-ink.ts) to bypass the `ink → ink-stub` resolve alias.
-vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+const { Text } = await import('ink');
 
-vi.mock('../components/ContextSummaryDisplay.js', async () => {
-  const { Text } = await import('ink');
+const realRealInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
+
+vi.mock('ink', () => realRealInkModule);
+
+vi.mock('../components/ContextSummaryDisplay.js', () => {
   return {
     ContextSummaryDisplay: () => (
       <Text color="white">context-summary-mock</Text>
