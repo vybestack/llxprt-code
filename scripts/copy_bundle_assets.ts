@@ -1,190 +1,382 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/**
+ * Stages the runtime data assets the prebuilt CLI bundle reads relative to the
+ * bundle directory (issue #3068).
+ *
+ * `buildCliBundle()` in `bun-build.config.ts` inlines the whole TypeScript
+ * module graph into a single `packages/cli/bundle/llxprt.js`. Every module that
+ * locates a data file via `__dirname` / `import.meta.url` therefore resolves it
+ * under `<bundle-dir>/…`, so those data files must be staged next to the bundle
+ * or every such read fails in the published package. This module owns that
+ * staging step.
+ *
+ * Required assets (the bundle is unusable without them) cause a hard throw so a
+ * release can never again silently ship a broken bundle. Generated artifacts
+ * (`npm run generate`) are copied when present and skipped when absent, so a
+ * fresh checkout can still run `npm run bundle:cli`.
+ *
+ * Not staged here on purpose:
+ *  - `tree-sitter-bash/tree-sitter-bash.wasm`. `shell-parser.ts` resolves it
+ *    with `require.resolve('tree-sitter-bash/tree-sitter-bash.wasm')`, i.e.
+ *    MODULE resolution from `node_modules`, not a bundle-relative read. Copying
+ *    it into `bundle/` would change nothing; failure degrades gracefully to
+ *    regex parsing. Residual caveat: `tree-sitter-bash` is a dependency of
+ *    `@vybestack/llxprt-code-core`, not of `packages/cli`, so it relies on npm
+ *    hoisting — the same ownership hazard documented for
+ *    `CLI_DIRNAME_DEPENDENT_EXTERNALS` in `bun-build.config.ts`.
+ */
 
-import { copyFileSync, existsSync, mkdirSync, cpSync } from 'node:fs';
-import { dirname, join, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { glob } from 'glob';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, '..');
-const bundleDir = join(root, 'bundle');
-const require = createRequire(import.meta.url);
-
-// Remove verbose logging
-
-// Create the bundle directory if it doesn't exist
-if (!existsSync(bundleDir)) {
-  mkdirSync(bundleDir);
+/** Options for {@link stageCliBundleAssets}. */
+export interface StageCliBundleAssetsOptions {
+  /** Bundle directory assets are staged into. Defaults to packages/cli/bundle. */
+  readonly bundleDir?: string;
+  /** Repository root the source assets are read from. Defaults to repo root. */
+  readonly repoRoot?: string;
 }
 
-// Find and copy all .sb files from packages to the root of the bundle directory
-const sbFiles = glob.sync('packages/**/*.sb', { cwd: root });
-for (const file of sbFiles) {
-  copyFileSync(join(root, file), join(bundleDir, basename(file)));
+function defaultRepoRoot(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..');
 }
 
-// Find and copy all .vsix files from packages to the root of the bundle directory
-const vsixFiles = glob.sync('packages/vscode-ide-companion/*.vsix', {
-  cwd: root,
-});
-for (const file of vsixFiles) {
-  copyFileSync(join(root, file), join(bundleDir, basename(file)));
+function ensureDir(dir: string): void {
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
 }
 
-// Copy tiktoken WASM file. Missing critical runtime assets must fail the
-// bundle step loudly rather than producing a bundle that breaks at runtime.
-const tiktokenWasmPath = join(
-  root,
-  'node_modules/@dqbd/tiktoken/tiktoken_bg.wasm',
-);
-if (!existsSync(tiktokenWasmPath)) {
-  throw new Error(
-    `Missing critical runtime asset: ${tiktokenWasmPath}. Run npm install first.`,
+/** Copies a single file, creating destination directories as needed. */
+function copyFileTo(srcPath: string, destPath: string): string {
+  ensureDir(dirname(destPath));
+  copyFileSync(srcPath, destPath);
+  return destPath;
+}
+
+function missingRequiredAsset(description: string, srcPath: string): Error {
+  return new Error(
+    `Cannot stage CLI bundle: required ${description} is missing at ${srcPath}. ` +
+      `Run \`npm install\` (and \`npm run generate\` for generated assets) before bundling.`,
   );
 }
-copyFileSync(tiktokenWasmPath, join(bundleDir, 'tiktoken_bg.wasm'));
 
-// Copy tree-sitter WASM file for web-tree-sitter runtime
-const treeSitterWasmPath = join(
-  root,
-  'node_modules/web-tree-sitter/tree-sitter.wasm',
-);
-if (!existsSync(treeSitterWasmPath)) {
-  throw new Error(
-    `Missing critical runtime asset: ${treeSitterWasmPath}. Run npm install first.`,
+/** Lists the regular files directly inside a directory. */
+function listFilesIn(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name);
+}
+
+/**
+ * Recursively lists every regular file under `rootDir` as repo-style relative
+ * paths (forward slashes), so a required directory tree can be mirrored into
+ * the bundle preserving its structure.
+ */
+function walkFiles(rootDir: string): string[] {
+  const out: string[] = [];
+  const stack: string[] = [''];
+  while (stack.length > 0) {
+    const rel = stack.pop();
+    if (rel === undefined) {
+      break;
+    }
+    const abs = rel === '' ? rootDir : join(rootDir, rel);
+    for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        stack.push(childRel);
+      } else if (entry.isFile()) {
+        out.push(childRel);
+      }
+    }
+  }
+  return out;
+}
+
+/** Copies a required single-file asset, throwing if the source is absent. */
+function stageRequiredFile(
+  srcPath: string,
+  destPath: string,
+  description: string,
+): string {
+  if (!existsSync(srcPath)) {
+    throw missingRequiredAsset(description, srcPath);
+  }
+  return copyFileTo(srcPath, destPath);
+}
+
+/**
+ * Copies a required directory's files into a destination directory, throwing if
+ * the source directory is absent or holds no matching files. Returns the staged
+ * destination paths so a future added source file can never be silently
+ * forgotten by the bundle.
+ */
+function stageRequiredDir(
+  srcDir: string,
+  destDir: string,
+  filter: (name: string) => boolean,
+  description: string,
+): string[] {
+  // existsSync guard is load-bearing: readdirSync would throw a raw ENOENT for
+  // a missing directory, so the actionable missingRequiredAsset below would be
+  // unreachable. The guard surfaces the actionable message instead.
+  if (!existsSync(srcDir)) {
+    throw missingRequiredAsset(description, srcDir);
+  }
+  const files = listFilesIn(srcDir).filter(filter);
+  if (files.length === 0) {
+    throw missingRequiredAsset(description, srcDir);
+  }
+  return files.map((file) =>
+    copyFileTo(join(srcDir, file), join(destDir, file)),
   );
 }
-copyFileSync(treeSitterWasmPath, join(bundleDir, 'tree-sitter.wasm'));
 
-// Copy the tree-sitter bash grammar WASM. shell-parser.ts loads this from disk
-// via require.resolve at runtime (the esbuild ?binary embedding plugin was
-// retired), so the bundle must ship the grammar alongside the other WASM files.
-const treeSitterBashWasmPath = require.resolve(
-  'tree-sitter-bash/tree-sitter-bash.wasm',
-);
-copyFileSync(treeSitterBashWasmPath, join(bundleDir, 'tree-sitter-bash.wasm'));
+/**
+ * Recursively copies a required directory tree into a destination directory,
+ * throwing if the source directory is absent or empty. Preserves the relative
+ * structure so bundle-relative reads (`join(__dirname, 'subdir', …)`) resolve.
+ */
+function stageRequiredTree(
+  srcDir: string,
+  destDir: string,
+  description: string,
+): string[] {
+  if (!existsSync(srcDir)) {
+    throw missingRequiredAsset(description, srcDir);
+  }
+  const files = walkFiles(srcDir);
+  if (files.length === 0) {
+    throw missingRequiredAsset(description, srcDir);
+  }
+  return files.map((rel) => copyFileTo(join(srcDir, rel), join(destDir, rel)));
+}
 
-// Copy all markdown files from prompt-config/defaults preserving directory structure
-const promptMdFiles = glob.sync(
-  'packages/core/src/prompt-config/defaults/**/*.md',
-  { cwd: root },
-);
-// Found markdown files to copy
-for (const file of promptMdFiles) {
-  // Extract the relative path after 'defaults/'
-  // Normalize path separators to forward slashes for consistent replacement
-  const normalizedFile = file.replace(/\\/g, '/');
-  const relativePath = normalizedFile.replace(
-    'packages/core/src/prompt-config/defaults/',
-    '',
+/** Copies a generated artifact when present; returns [] when absent. */
+function stageOptionalFile(srcPath: string, destPath: string): string[] {
+  if (!existsSync(srcPath)) {
+    return [];
+  }
+  return [copyFileTo(srcPath, destPath)];
+}
+
+/**
+ * Resolves the `web-tree-sitter` WASM via module resolution (the package's
+ * `exports` map `"./tree-sitter.wasm"`), so a nested/non-hoisted install layout
+ * still works — the same idiom `bun-build.config.ts` uses for tiktoken.
+ *
+ * Resolution is anchored at `repoRoot` (not this script's own location) so the
+ * fail-fast tests that drive a synthetic `repoRoot` get a deterministic, real
+ * result: an empty temp root has no `node_modules`, so resolution fails and the
+ * actionable error fires. Anchoring at the script location would always find
+ * the real repo's copy and silently mask a missing-asset regression. In
+ * production `repoRoot` is the real repo root, so the two anchors are
+ * equivalent there — this choice only affects testability.
+ */
+function resolveTreeSitterWasm(repoRoot: string): string {
+  const requireAtRoot = createRequire(join(repoRoot, 'package.json'));
+  try {
+    return requireAtRoot.resolve('web-tree-sitter/tree-sitter.wasm');
+  } catch {
+    throw missingRequiredAsset(
+      'tree-sitter.wasm',
+      join(repoRoot, 'node_modules/web-tree-sitter/tree-sitter.wasm'),
+    );
+  }
+}
+
+function stageTreeSitterWasm(repoRoot: string, bundleDir: string): string[] {
+  return [
+    stageRequiredFile(
+      resolveTreeSitterWasm(repoRoot),
+      join(bundleDir, 'tree-sitter.wasm'),
+      'tree-sitter.wasm',
+    ),
+  ];
+}
+
+/**
+ * Extensions the alias loader reads (`SUPPORTED_EXTENSIONS` in
+ * `packages/providers/src/composition/providerAliases.ts`). Staging is filtered
+ * to these so incidental files in the source directory are never published.
+ */
+const ALIAS_EXTENSIONS = ['.config', '.json'];
+
+/**
+ * Collects built-in provider alias asset names (`.config`/`.json`) from `dir`,
+ * failing fast when none are found.
+ *
+ * An empty result is a build-input error, not a silent no-op: the bundled
+ * `providerAliases` loader would then register zero built-in providers and
+ * `--provider openai` would fail at launch (issue #3062 regression). Surfacing
+ * this at build time prevents shipping a bundle that silently dropped every
+ * built-in alias.
+ */
+export function collectAliasAssets(dir: string): string[] {
+  const assets = readdirSync(dir).filter((name) =>
+    ALIAS_EXTENSIONS.some((ext) => name.endsWith(ext)),
   );
-  const sourcePath = join(root, file);
-  const targetPath = join(bundleDir, relativePath);
-  const targetDir = dirname(targetPath);
-
-  // Create directory structure if it doesn't exist
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
+  if (assets.length === 0) {
+    throw new Error(
+      `cli-bundle build produced no built-in provider alias assets: ${dir} ` +
+        `contains no .config/.json files; the bundled providerAliases loader ` +
+        `would register no built-in providers.`,
+    );
   }
-
-  copyFileSync(sourcePath, targetPath);
-
-  // Verify the file was copied
-  if (!existsSync(targetPath)) {
-    console.error(`  Failed to copy: ${relativePath}`);
-  }
+  return assets;
 }
 
-// Copy generated prompt manifest into the bundle root for runtime loading
-const promptManifestPath = join(
-  root,
-  'packages/core/dist/prompt-config/defaults/default-prompts.json',
-);
-if (existsSync(promptManifestPath)) {
-  copyFileSync(promptManifestPath, join(bundleDir, 'default-prompts.json'));
-}
-
-// Copy generated git-commit info into the bundle root for runtime loading
-const gitCommitInfoPath = join(
-  root,
-  'packages/cli/src/generated/git-commit.json',
-);
-if (existsSync(gitCommitInfoPath)) {
-  copyFileSync(gitCommitInfoPath, join(bundleDir, 'git-commit.json'));
-}
-
-// Copy provider alias config files preserving directory structure
-const aliasFiles = glob.sync(
-  'packages/providers/src/composition/aliases/*.config',
-  {
-    cwd: root,
-  },
-);
-for (const file of aliasFiles) {
-  const sourcePath = join(root, file);
-  const targetPath = join(bundleDir, 'providers', 'aliases', basename(file));
-  const targetDir = dirname(targetPath);
-
-  // Create directory structure if it doesn't exist
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
+function stageProviderAliases(repoRoot: string, bundleDir: string): string[] {
+  const srcDir = join(repoRoot, 'packages/providers/src/composition/aliases');
+  // The existsSync guard keeps the actionable message for a missing directory;
+  // collectAliasAssets owns the "directory exists but holds no aliases" guard
+  // (issue #3062) so both callers share one alias-collection implementation.
+  if (!existsSync(srcDir)) {
+    throw missingRequiredAsset('provider alias configs', srcDir);
   }
-
-  copyFileSync(sourcePath, targetPath);
-
-  // Verify the file was copied
-  if (!existsSync(targetPath)) {
-    console.error(`  Failed to copy alias: ${basename(file)}`);
-  }
+  const destDir = join(bundleDir, 'providers', 'aliases');
+  return collectAliasAssets(srcDir).map((name) =>
+    copyFileTo(join(srcDir, name), join(destDir, name)),
+  );
 }
 
-// Copy policy files preserving directory structure
-const policyFiles = glob.sync('packages/core/src/policy/policies/*.toml', {
-  cwd: root,
-});
-for (const file of policyFiles) {
-  const sourcePath = join(root, file);
-  const targetPath = join(bundleDir, 'policies', basename(file));
-  const targetDir = dirname(targetPath);
-
-  // Create directory structure if it doesn't exist
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
-  }
-
-  copyFileSync(sourcePath, targetPath);
-
-  // Verify the file was copied
-  if (!existsSync(targetPath)) {
-    console.error(`  Failed to copy policy: ${basename(file)}`);
-  }
+function stagePolicyTomls(repoRoot: string, bundleDir: string): string[] {
+  const srcDir = join(repoRoot, 'packages/policy/src/policies');
+  return stageRequiredDir(
+    srcDir,
+    join(bundleDir, 'policies'),
+    (name) => name.endsWith('.toml'),
+    'policy TOML files',
+  );
 }
 
-// Copy built-in skills preserving directory structure
-const builtinSkillsSrc = join(root, 'packages/core/src/skills/builtin');
-const builtinSkillsDest = join(bundleDir, 'builtin');
-if (existsSync(builtinSkillsSrc)) {
-  cpSync(builtinSkillsSrc, builtinSkillsDest, {
-    recursive: true,
-    dereference: true,
-  });
+/**
+ * macOS seatbelt profiles. The filter is scoped to the known profile shape
+ * (`sandbox-macos-` prefix + `.sb` suffix) because the source directory is the
+ * general `packages/cli/src/utils`, so a future unrelated or fixture `.sb` file
+ * would otherwise be silently published.
+ */
+function stageSandboxProfiles(repoRoot: string, bundleDir: string): string[] {
+  const srcDir = join(repoRoot, 'packages/cli/src/utils');
+  return stageRequiredDir(
+    srcDir,
+    bundleDir,
+    (name) => name.startsWith('sandbox-macos-') && name.endsWith('.sb'),
+    'macOS seatbelt profiles',
+  );
 }
-// Assets copied to bundle/
+
+/**
+ * Pinned tokenizer BPE assets read by the official prompt estimators
+ * (`assetLoader.ts` computes `ASSETS_DIR = join(__dirname, 'assets')`). Three
+ * model families (kimi-k3, glm-5.2, minimax-m3) each ship a manifest, BPE file,
+ * and license; without them those models cannot start a chat. Staged as a
+ * required tree so the on-disk layout the loader expects is preserved.
+ */
+function stageTokenizerAssets(repoRoot: string, bundleDir: string): string[] {
+  const srcDir = join(
+    repoRoot,
+    'packages/providers/src/tokenizers/official/assets',
+  );
+  return stageRequiredTree(
+    srcDir,
+    join(bundleDir, 'assets'),
+    'official tokenizer BPE assets',
+  );
+}
+
+/**
+ * Extension boilerplate templates read by `extensions new`
+ * (`new.ts` computes `EXAMPLES_PATH = join(__dirname, 'examples')` and
+ * `readdir`s it inside the yargs builder, so a missing tree crashes during
+ * argument parsing). Five templates with nested files; staged as a required
+ * tree preserving structure.
+ */
+function stageExtensionExamples(repoRoot: string, bundleDir: string): string[] {
+  const srcDir = join(
+    repoRoot,
+    'packages/cli/src/commands/extensions/examples',
+  );
+  return stageRequiredTree(
+    srcDir,
+    join(bundleDir, 'examples'),
+    'extension boilerplate examples',
+  );
+}
+
+function stagePromptDefaults(repoRoot: string, bundleDir: string): string[] {
+  const srcRoot = join(repoRoot, 'packages/core/src/prompt-config/defaults');
+  // glob.sync returns [] for a missing dir, so an existsSync guard is not
+  // needed here — the empty check below surfaces the actionable error.
+  const files = glob.sync('**/*.md', { cwd: srcRoot });
+  if (files.length === 0) {
+    throw missingRequiredAsset('prompt default markdown files', srcRoot);
+  }
+  return files.map((rel) =>
+    copyFileTo(join(srcRoot, rel), join(bundleDir, rel)),
+  );
+}
+
+function stageGeneratedAssets(repoRoot: string, bundleDir: string): string[] {
+  const staged: string[] = [];
+  staged.push(
+    ...stageOptionalFile(
+      join(
+        repoRoot,
+        'packages/core/dist/prompt-config/defaults/default-prompts.json',
+      ),
+      join(bundleDir, 'default-prompts.json'),
+    ),
+  );
+  staged.push(
+    ...stageOptionalFile(
+      join(repoRoot, 'packages/cli/src/generated/git-commit.json'),
+      join(bundleDir, 'git-commit.json'),
+    ),
+  );
+  return staged;
+}
+
+/**
+ * Stages every runtime asset the prebuilt CLI bundle resolves relative to the
+ * bundle directory. Throws on a missing required asset (the bundle would be
+ * unusable); copies generated artifacts when present.
+ *
+ * @returns the destination paths of every staged asset, for inclusion in build
+ * diagnostics / artifact lists.
+ */
+export function stageCliBundleAssets(
+  options: StageCliBundleAssetsOptions = {},
+): readonly string[] {
+  const repoRoot = options.repoRoot ?? defaultRepoRoot();
+  const bundleDir =
+    options.bundleDir ?? join(repoRoot, 'packages', 'cli', 'bundle');
+  ensureDir(bundleDir);
+
+  const staged: string[] = [];
+  staged.push(...stageTreeSitterWasm(repoRoot, bundleDir));
+  staged.push(...stageProviderAliases(repoRoot, bundleDir));
+  staged.push(...stagePolicyTomls(repoRoot, bundleDir));
+  staged.push(...stageSandboxProfiles(repoRoot, bundleDir));
+  staged.push(...stageTokenizerAssets(repoRoot, bundleDir));
+  staged.push(...stageExtensionExamples(repoRoot, bundleDir));
+  staged.push(...stagePromptDefaults(repoRoot, bundleDir));
+  staged.push(...stageGeneratedAssets(repoRoot, bundleDir));
+  return staged;
+}
+
+if (import.meta.main) {
+  const staged = stageCliBundleAssets();
+  console.error(
+    `staged ${staged.length} CLI bundle runtime asset(s) into packages/cli/bundle`,
+  );
+}
