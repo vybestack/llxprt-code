@@ -10,6 +10,10 @@ import {
   parseResponsesStream,
   type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
+import {
+  ACCEPTED_TERMINAL_EVENT_TYPES,
+  isTerminalEventType,
+} from '../openai/responsesTerminalEvents.js';
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
@@ -73,26 +77,6 @@ interface WebSocketTransportConfig {
 // Matches the Codex client's default WebSocket connect timeout
 // (websocket_connect_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
 const HANDSHAKE_TIMEOUT_MS = 15_000;
-// The parser yields terminal-metadata IContent for these, so a later close
-// must not replace them with a generic interruption error.
-const ACCEPTED_TERMINAL_EVENT_TYPES = new Set([
-  'response.completed',
-  'response.done',
-  'response.incomplete',
-]);
-// Still queued so the parser raises its own specific provider error.
-const PROTOCOL_FAILURE_TERMINAL_EVENT_TYPES = new Set([
-  'response.failed',
-  'error',
-]);
-
-function isTerminalEventType(type: string | undefined): boolean {
-  return (
-    type !== undefined &&
-    (ACCEPTED_TERMINAL_EVENT_TYPES.has(type) ||
-      PROTOCOL_FAILURE_TERMINAL_EVENT_TYPES.has(type))
-  );
-}
 
 function eventType(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;

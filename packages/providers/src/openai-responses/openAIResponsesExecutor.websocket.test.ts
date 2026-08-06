@@ -180,6 +180,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       ok: true,
       body: encodeSse([
         'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
+        'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
         'data: [DONE]\n\n',
       ]),
     });
@@ -208,6 +209,15 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
 
     expect(messages).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi' }] },
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          id: 'r1',
+          stopReason: 'end_turn',
+          finishReason: 'completed',
+        },
+      },
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(transportChecks).toBe(1);
@@ -217,6 +227,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     const fallbackBody = (): ReadableStream<Uint8Array> =>
       encodeSse([
         'data: {"type":"response.output_text.delta","delta":"fallback"}\n\n',
+        'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
         'data: [DONE]\n\n',
       ]);
     const fetchSpy = vi
@@ -243,6 +254,15 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     );
     expect(first).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          id: 'r1',
+          stopReason: 'end_turn',
+          finishReason: 'completed',
+        },
+      },
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
@@ -251,6 +271,15 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     );
     expect(second).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          id: 'r1',
+          stopReason: 'end_turn',
+          finishReason: 'completed',
+        },
+      },
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(transport.streamResponseCalls).toBe(1);

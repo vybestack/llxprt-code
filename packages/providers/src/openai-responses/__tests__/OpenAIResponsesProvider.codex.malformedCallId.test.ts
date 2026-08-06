@@ -65,6 +65,8 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
   it('should not emit function_call_output for malformed call ids that cannot match a function_call', async () => {
     const provider = buildProviderWithOAuth();
 
+    const encoder = new TextEncoder();
+
     const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
       const bodyText =
         init?.body instanceof Blob
@@ -99,7 +101,21 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
         }
       }
 
-      return new Response('', { status: 200 });
+      const sseStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+            ),
+          );
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      });
+      return new Response(sseStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     });
 
     globalThis.fetch = fetchMock as typeof globalThis.fetch;

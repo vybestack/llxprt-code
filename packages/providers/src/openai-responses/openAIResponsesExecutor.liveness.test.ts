@@ -130,6 +130,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
     const sseBody = encodeSse([
       'data: {"type":"response.created","response":{"id":"r1","object":"response","model":"gpt-5","status":"in_progress"}}\n\n',
       'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
       'data: [DONE]\n\n',
     ]);
     vi.stubGlobal(
@@ -157,6 +158,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
     const sseBody = encodeSse([
       'data: {"type":"response.created","response":{"id":"r1","object":"response","model":"gpt-5","status":"in_progress"}}\n\n',
       'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
       'data: [DONE]\n\n',
     ]);
     vi.stubGlobal(
@@ -174,6 +176,15 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
       {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Hi' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          id: 'r1',
+          stopReason: 'end_turn',
+          finishReason: 'completed',
+        },
       },
     ]);
   });
@@ -234,6 +245,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
   it('A3: emits finalized request dump at common pre-transport seam (HTTP)', async () => {
     const sseBody = encodeSse([
       'data: {"type":"response.output_text.delta","delta":"OK"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
       'data: [DONE]\n\n',
     ]);
     vi.stubGlobal(
