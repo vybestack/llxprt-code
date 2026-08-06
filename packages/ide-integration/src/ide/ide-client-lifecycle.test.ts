@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import {
   describe,
   it,
@@ -22,6 +23,16 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 import * as os from 'node:os';
 
+const realProcessUtilsModule = { ...(await import('./process-utils.js')) };
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realStreamableHttpModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/streamableHttp.js')),
+};
+const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
+const realNodeOsModule = { ...(await import('node:os')) };
+
 const actual = { ...(await import('node:fs')) };
 vi.mock('node:fs', () => {
   return {
@@ -34,11 +45,15 @@ vi.mock('node:fs', () => {
     existsSync: () => false,
   };
 });
-vi.mock('./process-utils.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
-vi.mock('./detect-ide.js');
-vi.mock('node:os');
+vi.mock('./process-utils.js', () => automock(realProcessUtilsModule));
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () =>
+  automock(realStreamableHttpModule),
+);
+vi.mock('./detect-ide.js', () => automock(realDetectIdeModule));
+vi.mock('node:os', () => automock(realNodeOsModule));
 
 /**
  * A controllable fake MCP Client that lets tests drive connect/ping and fire

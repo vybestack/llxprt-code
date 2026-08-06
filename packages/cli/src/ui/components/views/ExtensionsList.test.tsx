@@ -4,13 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import { vi, describe, beforeEach, it, expect, type Mock } from 'bun:test';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { ExtensionsList } from './ExtensionsList.js';
 
-vi.mock('../../contexts/UIStateContext.js');
+const realUIStateContextModule = {
+  ...(await import('../../contexts/UIStateContext.js')),
+};
+
+vi.mock('../../contexts/UIStateContext.js', () =>
+  automock(realUIStateContextModule),
+);
 
 const mockUseUIState = useUIState as Mock<typeof useUIState>;
 

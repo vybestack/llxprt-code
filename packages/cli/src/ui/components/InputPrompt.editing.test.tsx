@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
@@ -29,12 +30,41 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { StreamingState } from '../types.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 
-vi.mock('../hooks/useShellHistory.js');
-vi.mock('../hooks/useCommandCompletion.js');
-vi.mock('../hooks/useInputHistory.js');
-vi.mock('../hooks/useReverseSearchCompletion.js');
-vi.mock('../utils/clipboardUtils.js');
-vi.mock('../hooks/useKittyKeyboardProtocol.js');
+const realUseShellHistoryModule = {
+  ...(await import('../hooks/useShellHistory.js')),
+};
+const realUseCommandCompletionModule = {
+  ...(await import('../hooks/useCommandCompletion.js')),
+};
+const realUseInputHistoryModule = {
+  ...(await import('../hooks/useInputHistory.js')),
+};
+const realUseReverseSearchCompletionModule = {
+  ...(await import('../hooks/useReverseSearchCompletion.js')),
+};
+const realClipboardUtilsModule = {
+  ...(await import('../utils/clipboardUtils.js')),
+};
+const realUseKittyKeyboardProtocolModule = {
+  ...(await import('../hooks/useKittyKeyboardProtocol.js')),
+};
+
+vi.mock('../hooks/useShellHistory.js', () =>
+  automock(realUseShellHistoryModule),
+);
+vi.mock('../hooks/useCommandCompletion.js', () =>
+  automock(realUseCommandCompletionModule),
+);
+vi.mock('../hooks/useInputHistory.js', () =>
+  automock(realUseInputHistoryModule),
+);
+vi.mock('../hooks/useReverseSearchCompletion.js', () =>
+  automock(realUseReverseSearchCompletionModule),
+);
+vi.mock('../utils/clipboardUtils.js', () => automock(realClipboardUtilsModule));
+vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
+  automock(realUseKittyKeyboardProtocolModule),
+);
 
 const mockSlashCommands: SlashCommand[] = [
   {

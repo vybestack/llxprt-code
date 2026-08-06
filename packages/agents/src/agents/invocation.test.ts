@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import type { Mock } from '../testApi.js';
 import { SubagentInvocation } from './invocation.js';
@@ -20,7 +21,9 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type z } from 'zod';
 
-vi.mock('./executor.js');
+const realExecutorModule = { ...(await import('./executor.js')) };
+
+vi.mock('./executor.js', () => automock(realExecutorModule));
 
 const MockAgentExecutor = AgentExecutor as unknown as Mock<
   (...args: never[]) => unknown

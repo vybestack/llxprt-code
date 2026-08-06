@@ -69,9 +69,9 @@ describe('settingsLoader workspace trust provenance', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     (
-      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock<
-        (...args: never[]) => unknown
-      >
+      fs.realpathSync as unknown as Mock<
+        typeof fs.realpathSync
+      > as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation((location: fs.PathLike): string => String(location));
     resetTrustedFoldersForTesting();
     process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
@@ -160,9 +160,9 @@ describe('settingsLoader workspace trust provenance', () => {
       [workspaceSymlink]: TrustLevel.TRUST_FOLDER,
     });
     (
-      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock<
-        (...args: never[]) => unknown
-      >
+      fs.realpathSync as unknown as Mock<
+        typeof fs.realpathSync
+      > as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation((location: fs.PathLike): string =>
       String(location) === path.resolve('/mock/home/user')
         ? String(location)
@@ -188,9 +188,9 @@ describe('settingsLoader workspace trust provenance', () => {
     const workspace = '/trusted/workspace';
     exposeTrustRules({ [workspace]: TrustLevel.TRUST_FOLDER });
     (
-      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock<
-        (...args: never[]) => unknown
-      >
+      fs.realpathSync as unknown as Mock<
+        typeof fs.realpathSync
+      > as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation((location: fs.PathLike): string => {
       if (String(location) === path.resolve(workspace)) {
         throw new Error('canonical identity unavailable');

@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
@@ -17,7 +18,9 @@ import type { Key } from './useKeypress.js';
 import { useKeypress } from './useKeypress.js';
 import { MessageType } from '../types.js';
 
-vi.mock('./useKeypress.js');
+const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
+
+vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
 
 interface AgentStub {
   getApprovalMode: Mock<() => ApprovalMode>;

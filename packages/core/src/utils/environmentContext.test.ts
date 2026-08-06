@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -21,11 +22,18 @@ import {
 import type { Config } from '../config/config.js';
 import { getFolderStructure } from './getFolderStructure.js';
 
-vi.mock('../config/config.js');
+const realConfigModule = { ...(await import('../config/config.js')) };
+const realLlxprtCodeToolsModule = {
+  ...(await import('@vybestack/llxprt-code-tools')),
+};
+
+vi.mock('../config/config.js', () => automock(realConfigModule));
 vi.mock('./getFolderStructure.js', () => ({
   getFolderStructure: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-tools');
+vi.mock('@vybestack/llxprt-code-tools', () =>
+  automock(realLlxprtCodeToolsModule),
+);
 
 describe('getDirectoryContextString', () => {
   let mockConfig: Partial<Config>;

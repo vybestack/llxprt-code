@@ -11,6 +11,7 @@
  * file-level max-lines).
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -41,6 +42,10 @@ import {
 } from './client-test-helpers.js';
 
 // Mock prompts module before imports
+const realConfigModule = {
+  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
+
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
     Promise.resolve('Test system instruction'),
@@ -153,7 +158,9 @@ vi.mock('./turn', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
+vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+  automock(realConfigModule),
+);
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));

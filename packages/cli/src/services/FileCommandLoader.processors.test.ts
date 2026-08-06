@@ -109,7 +109,9 @@ describe('FileCommandLoader (processors)', () => {
     // vi.clearAllMocks() resets the mock function's implementation, so we
     // restore it here.
     const actualGlob = realGlobModule.glob;
-    (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
+    (glob.glob as unknown as Mock<typeof glob.glob>).mockImplementation(
+      actualGlob,
+    );
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context.invocation?.args ?? '';
@@ -454,10 +456,12 @@ describe('FileCommandLoader (processors)', () => {
 
       // Mock glob to throw an AbortError
       const abortError = new DOMException('Aborted', 'AbortError');
-      (glob.glob as Mock<typeof glob.glob>).mockImplementation(async () => {
-        controller.abort(); // Ensure the signal is aborted when the service checks
-        throw abortError;
-      });
+      (glob.glob as unknown as Mock<typeof glob.glob>).mockImplementation(
+        async () => {
+          controller.abort(); // Ensure the signal is aborted when the service checks
+          throw abortError;
+        },
+      );
 
       await loader.loadCommands(abortSignal);
 

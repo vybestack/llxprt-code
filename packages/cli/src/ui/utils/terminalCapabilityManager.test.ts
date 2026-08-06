@@ -327,11 +327,13 @@ describe('TerminalCapabilityManager', () => {
     await promise;
     expect(manager.isKittyProtocolEnabled()).toBe(true);
 
-    (writeSync as Mock<typeof writeSync>).mockClear();
+    (writeSync as unknown as Mock<typeof writeSync>).mockClear();
     manager.disableKittyProtocolOnExit();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
 
-    expect((writeSync as Mock<typeof writeSync>).mock.calls).toStrictEqual([
+    expect(
+      (writeSync as unknown as Mock<typeof writeSync>).mock.calls,
+    ).toStrictEqual([
       [stdout.fd, '\x1b[<u'],
       [stdout.fd, '\x1b[?1049l'],
       [stdout.fd, '\x1b[<u'],
@@ -351,12 +353,14 @@ describe('TerminalCapabilityManager', () => {
     await promise;
     expect(manager.isKittyProtocolEnabled()).toBe(true);
 
-    (writeSync as Mock<typeof writeSync>).mockClear();
+    (writeSync as unknown as Mock<typeof writeSync>).mockClear();
     stdout.isTTY = false;
     manager.disableKittyProtocolOnExit();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
 
-    expect(writeSync as Mock<typeof writeSync>).not.toHaveBeenCalled();
+    expect(
+      writeSync as unknown as Mock<typeof writeSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('should re-enable Kitty protocol after disable', async () => {

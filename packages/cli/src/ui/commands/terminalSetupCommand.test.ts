@@ -4,16 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { terminalSetupCommand } from './terminalSetupCommand.js';
 import * as terminalSetupModule from '../utils/terminalSetup.js';
 import type { CommandContext } from './types.js';
 
+const realTerminalSetupModule2 = {
+  ...(await import('../utils/terminalSetup.js')),
+};
+
 const realTerminalSetupModule = {
   ...(await import('../utils/terminalSetup.js')),
 };
 
-vi.mock('../utils/terminalSetup.js');
+vi.mock('../utils/terminalSetup.js', () => automock(realTerminalSetupModule2));
 
 describe('terminalSetupCommand', () => {
   beforeEach(() => {

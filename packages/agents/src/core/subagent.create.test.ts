@@ -8,6 +8,7 @@
  * SubAgentScope create tests: toolConfig preservation, stateless runtime enforcement.
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from '../testApi.js';
 import { vi, describe, it, expect, beforeEach, type Mock } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
@@ -25,6 +26,13 @@ import {
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSessionConfig } from './chatSession.js';
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
+const realNonInteractiveToolExecutorModule = {
+  ...(await import('./nonInteractiveToolExecutor.js')),
+};
+
 const { mockReadTodos, TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -61,8 +69,12 @@ vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => {
     createContentGenerator: vi.fn(),
   };
 });
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
-vi.mock('./nonInteractiveToolExecutor.js');
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
+);
+vi.mock('./nonInteractiveToolExecutor.js', () =>
+  automock(realNonInteractiveToolExecutorModule),
+);
 const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
 vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {

@@ -9,6 +9,7 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
@@ -27,6 +28,10 @@ import {
 } from './client-test-helpers.js';
 
 // Mock prompts module before imports
+const realConfigModule = {
+  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
+
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
     Promise.resolve('Test system instruction'),
@@ -139,7 +144,9 @@ vi.mock('./turn', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
+vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+  automock(realConfigModule),
+);
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));

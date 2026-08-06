@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
@@ -16,6 +17,10 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
+
+const realFsModule = { ...(await import('fs')) };
+const realCryptoModule = { ...(await import('crypto')) };
+const realTextUtilsModule = { ...(await import('../utils/textUtils.js')) };
 
 const mockIsBinary = vi.fn();
 const mockShellExecutionService = vi.fn();
@@ -33,7 +38,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
     isBinary: mockIsBinary,
   };
 });
-vi.mock('fs');
+vi.mock('fs', () => automock(realFsModule));
 // Mock os to always return 'linux' for consistent testing across platforms
 const actual = { ...(await import('os')) };
 vi.mock('os', () => {
@@ -48,8 +53,8 @@ vi.mock('os', () => {
     default: mockedOs,
   };
 });
-vi.mock('crypto');
-vi.mock('../utils/textUtils.js');
+vi.mock('crypto', () => automock(realCryptoModule));
+vi.mock('../utils/textUtils.js', () => automock(realTextUtilsModule));
 
 import {
   useShellCommandProcessor,
@@ -123,9 +128,9 @@ describe('useShellCommandProcessor', () => {
     // os functions are already mocked in the vi.mock call above
     // No need to re-mock them here
     (
-      crypto.randomBytes as Mock<typeof crypto.randomBytes> as Mock<
-        (...args: never[]) => unknown
-      >
+      crypto.randomBytes as unknown as Mock<
+        typeof crypto.randomBytes
+      > as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(Buffer.from('abcdef', 'hex'));
     mockIsBinary.mockReturnValue(false);
     (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);

@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import {
   MockedAgentClientClass,
@@ -43,6 +44,10 @@ import { MessageType, StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
+const realAtCommandProcessorModule = {
+  ...(await import('./atCommandProcessor.js')),
+};
+
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
@@ -66,7 +71,9 @@ vi.mock('./shellCommandProcessor.js', () => ({
   }),
 }));
 
-vi.mock('./atCommandProcessor.js');
+vi.mock('./atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
 
 vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),

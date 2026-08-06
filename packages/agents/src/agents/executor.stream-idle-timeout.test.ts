@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -19,6 +20,10 @@ import {
   type ExecutorTestFixture,
   type MockFn,
 } from './executor-test-helpers.js';
+
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
 
 const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } = {
   MockedChatSession: vi.fn(),
@@ -42,7 +47,9 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
+);
 
 const mockedGetDirectoryContextString = getDirectoryContextString as Mock<
   typeof getDirectoryContextString

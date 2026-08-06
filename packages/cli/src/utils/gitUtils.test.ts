@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -23,7 +24,9 @@ import {
   getWorkspaceIdentity,
 } from './gitUtils.js';
 
-vi.mock('child_process');
+const realChildProcessModule = { ...(await import('child_process')) };
+
+vi.mock('child_process', () => automock(realChildProcessModule));
 
 describe('isGitHubRepository', async () => {
   beforeEach(() => {

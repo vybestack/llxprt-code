@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -19,7 +20,9 @@ import os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../test-utils/regex.js';
 
-vi.mock('node:child_process');
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
+
+vi.mock('node:child_process', () => automock(realNodeChildProcessModule));
 
 import {
   setupSshAgentForwarding,
@@ -284,9 +287,9 @@ function mockTunnelProcess(exitCode: number | null = null) {
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
   };
-  (child_process.spawn as Mock<typeof child_process.spawn>).mockReturnValue(
-    fakeProcess as unknown as child_process.ChildProcess,
-  );
+  (
+    child_process.spawn as unknown as Mock<typeof child_process.spawn>
+  ).mockReturnValue(fakeProcess as unknown as child_process.ChildProcess);
   return fakeProcess;
 }
 
@@ -305,8 +308,9 @@ describe('setupSshAgentPodmanMacOS', () => {
 
     await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
 
-    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
-      .mock.calls[0];
+    const spawnCall = (
+      child_process.spawn as unknown as Mock<typeof child_process.spawn>
+    ).mock.calls[0];
     expect(spawnCall[0]).toBe('ssh');
     const sshArgs = spawnCall[1] as string[];
     expect(sshArgs).toContain('-R');
@@ -449,8 +453,9 @@ describe('setupSshAgentPodmanMacOS', () => {
       },
     });
 
-    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
-      .mock.calls[0];
+    const spawnCall = (
+      child_process.spawn as unknown as Mock<typeof child_process.spawn>
+    ).mock.calls[0];
     const sshArgs = spawnCall[1] as string[];
     const rIdx = sshArgs.indexOf('-R');
     const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
@@ -507,8 +512,9 @@ describe('setupCredentialProxyPodmanMacOS', () => {
 
     await setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock');
 
-    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
-      .mock.calls[0];
+    const spawnCall = (
+      child_process.spawn as unknown as Mock<typeof child_process.spawn>
+    ).mock.calls[0];
     expect(spawnCall[0]).toBe('ssh');
     const sshArgs = spawnCall[1] as string[];
     expect(sshArgs).toContain('-R');
@@ -648,8 +654,9 @@ describe('setupCredentialProxyPodmanMacOS', () => {
       },
     });
 
-    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
-      .mock.calls[0];
+    const spawnCall = (
+      child_process.spawn as unknown as Mock<typeof child_process.spawn>
+    ).mock.calls[0];
     const sshArgs = spawnCall[1] as string[];
     const rIdx = sshArgs.indexOf('-R');
     const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
@@ -683,8 +690,9 @@ describe('setupCredentialProxyPodmanMacOS', () => {
       excludedTunnelPorts: reservedTunnelPorts,
     });
 
-    const spawnCalls = (child_process.spawn as Mock<typeof child_process.spawn>)
-      .mock.calls;
+    const spawnCalls = (
+      child_process.spawn as unknown as Mock<typeof child_process.spawn>
+    ).mock.calls;
     const sshArgs = spawnCalls[0][1] as string[];
     const proxyArgs = spawnCalls[1][1] as string[];
 

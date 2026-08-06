@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,
@@ -34,6 +35,10 @@ import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 // Captures the resolved query handed to the fake Agent's stream(), and the
 // AgentEvents it should emit. Reset per-test in beforeEach.
+const realAtCommandProcessorModule = {
+  ...(await import('./ui/hooks/atCommandProcessor.js')),
+};
+
 const agentState = {
   // runNonInteractive passes the resolved query to agent.stream(); typed as
   // AgentInput | null (matching the stream() parameter type) so assertions get
@@ -82,7 +87,9 @@ vi.mock('@vybestack/llxprt-code-agents', () => {
 });
 
 // Mock core modules
-vi.mock('./ui/hooks/atCommandProcessor.js');
+vi.mock('./ui/hooks/atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
 const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
 vi.mock('@vybestack/llxprt-code-core', () => {
   return {

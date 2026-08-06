@@ -4,12 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { getStartupWarnings } from './startupWarnings';
 import fs from 'fs/promises';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
-vi.mock('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+vi.mock('fs/promises', () => automock(realPromisesModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 vi.mock('@vybestack/llxprt-code-core', () => {
   return {

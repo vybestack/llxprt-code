@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
@@ -14,6 +15,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+
+const realOsModule = { ...(await import('os')) };
+const realCryptoModule = { ...(await import('crypto')) };
 
 vi.mock('fs/promises', () => ({
   default: {
@@ -25,8 +29,8 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
 }));
-vi.mock('os');
-vi.mock('crypto');
+vi.mock('os', () => automock(realOsModule));
+vi.mock('crypto', () => automock(realCryptoModule));
 const actualFs = { ...(await import('fs')) };
 vi.mock('fs', () => {
   return {

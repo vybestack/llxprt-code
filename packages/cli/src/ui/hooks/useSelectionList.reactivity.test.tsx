@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -23,9 +24,11 @@ import { useKeypress } from './useKeypress.js';
 
 import type { KeypressHandler, Key } from '../contexts/KeypressContext.js';
 
+const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
+
 type UseKeypressMockOptions = { isActive: boolean };
 
-vi.mock('./useKeypress.js');
+vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
 
 let activeKeypressHandler: KeypressHandler | null = null;
 

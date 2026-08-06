@@ -60,22 +60,22 @@ function mockSshAdd(outcome: SshAddOutcome): void {
   const stderr = new PassThrough();
   Object.assign(child, { stdout, stderr });
 
-  (child_process.spawn as Mock<typeof child_process.spawn>).mockImplementation(
-    () => {
-      setImmediate(() => {
-        if (outcome.spawnError) {
-          child.emit('error', outcome.spawnError);
-          return;
-        }
-        stdout.end(outcome.stdout ?? '');
-        stderr.end(outcome.stderr ?? '');
-        stdout.on('end', () => {
-          child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
-        });
+  (
+    child_process.spawn as unknown as Mock<typeof child_process.spawn>
+  ).mockImplementation(() => {
+    setImmediate(() => {
+      if (outcome.spawnError) {
+        child.emit('error', outcome.spawnError);
+        return;
+      }
+      stdout.end(outcome.stdout ?? '');
+      stderr.end(outcome.stderr ?? '');
+      stdout.on('end', () => {
+        child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
       });
-      return child as unknown as child_process.ChildProcess;
-    },
-  );
+    });
+    return child as unknown as child_process.ChildProcess;
+  });
 }
 
 /**

@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
@@ -18,11 +19,15 @@ import type { UseAtCompletionProps } from './useAtCompletion.js';
 import { useAtCompletion } from './useAtCompletion.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 
+const realUseSlashCompletionModule = {
+  ...(await import('./useSlashCompletion')),
+};
+
 vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),
 }));
 
-vi.mock('./useSlashCompletion');
+vi.mock('./useSlashCompletion', () => automock(realUseSlashCompletionModule));
 
 vi.mock('./useCompletion', () => ({
   useCompletion: vi.fn(() => {

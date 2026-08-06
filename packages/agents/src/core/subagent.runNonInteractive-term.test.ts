@@ -8,6 +8,7 @@
  * SubAgentScope termination, recovery, runInteractive, scheduling timeout, dispose.
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from '../testApi.js';
 import {
@@ -34,6 +35,13 @@ import {
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
+const realNonInteractiveToolExecutorModule = {
+  ...(await import('./nonInteractiveToolExecutor.js')),
+};
+
 const { mockReadTodos, TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
@@ -70,8 +78,12 @@ vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => {
     createContentGenerator: vi.fn(),
   };
 });
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
-vi.mock('./nonInteractiveToolExecutor.js');
+vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
+);
+vi.mock('./nonInteractiveToolExecutor.js', () =>
+  automock(realNonInteractiveToolExecutorModule),
+);
 const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
 vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {

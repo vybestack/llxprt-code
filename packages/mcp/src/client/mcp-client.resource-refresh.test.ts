@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
@@ -16,12 +17,33 @@ import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceCon
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClient } from './mcp-client.js';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@google/genai');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
+const realStdioModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
+};
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realGenaiModule = { ...(await import('@google/genai')) };
+const realOauthProviderModule = {
+  ...(await import('../auth/oauth-provider.js')),
+};
+const realOauthTokenStorageModule = {
+  ...(await import('../auth/oauth-token-storage.js')),
+};
+const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
+
+vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+  automock(realStdioModule),
+);
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+vi.mock('@google/genai', () => automock(realGenaiModule));
+vi.mock('../auth/oauth-provider.js', () => automock(realOauthProviderModule));
+vi.mock('../auth/oauth-token-storage.js', () =>
+  automock(realOauthTokenStorageModule),
+);
+vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
 vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({

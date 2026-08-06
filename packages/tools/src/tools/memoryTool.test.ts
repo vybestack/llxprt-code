@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import {
   vi,
@@ -29,6 +30,8 @@ import { ToolErrorType } from '../types/tool-error.js';
 import type { IStorageService } from '../interfaces/index.js';
 
 // Mock dependencies
+const realOsModule = { ...(await import('os')) };
+
 const actual = { ...(await import('fs/promises')) };
 vi.mock('fs/promises', () => {
   return {
@@ -42,7 +45,7 @@ vi.mock('fs', () => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('os');
+vi.mock('os', () => automock(realOsModule));
 
 const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 

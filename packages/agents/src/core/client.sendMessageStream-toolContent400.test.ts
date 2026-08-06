@@ -10,6 +10,7 @@
  * closely on its structure: same vi.mock preamble, same setupAgentClient helper.
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
@@ -21,6 +22,10 @@ import {
 } from './client-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+const realConfigModule = {
+  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
 
 const REJECTION_400_MESSAGE =
   "The image data you provided does not represent a valid image. Please check your input and try again with one of the supported image formats: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].";
@@ -138,7 +143,9 @@ vi.mock('./turn', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
+vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+  automock(realConfigModule),
+);
 vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));

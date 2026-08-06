@@ -396,7 +396,7 @@ describe('cli.tsx main function', () => {
 
   it('should preserve shared sibling objects when stringifying rejection reasons', async () => {
     __resetUnhandledRejectionStateForTesting();
-    const appEventsMock = appEvents as Mock<typeof appEvents>;
+    const appEventsMock = appEvents as unknown as Mock<typeof appEvents>;
     const shared = { value: 'shared object' };
 
     const removeHandler = setupUnhandledRejectionHandler();
@@ -421,7 +421,7 @@ describe('cli.tsx main function', () => {
 
   it('should log unhandled promise rejections and open debug console on first error', async () => {
     __resetUnhandledRejectionStateForTesting();
-    const appEventsMock = appEvents as Mock<typeof appEvents>;
+    const appEventsMock = appEvents as unknown as Mock<typeof appEvents>;
     const rejectionError = new Error('Test unhandled rejection');
 
     // Use the returned disposer so the test-installed listener is removed

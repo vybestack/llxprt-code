@@ -7,7 +7,10 @@
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import { vi, type Mock } from 'bun:test';
+
+const realNodeCryptoModule = { ...(await import('node:crypto')) };
 
 const mockOpenBrowserSecurely = vi.fn();
 const mockHttpServer = {
@@ -20,7 +23,7 @@ const mockHttpServer = {
 vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
   openBrowserSecurely: mockOpenBrowserSecurely,
 }));
-vi.mock('node:crypto');
+vi.mock('node:crypto', () => automock(realNodeCryptoModule));
 vi.mock('node:http', () => ({
   createServer: vi.fn(() => mockHttpServer),
 }));

@@ -127,17 +127,17 @@ export function setupOAuthTestSpies(
   vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'debug').mockImplementation(() => {});
 
-  (crypto.randomBytes as Mock<typeof crypto.randomBytes>).mockImplementation(
-    (size: number) => {
-      if (size === 32) {
-        return Buffer.from('mock_code_verifier_32_bytes_long_string');
-      }
-      if (size === 16) {
-        return Buffer.from('mock_state_16_bytes');
-      }
-      return Buffer.alloc(size);
-    },
-  );
+  (
+    crypto.randomBytes as unknown as Mock<typeof crypto.randomBytes>
+  ).mockImplementation((size: number) => {
+    if (size === 32) {
+      return Buffer.from('mock_code_verifier_32_bytes_long_string');
+    }
+    if (size === 16) {
+      return Buffer.from('mock_state_16_bytes');
+    }
+    return Buffer.alloc(size);
+  });
 
   (crypto.createHash as Mock<typeof crypto.createHash>).mockReturnValue({
     update: vi.fn().mockReturnThis(),

@@ -4,18 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { type Config } from '@vybestack/llxprt-code-core';
 import { SESSION_FILE_PREFIX } from '@vybestack/llxprt-code-storage';
 import { type SessionInfo, getAllSessionFiles } from './sessionUtils.js';
 
-vi.mock('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+vi.mock('fs/promises', () => automock(realPromisesModule));
 vi.mock('./sessionUtils.js', () => ({
   getAllSessionFiles: vi.fn(),
 }));
 
-export const mockFs = fs as Mock<typeof fs>;
+export const mockFs = fs as unknown as Mock<typeof fs>;
 export const mockGetAllSessionFiles = getAllSessionFiles as Mock<
   typeof getAllSessionFiles
 >;

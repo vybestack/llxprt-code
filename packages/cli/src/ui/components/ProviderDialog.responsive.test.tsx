@@ -4,13 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders as render } from '../../test-utils/render.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ProviderDialog } from './ProviderDialog.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('../hooks/useTerminalSize.js');
+const realUseTerminalSizeModule = {
+  ...(await import('../hooks/useTerminalSize.js')),
+};
+
+vi.mock('../hooks/useTerminalSize.js', () =>
+  automock(realUseTerminalSizeModule),
+);
 
 const testProviders = [
   'anthropic',

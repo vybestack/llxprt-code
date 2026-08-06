@@ -143,20 +143,17 @@ describe('Settings Loading and Merging', () => {
     (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
       false,
     );
-    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
-      (p: fs.PathOrFileDescriptor) => {
-        // Handle system paths specifically
-        if (
-          p === MOCK_SYSTEM_SETTINGS_PATH ||
-          p === MOCK_SYSTEM_DEFAULTS_PATH
-        ) {
-          return '{}'; // Return valid empty JSON for system paths
-        }
-        // Always return valid empty JSON for any path to prevent JSON parsing errors
-        // Individual tests can override this mock for specific paths they need
-        return '{}';
-      },
-    );
+    (
+      fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+      // Handle system paths specifically
+      if (p === MOCK_SYSTEM_SETTINGS_PATH || p === MOCK_SYSTEM_DEFAULTS_PATH) {
+        return '{}'; // Return valid empty JSON for system paths
+      }
+      // Always return valid empty JSON for any path to prevent JSON parsing errors
+      // Individual tests can override this mock for specific paths they need
+      return '{}';
+    });
     (mockFsMkdirSync as Mock<(...args: never[]) => unknown>).mockImplementation(
       (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
@@ -190,7 +187,7 @@ describe('Settings Loading and Merging', () => {
         chatCompression: { contextPercentageThreshold: 0.5 },
       };
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -207,9 +204,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
         false,
       ); // No settings files exist
-      (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
-        '{}',
-      );
+      (
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       expect(settings.merged.chatCompression).toStrictEqual({});
     });
@@ -226,7 +223,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -257,7 +254,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -293,7 +290,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -322,7 +319,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -351,7 +348,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -390,7 +387,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === MOCK_SYSTEM_SETTINGS_PATH)
           return JSON.stringify(systemSettingsContent);
@@ -424,7 +421,7 @@ describe('Settings Loading and Merging', () => {
       const workspaceSettingsContent = {};
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === MOCK_SYSTEM_SETTINGS_PATH)
           return JSON.stringify(systemSettingsContent);
@@ -456,7 +453,7 @@ describe('Settings Loading and Merging', () => {
       const workspaceSettingsContent = {};
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === MOCK_SYSTEM_SETTINGS_PATH)
           return JSON.stringify(systemSettingsContent);
@@ -486,7 +483,7 @@ describe('Settings Loading and Merging', () => {
       const workspaceSettingsContent = {};
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === MOCK_SYSTEM_SETTINGS_PATH)
           return JSON.stringify(systemSettingsContent);
@@ -517,7 +514,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -553,7 +550,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -588,7 +585,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -643,7 +640,7 @@ describe('Settings Loading and Merging', () => {
       };
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === getSystemSettingsPath())
           return JSON.stringify(systemSettingsContent);
@@ -680,7 +677,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH) {
           // Simulate JSON.parse throwing for user settings
@@ -716,7 +713,7 @@ describe('Settings Loading and Merging', () => {
         mockFsExistsSync as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === USER_SETTINGS_PATH)
           return JSON.stringify(userSettingsContent);
@@ -744,7 +741,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
       );
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p === MOCK_WORKSPACE_SETTINGS_PATH)
           return JSON.stringify(workspaceSettingsContent);

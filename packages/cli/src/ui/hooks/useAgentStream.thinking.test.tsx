@@ -10,6 +10,7 @@
  * @requirement:REQ-THINK-UI-003
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import {
   MockedAgentClientClass,
@@ -35,6 +36,10 @@ import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { HistoryItemAi } from '../types.js';
 import { MessageType, StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
+
+const realAtCommandProcessorModule = {
+  ...(await import('./atCommandProcessor.js')),
+};
 
 const inkMock = (() => {
   const write = vi.fn();
@@ -138,7 +143,9 @@ vi.mock('./shellCommandProcessor.js', () => ({
   }),
 }));
 
-vi.mock('./atCommandProcessor.js');
+vi.mock('./atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
 
 vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),

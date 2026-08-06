@@ -525,18 +525,19 @@ describe('#2902 sandbox privilege hardening', () => {
     // startProxyContainer builds a second `run` argv that previously bypassed
     // the hardening. spawn is stubbed to throw immediately so the function
     // rejects before performing I/O, while the call args are recorded.
-    (childProcess.spawn as Mock<typeof childProcess.spawn>).mockImplementation(
-      () => {
-        throw new Error('proxy-argv-captured');
-      },
-    );
+    (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
 
     await expect(
       startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
     ).rejects.toThrow('proxy-argv-captured');
 
-    const spawnCalls = (childProcess.spawn as Mock<typeof childProcess.spawn>)
-      .mock.calls;
+    const spawnCalls = (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mock.calls;
     expect(spawnCalls.length).toBeGreaterThan(0);
     const proxyArgs = spawnCalls[0][1];
     expect(proxyArgs).toContain('--cap-drop=ALL');
@@ -549,11 +550,11 @@ describe('#2902 sandbox privilege hardening', () => {
     // The proxy sidecar has always forwarded setupContainerUser's userFlag
     // (unchanged by this PR). Assert that the hardening flags coexist with it
     // and that the user selection is still passed through intact.
-    (childProcess.spawn as Mock<typeof childProcess.spawn>).mockImplementation(
-      () => {
-        throw new Error('proxy-argv-captured');
-      },
-    );
+    (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
 
     await expect(
       startProxyContainer(
@@ -565,8 +566,9 @@ describe('#2902 sandbox privilege hardening', () => {
       ),
     ).rejects.toThrow('proxy-argv-captured');
 
-    const proxyArgs = (childProcess.spawn as Mock<typeof childProcess.spawn>)
-      .mock.calls[0][1];
+    const proxyArgs = (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mock.calls[0][1];
     expect(proxyArgs).toContain('--cap-drop=ALL');
     const secIdx = proxyArgs.indexOf('--security-opt');
     expect(proxyArgs[secIdx + 1]).toBe('no-new-privileges');

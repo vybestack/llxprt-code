@@ -59,7 +59,9 @@ vi.mock('child_process', () => {
 });
 
 const mockedIsGitRepository = isGitRepository as Mock<typeof isGitRepository>;
-const mockedRealPathSync = fs.realpathSync as Mock<typeof fs.realpathSync>;
+const mockedRealPathSync = fs.realpathSync as unknown as Mock<
+  typeof fs.realpathSync
+>;
 const mockedExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
 const mockedExecSync = childProcess.execSync as Mock<
   typeof childProcess.execSync

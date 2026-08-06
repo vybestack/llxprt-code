@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
 import {
@@ -17,9 +18,15 @@ import { useSelectionList } from '../../hooks/useSelectionList.js';
 import { Text } from 'ink';
 import { testRegex } from '../../../test-utils/regex.js';
 
+const realUseSelectionListModule = {
+  ...(await import('../../hooks/useSelectionList.js')),
+};
+
 type Theme = typeof import('../../semantic-colors.js').theme;
 
-vi.mock('../../hooks/useSelectionList.js');
+vi.mock('../../hooks/useSelectionList.js', () =>
+  automock(realUseSelectionListModule),
+);
 
 const mockTheme = {
   text: { primary: 'COLOR_PRIMARY', secondary: 'COLOR_SECONDARY' },

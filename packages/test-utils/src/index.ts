@@ -5,6 +5,7 @@
  */
 
 export * from './async-timers.js';
+export * from './automock.js';
 export * from './bounded-guard.js';
 export * from './env-test-helpers.js';
 export * from './export-surface-helpers.js';

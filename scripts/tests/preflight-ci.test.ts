@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../packages/test-utils/src/automock.js';
 import {
   describe,
   it,
@@ -18,7 +19,9 @@ import { resolve } from 'node:path';
 import * as child_process from 'child_process';
 import { preflightSteps, runPreflight } from '../preflight-ci.ts';
 
-vi.mock('child_process');
+const realChildProcessModule = { ...(await import('child_process')) };
+
+vi.mock('child_process', () => automock(realChildProcessModule));
 
 /**
  * Issue #2323: Behavioral regression test for release preflight step ordering.

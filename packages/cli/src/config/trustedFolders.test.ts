@@ -106,12 +106,13 @@ describe('Trusted Folders Loading', () => {
     (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
       false,
     );
-    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
-      '{}',
-    );
-    (fs.realpathSync as Mock<typeof fs.realpathSync>).mockImplementation(
-      (location) =>
-        typeof location === 'string' ? location : location.toString(),
+    (
+      fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue('{}');
+    (
+      fs.realpathSync as unknown as Mock<typeof fs.realpathSync>
+    ).mockImplementation((location) =>
+      typeof location === 'string' ? location : location.toString(),
     );
   });
 
@@ -131,7 +132,7 @@ describe('Trusted Folders Loading', () => {
         mockFsExistsSync as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p) => p === getTrustedFoldersPath());
       (
-        fs.readFileSync as Mock<(...args: never[]) => unknown>
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p) => {
         if (p === getTrustedFoldersPath()) return JSON.stringify(config);
         return '{}';
@@ -205,15 +206,15 @@ describe('Trusted Folders Loading', () => {
       const { folders } = setup({
         config: { '/secret': TrustLevel.DO_NOT_TRUST },
       });
-      (fs.realpathSync as Mock<typeof fs.realpathSync>).mockImplementation(
-        (location) => {
-          const resolved = location.toString();
-          if (resolved === '/secret') {
-            throw new Error('permission denied');
-          }
-          return resolved;
-        },
-      );
+      (
+        fs.realpathSync as unknown as Mock<typeof fs.realpathSync>
+      ).mockImplementation((location) => {
+        const resolved = location.toString();
+        if (resolved === '/secret') {
+          throw new Error('permission denied');
+        }
+        return resolved;
+      });
 
       expect(folders.isPathTrusted('/secret/file')).toBe(false);
     });
@@ -227,12 +228,12 @@ describe('Trusted Folders Loading', () => {
     const userContent = {
       '/user/folder': TrustLevel.TRUST_FOLDER,
     };
-    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
-      (p) => {
-        if (p === userPath) return JSON.stringify(userContent);
-        return '{}';
-      },
-    );
+    (
+      fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p) => {
+      if (p === userPath) return JSON.stringify(userContent);
+      return '{}';
+    });
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([
@@ -246,12 +247,12 @@ describe('Trusted Folders Loading', () => {
     (
       mockFsExistsSync as Mock<(...args: never[]) => unknown>
     ).mockImplementation((p) => p === userPath);
-    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
-      (p) => {
-        if (p === userPath) return 'invalid json';
-        return '{}';
-      },
-    );
+    (
+      fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p) => {
+      if (p === userPath) return 'invalid json';
+      return '{}';
+    });
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([]);
@@ -272,12 +273,12 @@ describe('Trusted Folders Loading', () => {
     const userContent = {
       '/user/folder/from/env': TrustLevel.TRUST_FOLDER,
     };
-    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
-      (p) => {
-        if (p === customPath) return JSON.stringify(userContent);
-        return '{}';
-      },
-    );
+    (
+      fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p) => {
+      if (p === customPath) return JSON.stringify(userContent);
+      return '{}';
+    });
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([

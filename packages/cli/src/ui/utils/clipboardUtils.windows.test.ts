@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -18,7 +19,9 @@ import type { Stats } from 'fs';
 import { saveClipboardImage } from './clipboardUtils.js';
 
 // Mock dependencies
-vi.mock('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+vi.mock('fs/promises', () => automock(realPromisesModule));
 
 const { mockSpawn } = {
   mockSpawn: vi.fn(),

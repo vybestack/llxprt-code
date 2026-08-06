@@ -503,7 +503,7 @@ describe('useReactToolScheduler (split)', () => {
       title: 'Mock Tool Requires Confirmation',
     };
     (
-      mockToolRequiresConfirmation.shouldConfirmExecute as Mock<
+      mockToolRequiresConfirmation.shouldConfirmExecute as unknown as Mock<
         (...args: never[]) => unknown
       >
     ).mockImplementation(

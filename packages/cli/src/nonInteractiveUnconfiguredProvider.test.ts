@@ -16,6 +16,7 @@
  * logic" — fromConfig is mocked only to assert it is NOT called.
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -36,6 +37,10 @@ import {
 import { runNonInteractive } from './nonInteractiveCli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { __setWriteToStderrForTesting } from './session/errorReporting.js';
+
+const realAtCommandProcessorModule = {
+  ...(await import('./ui/hooks/atCommandProcessor.js')),
+};
 
 const original = { ...(await import('@vybestack/llxprt-code-agents')) };
 vi.mock('@vybestack/llxprt-code-agents', () => {
@@ -60,7 +65,9 @@ vi.mock('./utils/cleanup.js', () => ({
   registerSyncCleanup: vi.fn(),
 }));
 
-vi.mock('./ui/hooks/atCommandProcessor.js');
+vi.mock('./ui/hooks/atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
 vi.mock('./services/CommandService.js', () => ({
   CommandService: {
     create: vi.fn().mockResolvedValue({ getCommands: () => [] }),

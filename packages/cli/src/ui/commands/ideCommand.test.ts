@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import {
   vi,
@@ -19,8 +20,11 @@ import { type CommandContext } from './types.js';
 import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
-vi.mock('child_process');
-vi.mock('glob');
+const realChildProcessModule = { ...(await import('child_process')) };
+const realGlobModule = { ...(await import('glob')) };
+
+vi.mock('child_process', () => automock(realChildProcessModule));
+vi.mock('glob', () => automock(realGlobModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 vi.mock('@vybestack/llxprt-code-core', () => {
   return {

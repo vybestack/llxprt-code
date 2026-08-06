@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -23,6 +24,9 @@ import {
   type Config,
 } from '@vybestack/llxprt-code-core';
 import chalk from 'chalk';
+
+const realSettingsModule = { ...(await import('../../config/settings.js')) };
+const realConfigModule = { ...(await import('../../config/config.js')) };
 
 const emitConsoleLog = vi.fn();
 const debugLogger = {
@@ -57,8 +61,8 @@ vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return actualActual;
 });
 
-vi.mock('../../config/settings.js');
-vi.mock('../../config/config.js');
+vi.mock('../../config/settings.js', () => automock(realSettingsModule));
+vi.mock('../../config/config.js', () => automock(realConfigModule));
 vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));

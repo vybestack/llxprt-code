@@ -4,19 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 import { newCommand } from './new.js';
 import yargs from 'yargs';
 import * as fsPromises from 'node:fs/promises';
 
-vi.mock('node:fs/promises');
+const realPromisesModule = { ...(await import('node:fs/promises')) };
+
+vi.mock('node:fs/promises', () => automock(realPromisesModule));
 
 vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-const mockedFs = fsPromises as Mock<typeof fsPromises>;
+const mockedFs = fsPromises as unknown as Mock<typeof fsPromises>;
 
 describe('extensions new command', () => {
   beforeEach(() => {

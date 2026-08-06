@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -27,7 +28,9 @@ import type { CommandContext, ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
 import { assertTruthy } from '../../test-utils/assertions.js';
 
-vi.mock('child_process');
+const realChildProcessModule = { ...(await import('child_process')) };
+
+vi.mock('child_process', () => automock(realChildProcessModule));
 
 // Mock fetch globally
 global.fetch = vi.fn();

@@ -503,7 +503,7 @@ describe('useReactToolScheduler (split)', () => {
       title: 'Mock Tool Requires Confirmation',
     };
     (
-      mockToolRequiresConfirmation.shouldConfirmExecute as Mock<
+      mockToolRequiresConfirmation.shouldConfirmExecute as unknown as Mock<
         (...args: never[]) => unknown
       >
     ).mockImplementation(
@@ -529,7 +529,9 @@ describe('useReactToolScheduler (split)', () => {
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     const confirmError = new Error('Confirmation check failed');
     (
-      mockTool.shouldConfirmExecute as Mock<(...args: never[]) => unknown>
+      mockTool.shouldConfirmExecute as unknown as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockRejectedValue(confirmError);
 
     const { result } = renderScheduler(
@@ -571,7 +573,9 @@ describe('useReactToolScheduler (split)', () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     (
-      mockTool.shouldConfirmExecute as Mock<(...args: never[]) => unknown>
+      mockTool.shouldConfirmExecute as unknown as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockResolvedValue(false);
     const execError = new Error('Execution failed');
     mockTool.executeFn.mockRejectedValue(execError);

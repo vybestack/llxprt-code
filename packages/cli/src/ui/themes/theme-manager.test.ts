@@ -5,10 +5,13 @@
  */
 
 // Patch: Unset NO_COLOR at the very top before any imports
+const realNodeFsModule = { ...(await import('node:fs')) };
+
 if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -27,7 +30,7 @@ import * as os from 'node:os';
 import type * as osActual from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-vi.mock('node:fs');
+vi.mock('node:fs', () => automock(realNodeFsModule));
 const actualOs = { ...(await import('node:os')) };
 vi.mock('node:os', () => {
   return {

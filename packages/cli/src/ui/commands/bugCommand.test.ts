@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -20,9 +21,13 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { getCliVersion } from '../../utils/version.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 
-vi.mock('open');
-vi.mock('../../utils/version.js');
-vi.mock('../utils/formatters.js');
+const realOpenModule = { ...(await import('open')) };
+const realVersionModule = { ...(await import('../../utils/version.js')) };
+const realFormattersModule = { ...(await import('../utils/formatters.js')) };
+
+vi.mock('open', () => automock(realOpenModule));
+vi.mock('../../utils/version.js', () => automock(realVersionModule));
+vi.mock('../utils/formatters.js', () => automock(realFormattersModule));
 // Mock the git-commit loader to a deterministic value so the assertion below
 // verifies bugCommand embeds the loader's return value, rather than comparing
 // the real loader's output against itself (a tautology).

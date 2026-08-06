@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -21,11 +22,31 @@ import {
   getTransportHeaders,
 } from './mcpClientTestHelpers.js';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
+const realStdioModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
+};
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realOauthProviderModule = {
+  ...(await import('../auth/oauth-provider.js')),
+};
+const realOauthTokenStorageModule = {
+  ...(await import('../auth/oauth-token-storage.js')),
+};
+const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
+
+vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+  automock(realStdioModule),
+);
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+vi.mock('../auth/oauth-provider.js', () => automock(realOauthProviderModule));
+vi.mock('../auth/oauth-token-storage.js', () =>
+  automock(realOauthTokenStorageModule),
+);
+vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {

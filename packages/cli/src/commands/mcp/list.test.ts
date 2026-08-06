@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -12,6 +13,10 @@ import { listMcpServers } from './list.js';
 import { loadSettings } from '../../config/settings.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
 
 vi.mock('../../config/settings.js', () => ({
   loadSettings: vi.fn(),
@@ -43,19 +48,23 @@ vi.mock('@vybestack/llxprt-code-mcp', () => {
     },
   };
 });
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
 
 const mockedExtensionStorage = ExtensionStorage as unknown as {
   getUserExtensionsDir: ReturnType<typeof vi.fn>;
 };
-const mockedLoadSettings = loadSettings as Mock<(...args: never[]) => unknown>;
-const mockedLoadExtensions = loadExtensions as Mock<
+const mockedLoadSettings = loadSettings as unknown as Mock<
   (...args: never[]) => unknown
 >;
-const mockedCreateTransport = createTransport as Mock<
+const mockedLoadExtensions = loadExtensions as unknown as Mock<
   (...args: never[]) => unknown
 >;
-const MockedClient = Client as Mock<(...args: never[]) => unknown>;
+const mockedCreateTransport = createTransport as unknown as Mock<
+  (...args: never[]) => unknown
+>;
+const MockedClient = Client as unknown as Mock<(...args: never[]) => unknown>;
 
 interface MockClient {
   connect: Mock<(...args: never[]) => unknown>;

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import {
   describe,
@@ -24,7 +25,13 @@ import { DefaultDark } from '../themes/default.js';
 import { DefaultLight } from '../themes/default-light.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('../hooks/useTerminalSize.js');
+const realUseTerminalSizeModule = {
+  ...(await import('../hooks/useTerminalSize.js')),
+};
+
+vi.mock('../hooks/useTerminalSize.js', () =>
+  automock(realUseTerminalSizeModule),
+);
 
 // Mock contexts
 const mockTodoContext = {

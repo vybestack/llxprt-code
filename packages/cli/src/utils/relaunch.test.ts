@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -18,9 +19,11 @@ import { EventEmitter } from 'node:events';
 import { relaunchAppInChildProcess } from './relaunch.js';
 import { RELAUNCH_EXIT_CODE } from './bootstrap.js';
 
-vi.mock('node:child_process');
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
-const mockedChildProcess = childProcess as Mock<typeof childProcess>;
+vi.mock('node:child_process', () => automock(realNodeChildProcessModule));
+
+const mockedChildProcess = childProcess as unknown as Mock<typeof childProcess>;
 
 describe('relaunchAppInChildProcess', () => {
   let mockChildProcess: EventEmitter;

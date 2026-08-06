@@ -501,7 +501,7 @@ describe('useReactToolScheduler (split)', () => {
       title: 'Mock Tool Requires Confirmation',
     };
     (
-      mockToolRequiresConfirmation.shouldConfirmExecute as Mock<
+      mockToolRequiresConfirmation.shouldConfirmExecute as unknown as Mock<
         (...args: never[]) => unknown
       >
     ).mockImplementation(
@@ -563,7 +563,9 @@ describe('useReactToolScheduler (split)', () => {
       returnDisplay: 'Formatted tool output',
     } as ToolResult);
     (
-      mockTool.shouldConfirmExecute as Mock<(...args: never[]) => unknown>
+      mockTool.shouldConfirmExecute as unknown as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockResolvedValue(false);
 
     const { result } = renderScheduler(

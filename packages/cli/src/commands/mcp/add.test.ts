@@ -66,7 +66,9 @@ vi.mock('@vybestack/llxprt-code-telemetry', () => {
   };
 });
 
-const mockedLoadSettings = loadSettings as Mock<(...args: never[]) => unknown>;
+const mockedLoadSettings = loadSettings as unknown as Mock<
+  (...args: never[]) => unknown
+>;
 
 describe('mcp add command', () => {
   let parser: Argv;

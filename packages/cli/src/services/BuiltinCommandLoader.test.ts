@@ -126,7 +126,7 @@ vi.mock('../utils/installationInfo.js', () => {
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;
 
-  const restoreCommandMock = restoreCommand as Mock<
+  const restoreCommandMock = restoreCommand as unknown as Mock<
     (...args: never[]) => unknown
   >;
 

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -27,7 +28,9 @@ import { coreEvents } from '@vybestack/llxprt-code-core';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-vi.mock('node:fs/promises');
+const realPromisesModule = { ...(await import('node:fs/promises')) };
+
+vi.mock('node:fs/promises', () => automock(realPromisesModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 vi.mock('@vybestack/llxprt-code-core', () => {
   return {
