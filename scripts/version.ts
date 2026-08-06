@@ -158,6 +158,50 @@ function updateSandboxImageUri(
   writeJson(packageJsonPath, packageJson);
 }
 
+/**
+ * Whether a value is a plain string-keyed record (the shape of a dependency
+ * section). Mirrors the narrowing style of {@link isPackageJson}.
+ */
+function isDependencyRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The os-gated CLI launcher platform packages (issue #2978). packages/cli
+ * declares these as exact-pinned optionalDependencies so npm's os filtering
+ * installs the right launcher per platform. Their versions MUST stay in exact
+ * lockstep with @vybestack/llxprt-code: a skew would make the parent reference a
+ * platform package version that does not exist on the registry, so npm silently
+ * skips it and the consumer is left with no `llxprt` command. The version bump
+ * rewrites the pins to the new release version so they cannot drift.
+ */
+const CLI_LAUNCHER_PLATFORM_PACKAGES = [
+  '@vybestack/llxprt-cli-posix',
+  '@vybestack/llxprt-cli-win32',
+] as const;
+
+function updateCliLauncherPlatformPins(
+  packageJsonPath: string,
+  version: string,
+): void {
+  const packageJson = readJson(packageJsonPath);
+  const optionalDeps = packageJson.optionalDependencies;
+  if (!isDependencyRecord(optionalDeps)) {
+    return;
+  }
+  let changed = false;
+  for (const pkg of CLI_LAUNCHER_PLATFORM_PACKAGES) {
+    if (optionalDeps[pkg] !== undefined && optionalDeps[pkg] !== version) {
+      optionalDeps[pkg] = version;
+      changed = true;
+    }
+  }
+  if (changed) {
+    console.log(`Pinned CLI launcher platform packages to v${version}`);
+    writeJson(packageJsonPath, packageJson);
+  }
+}
+
 // 5. Update sandboxImageUri values in publishable package metadata.
 const cliPackageJsonPath = resolve(process.cwd(), 'packages/cli/package.json');
 updateSandboxImageUri(rootPackageJsonPath, 'root package.json', newVersion);
@@ -166,6 +210,11 @@ updateSandboxImageUri(
   'packages/cli/package.json',
   newVersion,
 );
+
+// 5b. Re-pin the os-gated CLI launcher platform packages in lockstep with the
+// release version so packages/cli's optionalDependencies can never reference a
+// version that does not exist on the registry (issue #2978).
+updateCliLauncherPlatformPins(cliPackageJsonPath, newVersion);
 
 // 6. Update package-lock.json without reinstalling node_modules.
 try {

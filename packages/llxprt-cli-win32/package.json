@@ -1,0 +1,22 @@
+{
+  "name": "@vybestack/llxprt-cli-win32",
+  "version": "0.11.0",
+  "description": "LLxprt Code Windows launcher payload — provides the `llxprt` command on Windows",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "scripts": {
+    "build": "echo static launcher payload, no build step"
+  },
+  "os": [
+    "win32"
+  ],
+  "bin": {
+    "llxprt": "bin/llxprt.cmd"
+  },
+  "files": [
+    "bin/llxprt.cmd"
+  ]
+}

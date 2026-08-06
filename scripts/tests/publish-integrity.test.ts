@@ -418,6 +418,24 @@ describe('published package integrity (S1)', () => {
   });
 });
 
+/**
+ * Whether a dependency spec uses a local protocol (file:, workspace:, link:),
+ * meaning the dependency is bundled into the published tarball rather than
+ * resolved from the registry. Only bundled internal workspace dependencies must
+ * ship their source in the root tarball; registry-pinned internal packages
+ * (e.g. the os-gated CLI launcher packages, issue #2978) are published
+ * separately and resolved at install time, so their source is intentionally NOT
+ * part of the parent tarball.
+ */
+function isBundledWorkspaceDependency(version: unknown): boolean {
+  return (
+    typeof version === 'string' &&
+    (version.startsWith('file:') ||
+      version.startsWith('workspace:') ||
+      version.startsWith('link:'))
+  );
+}
+
 interface ShippedWorkspacePackagePath {
   readonly workspaceDir: string;
   readonly packagePath: string;
@@ -446,7 +464,6 @@ describe('published package no-compile runtime contract (S6)', () => {
     );
 
     expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt');
-    expect(cliPackage.bin?.llxprt).toBe('bin/llxprt');
     expect(cliPackage.scripts?.start).toBe('bun index.ts');
     expect(cliPackage.scripts?.debug).toBe('bun --inspect-brk index.ts');
 
@@ -498,6 +515,12 @@ describe('published package no-compile runtime contract (S6)', () => {
     // directly execve-compatible on POSIX. On Windows, the root postinstall
     // generates native .cmd/.ps1 launchers that invoke the package-local Bun.
     expect(packed.has('packages/cli/bin/llxprt')).toBe(true);
+    // The private root manifest still declares bin.llxprt pointing here, so the
+    // checked-in target must exist on disk — not just inside the tarball. This
+    // mirrors the existsSync symmetry already applied to the platform packages.
+    expect(existsSync(join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'))).toBe(
+      true,
+    );
     expect(packed.has('packages/cli/index.ts')).toBe(true);
     expect(packed.has('packages/cli/src/cli.tsx')).toBe(true);
     expect(packed.has('packages/core/index.ts')).toBe(true);
@@ -630,7 +653,11 @@ describe('published package no-compile runtime contract (S6)', () => {
             JSON.parse(readFileSync(packagePath, 'utf-8')),
           );
           return Array.from(iterateWorkspaceDependencies(workspacePackage))
-            .filter(({ name }) => packageNameToWorkspace.has(name))
+            .filter(
+              ({ name, version }) =>
+                packageNameToWorkspace.has(name) &&
+                isBundledWorkspaceDependency(version),
+            )
             .map(({ name: dep }) => {
               const depWorkspaceDir = packageNameToWorkspace.get(dep);
               if (depWorkspaceDir === undefined) {
@@ -789,22 +816,134 @@ describe('published package no-compile runtime contract (S6)', () => {
     },
   );
 
-  it('runs the checked-in launcher without a compiled CLI entry', () => {
-    // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
-    // directly execve-compatible (no /bin/sh wrapper needed). Running it
-    // directly exercises the real installed-command path.
-    const stdout = execFileSync(
-      join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'),
-      ['--version'],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-      },
-    );
+  // The sh launcher has a #!/bin/sh shebang and is execve'd directly. Windows
+  // has no sh and cannot execve a shebang script (no sh is present on PATH on
+  // this host), so the POSIX end-to-end launch is only verifiable on POSIX
+  // here. The real Windows entry point (.cmd) is covered by the dedicated
+  // issue-2978 windows-launcher suite.
+  const launcherIt = process.platform === 'win32' ? it.skip : it;
+  launcherIt(
+    'runs the checked-in launcher without a compiled CLI entry',
+    () => {
+      // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
+      // directly execve-compatible (no /bin/sh wrapper needed). Running it
+      // directly exercises the real installed-command path.
+      const stdout = execFileSync(
+        join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'),
+        ['--version'],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024,
+        },
+      );
 
-    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  }, 30000);
+      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    },
+    30000,
+  );
+});
+
+describe('platform launcher package invariants (issue #2978)', () => {
+  // The `llxprt` bin was moved out of packages/cli and into two os-gated
+  // platform packages (@vybestack/llxprt-cli-posix and -win32). npm v12 no
+  // longer runs install scripts, so npm derives the Windows cmd-shim from the
+  // bin target's shebang; a POSIX #!/bin/sh shebang produces a broken .cmd
+  // that invokes /bin/sh. Shipping an os-appropriate bin target per platform
+  // fixes this, but ONLY while packages/cli declares no bin of its own
+  // (otherwise npm re-derives the broken shim from packages/cli/bin/llxprt) and
+  // the two platform packages stay in exact lockstep with packages/cli.
+  const POSIX_PKG = '@vybestack/llxprt-cli-posix';
+  const WIN32_PKG = '@vybestack/llxprt-cli-win32';
+  const PLATFORM_PKGS = [POSIX_PKG, WIN32_PKG] as const;
+
+  function readCliManifest(): Record<string, unknown> {
+    return asRecord(
+      JSON.parse(
+        readFileSync(
+          join(repoRoot, 'packages', 'cli', 'package.json'),
+          'utf-8',
+        ),
+      ),
+    );
+  }
+
+  function readManifest(dir: string): Record<string, unknown> {
+    return asRecord(
+      JSON.parse(
+        readFileSync(join(repoRoot, 'packages', dir, 'package.json'), 'utf-8'),
+      ),
+    );
+  }
+
+  it('packages/cli declares no bin field', () => {
+    // If packages/cli declared a bin, npm would derive a shim from its
+    // shebang and reproduce the Windows /bin/sh regression.
+    expect(readCliManifest().bin).toBeUndefined();
+  });
+
+  it('packages/cli pins both platform packages as exact optionalDependencies', () => {
+    const cli = readCliManifest();
+    const optionalDeps = asOptionalRecord(cli.optionalDependencies) ?? {};
+    for (const pkg of PLATFORM_PKGS) {
+      const spec = asString(optionalDeps[pkg]);
+      // An exact pin starts with a digit; a range operator (^, ~, >, <, *, x)
+      // would let npm resolve a different version and silently break the
+      // os-gated launcher contract.
+      const first = spec.charAt(0);
+      expect(
+        first >= '0' && first <= '9',
+        `packages/cli optionalDependencies.${pkg} must be an exact version (got "${spec}")`,
+      ).toBe(true);
+    }
+  });
+
+  it('platform package versions are in exact lockstep with packages/cli', () => {
+    // A version skew would silently leave consumers with no `llxprt` command:
+    // the parent's optionalDependencies pin an exact version that does not
+    // exist on the registry, so the platform package is skipped at install.
+    const cli = readCliManifest();
+    const cliVersion = asString(cli.version);
+    const optionalDeps = asOptionalRecord(cli.optionalDependencies) ?? {};
+    for (const pkg of PLATFORM_PKGS) {
+      expect(
+        optionalDeps[pkg],
+        `${pkg} pin must exist in packages/cli optionalDependencies`,
+      ).toBeDefined();
+      expect(optionalDeps[pkg]).toBe(cliVersion);
+    }
+  });
+
+  it.each([
+    {
+      dir: 'llxprt-cli-posix',
+      pkg: POSIX_PKG,
+      os: ['darwin', 'linux', 'freebsd'],
+      binTarget: 'bin/llxprt',
+    },
+    {
+      dir: 'llxprt-cli-win32',
+      pkg: WIN32_PKG,
+      os: ['win32'],
+      binTarget: 'bin/llxprt.cmd',
+    },
+  ])(
+    '$pkg declares bin.llxprt, the correct exclusive os, and ships its bin target',
+    ({ dir, pkg, os, binTarget }) => {
+      const manifest = readManifest(dir);
+      expect(manifest.name).toBe(pkg);
+      const bin = asOptionalRecord(manifest.bin);
+      expect(bin?.llxprt, `${pkg} must declare bin.llxprt`).toBeDefined();
+      expect(bin?.llxprt).toBe(binTarget);
+      // Pinning the exact os array enforces mutually-exclusive install targets
+      // (POSIX set vs win32) so the two never both install on one machine.
+      expect(manifest.os).toEqual(os);
+      expect(
+        existsSync(join(repoRoot, 'packages', dir, binTarget)),
+        `${pkg} bin target "${binTarget}" must exist on disk`,
+      ).toBe(true);
+    },
+  );
 });
 
 describe('release build self-contained generate contract (issue #2392)', () => {

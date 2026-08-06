@@ -752,6 +752,15 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    // Bun-native tests for the @oven/bun-<platform> fallback (issue #2978).
+    // npm v12 default-deny of install scripts leaves bun/bin/bun.exe absent;
+    // the launcher falls back to @oven sub-package binaries. Vitest skips
+    // `*.bun.test.ts`; this runs under Bun's native runner only.
+    workspace: 'scripts-launcher-oven',
+    cwd: '.',
+    files: ['scripts/tests/issue-2978-oven-fallback.bun.test.ts'],
+  },
+  {
     // Bun-native test for the prebuilt CLI bundle (issue #2999). Builds the
     // bundle via the exported config, executes it, and asserts --version
     // output, proving externals resolve and the artifact is genuinely

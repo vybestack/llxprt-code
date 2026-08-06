@@ -109,10 +109,19 @@ LLxprt Code由[Bun](https://bun.sh)运行时驱动。当您运行`llxprt`时，�
 **Bun解析（生产启动器）：**
 
 1. 包本地：`<package>/node_modules/bun/bin/bun.exe`（包固定的Bun依赖项）
+   - **回退：** `@oven/bun-<platform>/bin/bun[.exe]`变体（仅在`bun/bin/bun.exe`不存在时探测 — 见下方[npm v12说明](#npm-v12安装脚本默认拒绝)）
 2. 提升（仅限已安装的包）：外层的`node_modules/bun/bin/bun.exe`（npm/Bun提升），在外层`node_modules`边界处停止 — 永远不会爬升到消费者的上级目录
+   - **回退：** 外层`node_modules`内的`@oven/bun-<platform>`变体
 3. 工作区根目录（仅限源工作区）：当包不在`node_modules`下且仓库根目录是经过验证的llxprt-code工作区（其清单引用此包）时，使用该经过验证的根目录的`node_modules/bun/bin/bun.exe`
+   - **回退：** 工作区根目录的`@oven/bun-<platform>`变体
 
-启动器永远不会扫描`.bin`符号链接，也永远不会回退到`PATH`上的全局`bun`。当包的`package.json`声明了精确的Bun固定版本（例如`1.3.14`）时，`package.json`/版本缺失或不匹配的候选项将被拒绝。
+在macOS上，已经存在于`PATH`上且满足固定版本最低要求的Bun优先于以上所有路径（issue #2962），以避免npm重新提取运行中可执行文件导致的凭证访问中断。
+
+启动器永远不会扫描`.bin`符号链接。当包的`package.json`声明了精确的Bun固定版本（例如`1.3.14`）时，`package.json`/版本缺失或不匹配的候选项将被拒绝。
+
+<a id="npm-v12安装脚本默认拒绝"></a>
+
+**npm v12安装脚本默认拒绝（RFC 0054）：** npm v12默认禁用依赖安装脚本。`bun`包通过`postinstall`将其二进制文件从`@oven/bun-<platform>`可选依赖移动到`bun/bin/bun.exe`。当安装脚本被阻止时，该二进制文件永远不会出现。LLxprt Code将全部16个`@oven/bun-<platform>`包声明为自己的`optionalDependencies`；这些tarball仅包含`bin/bun[.exe]`且没有安装脚本，因此在默认拒绝下仍会出现。启动器和TypeScript解析器在`bun/bin/bun.exe`不存在时回退到它们。主机检测（CPU特性、ABI）仅在此回退路径上运行 — 正常安装永远不会fork检测子进程。
 
 如果未找到包本地的Bun运行时，启动器会打印可操作的错误（退出码43）：
 

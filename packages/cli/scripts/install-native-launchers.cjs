@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-/* eslint-env node */
 'use strict';
 
 const fs = require('fs');
@@ -400,6 +399,272 @@ function writeOwnedLauncher(
   return true;
 }
 
+/**
+ * `@oven/bun-<platform>` variant fallback (issue #2978).
+ *
+ * npm v12 disables dependency install scripts by default (RFC 0054), so the
+ * `bun` package's `postinstall` — which MOVES the binary from its
+ * `@oven/bun-<platform>` optional dependency into `bun/bin/bun.exe` — never
+ * runs. The `@oven` tarballs contain only `bin/bun[.exe]` and NO scripts, so
+ * they materialize under default-deny. The table below is transcribed from
+ * `node_modules/bun/install.js` (bun@1.3.14).
+ *
+ * DELIBERATE DEVIATION from upstream: on a musl host, musl variants are
+ * ordered FIRST (abiSortKey 0) with glibc as a last resort (abiSortKey 1).
+ * Upstream's filter lets glibc entries sort ahead of musl, which is safe there
+ * because its postinstall already picked a binary, but unsafe here because
+ * several variants coexist untouched.
+ */
+const OVEN_PLATFORM_TABLE = [
+  { os: 'darwin', arch: 'arm64', bin: 'bun-darwin-aarch64', exe: 'bin/bun' },
+  {
+    os: 'darwin',
+    arch: 'x64',
+    avx2: true,
+    bin: 'bun-darwin-x64',
+    exe: 'bin/bun',
+  },
+  { os: 'darwin', arch: 'x64', bin: 'bun-darwin-x64-baseline', exe: 'bin/bun' },
+  { os: 'linux', arch: 'arm64', bin: 'bun-linux-aarch64', exe: 'bin/bun' },
+  {
+    os: 'linux',
+    arch: 'x64',
+    avx2: true,
+    bin: 'bun-linux-x64',
+    exe: 'bin/bun',
+  },
+  { os: 'linux', arch: 'x64', bin: 'bun-linux-x64-baseline', exe: 'bin/bun' },
+  {
+    os: 'linux',
+    arch: 'arm64',
+    abi: 'musl',
+    bin: 'bun-linux-aarch64-musl',
+    exe: 'bin/bun',
+  },
+  {
+    os: 'linux',
+    arch: 'x64',
+    abi: 'musl',
+    avx2: true,
+    bin: 'bun-linux-x64-musl',
+    exe: 'bin/bun',
+  },
+  {
+    os: 'linux',
+    arch: 'x64',
+    abi: 'musl',
+    bin: 'bun-linux-x64-musl-baseline',
+    exe: 'bin/bun',
+  },
+  {
+    os: 'android',
+    arch: 'arm64',
+    abi: 'android',
+    bin: 'bun-linux-aarch64-android',
+    exe: 'bin/bun',
+  },
+  {
+    os: 'android',
+    arch: 'x64',
+    abi: 'android',
+    bin: 'bun-linux-x64-android',
+    exe: 'bin/bun',
+  },
+  { os: 'freebsd', arch: 'arm64', bin: 'bun-freebsd-aarch64', exe: 'bin/bun' },
+  { os: 'freebsd', arch: 'x64', bin: 'bun-freebsd-x64', exe: 'bin/bun' },
+  {
+    os: 'win32',
+    arch: 'x64',
+    avx2: true,
+    bin: 'bun-windows-x64',
+    exe: 'bin/bun.exe',
+  },
+  {
+    os: 'win32',
+    arch: 'x64',
+    bin: 'bun-windows-x64-baseline',
+    exe: 'bin/bun.exe',
+  },
+  {
+    os: 'win32',
+    arch: 'arm64',
+    bin: 'bun-windows-aarch64',
+    exe: 'bin/bun.exe',
+  },
+];
+
+function ovenExeNamesFor(exe) {
+  if (exe === 'bin/bun.exe') {
+    return ['bin/bun.exe', 'bin/bun'];
+  }
+  return ['bin/bun', 'bin/bun.exe'];
+}
+
+function ovenNormalizeArch(rawArch) {
+  switch (rawArch) {
+    case 'x64':
+    case 'x86_64':
+    case 'amd64':
+      return 'x64';
+    case 'arm64':
+    case 'aarch64':
+      return 'arm64';
+    default:
+      return null;
+  }
+}
+
+function ovenIsRosetta2() {
+  try {
+    const r = require('child_process').spawnSync(
+      'sysctl',
+      ['-n', 'sysctl.proc_translated'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    return r.status === 0 && (r.stdout || '').includes('1');
+  } catch {
+    return false;
+  }
+}
+
+function ovenExistsAlpine() {
+  try {
+    return fs.existsSync('/etc/alpine-release');
+  } catch {
+    return false;
+  }
+}
+
+function ovenLinuxHasAvx2() {
+  try {
+    return fs.readFileSync('/proc/cpuinfo', 'utf8').includes('avx2');
+  } catch {
+    return false;
+  }
+}
+
+function ovenDarwinHasAvx2() {
+  try {
+    const r = require('child_process').spawnSync(
+      'sysctl',
+      ['-n', 'machdep.cpu'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    return r.status === 0 && (r.stdout || '').includes('AVX2');
+  } catch {
+    return false;
+  }
+}
+
+function ovenWindowsHasAvx2() {
+  try {
+    const r = require('child_process').spawnSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        // Template literal avoids parser issues with nested quotes in CJS.
+        `(Add-Type -MemberDefinition '[DllImport("kernel32.dll")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);' -Name 'Kernel32' -Namespace 'Win32' -PassThru)::IsProcessorFeaturePresent(40)`,
+      ],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    return r.status === 0 && (r.stdout || '').trim() === 'True';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detects the host platform and selects the ordered list of @oven variant
+ * candidates. Detection (sysctl, /proc/cpuinfo, PowerShell) runs ONLY here —
+ * i.e. only when bun/bin/bun.exe was not found.
+ */
+function selectHostOvenVariants() {
+  const os = process.platform;
+  let arch = ovenNormalizeArch(process.arch);
+  if (os === 'darwin' && arch === 'x64' && ovenIsRosetta2()) {
+    arch = 'arm64';
+  }
+  if (!arch) {
+    return [];
+  }
+
+  const abi =
+    os === 'android'
+      ? 'android'
+      : os === 'linux' && ovenExistsAlpine()
+        ? 'musl'
+        : undefined;
+
+  const avx2 =
+    arch === 'x64' &&
+    (os === 'linux'
+      ? ovenLinuxHasAvx2()
+      : os === 'darwin'
+        ? ovenDarwinHasAvx2()
+        : os === 'win32'
+          ? ovenWindowsHasAvx2()
+          : false);
+
+  const matched = OVEN_PLATFORM_TABLE.filter(function (row) {
+    if (row.os !== os || row.arch !== arch) return false;
+    if (row.avx2 === true && !avx2) return false;
+    // abi filter: a row with no abi always passes; a row with abi passes only
+    // when the host abi matches. BUT on a musl host, glibc rows (no abi) also
+    // pass as a last-resort fallback.
+    if (row.abi === undefined) return true;
+    return row.abi === abi;
+  });
+
+  const abiKey = function (row) {
+    if (abi === 'musl') return row.abi === 'musl' ? 0 : 1;
+    return 0;
+  };
+  const avx2Key = function (row) {
+    return row.avx2 === true ? 0 : 1;
+  };
+
+  matched.sort(function (a, b) {
+    const ad = abiKey(a) - abiKey(b);
+    if (ad !== 0) return ad;
+    return avx2Key(a) - avx2Key(b);
+  });
+
+  return matched.map(function (row) {
+    return {
+      packageName: '@oven/' + row.bin,
+      exeNames: ovenExeNamesFor(row.exe),
+    };
+  });
+}
+
+/**
+ * Probes @oven variant binaries inside a node_modules directory. Returns the
+ * first existing binary path, or null. Detection runs lazily inside
+ * selectHostOvenVariants so callers that found bun/bin/bun.exe never fork.
+ */
+function resolveOvenFromNodeModules(nodeModulesDir) {
+  const variants = selectHostOvenVariants();
+  for (const variant of variants) {
+    for (const exeName of variant.exeNames) {
+      const candidate = path.join(nodeModulesDir, variant.packageName, exeName);
+      if (isRegularFile(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 function resolveBunExe(packageRoot) {
   // Prefer the package-local Bun first. Since bun is a direct dependency in
   // packages/cli/package.json, the local node_modules/bun is the authoritative
@@ -414,6 +679,14 @@ function resolveBunExe(packageRoot) {
   );
   if (isRegularFile(localBunExe)) {
     return localBunExe;
+  }
+  // @oven fallback (issue #2978): when bun/bin/bun.exe is absent because npm v12
+  // blocked bun's postinstall, probe the @oven/bun-<platform> binary directly.
+  const localOven = resolveOvenFromNodeModules(
+    path.join(packageRoot, 'node_modules'),
+  );
+  if (localOven) {
+    return localOven;
   }
   // Fall back to Node module resolution, which may find a hoisted Bun under a
   // package manager that deduplicates to the enclosing node_modules.
@@ -430,6 +703,13 @@ function resolveBunExe(packageRoot) {
       if (isRegularFile(candidate)) {
         return candidate;
       }
+      // @oven ancestor fallback (issue #2978).
+      const ancestorOven = resolveOvenFromNodeModules(
+        path.join(dir, 'node_modules'),
+      );
+      if (ancestorOven) {
+        return ancestorOven;
+      }
       dir = path.dirname(dir);
     }
     return null;
@@ -438,6 +718,13 @@ function resolveBunExe(packageRoot) {
   const bunExe = path.join(bunDir, 'bin', 'bun.exe');
   if (isRegularFile(bunExe)) {
     return bunExe;
+  }
+  // @oven fallback for a hoisted bun package: the @oven packages would be in
+  // the same node_modules as the resolved bun package.
+  const enclosingNm = path.dirname(bunDir);
+  const hoistedOven = resolveOvenFromNodeModules(enclosingNm);
+  if (hoistedOven) {
+    return hoistedOven;
   }
   return null;
 }

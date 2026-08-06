@@ -93,10 +93,72 @@ cmd-shim only injects an interpreter when the target has a shebang. That
 asymmetry is the only real hook for keeping POSIX on the fast `sh` path while
 making Windows work without a lifecycle script.
 
-## 6. Pre-change baseline for `resolveBunExe`
+## 6. Where the end-to-end launcher proof must run
+
+An attempt to drive `packages/cli/bin/llxprt` end-to-end on this win32 host via
+Git for Windows `sh` was abandoned as invalid rather than reported as a result.
+Two harness defects, neither of them in the code under test:
+
+- bare `C:\Program Files\Git\usr\bin\sh.exe` has no `uname`, `od`, `sed`, `tr`
+  etc. on PATH, so the launcher's kernel detection and magic-byte check cannot
+  run (`uname: command not found`, exit 127);
+- PowerShell `Set-Content` rewrote the extracted script with CRLF endings.
+
+Even with both fixed, MSYS hands `/c/...`-style paths to a native `bun.exe`,
+which is a different failure mode than the one under test. This is why the
+repo's existing launcher suite is gated to ubuntu-latest (see the
+`itNeedsSymlinks` comment in `scripts/tests/issue-2603-launcher.bun.test.ts`).
+
+Exit-code propagation through Git `sh` was confirmed working (`sh -c 'exit 43'`
+-> 43), so the abandoned harness is not evidence of anything about exit 43.
+
+The end-to-end RED/GREEN proof therefore belongs in
+`scripts/tests/issue-2978-oven-fallback.bun.test.ts` running in Linux CI, not in
+a local Windows harness. The facts in sections 1-5 are the novel claims and each
+is verified directly.
+
+## 7. Pre-change baseline for `resolveBunExe`
 
     resolveBunExe(packages/cli) = <repo>/node_modules/bun/bin/bun.exe
 
 Resolved via the ancestor walk to the hoisted Bun. This must stay byte-identical
 after the change whenever that file exists; `@oven` may only be reached when it
 does not.
+
+## 8. Root manifest must mirror the new optional deps (predicted CI failure)
+
+Verified state of the root manifest before the change:
+
+```text
+ROOT dependencies.bun            = 1.3.14
+ROOT optionalDependencies.bun    = undefined
+ROOT has optionalDependencies    = true
+ROOT @oven entries               = 0
+ROOT trustedDependencies has bun = true
+```
+
+`scripts/tests/publish-integrity.test.ts` (test: "declares runtime dependencies
+needed by shipped workspace source") requires every external dependency of a
+shipped workspace to be covered by the ROOT manifest with a compatible semver
+range. `packages/cli` is a shipped workspace, and `isRootSectionAdequate`
+(`scripts/tests/publish-dependency-helpers.ts:214-219`) accepts an optional
+workspace dep only from the root's `dependencies` or `optionalDependencies`:
+
+```text
+// Optional workspace deps can be in either root section.
+return (
+  rootSection === 'dependencies' || rootSection === 'optionalDependencies'
+);
+```
+
+This is precisely why the root already mirrors `bun: 1.3.14`. Therefore adding
+the 16 `@oven/bun-*` entries to `packages/cli` `optionalDependencies` WITHOUT
+also adding them to the root `optionalDependencies` will fail this test.
+
+**Required:** mirror all 16 `@oven/bun-*` at `1.3.14` into root
+`optionalDependencies`.
+
+No trust change is needed: the `@oven` packages declare no install script, so
+`bun-workspaces.test.ts` ("classifies every install-script package as trusted or
+reviewed-untrusted") is unaffected, and `bun` itself is already in
+`trustedDependencies`.

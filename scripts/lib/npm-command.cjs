@@ -83,38 +83,84 @@ function existsSyncOptional(options, p) {
 function resolveNpmCliJs(options) {
   const env = (options && options.env) || process.env;
   const probed = [];
-  // npm_execpath is set when running under npm. It points to the CLI JS entry
-  // (e.g. /path/to/node_modules/npm/bin/npm-cli.js). Only trust it when it is a
-  // real .js file whose basename is npm-cli.js that exists — pnpm and Yarn
-  // also set npm_execpath to their own CLI during lifecycle scripts, so a
-  // generic .js+exists check could resolve the wrong package manager.
-  //
-  // We check basename on BOTH separators (/ and \) so Windows-style paths
-  // (backslashes) are handled correctly even when this code runs on POSIX
-  // (e.g. during cross-platform unit tests).
-  if (env.npm_execpath && env.npm_execpath.endsWith('.js')) {
-    const normalizedBase = env.npm_execpath
-      .replace(/\\/g, '/')
-      .split('/')
-      .pop();
-    // Require an absolute path so a relative npm_execpath (which would be
-    // CWD-dependent) is never trusted. Check both POSIX (/ prefix) and
-    // Windows (drive-letter:\) forms so cross-platform unit tests that
-    // simulate Windows paths on a POSIX host work correctly.
-    const isAbs =
-      path.isAbsolute(env.npm_execpath) ||
-      /^[A-Za-z]:[\\/]/.test(env.npm_execpath);
-    if (
-      normalizedBase === 'npm-cli.js' &&
-      isAbs &&
-      existsSyncOptional(options, env.npm_execpath)
-    ) {
-      return env.npm_execpath;
-    }
-    probed.push(env.npm_execpath);
+  const cli =
+    resolveFromNpmExecpath(env, options, probed) ||
+    resolveFromNodeDir(options, probed) ||
+    resolveFromPathNpmCmd(env, options, probed) ||
+    resolveFromPrefixCandidates(env, options, probed);
+  if (cli) {
+    return cli;
   }
-  // Fallback: npm ships alongside Node in setup-node and official installers:
-  //   <node-dir>/node_modules/npm/bin/npm-cli.js
+  throw createNpmCliNotFoundError(probed);
+}
+
+/**
+ * Builds the NpmCliNotFoundError thrown when resolution fails, carrying the
+ * probed paths so the caller gets an actionable message instead of an opaque
+ * Node MODULE_NOT_FOUND at spawn time.
+ *
+ * @param {string[]} probed
+ * @returns {NpmCliNotFoundError}
+ */
+function createNpmCliNotFoundError(probed) {
+  return new NpmCliNotFoundError(
+    `npm-cli.js could not be resolved on Windows (probed: ${probed.join(', ')}). ` +
+      'Ensure npm is installed and accessible. This code checks the node.exe ' +
+      'directory (setup-node / official installers), NPM_CONFIG_PREFIX, and ' +
+      'APPDATA locations (nvm-windows, Volta, global installs). If none apply, ' +
+      'install Node via setup-node or an official installer that ships npm ' +
+      'alongside node.exe, or verify that NPM_CONFIG_PREFIX / APPDATA point to ' +
+      'a valid npm installation.',
+    { probed },
+  );
+}
+
+/**
+ * Attempts to resolve npm-cli.js from npm_execpath.
+ *
+ * npm_execpath is set when running under npm and points to the CLI JS entry
+ * (e.g. /path/to/node_modules/npm/bin/npm-cli.js). Only trust it when it is a
+ * real .js file whose basename is npm-cli.js on an absolute path that exists —
+ * pnpm and Yarn also set npm_execpath to their own CLI during lifecycle
+ * scripts, so a generic .js+exists check could resolve the wrong package
+ * manager. The basename is normalized across both separators so Windows-style
+ * backslash paths are handled even when this code runs on POSIX.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {InvocationOptions} options
+ * @param {string[]} probed
+ * @returns {string | undefined}
+ */
+function resolveFromNpmExecpath(env, options, probed) {
+  if (!env.npm_execpath || !env.npm_execpath.endsWith('.js')) {
+    return undefined;
+  }
+  const normalizedBase = env.npm_execpath.replace(/\\/g, '/').split('/').pop();
+  const isAbsolute =
+    path.isAbsolute(env.npm_execpath) ||
+    /^[A-Za-z]:[\\/]/.test(env.npm_execpath);
+  if (
+    normalizedBase === 'npm-cli.js' &&
+    isAbsolute &&
+    existsSyncOptional(options, env.npm_execpath)
+  ) {
+    return env.npm_execpath;
+  }
+  probed.push(env.npm_execpath);
+  return undefined;
+}
+
+/**
+ * Attempts to resolve npm-cli.js from the directory containing the Node (or
+ * runtime) executable: <node-dir>/node_modules/npm/bin/npm-cli.js. This is the
+ * standard layout for setup-node GitHub Actions runners and official Node
+ * installers.
+ *
+ * @param {InvocationOptions} options
+ * @param {string[]} probed
+ * @returns {string | undefined}
+ */
+function resolveFromNodeDir(options, probed) {
   const nodeExe = (options && options.execPath) || process.execPath;
   const nodeDir = path.dirname(nodeExe);
   const fallback = path.join(
@@ -128,22 +174,64 @@ function resolveNpmCliJs(options) {
     return fallback;
   }
   probed.push(fallback);
+  return undefined;
+}
 
-  // Fallback 2: npm prefix locations for nvm-windows, Volta, and global npm
-  // installs where npm is NOT alongside node.exe. These are derived from
-  // well-known environment variables (NPM_CONFIG_PREFIX, APPDATA) without
-  // spawning a shell or npm.cmd.
-  const prefixCandidates = [];
-  // Validate NPM_CONFIG_PREFIX as an absolute path so a relative value does
-  // not silently resolve against process.cwd(). Check both POSIX (/) and
-  // Windows (drive-letter:\) forms so cross-platform unit tests that simulate
-  // Windows paths on a POSIX host work correctly.
+/**
+ * Attempts to resolve npm-cli.js by locating npm.cmd on PATH.
+ *
+ * When this code runs under a non-Node runtime (e.g. Bun), process.execPath
+ * is the runtime binary rather than node.exe, so the node-dir fallback probes
+ * the wrong directory. The official Node Windows installer places npm.cmd
+ * next to node.exe with its npm-cli.js at
+ * <dir>/node_modules/npm/bin/npm-cli.js; locating npm.cmd on PATH (a pure
+ * filesystem scan — no shell, no .cmd spawn) finds that layout regardless of
+ * the invoking runtime.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {InvocationOptions} options
+ * @param {string[]} probed
+ * @returns {string | undefined}
+ */
+function resolveFromPathNpmCmd(env, options, probed) {
+  const pathVar = env.PATH || env.Path || env.path;
+  if (typeof pathVar !== 'string' || pathVar.length === 0) {
+    return undefined;
+  }
+  const dirs = pathVar.split(path.delimiter).filter((dir) => dir.length > 0);
+  for (const dir of dirs) {
+    const npmCmd = path.join(dir, 'npm.cmd');
+    if (!existsSyncOptional(options, npmCmd)) {
+      continue;
+    }
+    const pathCli = path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+    if (existsSyncOptional(options, pathCli)) {
+      return pathCli;
+    }
+    probed.push(pathCli);
+  }
+  return undefined;
+}
+
+/**
+ * Collects well-known npm-cli.js prefix candidates (NPM_CONFIG_PREFIX and
+ * APPDATA / nvm-windows / global roaming install locations). NPM_CONFIG_PREFIX
+ * is validated as an absolute path so a relative value does not silently
+ * resolve against process.cwd(); both POSIX (/) and Windows (drive-letter:\)
+ * forms are accepted so cross-platform unit tests that simulate Windows paths
+ * on a POSIX host work correctly.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {string[]}
+ */
+function collectPrefixCandidates(env) {
+  const candidates = [];
   if (
     env.NPM_CONFIG_PREFIX &&
     (path.isAbsolute(env.NPM_CONFIG_PREFIX) ||
       /^[A-Za-z]:[\\/]/.test(env.NPM_CONFIG_PREFIX))
   ) {
-    prefixCandidates.push(
+    candidates.push(
       path.join(
         env.NPM_CONFIG_PREFIX,
         'node_modules',
@@ -154,28 +242,33 @@ function resolveNpmCliJs(options) {
     );
   }
   if (env.APPDATA) {
-    // nvm-windows / global npm roaming install location.
-    prefixCandidates.push(
+    candidates.push(
       path.join(env.APPDATA, 'npm', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     );
   }
-  for (const candidate of prefixCandidates) {
+  return candidates;
+}
+
+/**
+ * Attempts to resolve npm-cli.js from npm prefix locations for nvm-windows,
+ * Volta, and global npm installs where npm is NOT alongside node.exe. These
+ * are derived from well-known environment variables without spawning a shell
+ * or npm.cmd.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {InvocationOptions} options
+ * @param {string[]} probed
+ * @returns {string | undefined}
+ */
+function resolveFromPrefixCandidates(env, options, probed) {
+  const candidates = collectPrefixCandidates(env);
+  for (const candidate of candidates) {
     if (existsSyncOptional(options, candidate)) {
       return candidate;
     }
     probed.push(candidate);
   }
-
-  throw new NpmCliNotFoundError(
-    `npm-cli.js could not be resolved on Windows (probed: ${probed.join(', ')}). ` +
-      'Ensure npm is installed and accessible. This code checks the node.exe ' +
-      'directory (setup-node / official installers), NPM_CONFIG_PREFIX, and ' +
-      'APPDATA locations (nvm-windows, Volta, global installs). If none apply, ' +
-      'install Node via setup-node or an official installer that ships npm ' +
-      'alongside node.exe, or verify that NPM_CONFIG_PREFIX / APPDATA point to ' +
-      'a valid npm installation.',
-    { probed },
-  );
+  return undefined;
 }
 
 /**

@@ -17,14 +17,22 @@ import { createRequire } from 'node:module';
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const nodeRequire = createRequire(import.meta.url);
-const npmInvocation = nodeRequire('../lib/npm-command.cjs').npmInvocation as (
-  args?: readonly string[],
-  options?: {
-    platform?: string;
+const { npmInvocation, resolveNpmCliJs } = nodeRequire(
+  '../lib/npm-command.cjs',
+) as {
+  npmInvocation: (
+    args?: readonly string[],
+    options?: {
+      platform?: string;
+      execPath?: string;
+      env?: Record<string, string | undefined>;
+    },
+  ) => { command: string; args: string[] };
+  resolveNpmCliJs: (options?: {
     execPath?: string;
     env?: Record<string, string | undefined>;
-  },
-) => { command: string; args: string[] };
+  }) => string;
+};
 const tarCommand = nodeRequire('../lib/tar-command.cjs') as {
   spawnTarList: (tarball: string, timeoutMs?: number) => { stdout: string };
   spawnTarListVerbose: (
@@ -195,19 +203,32 @@ describe('CLI workspace tarball contents (actual release artifact)', () => {
   it('declares a postinstall script in the CLI workspace package.json', () => {
     const cliPkg = JSON.parse(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
-    ) as { scripts: Record<string, string>; bin: Record<string, string> };
+    ) as { scripts: Record<string, string>; bin?: Record<string, string> };
     expect(cliPkg.scripts.postinstall).toContain('install-native-launchers');
-    expect(cliPkg.bin.llxprt).toBe('bin/llxprt');
+    // #2978: packages/cli no longer declares a bin; the `llxprt` command is
+    // provided by the os-gated platform packages (optionalDependencies) so npm
+    // cannot derive a broken /bin/sh shim on Windows.
+    expect(cliPkg.bin).toBeUndefined();
   });
 
-  it('ships bin/llxprt with executable mode in the tarball', () => {
-    const tarball = packCliWorkspace();
-    const { stdout } = spawnTarListVerbose(tarball, 'package/bin/llxprt');
-    // Match the POSIX permission string (e.g. -rwxr-xr-x). Both GNU tar and
-    // bsdtar emit this format in verbose mode. Check for 'x' in the owner
-    // position (character index 3 or 4 depending on type prefix).
-    expect(stdout).toMatch(/^.{0,1}[-bcCdDlMnpPs?]rwx/);
-  }, 120_000);
+  // npm marks a declared bin target 0o755 only when packing on a POSIX host;
+  // on Windows npm pack records every file as 0644 (no exec bit to stat), so
+  // the executable-mode invariant is only verifiable on POSIX here. The
+  // launcher is committed 100755 (packages/cli/bin/llxprt), so it ships
+  // executable on POSIX.
+  const executableModeIt = process.platform === 'win32' ? it.skip : it;
+  executableModeIt(
+    'ships bin/llxprt with executable mode in the tarball',
+    () => {
+      const tarball = packCliWorkspace();
+      const { stdout } = spawnTarListVerbose(tarball, 'package/bin/llxprt');
+      // Match the POSIX permission string (e.g. -rwxr-xr-x). Both GNU tar and
+      // bsdtar emit this format in verbose mode. Check for 'x' in the owner
+      // position (character index 3 or 4 depending on type prefix).
+      expect(stdout).toMatch(/^.{0,1}[-bcCdDlMnpPs?]rwx/);
+    },
+    120_000,
+  );
 });
 
 describe('install-native-launchers module (CLI workspace)', () => {
@@ -301,6 +322,21 @@ describe('install-native-launchers module (CLI workspace)', () => {
         } catch {
           /* try next */
         }
+      }
+      // Derive npm's own package directory from its resolved CLI entry
+      // (npm-cli.js lives at <npmPkg>/bin/npm-cli.js). cmd-shim is a bundled
+      // dependency of npm, so it lives at <npmPkg>/node_modules/cmd-shim. This
+      // resolves under any runtime (Node or Bun) and on the official Windows
+      // installer layout; preferred over the spawn-based fallbacks below
+      // because it needs no extra process.
+      try {
+        const npmCliJs = resolveNpmCliJs();
+        const npmPkgDir = dirname(dirname(npmCliJs));
+        const candidate = join(npmPkgDir, 'node_modules', 'cmd-shim');
+        nodeRequire.resolve(candidate);
+        return candidate;
+      } catch {
+        // not resolvable here; fall through to spawn-based discovery
       }
       const { command: npmCmd, args: npmArgs } = npmInvocation(['root', '-g']);
       const npmRoot = spawnSync(npmCmd, npmArgs, {

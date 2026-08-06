@@ -1,0 +1,24 @@
+{
+  "name": "@vybestack/llxprt-cli-posix",
+  "version": "0.11.0",
+  "description": "LLxprt Code POSIX launcher payload — provides the `llxprt` command on POSIX platforms",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "scripts": {
+    "build": "echo static launcher payload, no build step"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "freebsd"
+  ],
+  "bin": {
+    "llxprt": "bin/llxprt"
+  },
+  "files": [
+    "bin/llxprt"
+  ]
+}
