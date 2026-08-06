@@ -113,10 +113,10 @@ describe('.github/workflows/ocr-review.yml', () => {
   }
 
   it('is discovered by the scripts test root used in CI', () => {
-    const manifest = readRootFile('scripts/bun-test-manifest.ts');
+    const roots = readRootFile('scripts/bun-test-roots.ts');
 
-    expect(manifest).toContain("workspace: 'scripts-tests'");
-    expect(manifest).toContain("'scripts/tests/**/*.test.ts'");
+    expect(roots).toContain("root: 'scripts-tests'");
+    expect(roots).toContain("directories: ['scripts/tests']");
   });
 
   it('uses authorization-aware workflow concurrency around the complete run', () => {

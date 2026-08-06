@@ -31,7 +31,6 @@ const HEAVY_JOBS = [
   'bun_native_modules_smoke',
   'node_consumer_smoke',
   'bun_test_orchestrator_smoke',
-  'bun_native_test_parity',
   'acp_conformance',
 ] as const;
 
