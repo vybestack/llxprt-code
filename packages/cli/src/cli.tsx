@@ -99,6 +99,11 @@ import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
+import {
+  captureBootstrapEnvPath,
+  resolveBootstrapSelection,
+  type BootstrapSelection,
+} from './observation/jspWiring.js';
 import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
 import { formatNonInteractiveError } from './session/errorReporting.js';
 import {
@@ -195,6 +200,7 @@ async function constructForegroundAgentAndDispatch(
   providerActivation: ConfiguredProviderActivationResult,
   hasPipedInput: boolean,
   readStdinData: () => Promise<string>,
+  bootstrapSelection: BootstrapSelection | null,
 ): Promise<void> {
   // Configure Unicode rendering before any Ink render (including the MCP
   // initialization spinner inside constructAgentWithSpinner) so that Windows
@@ -207,7 +213,11 @@ async function constructForegroundAgentAndDispatch(
   );
   await connectIdeClientIfEnabled(config);
 
-  const recording = await setupSessionRecording(config, argv);
+  const recording = await setupSessionRecording(
+    config,
+    argv,
+    bootstrapSelection,
+  );
 
   await dispatchInteractiveOrNonInteractive({
     config,
@@ -279,31 +289,48 @@ function detectImageModeFromArgv(argv: ParsedCliArgs): boolean {
   return isImageModeActive(buildImageModeFlags(argv));
 }
 
-export async function main() {
-  configureEarlyDebugLogging();
+/**
+ * Resolve the JSP bootstrap selection immediately after parsing. The env was
+ * already captured and scrubbed at the first line of `main()` by
+ * `captureBootstrapEnvPath`; this resolves the final selection from public
+ * flag > transported env path > captured env path > disabled (AC10–AC13). File
+ * validation happens later at observation setup (fail-fast).
+ */
+function preparePostParseStartup(
+  argv: ParsedCliArgs,
+  capturedEnvPath: string | undefined,
+): {
+  bootstrapSelection: BootstrapSelection | null;
+  hasPipedInput: boolean;
+  readStdinOnce: () => Promise<string>;
+} {
+  return {
+    bootstrapSelection: resolveBootstrapSelection(
+      argv.jspBootstrap,
+      argv.jspBootstrapInternalEnvPath,
+      capturedEnvPath,
+    ),
+    hasPipedInput: !process.stdin.isTTY && argv.experimentalAcp !== true,
+    readStdinOnce: createMemoizedStdinReader(),
+  };
+}
 
-  const rawArgs = process.argv.slice(2);
-  await handleVersionAndHelpFlags(rawArgs);
-
-  const cleanupStdio = setupProcessLifecycle();
-
-  const workspaceRoot = process.cwd();
-  prepareSandboxCredentialStartup(workspaceRoot);
-
-  const settings = loadSettings(workspaceRoot);
-
-  await maybeRelaunchForMemory(settings);
-
-  const argv = await parseArguments(settings.merged);
-
-  const hasPipedInput = !process.stdin.isTTY && argv.experimentalAcp !== true;
-  const readStdinOnce = createMemoizedStdinReader();
-
+/**
+ * Runs the post-parse startup steps that main() delegates out to keep its own
+ * body under the max-lines-per-function limit. Performs checkpoint cleanup
+ * only — stdin guard, settings, config, terminal setup, and provider work
+ * stay in main() to preserve the ordering contract.
+ */
+async function runPostParseStartup(): Promise<void> {
   await cleanupCheckpoints();
+}
 
-  // Direct image mode bypasses the conversational stdin guard: when image
-  // flags are present, the operation does not read stdin for a conversational
-  // prompt, so a non-TTY stdin with no prompt must NOT cause an early exit.
+/** Guard stdin-or-prompt unless image mode is active (bypasses the guard). */
+async function ensureStdinOrPrompt(
+  argv: ParsedCliArgs,
+  hasPipedInput: boolean,
+  readStdinOnce: () => Promise<string>,
+): Promise<void> {
   if (!detectImageModeFromArgv(argv)) {
     await ensureStdinOrPromptProvided(
       hasPipedInput,
@@ -312,6 +339,34 @@ export async function main() {
         (argv.promptWords ?? []).join(' '),
     );
   }
+}
+
+export async function main() {
+  // Capture and scrub LLXPRT_JSP_BOOTSTRAP_FILE before any child-capable
+  // startup. No file I/O; resolved later, validated at observation setup.
+  const capturedEnvPath = captureBootstrapEnvPath();
+
+  configureEarlyDebugLogging();
+
+  await handleVersionAndHelpFlags(process.argv.slice(2));
+
+  const cleanupStdio = setupProcessLifecycle();
+
+  const workspaceRoot = process.cwd();
+  prepareSandboxCredentialStartup(workspaceRoot);
+
+  const settings = loadSettings(workspaceRoot);
+
+  await maybeRelaunchForMemory(settings, capturedEnvPath);
+
+  const argv = await parseArguments(settings.merged);
+
+  const { bootstrapSelection, hasPipedInput, readStdinOnce } =
+    preparePostParseStartup(argv, capturedEnvPath);
+
+  await runPostParseStartup();
+
+  await ensureStdinOrPrompt(argv, hasPipedInput, readStdinOnce);
   throwIfSettingsErrors(settings);
   redirectConsoleForAcp(argv);
 
@@ -338,29 +393,18 @@ export async function main() {
 
   // ACP/Zed runs its own runtime and constructs per-session Agents via
   // fromConfig internally; it must be handled BEFORE the general
-  // non-interactive unconfigured-provider guard so that
-  // ensureAcpProviderActivated can perform ACP-specific provider activation.
+  // non-interactive unconfigured-provider guard.
   if (await handleZedAcpIntegration(config, settings, cleanupStdio)) {
     return;
   }
 
-  // Non-interactive unconfigured-provider gate: when no provider is
-  // active and we are NOT in interactive mode, exit FATAL_CONFIG_ERROR (52)
-  // BEFORE any provider activation or Agent construction. The interactive path
-  // falls through to guidance in the UI. Uses the shared
+  // Non-interactive unconfigured-provider gate: exit FATAL_CONFIG_ERROR (52)
+  // BEFORE any provider activation or Agent construction when no provider is
+  // active and we are NOT in interactive mode. Uses the shared
   // guardUnconfiguredProvider helper (single message, single exit code).
   await guardUnconfiguredProvider(config, runExitCleanup);
 
-  // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378): the
-  // sandbox-hop decision and the FATAL_AUTHENTICATION_ERROR exit both need the
-  // auth outcome BEFORE the Agent is constructed. activateConfiguredProvider
-  // assembles a declarative intent and delegates to the public
-  // `preflightAgentActivation` agent-bootstrap entrypoint (the CLI does not
-  // execute the activation primitive itself). This establishes the active
-  // provider/auth on the Config; the Agent's own (idempotent) fromConfig
-  // activation then ADOPTS it without a second activation sequence. The
-  // preflight does not require Config.initialize() — the agentClient factory is
-  // bound at construction and the client is created lazily.
+  // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378).
   const providerActivation = await activateConfiguredProvider(
     config,
     providerManager,
@@ -368,7 +412,7 @@ export async function main() {
   );
   const initialAuthFailed = providerActivation.authFailed;
 
-  // hop into sandbox if we are outside and sandboxing is enabled
+  // hop into sandbox if outside and sandboxing is enabled
   await maybeHopIntoSandbox({
     config,
     settings,
@@ -378,6 +422,7 @@ export async function main() {
     initialAuthFailed,
     readStdin: readStdinOnce,
     hasPipedInput,
+    bootstrapSelection,
   });
 
   if (initialAuthFailed) {
@@ -385,10 +430,8 @@ export async function main() {
     process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
   }
 
-  // Direct image mode: detect after configuration/auth/backend setup but BEFORE
-  // interactive/non-interactive conversational dispatch. Image mode must NOT
-  // construct or invoke the conversational agent loop — it runs the common
-  // image-operation service directly and exits.
+  // Direct image mode: detect after config/auth but BEFORE conversational
+  // dispatch. Image mode runs the image-operation service directly and exits.
   const imageExitCode = await runDirectImageModeAndExit(argv, config);
   if (imageExitCode !== null) {
     await runExitCleanup();
@@ -406,5 +449,6 @@ export async function main() {
     providerActivation,
     hasPipedInput,
     readStdinOnce,
+    bootstrapSelection,
   );
 }

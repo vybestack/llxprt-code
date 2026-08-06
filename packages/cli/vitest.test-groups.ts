@@ -75,6 +75,12 @@ const baseExclude: readonly string[] = [
   // Sandbox container credential-isolation tests are Bun-native for the same
   // reason (issue #2946).
   '**/src/utils/sandbox-containers.test.ts',
+  // Sandbox enablement precedence (flag > env > settings) and source-labeled
+  // diagnostics are Bun-native (issue #3083) and registered in
+  // scripts/bun-test-manifest.ts; exclude from Vitest.
+  '**/src/config/sandboxConfig.precedence.test.ts',
+  // --jsp-bootstrap parser test is Bun-native (issue #3083 AC9).
+  '**/src/config/cliArgParser.jspBootstrap.test.ts',
   // Claude Code login-bucket characterization is Bun-native for the same
   // reason (issue #2891).
   '**/src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',

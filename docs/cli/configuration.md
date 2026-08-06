@@ -1673,6 +1673,32 @@ The CLI automatically loads environment variables from `.env` files. The loading
 
 String values in `settings.json` can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax.
 
+### JSP Observation Bootstrap (`--jsp-bootstrap`)
+
+The `--jsp-bootstrap <path>` flag points the CLI at a JSP observation
+bootstrap file used by the telemetry/observation producer. Precedence (highest
+to lowest):
+
+1. **`--jsp-bootstrap <path>`** — explicit CLI flag.
+2. **`LLXPRT_JSP_BOOTSTRAP_FILE`** — deprecated environment-variable fallback.
+3. **Disabled** — no observation producer is started.
+
+The bootstrap file is a mode-0600, credential-bearing artifact (it carries the
+`publisher_credential`, `agent_id`, and `lifecycle_generation` for the session).
+To prevent unrelated descendant processes (subagents, shell tools, MCP servers)
+from inheriting a per-process identity pointer that may already have been
+rotated away, the CLI captures `LLXPRT_JSP_BOOTSTRAP_FILE` and removes it from
+its own environment at the very first executable line of startup — before
+debug logging, help/version handling, settings loading, memory relaunch, or
+argument parsing. No descendant inherits the variable.
+
+When the CLI performs an intentional direct-replacement relaunch (a memory
+relaunch or a sandbox hop) and the bootstrap path came from the environment,
+that path is transported to the child **only** via the hidden argv option
+`--jsp-bootstrap-internal-env-path`. The variable is never restored to the
+environment, and only the nonsecret path travels on argv — the credential
+itself stays inside the bootstrap file and is never placed on the command line.
+
 ## Shell History
 
 Shell command history is stored per-project under LLxprt's [log/state directory](../reference/application-directories.md) at `<log>/tmp/<project_hash>/shell_history` (overridable via `LLXPRT_LOG_HOME`).

@@ -735,6 +735,26 @@ auto-detects an available engine.
 
 `--sandbox-engine none` always wins, even when `LLXPRT_SANDBOX` is set.
 
+### Precedence
+
+When more than one source configures sandboxing, they are applied in this order
+(highest to lowest):
+
+1. **CLI flag** — `--sandbox` / `--no-sandbox`
+2. **Environment variable** — `LLXPRT_SANDBOX`
+3. **Settings file** — `settings.sandbox`
+4. **Default** — no sandbox
+
+An explicit flag wins over a set `LLXPRT_SANDBOX`. In particular, `--no-sandbox`
+(or `--sandbox false`) disables the sandbox even when `LLXPRT_SANDBOX=true` (or
+`docker`, `1`) is set, so you can always opt out of an inherited environment
+variable. When the flag is absent, `LLXPRT_SANDBOX` is honoured; when both the
+flag and the variable are absent, `settings.sandbox` is used. An empty or
+whitespace-only `LLXPRT_SANDBOX` is treated as absent.
+
+`--sandbox-engine none` still short-circuits to no sandbox regardless of the
+flag, variable, or settings.
+
 ### Sandbox profiles
 
 Profiles are JSON files in your config directory under `sandboxes/` (see

@@ -25,6 +25,32 @@ import { createObservationTap, type ObservationTap } from './observationTap.js';
 const BOOTSTRAP_ENV = 'LLXPRT_JSP_BOOTSTRAP_FILE';
 const NO_CONTENT_ENV = 'LLXPRT_JSP_NO_CONTENT';
 
+/**
+ * The public argv token for the bootstrap flag and the hidden internal token
+ * used to transport an env-origin path across a direct-replacement relaunch
+ * (memory or sandbox hop) without restoring the variable to the environment.
+ */
+const BOOTSTRAP_ARGV_FLAG = '--jsp-bootstrap';
+const INTERNAL_ENV_PATH_ARGV_FLAG = '--jsp-bootstrap-internal-env-path';
+
+/**
+ * The channel that supplied the bootstrap path, surfaced in failure
+ * diagnostics so the message names the real source (`--jsp-bootstrap` or
+ * `LLXPRT_JSP_BOOTSTRAP_FILE`) instead of always blaming one.
+ */
+export type BootstrapSource = typeof BOOTSTRAP_ARGV_FLAG | typeof BOOTSTRAP_ENV;
+
+/**
+ * The resolved bootstrap selection: the non-empty path plus the channel that
+ * supplied it. Produced once, after argument parsing, and threaded explicitly
+ * through startup so the credential-bearing file is validated later
+ * (fail-fast) while the env scrub happens at process start.
+ */
+export interface BootstrapSelection {
+  readonly path: string;
+  readonly source: BootstrapSource;
+}
+
 export interface ObservationSessionContext {
   readonly repository: string;
   readonly path: string;
@@ -47,7 +73,104 @@ export function createTodoObservationSubscription(
 }
 
 /**
- * Load and validate the JSP bootstrap file declared on the environment.
+ * Capture `LLXPRT_JSP_BOOTSTRAP_FILE` from `env` and delete it unconditionally,
+ * before any file I/O. This must be the FIRST executable action in `main()` —
+ * before `configureEarlyDebugLogging`, help/version handling, process lifecycle
+ * setup, settings load, memory relaunch, or yargs parsing — because all of
+ * those paths can spawn or replace the process (memory relaunch clones
+ * `process.env`; MCP subcommand handlers start stdio transports that clone
+ * `process.env`; help/version can `process.exit` before later scrubbing would
+ * run). Descendants (subagents, shell tools, test runners, MCP servers) would
+ * otherwise inherit a per-session, identity-bearing pointer to a file that
+ * carries another process's `agentId` / `lifecycleGeneration` and may already
+ * have been rotated away (issues #3083 and #3082).
+ *
+ * The deletion is unconditional: whether the value was non-empty, empty, or
+ * absent. No credential-bearing file is read here; validation is deferred to
+ * {@link loadBootstrap} at observation setup (fail-fast). Returns the non-empty
+ * path for later resolution, or `undefined` when the variable was absent/empty.
+ */
+export function captureBootstrapEnvPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const envPath = env[BOOTSTRAP_ENV];
+  delete env[BOOTSTRAP_ENV];
+  if (envPath !== undefined && envPath.length > 0) {
+    return envPath;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the bootstrap selection AFTER argument parsing from the three
+ * candidate paths. Precedence (highest to lowest):
+ *
+ * 1. Public `--jsp-bootstrap` flag (non-empty) → source `--jsp-bootstrap`.
+ * 2. Hidden `--jsp-bootstrap-internal-env-path` (transported across a memory
+ *    or sandbox direct-replacement relaunch) → source `LLXPRT_JSP_BOOTSTRAP_FILE`.
+ * 3. The path captured at process start by {@link captureBootstrapEnvPath}
+ *    → source `LLXPRT_JSP_BOOTSTRAP_FILE`.
+ * 4. `null` (observation disabled).
+ *
+ * This is a pure function: the environment has already been scrubbed at
+ * process start, so this never touches `process.env`.
+ */
+export function resolveBootstrapSelection(
+  flagPath: string | undefined,
+  internalEnvPath: string | undefined,
+  capturedEnvPath: string | undefined,
+): BootstrapSelection | null {
+  if (typeof flagPath === 'string' && flagPath.length > 0) {
+    return { path: flagPath, source: BOOTSTRAP_ARGV_FLAG };
+  }
+  if (typeof internalEnvPath === 'string' && internalEnvPath.length > 0) {
+    return { path: internalEnvPath, source: BOOTSTRAP_ENV };
+  }
+  if (typeof capturedEnvPath === 'string' && capturedEnvPath.length > 0) {
+    return { path: capturedEnvPath, source: BOOTSTRAP_ENV };
+  }
+  return null;
+}
+
+/**
+ * Transport a non-secret env-origin bootstrap path into a child process argv
+ * for a direct-replacement relaunch (memory or sandbox hop). The env variable
+ * is never restored to the outer process environment; only the nonsecret path
+ * travels via the hidden internal argv option. No credential contents are
+ * transported — the credential remains inside the mode-0600 bootstrap file.
+ *
+ * The hidden option is inserted immediately BEFORE the first exact `--`
+ * terminator (or appended if absent) so yargs treats it as a flag, not a
+ * positional, in both launch and subcommand contexts. Every original argv
+ * element is preserved. Transport is not duplicated when the option is already
+ * present (e.g. a prior memory hop already added it). A flag-origin selection
+ * is already in argv as `--jsp-bootstrap` and is not re-transported.
+ */
+export function augmentArgvWithInternalEnvPath(
+  argv: readonly string[],
+  envPath: string | undefined,
+): string[] {
+  if (envPath === undefined) {
+    return [...argv];
+  }
+  if (argv.includes(INTERNAL_ENV_PATH_ARGV_FLAG)) {
+    return [...argv];
+  }
+  const insert = [INTERNAL_ENV_PATH_ARGV_FLAG, envPath];
+  const terminatorIndex = argv.indexOf('--');
+  if (terminatorIndex === -1) {
+    return [...argv, ...insert];
+  }
+  return [
+    ...argv.slice(0, terminatorIndex),
+    ...insert,
+    ...argv.slice(terminatorIndex),
+  ];
+}
+
+/**
+ * Read, parse, and schema-validate the JSP bootstrap file named by an
+ * already-consumed selection.
  *
  * A bootstrap file is present only when a supervisor has deliberately opted
  * this process into observation, so a misconfiguration must fail fast and
@@ -60,23 +183,27 @@ export function createTodoObservationSubscription(
  * entry point renders a single actionable line rather than an
  * unexpected-critical stack trace.
  *
- * The messages intentionally name only the environment variable and the
- * failure category: this file is credential-bearing, and the message is
- * written to stderr where a supervisor may log it.
+ * The messages name the channel that supplied the path (`--jsp-bootstrap` or
+ * `LLXPRT_JSP_BOOTSTRAP_FILE`) — taken from the selection's `source` — and the
+ * failure category only: this file is credential-bearing, and the message is
+ * written to stderr where a supervisor may log it. The environment has already
+ * been scrubbed by {@link captureBootstrapEnvPath}, so this function never
+ * touches `process.env`.
  */
-export function loadBootstrapFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
+export function loadBootstrap(
+  selection: BootstrapSelection | null,
 ): JspBootstrap | null {
-  const filePath = env[BOOTSTRAP_ENV];
-  if (filePath === undefined || filePath.length === 0) {
+  if (selection === null) {
     return null;
   }
+  const filePath = selection.path;
+  const source = selection.source;
   let raw: string;
   try {
     raw = readFileSync(filePath, 'utf8');
   } catch {
     throw new FatalConfigError(
-      `JSP bootstrap file named by ${BOOTSTRAP_ENV} could not be read`,
+      `JSP bootstrap file named by ${source} could not be read`,
     );
   }
   let parsed: unknown;
@@ -84,13 +211,13 @@ export function loadBootstrapFromEnv(
     parsed = JSON.parse(raw);
   } catch {
     throw new FatalConfigError(
-      `JSP bootstrap file named by ${BOOTSTRAP_ENV} is malformed JSON`,
+      `JSP bootstrap file named by ${source} is malformed JSON`,
     );
   }
   const result = parseBootstrap(parsed);
   if (!result.ok) {
     throw new FatalConfigError(
-      `JSP bootstrap file named by ${BOOTSTRAP_ENV} was rejected (${result.error.code})`,
+      `JSP bootstrap file named by ${source} was rejected (${result.error.code})`,
     );
   }
   return result.value;
@@ -153,6 +280,7 @@ export function createObservationProducer(
 
 export function initializeObservationProducer(
   context: ObservationSessionContext,
+  selection: BootstrapSelection | null,
 ): void {
   unsubscribeTodos?.();
   unsubscribeTodos = null;
@@ -163,7 +291,7 @@ export function initializeObservationProducer(
   producer?.stop();
   producer = null;
   tap = createObservationTap(null);
-  producer = createObservationProducer(loadBootstrapFromEnv(), context);
+  producer = createObservationProducer(loadBootstrap(selection), context);
   if (producer === null) {
     return;
   }

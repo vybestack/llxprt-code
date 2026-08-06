@@ -4,13 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
-  loadBootstrapFromEnv,
+  captureBootstrapEnvPath,
+  resolveBootstrapSelection,
+  loadBootstrap,
   createObservationProducer,
   createTodoObservationSubscription,
   shouldSuppressContent,
+  initializeObservationProducer,
+  stopObservationProducer,
   type ObservationSessionContext,
+  type BootstrapSelection,
 } from './jspWiring.js';
 import type { JspPostResult } from './jspPublisher.js';
 import type { JspSnapshotDocument, JspBoundDocument } from './jspDocuments.js';
@@ -18,6 +23,7 @@ import { todoEvents, FatalConfigError } from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import http from 'node:http';
 
 const OK: JspPostResult = { kind: 'ok' };
 
@@ -52,6 +58,13 @@ async function writeTempFile(name: string, content: string): Promise<string> {
   return filePath;
 }
 
+async function cleanupTempDirs(): Promise<void> {
+  const dirs = tempDirs.splice(0);
+  await Promise.allSettled(
+    dirs.map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
+}
+
 /**
  * Run a load attempt and capture the thrown error, asserting it is a
  * FatalConfigError with exit code 52. Returns the error so the caller can
@@ -65,52 +78,133 @@ function expectFatalBootstrap(fn: () => unknown): FatalConfigError {
     expect((error as FatalConfigError).exitCode).toBe(52);
     return error as FatalConfigError;
   }
-  throw new Error('expected loadBootstrapFromEnv to throw');
+  throw new Error('expected loadBootstrap to throw');
 }
 
-describe('loadBootstrapFromEnv', () => {
-  afterEach(async () => {
-    // Each helper call creates a directory; without this they accumulate in
-    // the system temp directory on every run. Use allSettled so a single
-    // rejection does not abandon cleanup of the remaining directories.
-    const dirs = tempDirs.splice(0);
-    await Promise.allSettled(
-      dirs.map((dir) => fs.rm(dir, { recursive: true, force: true })),
-    );
-  });
-
+describe('captureBootstrapEnvPath (process-start capture + scrub, AC13)', () => {
   const origEnv = { ...process.env };
 
   beforeEach(() => {
     delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = { ...origEnv };
+    await cleanupTempDirs();
   });
 
-  it('returns null when env is absent (observation disabled)', () => {
-    expect(loadBootstrapFromEnv()).toBeNull();
+  it('captures and scrubs a non-empty value', () => {
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = '/session/per-process.json';
+    expect(captureBootstrapEnvPath()).toBe('/session/per-process.json');
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
   });
 
-  it('returns parsed bootstrap when env points to a valid file', async () => {
+  it('returns undefined and still scrubs an empty value', () => {
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = '';
+    expect(captureBootstrapEnvPath()).toBeUndefined();
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
+  });
+
+  it('returns undefined when absent (no-op scrub)', () => {
+    expect(captureBootstrapEnvPath()).toBeUndefined();
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
+  });
+});
+
+describe('resolveBootstrapSelection (post-parse resolution, AC10–AC14)', () => {
+  afterEach(async () => {
+    await cleanupTempDirs();
+  });
+
+  it('returns null when all sources absent (AC12)', () => {
+    expect(
+      resolveBootstrapSelection(undefined, undefined, undefined),
+    ).toBeNull();
+  });
+
+  it('AC10: flag path wins over captured env path', () => {
+    const sel = resolveBootstrapSelection(
+      '/flag/path.json',
+      undefined,
+      '/env/named.json',
+    );
+    expect(sel?.path).toBe('/flag/path.json');
+    expect(sel?.source).toBe('--jsp-bootstrap');
+  });
+
+  it('AC11: captured env path used when flag absent', () => {
+    const sel = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      '/env/path.json',
+    );
+    expect(sel?.path).toBe('/env/path.json');
+    expect(sel?.source).toBe('LLXPRT_JSP_BOOTSTRAP_FILE');
+  });
+
+  it('transported internal env path wins over captured env path', () => {
+    const sel = resolveBootstrapSelection(
+      undefined,
+      '/transported.json',
+      '/captured.json',
+    );
+    expect(sel?.path).toBe('/transported.json');
+    expect(sel?.source).toBe('LLXPRT_JSP_BOOTSTRAP_FILE');
+  });
+
+  it('empty strings treated as absent', () => {
+    expect(resolveBootstrapSelection('', '', '')).toBeNull();
+  });
+});
+
+describe('loadBootstrap (validation, AC10–AC14)', () => {
+  const origEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
+  });
+
+  afterEach(async () => {
+    process.env = { ...origEnv };
+    await cleanupTempDirs();
+  });
+
+  it('returns null for a null selection (AC12)', () => {
+    expect(loadBootstrap(null)).toBeNull();
+  });
+
+  it('returns parsed bootstrap for a valid env-origin selection', async () => {
     const file = await writeTempFile(
       'bootstrap.json',
       JSON.stringify(validBootstrapJson),
     );
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const result = loadBootstrapFromEnv();
+    const capturedEnvPath = captureBootstrapEnvPath();
+    const selection = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      capturedEnvPath,
+    );
+    const result = loadBootstrap(selection);
     expect(result).not.toBeNull();
     expect(result?.agentId).toBe('agent-alex');
   });
 
   it('throws on unreadable bootstrap file (fail fast, exit 52)', () => {
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE =
+    const missing =
       join(
         tmpdir(),
         'jsp-no-such-file-' + Math.random().toString(36).slice(2),
       ) + '.json';
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = missing;
+    const capturedEnvPath = captureBootstrapEnvPath();
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
+    const selection = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      capturedEnvPath,
+    );
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
     expect(error.message).toContain('could not be read');
   });
@@ -118,7 +212,13 @@ describe('loadBootstrapFromEnv', () => {
   it('throws on malformed bootstrap (fail fast, exit 52)', async () => {
     const file = await writeTempFile('bad.json', '{ not json');
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    const capturedEnvPath = captureBootstrapEnvPath();
+    const selection = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      capturedEnvPath,
+    );
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
     expect(error.message).toContain('malformed JSON');
   });
@@ -132,7 +232,13 @@ describe('loadBootstrapFromEnv', () => {
       }),
     );
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    const capturedEnvPath = captureBootstrapEnvPath();
+    const selection = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      capturedEnvPath,
+    );
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
     expect(error.message).toContain('rejected (JSP-E004)');
     // A credential-bearing file's secrets must not leak into the diagnostic.
@@ -146,9 +252,78 @@ describe('loadBootstrapFromEnv', () => {
       JSON.stringify({ ...validBootstrapJson, protocol: 'jsp/2' }),
     );
     process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    const capturedEnvPath = captureBootstrapEnvPath();
+    const selection = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      capturedEnvPath,
+    );
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
     expect(error.message).toContain('rejected (JSP-E003)');
+  });
+
+  it('AC13: scrubbed env stays absent after a failed load', () => {
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE =
+      join(tmpdir(), 'jsp-missing-' + Math.random().toString(36).slice(2)) +
+      '.json';
+    const capturedEnvPath = captureBootstrapEnvPath();
+    const selection = resolveBootstrapSelection(
+      undefined,
+      undefined,
+      capturedEnvPath,
+    );
+    expectFatalBootstrap(() => loadBootstrap(selection));
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
+  });
+
+  it('AC14: error names --jsp-bootstrap for a flag-origin selection', () => {
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = '/also/not/real.json';
+    const capturedEnvPath = captureBootstrapEnvPath();
+    const selection = resolveBootstrapSelection(
+      '/flag/also-missing.json',
+      undefined,
+      capturedEnvPath,
+    );
+    expect(selection?.source).toBe('--jsp-bootstrap');
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
+    expect(error.message).toContain('--jsp-bootstrap');
+    expect(error.message).not.toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
+  });
+
+  it('AC14: rejection error names --jsp-bootstrap for a flag-supplied invalid file', async () => {
+    const flagFile = await writeTempFile(
+      'flag-bad.json',
+      JSON.stringify({ ...validBootstrapJson, protocol: 'jsp/2' }),
+    );
+    const selection = resolveBootstrapSelection(flagFile, undefined, undefined);
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
+    expect(error.message).toContain('--jsp-bootstrap');
+    expect(error.message).toContain('rejected (JSP-E003)');
+  });
+
+  it('AC14: env-origin error names LLXPRT_JSP_BOOTSTRAP_FILE for internal-env-path transport', () => {
+    // Simulate a memory/sandbox-hopped env-origin path: arrived via the hidden
+    // internal env-path option, so the resolver marks its source as env.
+    const selection = resolveBootstrapSelection(
+      undefined,
+      '/transported/missing.json',
+      undefined,
+    );
+    expect(selection?.source).toBe('LLXPRT_JSP_BOOTSTRAP_FILE');
+    const error = expectFatalBootstrap(() => loadBootstrap(selection));
+    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).not.toContain('--jsp-bootstrap');
+  });
+
+  it('loadBootstrap never touches process.env (pure function)', () => {
+    const selection: BootstrapSelection = {
+      path: '/does-not-exist.json',
+      source: 'LLXPRT_JSP_BOOTSTRAP_FILE',
+    };
+    expectFatalBootstrap(() => loadBootstrap(selection));
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
   });
 });
 
@@ -297,6 +472,81 @@ describe('createObservationProducer', () => {
     ).toBe(9999);
     producer?.stop();
     delete process.env.LLXPRT_JSP_NO_CONTENT;
+  });
+});
+
+describe('initializeObservationProducer (AC15)', () => {
+  const origEnv = { ...process.env };
+  let captureServer: http.Server | null = null;
+  let losingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  beforeEach(() => {
+    delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
+    delete process.env.LLXPRT_JSP_NO_CONTENT;
+  });
+
+  afterEach(async () => {
+    await stopObservationProducer();
+    if (losingTimeout !== null) {
+      clearTimeout(losingTimeout);
+      losingTimeout = null;
+    }
+    await new Promise<void>((resolve) => {
+      if (captureServer === null) {
+        resolve();
+        return;
+      }
+      captureServer.close(() => resolve());
+      captureServer = null;
+    });
+    process.env = { ...origEnv };
+    await cleanupTempDirs();
+  });
+
+  it('honours an explicit flag path with no env var set (real producer)', async () => {
+    // Spin up a real loopback HTTP capture server. The only way to observe
+    // that initializeObservationProducer actually constructed a producer from
+    // the flag path — without spying on internal module state — is to see the
+    // real registration POST land on the broker endpoint named by the file.
+    let resolveRequest!: (req: http.IncomingMessage) => void;
+    const firstRequest = new Promise<http.IncomingMessage>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{}');
+      resolveRequest(req);
+    });
+    captureServer = server;
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address();
+    const port =
+      typeof address === 'object' && address !== null ? address.port : 0;
+
+    const file = await writeTempFile(
+      'explicit.json',
+      JSON.stringify({
+        ...validBootstrapJson,
+        endpoint: `http://127.0.0.1:${port}`,
+      }),
+    );
+
+    const selection = resolveBootstrapSelection(file, undefined, undefined);
+    initializeObservationProducer(sessionContext, selection);
+    // No env var was ever set, and the loader must not introduce one.
+    expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      losingTimeout = setTimeout(
+        () => reject(new Error('registration POST did not arrive')),
+        5_000,
+      );
+    });
+    const received = await Promise.race([firstRequest, timeoutPromise]);
+    expect(received.method).toBe('POST');
+    expect(received.url).toContain('/register');
   });
 });
 

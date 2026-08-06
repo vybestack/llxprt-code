@@ -15,6 +15,7 @@ import type { SettingDefinition } from './config/settingsSchema.js';
 import { readStdin } from './utils/readStdin.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
+import { augmentArgvWithInternalEnvPath } from './observation/jspWiring.js';
 import type { DnsResolutionOrder, LoadedSettings } from './config/settings.js';
 import {
   FatalConfigError,
@@ -105,6 +106,7 @@ export function redirectConsoleForAcp(argv: ParsedCliArgs): void {
 
 export async function maybeRelaunchForMemory(
   settings: LoadedSettings,
+  capturedEnvPath?: string,
 ): Promise<void> {
   if (
     settings.merged.ui.autoConfigureMaxOldSpaceSize !== true ||
@@ -116,7 +118,21 @@ export async function maybeRelaunchForMemory(
   const maxHeapSizeMB = settings.merged.ui.maxHeapSizeMB;
   const memoryArgs = shouldRelaunchForMemory(debugMode, maxHeapSizeMB);
   if (memoryArgs.length > 0) {
-    const exitCode = await relaunchAppInChildProcess(memoryArgs);
+    // A memory relaunch is an intentional direct replacement. The env-origin
+    // bootstrap path (captured and scrubbed at process start) must reach the
+    // child, but NOT via the environment — it is transported via the hidden
+    // internal argv option so the child resolves it post-parse without ever
+    // seeing LLXPRT_JSP_BOOTSTRAP_FILE in its inherited environment.
+    const exitCode =
+      capturedEnvPath === undefined
+        ? await relaunchAppInChildProcess(memoryArgs)
+        : await relaunchAppInChildProcess(
+            memoryArgs,
+            augmentArgvWithInternalEnvPath(
+              process.argv.slice(1),
+              capturedEnvPath,
+            ),
+          );
     process.exit(exitCode);
   }
 }
