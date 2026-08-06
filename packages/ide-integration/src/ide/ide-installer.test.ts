@@ -37,6 +37,9 @@ describe('ide-installer', () => {
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
