@@ -249,18 +249,17 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     expect(turnMessages).toHaveLength(2);
   });
 
-  it('emits the terminal done BEFORE the todo_pause tool-result through mapLoopStream (issue #3071 ordering)', async () => {
-    // CHARACTERIZATION GUARD. The CLI observation tap
-    // (packages/cli/src/observation/observationTap.ts) opens the user_input
-    // wait for issue #3071 from onStreamSettled(), NOT from endTurn, precisely
-    // because the terminal `done` is emitted BEFORE the pause tool-result
-    // (turn.ts emits Finished on the provider chunk's finishReason, the
-    // deferred-events flush runs before the loop schedules the tool, and the
-    // adapter maps Finished to an immediate `done`). endTurn therefore runs on
-    // the early done while the pause has not yet been observed, so opening the
-    // wait there would be dead code. If this ordering ever changes (done after
-    // the result, or the result projected with an empty name / an error), the
-    // tap's onStreamSettled design must be revisited.
+  it('emits exactly one terminal done AFTER the todo_pause tool-result through mapLoopStream (issue #3087 ordering)', async () => {
+    // ORDERING GUARD. The public stream must publish exactly ONE `done` and
+    // it must be the LAST event, so that the turn's tool activity is fully
+    // reported before the turn is declared over. turn.ts emits Finished on the
+    // provider chunk's finishReason and MessageStreamOrchestrator flushes it
+    // before the loop schedules the tool, so the adapter deliberately does NOT
+    // project Finished to a `done` — it defers to the loop-end synthesis.
+    // The CLI observation tap
+    // (packages/cli/src/observation/observationTap.ts) depends on this: it
+    // opens the user_input wait from endTurn, which is only correct while the
+    // pause tool-result precedes the terminal `done`.
     const pauseTool = new MockTool({
       name: 'todo_pause',
       execute: async () => ({
@@ -302,7 +301,7 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
       agentEvents.push(ev);
     }
 
-    const doneIndex = agentEvents.findIndex((e) => e.type === 'done');
+    const doneEvents = agentEvents.filter((e) => e.type === 'done');
     const pauseResult = agentEvents.find(
       (e): e is Extract<AgentEvent, { type: 'tool-result' }> =>
         e.type === 'tool-result' && e.result.name === 'todo_pause',
@@ -312,9 +311,11 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     expect(pauseResult).not.toBeUndefined();
     expect(pauseResult?.result.isError).toBe(false);
 
-    // CRITICAL ordering: the terminal `done` precedes the pause result.
-    expect(doneIndex).toBeGreaterThanOrEqual(0);
+    // CRITICAL: exactly one terminal `done`, and it follows the pause result.
+    expect(doneEvents).toHaveLength(1);
+    const doneIndex = agentEvents.indexOf(doneEvents[0]);
     const pauseResultIndex = agentEvents.indexOf(pauseResult!);
-    expect(doneIndex).toBeLessThan(pauseResultIndex);
+    expect(pauseResultIndex).toBeLessThan(doneIndex);
+    expect(doneIndex).toBe(agentEvents.length - 1);
   });
 });

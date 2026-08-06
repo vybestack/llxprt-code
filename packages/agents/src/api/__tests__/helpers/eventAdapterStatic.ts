@@ -61,7 +61,6 @@ export function driveSingleStreamEvent(
   event: ServerAgentStreamEvent,
 ): readonly AgentEvent[] {
   const state = {
-    emittedDone: false,
     lastFinished: null,
     lastStop: null,
     pendingDoneReason: null,
