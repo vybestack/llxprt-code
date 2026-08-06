@@ -135,9 +135,11 @@ describe('activate', () => {
   });
 
   it('should show the info message on first activation', async () => {
-    const showInformationMessageMock = vi
-      .mocked(vscode.window.showInformationMessage)
-      .mockResolvedValue(undefined);
+    const showInformationMessageMock = (
+      vscode.window.showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >
+    ).mockResolvedValue(undefined);
     (
       context.globalState.get as Mock<typeof context.globalState.get>
     ).mockReturnValue(undefined);
@@ -161,18 +163,22 @@ describe('activate', () => {
   });
 
   it('should launch the LLxprt Code when the user clicks the button', async () => {
-    const showInformationMessageMock = vi
-      .mocked(vscode.window.showInformationMessage)
-      .mockResolvedValue('Re-launch LLxprt Code' as never);
+    const showInformationMessageMock = (
+      vscode.window.showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >
+    ).mockResolvedValue('Re-launch LLxprt Code' as never);
     (
       context.globalState.get as Mock<typeof context.globalState.get>
     ).mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalled();
     await new Promise(process.nextTick); // Wait for the promise to resolve
-    const commandCallback = vi
-      .mocked(vscode.commands.registerCommand)
-      .mock.calls.find((call) => call[0] === 'llxprt-code.runLLxprtCode')?.[1];
+    const commandCallback = (
+      vscode.commands.registerCommand as Mock<
+        typeof vscode.commands.registerCommand
+      >
+    ).mock.calls.find((call) => call[0] === 'llxprt-code.runLLxprtCode')?.[1];
 
     expect(commandCallback).toBeDefined();
   });

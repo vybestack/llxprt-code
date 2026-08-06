@@ -7,6 +7,12 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 
+const realProviderMutationsModule = {
+  ...(await import('./providerMutations.js')),
+};
+const realRuntimeAccessorsModule = {
+  ...(await import('./runtimeAccessors.js')),
+};
 vi.mock('./runtimeAccessors.js', () => {
   const mockConfig = {
     setEphemeralSetting: vi.fn(),
@@ -44,6 +50,7 @@ vi.mock('./runtimeAccessors.js', () => {
     })),
   };
   return {
+    ...realRuntimeAccessorsModule,
     getCliRuntimeServices: vi.fn(() => ({
       config: mockConfig,
       settingsService: mockSettingsService,
@@ -70,15 +77,29 @@ vi.mock('./runtimeAccessors.js', () => {
 });
 
 vi.mock('./providerMutations.js', () => ({
+  ...realProviderMutationsModule,
   computeModelDefaults: vi.fn(() => ({})),
   normalizeProviderBaseUrl: vi.fn(),
   extractProviderBaseUrl: vi.fn(() => undefined),
   updateActiveProviderApiKey: vi.fn(),
 }));
 
+const realProviderAliasesModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-providers/composition/providerAliases.js'
+  )),
+};
+
+const realOauthProviderRegistrationModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-providers/composition/oauth-provider-registration.js'
+  )),
+};
+
 vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerAliases.js',
   () => ({
+    ...realProviderAliasesModule,
     loadProviderAliasEntries: vi.fn(() => []),
   }),
 );
@@ -86,6 +107,7 @@ vi.mock(
 vi.mock(
   '@vybestack/llxprt-code-providers/composition/oauth-provider-registration.js',
   () => ({
+    ...realOauthProviderRegistrationModule,
     ensureOAuthProviderRegistered: vi.fn(),
   }),
 );

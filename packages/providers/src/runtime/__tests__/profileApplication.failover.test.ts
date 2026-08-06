@@ -24,6 +24,9 @@ import type {
   LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
 
+const realRuntimeSettingsModule = {
+  ...(await import('../runtimeSettings.js')),
+};
 type ProviderManagerStub = {
   providers: Map<string, unknown>;
   activeProviderName: string | null;
@@ -203,6 +206,7 @@ function wrapRegisterProviderToCaptureLB(): {
 }
 
 vi.mock('../runtimeSettings.js', () => ({
+  ...realRuntimeSettingsModule,
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,

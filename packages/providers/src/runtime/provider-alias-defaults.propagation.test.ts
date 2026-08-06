@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const realProviderAliasesModule = {
@@ -450,25 +458,21 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
   describe('Claude Code OAuth maxOutputTokens respect (Issue #1769)', () => {
     const enableOAuth = () =>
-      vi
-        .mocked(
-          (
-            mockOAuthManager as unknown as {
-              isOAuthEnabled: ReturnType<typeof vi.fn>;
-            }
-          ).isOAuthEnabled,
-        )
-        .mockReturnValue(true);
+      (
+        (
+          mockOAuthManager as unknown as {
+            isOAuthEnabled: ReturnType<typeof vi.fn>;
+          }
+        ).isOAuthEnabled as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(true);
     const disableOAuth = () =>
-      vi
-        .mocked(
-          (
-            mockOAuthManager as unknown as {
-              isOAuthEnabled: ReturnType<typeof vi.fn>;
-            }
-          ).isOAuthEnabled,
-        )
-        .mockReturnValue(false);
+      (
+        (
+          mockOAuthManager as unknown as {
+            isOAuthEnabled: ReturnType<typeof vi.fn>;
+          }
+        ).isOAuthEnabled as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(false);
 
     it('should restore maxOutputTokens and not inject max_tokens=10000 when user had maxOutputTokens configured', async () => {
       pushClaudeCodeAlias();

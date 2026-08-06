@@ -54,9 +54,9 @@ import {
 
 describe('Shell Command Processor - Encoding Functions', () => {
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
-  let mockedExecSync: ReturnType<typeof vi.mocked<typeof execSync>>;
-  let mockedOsPlatform: ReturnType<typeof vi.mocked<() => string>>;
-  let mockedChardetDetect: ReturnType<typeof vi.mocked<typeof chardetDetect>>;
+  let mockedExecSync: Mock<typeof execSync>;
+  let mockedOsPlatform: Mock<() => string>;
+  let mockedChardetDetect: Mock<typeof chardetDetect>;
 
   beforeEach(() => {
     consoleWarnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});

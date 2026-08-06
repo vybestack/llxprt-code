@@ -138,19 +138,19 @@ describe('Codex per-bucket browser profile selection', () => {
       workAuth,
       personalAuth,
     ]);
-    const browserLaunches = vi
-      .mocked(openBrowserSecurely)
-      .mock.calls.map(([url, options]) => ({
-        state: new URL(url).searchParams.get('state'),
-        profileDirectory: options?.profileDirectory,
-      }));
+    const browserLaunches = (
+      openBrowserSecurely as Mock<typeof openBrowserSecurely>
+    ).mock.calls.map(([url, options]) => ({
+      state: new URL(url).searchParams.get('state'),
+      profileDirectory: options?.profileDirectory,
+    }));
     const stateToBucket = new Map(
-      vi
-        .mocked(startLocalOAuthCallback)
-        .mock.calls.map(([options], index) => [
-          options.state,
-          index === 0 ? 'work' : 'personal',
-        ]),
+      (
+        startLocalOAuthCallback as Mock<typeof startLocalOAuthCallback>
+      ).mock.calls.map(([options], index) => [
+        options.state,
+        index === 0 ? 'work' : 'personal',
+      ]),
     );
     const bucketProfiles = Object.fromEntries(
       browserLaunches.map(({ state, profileDirectory }) => [

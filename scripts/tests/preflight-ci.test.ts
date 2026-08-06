@@ -149,9 +149,9 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
 
     expect(() => runPreflight()).not.toThrow();
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
     expect(executedCommands).toContain(rollupCommand);
     for (const step of preflightSteps()) {
       expect(
@@ -194,9 +194,9 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
 
     const buildIndex = executedCommands.indexOf(failingCommand);
     expect(
@@ -236,9 +236,9 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
 
     expect(executedCommands).not.toContain('npm ci');
     for (const step of preflightSteps()) {
@@ -261,9 +261,9 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
 
     for (const step of preflightSteps()) {
       expect(
