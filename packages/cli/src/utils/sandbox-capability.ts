@@ -41,11 +41,13 @@ function createHostOnlyDir(): string {
   try {
     fs.mkdirSync(hostOnlyDir, { mode: 0o700 });
     dirCreated = true;
-    const dirFd = fs.openSync(hostOnlyDir, 'r');
-    try {
-      fs.fchmodSync(dirFd, 0o700);
-    } finally {
-      fs.closeSync(dirFd);
+    if (process.platform !== 'win32') {
+      const dirFd = fs.openSync(hostOnlyDir, 'r');
+      try {
+        fs.fchmodSync(dirFd, 0o700);
+      } finally {
+        fs.closeSync(dirFd);
+      }
     }
   } catch (err) {
     const errors: unknown[] = [err];
@@ -93,7 +95,7 @@ function writeCapabilityEnvFile(
   let writeError: unknown;
   try {
     fs.writeSync(fd, `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}\n`, 0, 'utf8');
-    fs.fchmodSync(fd, 0o600);
+    if (process.platform !== 'win32') fs.fchmodSync(fd, 0o600);
   } catch (err) {
     writeError = err;
   }
