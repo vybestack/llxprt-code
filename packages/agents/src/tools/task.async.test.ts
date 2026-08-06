@@ -9,7 +9,7 @@
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
@@ -574,12 +574,16 @@ describe('TaskTool', () => {
       // Wait for the background execution to finish
       await executionPromise;
 
-      // failTask should have been called because the task was still 'running'
-      // when the timeout-caused abort was detected
-      expect(failTaskMock).toHaveBeenCalledWith(
-        'async-agent-timeout',
-        'Async task timed out',
-      );
+      // failTask should have been called with a legible timeout message
+      // naming the effective bound and the raisable settings (Issue #3031),
+      // not the bare 'Async task timed out' string.
+      expect(failTaskMock).toHaveBeenCalledTimes(1);
+      const failArgs = failTaskMock.mock.calls[0];
+      expect(failArgs[0]).toBe('async-agent-timeout');
+      expect(failArgs[1]).toContain('TIMEOUT');
+      expect(failArgs[1]).toContain('0.05s');
+      expect(failArgs[1]).toContain('task-max-timeout-seconds');
+      expect(failArgs[1]).not.toBe('Async task timed out');
       expect(completeTaskMock).not.toHaveBeenCalled();
 
       vi.useRealTimers();
@@ -632,11 +636,9 @@ describe('TaskTool', () => {
       // Wait for the background execution to finish.
       await new Promise((resolve) => setTimeout(resolve, 20));
 
-      // The task must NOT be labelled as a timeout.
-      expect(failTaskSpy).not.toHaveBeenCalledWith(
-        'async-cancel-status',
-        'Async task timed out',
-      );
+      // The task must NOT be labelled as a timeout: user cancellation calls
+      // cancelTask (status='cancelled'), never failTask (Issue #3031).
+      expect(failTaskSpy).not.toHaveBeenCalled();
     });
   });
 });

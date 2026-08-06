@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
@@ -259,7 +259,10 @@ describe('executeToolCall', () => {
       | { error?: unknown; output?: unknown }
       | undefined;
     expect(payload?.output).toBeUndefined();
-    expect(payload?.error).toBe('Execution failed');
+    // Issue #3037: the model-facing tool_response carries the remedial
+    // llmContent ('Error: Execution failed'), not the terse error.message
+    // ('Execution failed'), while error.message/resultDisplay stay terse.
+    expect(payload?.error).toBe('Error: Execution failed');
   });
 
   it('should return an error if execution throws', async () => {

@@ -425,23 +425,27 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
   it('listKeys deduplicates across keyring and fallback', async () => {
     const mockKeyring = createMockKeyring();
 
-    // Create a SecureStore where keyring will fail after initial set
+    // Create a SecureStore where keyring will fail after initial set.
+    // Uses a TIMEOUT error (transient, non-latching): since issue #2928 a
+    // LOCKED/DENIED classification latches the keyring unusable for the whole
+    // process, which would prevent the "restore keyring" phase below from
+    // re-reading the keyring.
     let shouldFailKeyring = false;
     const flakyKeyring: KeyringAdapter = {
       getPassword: async (service, account) => {
-        if (shouldFailKeyring) throw new Error('keyring locked');
+        if (shouldFailKeyring) throw new Error('The operation timed out.');
         return mockKeyring.getPassword(service, account);
       },
       setPassword: async (service, account, password) => {
-        if (shouldFailKeyring) throw new Error('keyring locked');
+        if (shouldFailKeyring) throw new Error('The operation timed out.');
         return mockKeyring.setPassword(service, account, password);
       },
       deletePassword: async (service, account) => {
-        if (shouldFailKeyring) throw new Error('keyring locked');
+        if (shouldFailKeyring) throw new Error('The operation timed out.');
         return mockKeyring.deletePassword(service, account);
       },
       findCredentials: async (service) => {
-        if (shouldFailKeyring) throw new Error('keyring locked');
+        if (shouldFailKeyring) throw new Error('The operation timed out.');
         return mockKeyring.findCredentials!(service);
       },
     };

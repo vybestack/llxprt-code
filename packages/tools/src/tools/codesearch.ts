@@ -55,10 +55,16 @@ interface McpCodeRequest {
 interface McpCodeResponse {
   jsonrpc: string;
   result?: {
-    content: Array<{
+    content?: Array<{
       type: string;
       text: string;
     }>;
+    isError?: boolean;
+  };
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
   };
 }
 
@@ -66,6 +72,15 @@ export interface CodeSearchToolParams {
   query: string;
   tokensNum?: number;
 }
+
+/**
+ * Discriminated result of parsing a single SSE data line from the Exa MCP.
+ * - ok:true carries the content to return to the model.
+ * - ok:false carries an upstream failure message that must surface as an error.
+ */
+type ParsedCodeLine =
+  | { ok: true; content: string }
+  | { ok: false; errorText: string };
 
 export interface CodeSearchToolDependencies {
   keyStorage?: Pick<IToolKeyStorage, 'resolveKey'>;
@@ -132,11 +147,13 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
 
   private async buildEndpointUrl(): Promise<string> {
     const baseUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CONTEXT}`;
+    const params = new URLSearchParams();
+    params.set('tools', 'get_code_context_exa');
     const key = await this.dependencies.keyStorage?.resolveKey('exa');
     if (key !== undefined && key !== null) {
-      return `${baseUrl}?exaApiKey=${encodeURIComponent(key)}`;
+      params.set('exaApiKey', key);
     }
-    return baseUrl;
+    return `${baseUrl}?${params.toString()}`;
   }
 
   async execute(
@@ -179,9 +196,24 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       const lines = responseText.split('\n');
       for (const line of lines) {
         const parsed = this.parseCodeResponseLine(line);
-        if (parsed !== undefined) {
-          return parsed;
+        if (parsed === undefined) {
+          continue;
         }
+        if (!parsed.ok) {
+          const safeErrorText = ensureJsonSafe(parsed.errorText);
+          return {
+            llmContent: `Code search failed: ${safeErrorText}`,
+            returnDisplay: `Code search failed: ${safeErrorText}`,
+            error: {
+              message: safeErrorText,
+              type: ToolErrorType.SEARCH_ERROR,
+            },
+          };
+        }
+        return {
+          llmContent: parsed.content,
+          returnDisplay: parsed.content,
+        };
       }
 
       return {
@@ -203,26 +235,44 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
     }
   }
 
-  private parseCodeResponseLine(
-    line: string,
-  ): { llmContent: string; returnDisplay: string } | undefined {
+  private parseCodeResponseLine(line: string): ParsedCodeLine | undefined {
     if (!line.startsWith('data: ')) {
       return undefined;
     }
+    let data: McpCodeResponse;
     try {
-      const data: McpCodeResponse = JSON.parse(line.substring(6));
-      if (
-        data.result?.content !== undefined &&
-        data.result.content.length > 0
-      ) {
-        const content = ensureJsonSafe(data.result.content[0].text);
-        return {
-          llmContent: content,
-          returnDisplay: content,
-        };
-      }
+      data = JSON.parse(line.substring(6));
     } catch {
-      // Ignore parse errors for intermediate lines
+      // A malformed intermediate SSE line is genuinely unpredictable
+      // external input; skip it without aborting the whole stream.
+      return undefined;
+    }
+
+    if (data.error) {
+      const code =
+        typeof data.error.code === 'number'
+          ? String(data.error.code)
+          : 'unknown';
+      const message =
+        typeof data.error.message === 'string' && data.error.message.length > 0
+          ? data.error.message
+          : 'no message provided by upstream server';
+      return {
+        ok: false,
+        errorText: `MCP error ${code}: ${message}`,
+      };
+    }
+    if (data.result?.isError === true) {
+      const text = data.result.content?.[0]?.text;
+      return {
+        ok: false,
+        errorText:
+          text ?? 'the upstream server reported an error with no message.',
+      };
+    }
+    const content = data.result?.content;
+    if (content !== undefined && content.length > 0) {
+      return { ok: true, content: ensureJsonSafe(content[0].text) };
     }
     return undefined;
   }

@@ -21,9 +21,10 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:ci": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace ide-integration --junit junit.xml",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace ide-integration --junit junit.xml",
+    "typecheck": "tsc --noEmit",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace ide-integration"
   },
   "files": [
     "index.ts",

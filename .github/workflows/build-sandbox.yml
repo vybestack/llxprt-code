@@ -8,6 +8,12 @@ on:
         required: false
         default: 'latest'
 
+# The ref plus requested tag identify the image being produced, so only a
+# genuinely superseding rebuild of the same tag is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.tag || 'latest' }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/sandbox

@@ -487,25 +487,6 @@ If git status cannot be read, the tool will still return file content and includ
     params: ReadFileToolParams,
     signal: AbortSignal = new AbortController().signal,
   ): Promise<ToolResult> {
-    const result = await this.build(params).execute(signal);
-    return this.normalizeLegacyExecutableResult(result);
-  }
-
-  private normalizeLegacyExecutableResult(result: ToolResult): ToolResult {
-    const normalized: ToolResult = { ...result };
-    if (
-      normalized.returnDisplay === '' &&
-      typeof normalized.llmContent === 'string'
-    ) {
-      normalized.returnDisplay = normalized.llmContent;
-    }
-    if (normalized.error != null) {
-      return {
-        ...normalized,
-        llmContent: normalized.error.message,
-        error: normalized.error.message as unknown as ToolResult['error'],
-      };
-    }
-    return normalized;
+    return this.build(params).execute(signal);
   }
 }

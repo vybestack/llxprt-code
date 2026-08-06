@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
 import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
 import {
-  ChatSession,
   StreamEventType,
   type StreamEvent,
-} from '../core/chatSession.js';
+} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
@@ -26,21 +25,24 @@ import {
   type ExecutorTestFixture,
   type MockFn,
 } from './executor-test-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
-const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockExecuteToolCall: vi.fn(),
-}));
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
+  vi.hoisted(() => ({
+    MockedChatSession: vi.fn(),
+    mockSendMessageStream: vi.fn(),
+    mockExecuteToolCall: vi.fn(),
+  }));
 
-vi.mock('../core/chatSession.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/chatSession.js')>();
-  return {
+vi.mock('../core/chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('../core/chatSession.js')) => ({
     ...actual,
-    ChatSession: vi.fn().mockImplementation(() => ({
-      sendMessageStream: mockSendMessageStream,
-    })),
-  };
+    ChatSession: MockedChatSession,
+  });
+  const result = importOriginal() as
+    | typeof import('../core/chatSession.js')
+    | Promise<typeof import('../core/chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
 });
 
 vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
@@ -49,7 +51,6 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
-const MockedChatSession = vi.mocked(ChatSession);
 const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
 
 describe('AgentExecutor run (Termination Conditions)', () => {
@@ -144,30 +145,30 @@ describe('AgentExecutor run (Termination Conditions)', () => {
     let capturedSignal: AbortSignal | undefined;
     mockSendMessageStream.mockImplementationOnce(
       async ({ config: messageConfig }) => {
-        capturedSignal = messageConfig?.abortSignal;
+        const config = messageConfig as
+          | { abortSignal?: AbortSignal }
+          | undefined;
+        capturedSignal = config?.abortSignal;
         return (async function* () {
           yield {
             type: StreamEventType.CHUNK,
             value: createMockResponseChunk([{ text: 'partial output' }]),
           } as StreamEvent;
 
-          await new Promise<void>((_resolve, reject) => {
-            if (!capturedSignal) {
-              reject(new Error('Abort signal was not provided'));
-              return;
-            }
-            if (capturedSignal.aborted) {
-              reject(createAbortError());
-              return;
-            }
-            capturedSignal.addEventListener(
-              'abort',
-              () => {
-                queueMicrotask(() => reject(createAbortError()));
-              },
-              { once: true },
-            );
-          });
+          if (!capturedSignal) {
+            throw new Error('Abort signal was not provided');
+          }
+          const signal = capturedSignal;
+          // The already-aborted case must be handled before subscribing:
+          // adding an `abort` listener to a signal that has already aborted
+          // never fires, so waiting on the event alone would hang whenever the
+          // idle-timeout wins the race to abort before this line runs.
+          if (!signal.aborted) {
+            await new Promise<void>((resolve) => {
+              signal.addEventListener('abort', () => resolve(), { once: true });
+            });
+          }
+          throw createAbortError();
         })();
       },
     );
@@ -184,6 +185,11 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       },
     );
 
+    // Flush microtasks so the executor's async setup chain registers the
+    // stream-idle-timeout timer before we advance fake time.
+    expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+      true,
+    );
     await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
     await runRejection;

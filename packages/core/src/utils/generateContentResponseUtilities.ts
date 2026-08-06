@@ -429,10 +429,69 @@ export function extractAgentIdFromMetadata(
   return undefined;
 }
 
+/**
+ * Extracts the model-facing text from a ToolResult's `llmContent` for the
+ * error path, applying the same output limiting as the success path so a huge
+ * error body cannot bypass `tool-output-max-tokens`. Returns `undefined` when
+ * no usable text is present, letting the caller fall back to `error.message`.
+ *
+ * Issue #3037: tools author a remedial `llmContent` for the model and a terse
+ * `error.message` for logs/UI; this keeps both intact by lifting `llmContent`
+ * through the error boundary instead of discarding it.
+ */
+export function extractModelFacingErrorText(
+  llmContent: unknown,
+  toolName: string,
+  config?: ToolOutputSettingsProvider,
+): string | undefined {
+  if (typeof llmContent === 'string') {
+    if (llmContent.trim().length === 0) {
+      return undefined;
+    }
+    return limitStringOutput(llmContent, toolName, config);
+  }
+
+  const blocks = toBlocksFromLegacyParts(llmContent);
+  const textParts: string[] = [];
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      textParts.push(block.text);
+    }
+  }
+  if (textParts.length === 0) {
+    return undefined;
+  }
+  const joined = textParts.join('\n');
+  if (joined.trim().length === 0) {
+    return undefined;
+  }
+  return limitStringOutput(joined, toolName, config);
+}
+
+/**
+ * Marker used when a failed tool call has no usable `error.message`. Status is
+ * derived by truthiness of the top-level `error` field, so an empty string
+ * would silently read as "success"; a genuine failure must always be marked.
+ */
+const TOOL_FAILURE_MARKER_FALLBACK = 'Tool call failed';
+
+/**
+ * Returns the terse top-level failure marker for a tool_response block. The
+ * marker is derived by truthiness, so an empty/whitespace message would read
+ * as "success"; fall back to the constant in that case. This is the single
+ * source of truth for the marker so every explicit failure producer (Part 1's
+ * createErrorResponse and the additional producer sites in issue #3063) stays
+ * consistent.
+ */
+export function toolFailureMarker(message: string): string {
+  return message.trim().length > 0 ? message : TOOL_FAILURE_MARKER_FALLBACK;
+}
+
 export const createErrorResponse = (
   request: ToolCallRequestInfo,
   error: Error,
   errorType: ToolErrorType | undefined,
+  modelFacingContent?: string,
 ): ToolCallResponseInfo => ({
   callId: request.callId,
   error,
@@ -441,7 +500,8 @@ export const createErrorResponse = (
       type: 'tool_response',
       callId: request.callId,
       toolName: request.name,
-      result: { error: error.message },
+      result: { error: modelFacingContent ?? error.message },
+      error: toolFailureMarker(error.message),
     },
   ],
   resultDisplay: error.message,

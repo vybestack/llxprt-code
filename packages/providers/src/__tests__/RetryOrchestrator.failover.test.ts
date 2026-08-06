@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -329,6 +329,47 @@ describe('RetryOrchestrator', () => {
       expect(currentBucket).toBe('bucket2');
     });
 
+    // issue1123 / SB-06: the sibling "401/403" test only constructs a 401;
+    // this real-403 case protects the preserved second-403 bucket-failover
+    // after issue #2917 made 403 non-retryable by status.
+    it('should failover on a genuine 403 after one retry', async () => {
+      let currentBucket = 'bucket1';
+      const buckets = ['bucket1', 'bucket2'];
+      let bucketIndex = 0;
+      const provider = createTestProvider({
+        responses: [
+          { error: createAuthError(403) },
+          { error: createAuthError(403) },
+          'success',
+        ],
+      });
+      const failoverHandler = {
+        getBuckets: () => buckets,
+        getCurrentBucket: () => currentBucket,
+        tryFailover: async () => {
+          bucketIndex++;
+          if (bucketIndex >= buckets.length) return false;
+          currentBucket = buckets[bucketIndex];
+          return true;
+        },
+        isEnabled: () => true,
+      };
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+      const options = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: { getBucketFailoverHandler: () => failoverHandler },
+        },
+      } as unknown as GenerateChatOptions;
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+      expect(result).toHaveLength(1);
+      expect(currentBucket).toBe('bucket2');
+    });
     it('should reset retry count after successful bucket switch', async () => {
       const rateLimitError = createRateLimitError();
       let currentBucket = 'bucket1';

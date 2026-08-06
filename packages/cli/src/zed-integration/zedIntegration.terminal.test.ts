@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   DebugLogger,
@@ -28,6 +28,19 @@ const preparedEcho = buildCommandToExecute(
   'echo hello',
   false,
   '/tmp/shell.tmp',
+);
+const preparedEchoSemicolon = buildCommandToExecute(
+  'echo hello;',
+  false,
+  '/tmp/shell.tmp',
+);
+// Builder-generated wrapper whose temp path contains a literal newline. The
+// path is quoted by singleQuoteForShell so it is valid real Bash, but a parser
+// that splits the wrapper at the first newline would fail to correlate it.
+const preparedEchoNewlinePath = buildCommandToExecute(
+  'echo hello',
+  false,
+  '/tmp/before' + String.fromCharCode(10) + 'after.tmp',
 );
 
 function terminalManager(
@@ -67,6 +80,26 @@ function shellToolResultEvent(toolCallId: string, output: string): AgentEvent {
 }
 
 const doneEvent: AgentEvent = { type: 'done', reason: 'stop' };
+
+// bun:test's `expect(p).rejects.toThrow()` is typed to return `void`, so
+// `await expect(...).rejects...` trips @typescript-eslint/await-thenable.
+// Drive the promise directly and assert on the captured rejection instead.
+async function expectRejection(
+  promise: Promise<unknown>,
+  messageFragment: string,
+): Promise<void> {
+  let caught: unknown;
+  let rejected = false;
+  try {
+    await promise;
+  } catch (error) {
+    caught = error;
+    rejected = true;
+  }
+  expect(rejected).toBe(true);
+  const text = caught instanceof Error ? caught.message : String(caught);
+  expect(text).toContain(messageFragment);
+}
 
 describe('Zed terminal execution', () => {
   afterEach(async () => {
@@ -128,7 +161,7 @@ describe('Zed terminal execution', () => {
     });
 
     await terminals.executeShellCommand(
-      preparedEcho,
+      preparedEchoSemicolon,
       '/project',
       () => undefined,
       new AbortController().signal,
@@ -143,17 +176,43 @@ describe('Zed terminal execution', () => {
     );
   });
 
+  it('correlates a wrapper whose temp path contains a literal newline', async () => {
+    const connection = new RecordingConnection();
+    const terminals = terminalManager(connection);
+    await terminals.observeToolCall({
+      id: 'shell-newline-path',
+      name: 'run_shell_command',
+      args: { command: 'echo hello' },
+    });
+
+    await terminals.executeShellCommand(
+      preparedEchoNewlinePath,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(connection.onlySessionUpdates()).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'shell-newline-path',
+        content: [{ type: 'terminal', terminalId: 'terminal-1' }],
+      }),
+    );
+  });
+
   it('rejects an agent-reported cwd outside the session project root', async () => {
     const connection = new RecordingConnection();
     const terminals = terminalManager(connection);
 
-    await expect(
+    await expectRejection(
       terminals.observeToolCall({
         id: 'shell-traversal',
         name: 'run_shell_command',
         args: { command: 'echo hello', dir_path: '../../etc' },
       }),
-    ).rejects.toThrow('Shell tool cwd resolves outside the session root');
+      'Shell tool cwd resolves outside the session root',
+    );
 
     expect(connection.createTerminalCalls).toHaveLength(0);
     expect(connection.onlySessionUpdates()).toHaveLength(0);
@@ -181,13 +240,14 @@ describe('Zed terminal execution', () => {
     );
     await connection.waitForTerminalProcessCreated();
 
-    await expect(
+    await expectRejection(
       terminals.observeToolCall({
         id: 'shell-retry',
         name: 'run_shell_command',
         args: { command: 'echo hello' },
       }),
-    ).rejects.toThrow('transport unavailable');
+      'transport unavailable',
+    );
     await terminals.observeToolCall({
       id: 'shell-retry',
       name: 'run_shell_command',
@@ -209,14 +269,15 @@ describe('Zed terminal execution', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
-      terminalManager(connection).executeShellCommand(
-        preparedEcho,
-        '/project',
-        () => undefined,
-        controller.signal,
-      ),
-    ).resolves.toMatchObject({ aborted: true });
+    const cancelledResult = await terminalManager(
+      connection,
+    ).executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      controller.signal,
+    );
+    expect(cancelledResult).toMatchObject({ aborted: true });
     expect(connection.createTerminalCalls).toHaveLength(0);
   });
 
@@ -285,14 +346,15 @@ describe('Zed terminal execution', () => {
       args: { command: 'echo hello' },
     });
 
-    await expect(
+    await expectRejection(
       terminals.executeShellCommand(
         preparedEcho,
         '/project',
         () => undefined,
         new AbortController().signal,
       ),
-    ).rejects.toThrow('transport closed');
+      'transport closed',
+    );
     expect(connection.killCalls).toBe(1);
     expect(connection.releaseCalls).toBe(1);
   });
@@ -328,6 +390,72 @@ describe('Zed terminal execution', () => {
           { type: 'content', content: { type: 'text', text: 'text-output' } },
         ],
       }),
+    );
+  });
+});
+
+describe('Zed terminal command correlation does not over-match', () => {
+  async function correlationAttempt(
+    rawObserved: string,
+    prepared: string,
+  ): Promise<acp.SessionUpdate[]> {
+    const connection = new RecordingConnection();
+    const terminals = terminalManager(connection);
+    await terminals.observeToolCall({
+      id: 'shell-no-match',
+      name: 'run_shell_command',
+      args: { command: rawObserved },
+    });
+    await terminals.executeShellCommand(
+      prepared,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+    return connection.onlySessionUpdates();
+  }
+
+  it('does not correlate an arbitrary (non-canonical) trap command', async () => {
+    const updates = await correlationAttempt(
+      'echo hi',
+      "trap 'echo malicious' EXIT\necho hi",
+    );
+    expect(updates).not.toContainEqual(
+      expect.objectContaining({ toolCallId: 'shell-no-match' }),
+    );
+  });
+
+  it('does not treat a plain command as equal to a semicolon-terminated one', async () => {
+    const updates = await correlationAttempt(
+      'echo hello',
+      preparedEchoSemicolon,
+    );
+    expect(updates).not.toContainEqual(
+      expect.objectContaining({ toolCallId: 'shell-no-match' }),
+    );
+  });
+
+  it('does not treat a plain command as equal to a real trailing-& command', async () => {
+    const preparedEchoAmp = buildCommandToExecute(
+      'echo hello &',
+      false,
+      '/tmp/shell.tmp',
+    );
+    const updates = await correlationAttempt('echo hello', preparedEchoAmp);
+    expect(updates).not.toContainEqual(
+      expect.objectContaining({ toolCallId: 'shell-no-match' }),
+    );
+  });
+
+  it('does not strip an escaped/literal terminal character to force a match', async () => {
+    const preparedEscapedAmp = buildCommandToExecute(
+      'printf foo\\&',
+      false,
+      '/tmp/shell.tmp',
+    );
+    const updates = await correlationAttempt('printf foo', preparedEscapedAmp);
+    expect(updates).not.toContainEqual(
+      expect.objectContaining({ toolCallId: 'shell-no-match' }),
     );
   });
 });

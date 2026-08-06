@@ -129,6 +129,70 @@ llxprt --provider xai --key-name xai-prod
 - **Linux containers:** Same situation. Use `--keyfile` or `--key` if the encrypted fallback doesn't work.
 - **macOS:** Keychain should work out of the box. If not, check `security list-keychains` in Terminal.
 
+#### macOS: Repeated Keychain Password Prompts (Ad-hoc / Unsigned Bun)
+
+On macOS, the launcher prefers a Bun already on `PATH` when it meets the pinned version floor (so npm re-installs do not unlink a running session — see [#2962](https://github.com/vybestack/llxprt-code/issues/2962)). But on macOS the **code signature** of that binary decides whether it can hold a durable Keychain grant, and a Bun that is ad-hoc signed or otherwise lacks a stable team identity (for example the Homebrew `homebrew/core` formula, which compiles from source and discards Oven's Developer ID) cannot.
+
+The launcher inspects the selected Bun's designated code-signing requirement on startup and prints a single advisory warning to stderr when codesign inspection fails OR when a successful inspection lacks Oven's required team identity (`certificate leaf[subject.OU] = "7FRXF46ZSN"`), for example:
+
+```text
+LLxprt Code: the Bun on your PATH is ad-hoc signed or otherwise
+lacks a stable team identity, so it cannot hold a persistent macOS
+Keychain grant. You will be prompted for your login password on every
+credential read, and "Always Allow" will not persist (#3020).
+Install the official Bun release signed by Oven:
+    brew uninstall bun && brew install oven-sh/bun/bun
+    curl -fsSL https://bun.com/install | bash
+```
+
+**Why "Always Allow" does not work:** the Keychain ACL stored on each item is identity-based, so it matches any Oven-signed Bun anywhere on disk. A binary that is ad-hoc signed or has no team ID can never satisfy that requirement. The structural fact, confirmed in source: every LLxprt credential item is created through macOS `SecKeychainAddGenericPassword`, which takes no access-control parameter, so the item's ACL is the macOS default `SecAccess`. That default carries the required **owner** entry authorizing `change_acl` with an **empty** trusted-application list. Per Apple's documentation an empty list means no application is trusted to amend the ACL **without user confirmation** (unlike a null list, which means any application may). No layer of the dependency chain (`@napi-rs/keyring` 1.3.0 → `keyring-core` → `apple-native-keyring-store` 1.0.1 → `security-framework` 3.7.0) exposes any way to supply a different `SecAccess`, so LLxprt cannot construct or repair the ACL of these items from TypeScript. The exact `securityd` mechanism by which the observed "Always Allow" grant fails to persist is not established by this work — confirming it would require a native ACL inspection of the item immediately before and after a grant — but the symptom (the prompt recurs on every credential read) is consistent with it. Installing an Oven-signed Bun with a stable team identity clears the symptom in practice.
+
+**Why it is a warning, not a hard failure:** a Bun that is ad-hoc signed or has no team identity runs LLxprt Code correctly in every respect except Keychain access, and some users keep no credentials in the Keychain at all. Failing closed would break those working setups. Skipping it and falling through to the bundled Bun would silently re-enable the npm-unlink failure mode that #2962 exists to prevent, so the launcher warns and continues to use the selected Bun.
+
+To install an Oven-signed Bun (either remedy clears the warning):
+
+```bash
+# Homebrew: use the official oven-sh tap instead of homebrew/core
+brew uninstall bun && brew install oven-sh/bun/bun
+
+# Or the official installer
+curl -fsSL https://bun.com/install | bash
+```
+
+Verify the team identity afterward (it should report `7FRXF46ZSN`):
+
+```bash
+codesign -dv --requirements - "$(command -v bun)" 2>&1
+```
+
+This check is macOS-only; Linux and Windows never key credential access on code identity.
+
+##### Runtime diagnostic: "the grant is not being persisted"
+
+If the launcher warning was not present at startup (for example, you started LLxprt Code from an Oven-signed Bun but the grant is still not sticking), LLxprt Code watches for the symptom itself: when the **same** credential has to be authorized interactively a second time in a session — after an earlier authorization for it had already completed — it prints a one-time notice to stderr explaining that the grant is not being persisted and that the prompt will keep recurring. This is a heuristic based on how long a successful credential read blocked, so a pathologically slow keychain can also trigger it. Credential access is **not** interrupted by this notice — the value is still read and returned, so your session keeps working. The notice fires at most once per process.
+
+##### Recovery: disable the OS keyring
+
+If you cannot install an Oven-signed Bun right now, you can route LLxprt's own SecureStore credentials through the encrypted file fallback and leave the Keychain alone:
+
+```bash
+export LLXPRT_DISABLE_OS_KEYRING=1
+```
+
+Add this to your shell profile so it persists; do not toggle it per-invocation (see the caveats below). Only the exact value `1` opts out. With it set:
+
+- **SecureStore credentials** (named API keys and similar) are stored in the encrypted file store under your OS data directory (`~/Library/Application Support/llxprt-code/secure-store/` on macOS), using the same AES-256-GCM envelope as the automatic fallback.
+- Existing Keychain items are **left in place** — nothing is deleted and nothing is migrated. You will re-authenticate once so the credential is written to the file store.
+
+**Limitations of this escape hatch (read before relying on it):**
+
+- **MCP server OAuth tokens are not covered.** MCP server OAuth uses `KeychainTokenStorage`, which requires the OS keyring and throws when it is unavailable. While this variable is set, MCP server OAuth is unavailable. This is the same pre-existing limitation that already applies on hosts with no keyring at all (headless Linux, containers); it is not specific to this variable.
+- **Stores with `fallbackPolicy: 'deny'` still fail.** A store constructed with a deny policy raises `UNAVAILABLE` rather than writing a file. The opt-out deliberately does not defeat a deny policy.
+- **The machine secret can change, and v:2 fallback files are tied to it.** When the machine secret lives only in the OS keyring, disabling the keyring makes machine-secret resolution fall through to the file path and generate a _different_ secret. Existing v:2 fallback files then fail to decrypt with a `CORRUPT` error, and files written while opted out likewise fail to decrypt after the variable is removed. This is a loud, visible failure (not silent), which is why the variable should be set persistently rather than toggled per-invocation.
+- **Re-enabling reads the Keychain first.** After the variable is removed, `SecureStore.get()` consults the keyring before the fallback file, so a credential you re-authenticated while opted out is silently shadowed by the older Keychain value, and a delete performed while opted out leaves the Keychain item in place. This silent behavior is the other reason to treat the variable as persistent.
+
+This is the interim escape hatch for [#3020](https://github.com/vybestack/llxprt-code/issues/3020). The full, settings-driven keyring opt-out is tracked in [#2928](https://github.com/vybestack/llxprt-code/issues/2928).
+
 ### Common Authentication Errors
 
 **`Failed to login. Message: Request contains an invalid argument`**

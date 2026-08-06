@@ -18,12 +18,20 @@
  * provider stream (scripted ServerAgentStreamEvents).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '../../../testApi.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { mapLoopStream } from '../../../api/eventAdapter.js';
+import type { AgentEvent } from '../../../api/event-types.js';
 import {
   createScriptedAgentClient,
   createTestConfig,
@@ -239,5 +247,74 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     );
 
     expect(turnMessages).toHaveLength(2);
+  });
+
+  it('emits the terminal done BEFORE the todo_pause tool-result through mapLoopStream (issue #3071 ordering)', async () => {
+    // CHARACTERIZATION GUARD. The CLI observation tap
+    // (packages/cli/src/observation/observationTap.ts) opens the user_input
+    // wait for issue #3071 from onStreamSettled(), NOT from endTurn, precisely
+    // because the terminal `done` is emitted BEFORE the pause tool-result
+    // (turn.ts emits Finished on the provider chunk's finishReason, the
+    // deferred-events flush runs before the loop schedules the tool, and the
+    // adapter maps Finished to an immediate `done`). endTurn therefore runs on
+    // the early done while the pause has not yet been observed, so opening the
+    // wait there would be dead code. If this ordering ever changes (done after
+    // the result, or the result projected with an empty name / an error), the
+    // tap's onStreamSettled design must be revisited.
+    const pauseTool = new MockTool({
+      name: 'todo_pause',
+      execute: async () => ({
+        llmContent: 'paused',
+        returnDisplay: 'paused',
+      }),
+    });
+
+    const toolRegistry = createToolRegistryForTest([pauseTool]);
+    const messageBus = new MessageBus(createAskPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAskPolicyEngine(),
+      interactive: true,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('todo_pause', 'pause-order', {
+          reason: 'blocked',
+        }),
+        finishedEvent(),
+      ],
+    ]);
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      interactiveMode: true,
+    });
+
+    const agentEvents: AgentEvent[] = [];
+    for await (const ev of mapLoopStream(
+      loop.run([{ type: 'text', text: 'pause' }], new AbortController().signal),
+    )) {
+      agentEvents.push(ev);
+    }
+
+    const doneIndex = agentEvents.findIndex((e) => e.type === 'done');
+    const pauseResult = agentEvents.find(
+      (e): e is Extract<AgentEvent, { type: 'tool-result' }> =>
+        e.type === 'tool-result' && e.result.name === 'todo_pause',
+    );
+
+    // The pause tool result is projected with its true name and no error.
+    expect(pauseResult).not.toBeUndefined();
+    expect(pauseResult?.result.isError).toBe(false);
+
+    // CRITICAL ordering: the terminal `done` precedes the pause result.
+    expect(doneIndex).toBeGreaterThanOrEqual(0);
+    const pauseResultIndex = agentEvents.indexOf(pauseResult!);
+    expect(doneIndex).toBeLessThan(pauseResultIndex);
   });
 });

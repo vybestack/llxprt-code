@@ -25,8 +25,19 @@ import {
   readEphemeralSettings,
   setupAsyncTimeout,
   setupForegroundRelay,
+  TASK_TIMEOUT_DEFAULT_SETTING,
+  TASK_TIMEOUT_MAX_SETTING,
 } from './taskAbortHelpers.js';
-import { createErrorResult } from './taskResultHelpers.js';
+import {
+  attachTimeoutMetadata,
+  createErrorResult,
+  createTimeoutResult,
+} from './taskResultHelpers.js';
+import {
+  describeTimeoutTermination,
+  requireEffectiveTimeoutSeconds,
+  type TimeoutResolution,
+} from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
 export interface AsyncSetupResult {
   launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
@@ -38,6 +49,7 @@ export interface AsyncSetupResult {
   timeoutId: NodeJS.Timeout | null;
   timedOut: { value: boolean };
   cleanupForegroundRelay: () => void;
+  resolution: TimeoutResolution;
 }
 
 /** Collaborators needed to run an async task. */
@@ -49,10 +61,7 @@ export interface AsyncTaskCollaborators {
   getAsyncTaskManager?: () => AsyncTaskManager | undefined;
   isInteractiveEnvironment?: () => boolean;
   getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
-  buildLaunchRequest: (params: {
-    timeout_seconds?: number;
-    grace_period_seconds?: number;
-  }) => SubagentLaunchRequest;
+  buildLaunchRequest: (timeoutMs?: number) => SubagentLaunchRequest;
   buildContextState: () => ContextState;
 }
 
@@ -193,6 +202,52 @@ export function resolveAsyncContext(collaborators: AsyncTaskCollaborators):
 }
 
 /**
+ * Cleans up partially-allocated async resources after a failed launch:
+ * foreground relay, slot reservation, timeout timer, and scope disposal.
+ */
+function cleanupFailedAsyncLaunch(
+  cleanupForegroundRelay: () => void,
+  taskRegistered: boolean,
+  bookingId: string | undefined,
+  asyncTaskManager: AsyncTaskManager,
+  timeoutId: NodeJS.Timeout | null,
+  dispose: (() => Promise<void>) | undefined,
+): void {
+  cleanupForegroundRelay();
+  if (!taskRegistered && bookingId) {
+    asyncTaskManager.cancelReservation(bookingId);
+  }
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+  }
+  if (dispose) {
+    void dispose().catch(() => {});
+  }
+}
+
+function effectiveTimeoutMs(resolution: TimeoutResolution): number | undefined {
+  return resolution.effectiveTimeoutSeconds === undefined
+    ? undefined
+    : resolution.effectiveTimeoutSeconds * 1000;
+}
+
+/**
+ * Builds the TIMEOUT `ToolResult` for a timeout that fires during async launch.
+ * The legible message names the effective bound and the raisable settings
+ * (Issue #3031), distinct from the raw AbortError text.
+ */
+function createLaunchTimeoutResult(resolution: TimeoutResolution): ToolResult {
+  return attachTimeoutMetadata(
+    createTimeoutResult(requireEffectiveTimeoutSeconds(resolution)),
+    resolution,
+    {
+      defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+      maxSetting: TASK_TIMEOUT_MAX_SETTING,
+    },
+  );
+}
+
+/**
  * Sets up the async infrastructure: relays the foreground signal, launches the
  * subagent, registers the task, and arms the timeout. Returns either an error
  * `ToolResult` (on launch failure) or the `AsyncSetupResult`.
@@ -222,10 +277,20 @@ export async function setupAsyncInfrastructure(
     asyncAbortController,
   );
 
+  // Arm the timeout BEFORE launch so the abort signal bounds it; carrying the
+  // full resolution lets the result and timeout failure report the bound (#3031).
+  const timeoutSetup = setupAsyncTimeout(
+    collaborators.config,
+    collaborators.params.timeout_seconds,
+    asyncAbortController,
+    timedOut,
+  );
+  timeoutId = timeoutSetup.timeoutId;
+  const resolution = timeoutSetup.resolution;
+  const timeoutMs = effectiveTimeoutMs(resolution);
+
   try {
-    const launchRequest = collaborators.buildLaunchRequest(
-      collaborators.params,
-    );
+    const launchRequest = collaborators.buildLaunchRequest(timeoutMs);
     launchResult = await orchestrator.launch(
       launchRequest,
       asyncAbortController.signal,
@@ -234,14 +299,6 @@ export async function setupAsyncInfrastructure(
     scope = launchResult.scope;
     dispose = launchResult.dispose;
     contextState = collaborators.buildContextState();
-
-    const timeoutSetup = setupAsyncTimeout(
-      collaborators.config,
-      collaborators.params.timeout_seconds,
-      asyncAbortController,
-      timedOut,
-    );
-    timeoutId = timeoutSetup.timeoutId;
 
     asyncTaskManager.registerTask(
       {
@@ -254,17 +311,16 @@ export async function setupAsyncInfrastructure(
     );
     taskRegistered = true;
   } catch (error) {
-    cleanupForegroundRelay();
-    if (!taskRegistered && bookingId) {
-      asyncTaskManager.cancelReservation(bookingId);
-    }
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    if (dispose) {
-      // Defensively swallow disposal errors on the partial-launch path so a
-      // rejecting dispose() cannot surface as an unhandled rejection.
-      void dispose().catch(() => {});
+    cleanupFailedAsyncLaunch(
+      cleanupForegroundRelay,
+      taskRegistered,
+      bookingId,
+      asyncTaskManager,
+      timeoutId,
+      dispose,
+    );
+    if (timedOut.value) {
+      return createLaunchTimeoutResult(resolution);
     }
     return createErrorResult(
       error,
@@ -282,6 +338,7 @@ export async function setupAsyncInfrastructure(
     timeoutId,
     timedOut,
     cleanupForegroundRelay,
+    resolution,
   };
 }
 
@@ -346,6 +403,7 @@ export function executeInBackground(
   dispose: () => Promise<void>,
   signal: AbortSignal,
   timeoutId: ReturnType<typeof setTimeout> | null,
+  resolution: TimeoutResolution,
   emitClosingSubagentTag?: () => void,
   cleanupForegroundRelay?: () => void,
   timedOut?: { value: boolean },
@@ -373,6 +431,7 @@ export function executeInBackground(
           asyncTaskManager,
           agentId,
           timedOut?.value === true,
+          resolution,
         );
         return;
       }
@@ -381,6 +440,22 @@ export function executeInBackground(
 
       asyncTaskManager.completeTask(agentId, output);
     } catch (error) {
+      if (signal.aborted && timedOut?.value === true) {
+        // A timeout-caused rejection produces a legible failure naming the
+        // effective bound and the raisable settings (Issue #3031), distinct
+        // from the raw AbortError text.
+        asyncTaskManager.failTask(
+          agentId,
+          describeTimeoutTermination(
+            requireEffectiveTimeoutSeconds(resolution),
+            {
+              defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+              maxSetting: TASK_TIMEOUT_MAX_SETTING,
+            },
+          ),
+        );
+        return;
+      }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       asyncTaskManager.failTask(agentId, errorMessage);
@@ -438,6 +513,7 @@ export async function executeAsyncTask(
     timeoutId,
     timedOut,
     cleanupForegroundRelay,
+    resolution,
   } = setupResult as AsyncSetupResult;
 
   const asyncStreaming = setupAsyncStreaming(
@@ -456,20 +532,28 @@ export async function executeAsyncTask(
     dispose,
     asyncAbortController.signal,
     timeoutId,
+    resolution,
     asyncStreaming?.emitAsyncClosingSubagentTag,
     cleanupForegroundRelay,
     timedOut,
   );
 
-  return {
-    llmContent:
-      `Async task launched: subagent '${collaborators.normalized.subagentName}' (ID: ${agentId}). ` +
-      `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
-    returnDisplay: `Async task started: **${collaborators.normalized.subagentName}** (\`${agentId}\`)`,
-    metadata: {
-      agentId,
-      async: true,
-      status: 'running',
+  return attachTimeoutMetadata(
+    {
+      llmContent:
+        `Async task launched: subagent '${collaborators.normalized.subagentName}' (ID: ${agentId}). ` +
+        `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
+      returnDisplay: `Async task started: **${collaborators.normalized.subagentName}** (\`${agentId}\`)`,
+      metadata: {
+        agentId,
+        async: true,
+        status: 'running',
+      },
     },
-  };
+    resolution,
+    {
+      defaultSetting: TASK_TIMEOUT_DEFAULT_SETTING,
+      maxSetting: TASK_TIMEOUT_MAX_SETTING,
+    },
+  );
 }

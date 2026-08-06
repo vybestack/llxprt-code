@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import type { Mock } from '../testApi.js';
 import { SubagentInvocation } from './invocation.js';
 import { AgentExecutor } from './executor.js';
 import type {
@@ -22,6 +23,15 @@ import { type z } from 'zod';
 vi.mock('./executor.js');
 
 const MockAgentExecutor = vi.mocked(AgentExecutor);
+
+// Local mapped-type stand-in for a deep-mocked object: maps each method to a Mock<F>
+// while preserving non-method properties unchanged. Used for type annotations
+// on objects assembled from vi.fn() and cast through unknown.
+type Mocked<T> = {
+  [P in keyof T]: T[P] extends (...args: never[]) => unknown
+    ? Mock<T[P]>
+    : T[P];
+};
 
 let mockConfig: Config;
 
@@ -201,9 +211,11 @@ describe('SubagentInvocation', () => {
 
     it('should stream THOUGHT_CHUNK activities from the executor', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
-        const onActivity = MockAgentExecutor.create.mock.calls[0][3];
+        const onActivity = MockAgentExecutor.create.mock.calls[0][3] as
+          | ((event: SubagentActivityEvent) => void)
+          | undefined;
 
-        if (onActivity) {
+        if (onActivity !== undefined) {
           onActivity({
             isSubagentActivityEvent: true,
             agentName: 'MockAgent',
@@ -239,9 +251,11 @@ describe('SubagentInvocation', () => {
 
     it('should NOT stream other activities (e.g., TOOL_CALL_START, ERROR)', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
-        const onActivity = MockAgentExecutor.create.mock.calls[0][3];
+        const onActivity = MockAgentExecutor.create.mock.calls[0][3] as
+          | ((event: SubagentActivityEvent) => void)
+          | undefined;
 
-        if (onActivity) {
+        if (onActivity !== undefined) {
           onActivity({
             isSubagentActivityEvent: true,
             agentName: 'MockAgent',
@@ -270,8 +284,10 @@ describe('SubagentInvocation', () => {
 
     it('should run successfully without an updateOutput callback', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
-        const onActivity = MockAgentExecutor.create.mock.calls[0][3];
-        if (onActivity) {
+        const onActivity = MockAgentExecutor.create.mock.calls[0][3] as
+          | ((event: SubagentActivityEvent) => void)
+          | undefined;
+        if (onActivity !== undefined) {
           // Ensure calling activity doesn't crash when updateOutput is undefined
           onActivity({
             isSubagentActivityEvent: true,

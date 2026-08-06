@@ -17,7 +17,7 @@
  * toModelStreamChunk path (@plan:PLAN-20260707-AGENTNEUTRAL.P13).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 

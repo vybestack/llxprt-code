@@ -18,7 +18,7 @@
  */
 
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { vi, type Mock } from 'vitest';
+import { vi, type Mock } from '../../testApi.js';
 import { ChatSession } from '../chatSession.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from '../turn.js';
 import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';
@@ -128,12 +128,16 @@ export interface FullLoopHarness {
   turn: Turn;
   historyService: HistoryService;
   provider: IProvider;
-  generateChatCompletionMock: Mock;
+  generateChatCompletionMock: Mock<
+    (...args: never[]) => AsyncIterableIterator<IContent>
+  >;
   config: Config;
 }
 
 export function createFullLoopHarness(
-  generateChatCompletionMock: Mock,
+  generateChatCompletionMock: Mock<
+    (...args: never[]) => AsyncIterableIterator<IContent>
+  >,
   options?: {
     tools?: ToolDeclaration[];
     hookConfig?: Config;

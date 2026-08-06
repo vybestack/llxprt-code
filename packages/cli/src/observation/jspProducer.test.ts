@@ -5,7 +5,11 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { JspBoundDocument } from './jspDocuments.js';
+import type {
+  JspBoundDocument,
+  JspSnapshotDocument,
+  JspTodoItem,
+} from './jspDocuments.js';
 import {
   JspProducer,
   OBSERVER_LEASE_MS,
@@ -74,29 +78,68 @@ function eventTypes(documents: readonly JspBoundDocument[]): string[] {
   );
 }
 
+/**
+ * Pull the task-list items out of a published `todos.replaced` event so a test
+ * can assert them exactly. The consumer schema is closed, so an extra member is
+ * rejected at ingress; a partial matcher would let one through.
+ */
+function todoItemsOfEvent(
+  document: JspBoundDocument,
+): readonly JspTodoItem[] | undefined {
+  if (document.kind !== 'event' || document.event.type !== 'todos.replaced') {
+    return undefined;
+  }
+  return document.event.items;
+}
+
+/** The same, for the task list carried on a snapshot. */
+function todoItemsOfSnapshot(
+  snapshot: JspSnapshotDocument,
+): readonly JspTodoItem[] | undefined {
+  const { todos } = snapshot;
+  if (todos === 'unsupported' || todos.availability !== 'known') {
+    return undefined;
+  }
+  return todos.value.items;
+}
+
 describe('heartbeat cadence', () => {
-  it('heartbeats at least three times within the observer lease', async () => {
-    const bootstrapped = makeHarness();
-    const sent: number[] = [];
-    const clock = 0;
-    const hooks: JspProducerHooks = {
-      ...bootstrapped.hooks,
-      now: () => clock,
-      register: () => Promise.resolve(OK),
-      publish: () => Promise.resolve(OK),
-      heartbeat: () => {
-        sent.push(clock);
-        return Promise.resolve(OK);
-      },
-    };
-    const producer = new JspProducer(bootstrap, nativeSession, hooks);
-    producer.start();
-    await producer.flush();
-    // A heartbeat interval equal to the lease makes expiry a race with
-    // scheduling jitter, so require headroom for two lost heartbeats.
-    const interval = producer.heartbeatIntervalMs();
-    expect(interval * 3).toBeLessThanOrEqual(OBSERVER_LEASE_MS);
-    producer.stop();
+  it('delivers at least three heartbeats within the observer lease on the shipped default interval', async () => {
+    vi.useFakeTimers();
+    let producer: JspProducer | undefined;
+    try {
+      const bootstrapped = makeHarness();
+      let heartbeats = 0;
+      const hooks: JspProducerHooks = {
+        ...bootstrapped.hooks,
+        register: () => Promise.resolve(OK),
+        publish: () => Promise.resolve(OK),
+        heartbeat: () => {
+          heartbeats += 1;
+          return Promise.resolve(OK);
+        },
+      };
+      // No heartbeatMs override: the shipped DEFAULT interval is the value
+      // under test. The cadence property only holds if that shipped value
+      // leaves room for two lost heartbeats inside one lease.
+      producer = new JspProducer(bootstrap, nativeSession, hooks);
+      const interval = producer.heartbeatIntervalMs();
+      producer.start();
+      await producer.flush();
+      // Advance a full lease window so the interval has fired repeatedly.
+      await vi.advanceTimersByTimeAsync(OBSERVER_LEASE_MS);
+      // An observer must be able to lose two consecutive heartbeats inside
+      // one lease, so at least three must actually be delivered.
+      expect(heartbeats).toBeGreaterThanOrEqual(3);
+      expect(interval * 3).toBeLessThanOrEqual(OBSERVER_LEASE_MS);
+    } finally {
+      // Restore real timers before stopping: restoration discards the fake
+      // interval outright, so it cannot be skipped by anything stop() does,
+      // and a failed assertion still cannot leave fake timers installed for
+      // the rest of the file. stop() then releases the producer itself.
+      vi.useRealTimers();
+      producer?.stop();
+    }
   });
 });
 
@@ -167,8 +210,80 @@ describe('JspProducer', () => {
       availability: 'known',
       value: {
         revision: 1,
-        items: [{ text: 'after resume', completed: false }],
+        items: [{ text: 'after resume', state: 'in_progress' }],
       },
+    });
+    producer.stop();
+  });
+
+  it('publishes the item the agent is working on as in_progress', async () => {
+    // The active item is the whole point of the field: a derived boolean
+    // collapsed pending and in_progress, so an observer had to guess which
+    // entry was live. Prove the distinction survives the wire on the event
+    // path as well as the snapshot.
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    producer.observeTodosReplaced(undefined, [
+      { content: 'Done already', status: 'completed' },
+      { content: 'Working on it', status: 'in_progress' },
+      { content: 'Not started', status: 'pending' },
+    ]);
+    await producer.flush();
+
+    // The consumer schema is closed, so assert the published items exactly
+    // rather than with a partial match: a surviving `completed` member would
+    // be rejected at ingress and take the whole document with it.
+    expect(published).toHaveLength(1);
+    expect(todoItemsOfEvent(published[0])).toStrictEqual([
+      { text: 'Done already', state: 'completed' },
+      { text: 'Working on it', state: 'in_progress' },
+      { text: 'Not started', state: 'pending' },
+    ]);
+    expect(todoItemsOfSnapshot(producer.snapshot())).toStrictEqual([
+      { text: 'Done already', state: 'completed' },
+      { text: 'Working on it', state: 'in_progress' },
+      { text: 'Not started', state: 'pending' },
+    ]);
+    producer.stop();
+  });
+
+  it('drops a todo replacement it cannot publish faithfully', async () => {
+    // The native status set is a closed enum well inside the bound, so an
+    // over-bound status is an impossible state. Publishing a truncated label
+    // would put a value the source never reported onto the wire, and
+    // publishing the full one would be rejected for the bound and take the
+    // whole document with it, so the replacement is refused outright.
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    expect(() =>
+      producer.observeTodosReplaced(undefined, [
+        { content: 'Runaway', status: 'x'.repeat(65) },
+      ]),
+    ).toThrow(RangeError);
+    await producer.flush();
+
+    expect(published).toStrictEqual([]);
+    expect(producer.snapshot().todos).toMatchObject({
+      availability: 'unknown',
+    });
+
+    // The refused replacement must not consume a revision: a hole in the
+    // sequence is how an observer detects loss.
+    producer.observeTodosReplaced(undefined, [
+      { content: 'Recovered', status: 'pending' },
+    ]);
+    await producer.flush();
+    expect(producer.snapshot().todos).toMatchObject({
+      availability: 'known',
+      value: { revision: 1 },
     });
     producer.stop();
   });
@@ -218,14 +333,10 @@ describe('JspProducer', () => {
 
     await producer.shutdown();
 
-    expect(published.at(-1)).toMatchObject({
+    const terminal = published.at(-1);
+    expect(terminal).toMatchObject({
       kind: 'snapshot',
-      todos: {
-        availability: 'known',
-        value: {
-          items: [{ text: 'Completed task', completed: true }],
-        },
-      },
+      todos: { availability: 'known' },
       last_displayed_assistant_message: {
         availability: 'known',
         value: { content: 'Committed reply' },
@@ -235,15 +346,25 @@ describe('JspProducer', () => {
         value: null,
       },
     });
+    // Assert the task-list items exactly: the consumer schema is closed, so a
+    // surviving `completed` member would fail the whole snapshot at ingress
+    // and a partial match would not notice it.
+    expect(todoItemsOfSnapshot(terminal as JspSnapshotDocument)).toStrictEqual([
+      { text: 'Completed task', state: 'completed' },
+    ]);
   });
 
-  it('never blocks or throws when registration and publication fail', () => {
+  it('never throws into the foreground when registration is terminally rejected', async () => {
+    let publishCalls = 0;
     const identity = makeHarness().hooks.createIdentity(bootstrap);
     const hooks: JspProducerHooks = {
       now: () => 100,
       createIdentity: () => identity,
       register: () => Promise.resolve(REJECTED_409),
-      publish: () => Promise.reject(new Error('offline')),
+      publish: () => {
+        publishCalls += 1;
+        return Promise.resolve(OK);
+      },
       heartbeat: () => Promise.resolve(TRANSPORT),
     };
     const producer = new JspProducer(bootstrap, nativeSession, hooks, {
@@ -255,6 +376,43 @@ describe('JspProducer', () => {
       producer.observeActivityChanged('acting');
       producer.observeTurnEnded('completed');
     }).not.toThrow();
+    await producer.flush();
+    // A terminal registration stops the producer before any publish attempt,
+    // which is the property the narrowed name claims.
+    expect(publishCalls).toBe(0);
+    producer.stop();
+  });
+
+  it('never throws into the foreground when publication rejects and stays usable', async () => {
+    let publishCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => Promise.resolve(OK),
+      publish: () => {
+        publishCalls += 1;
+        return Promise.reject(new Error('offline'));
+      },
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+      capacity: 1,
+    });
+    expect(() => {
+      producer.start();
+      producer.observeTurnStarted();
+      producer.observeActivityChanged('acting');
+      producer.observeTurnEnded('completed');
+    }).not.toThrow();
+    await producer.flush();
+    // The rejecting publish path was genuinely exercised.
+    expect(publishCalls).toBeGreaterThan(0);
+    // The producer must remain usable: a later observation still advances the
+    // sequence, proving the rejection did not strand the foreground stream.
+    const before = producer.snapshot().source_sequence;
+    producer.observeTurnStarted();
+    expect(producer.snapshot().source_sequence).toBeGreaterThan(before);
     producer.stop();
   });
 
@@ -528,18 +686,38 @@ describe('construction and shutdown robustness', () => {
     }
   });
 
-  it('still stops cleanly when the final drain rejects', async () => {
+  it('still stops cleanly and publishes the terminal snapshot when every publish fails', async () => {
     const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const published: JspBoundDocument[] = [];
     const hooks: JspProducerHooks = {
       now: () => 100,
       createIdentity: () => identity,
       register: () => Promise.resolve(OK),
-      publish: () => Promise.reject(new Error('broker vanished mid-drain')),
+      publish: (document) => {
+        published.push(document);
+        return Promise.reject(new Error('broker vanished mid-drain'));
+      },
       heartbeat: () => Promise.resolve(OK),
     };
     const producer = new JspProducer(bootstrap, nativeSession, hooks);
     producer.start();
+    // Let registration complete so the following observation enqueues a real
+    // event the drain will publish (and reject). Without this, the observation
+    // is made while unregistered and never reaches publish, so the drain has
+    // nothing to fail on.
+    await producer.flush();
+
+    // Burn the queue's one-shot recovery request before shutdown. The failed
+    // send below asks the producer for a recovery snapshot, and that request
+    // is not renewed until a send actually succeeds. Doing it here means the
+    // failures during shutdown cannot inject a queue-authored snapshot, so a
+    // snapshot arriving last during shutdown can only be the direct terminal
+    // publish. Two flushes: the first settles the failing send, the second the
+    // drain carrying the recovery snapshot it asked for.
     producer.observeTurnStarted();
+    await producer.flush();
+    await producer.flush();
+    published.length = 0;
 
     // shutdown must not propagate the drain failure, and must leave the
     // producer stopped rather than half-torn-down: a stopped producer is
@@ -548,6 +726,13 @@ describe('construction and shutdown robustness', () => {
     const after = producer.snapshot().source_sequence;
     producer.observeTurnStarted();
     expect(producer.snapshot().source_sequence).toBe(after);
+
+    // Shutdown drains the session.ended event, and every publish rejects. Any
+    // snapshot the queue still had to offer was enqueued ahead of that event,
+    // so the trailing snapshot is the direct terminal publish: it happened
+    // after the failed drain rather than being skipped by it.
+    expect(published.some((document) => document.kind === 'event')).toBe(true);
+    expect(published.at(-1)?.kind).toBe('snapshot');
   });
 });
 
@@ -667,6 +852,51 @@ describe('overflow recovery', () => {
 
     // The gap must be reported and repaired by a fresh snapshot, otherwise the
     // observer rejects everything that follows.
+    expect(published.some((document) => document.kind === 'snapshot')).toBe(
+      true,
+    );
+    producer.stop();
+  });
+
+  it('repairs an overflow through the queue recovery callback with no further observation', async () => {
+    // The burst test above can be satisfied by the polling path inside
+    // applyAndPublish: a later transition sees needsSnapshotRecovery() and
+    // enqueues the snapshot itself. This test isolates the callback path by
+    // overflowing and then making NO further observation, so the only route to
+    // a published snapshot is JspBoundedQueue's onRecoveryNeeded firing through
+    // queueMicrotask.
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const published: JspBoundDocument[] = [];
+    const hooks: JspProducerHooks = {
+      now: () => 100,
+      createIdentity: () => identity,
+      register: () => Promise.resolve(OK),
+      publish: (document) => {
+        published.push(document);
+        return Promise.resolve(OK);
+      },
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+      capacity: 1,
+    });
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    // The first event fills the capacity-one buffer. The second overflows: the
+    // event is dropped and the queue requests recovery via microtask.
+    producer.observeTurnStarted();
+    producer.observeActivityChanged('acting');
+    // Deliberately make no further observation. The polling path in
+    // applyAndPublish is never reached again, so a published snapshot can only
+    // arrive through the queue's onRecoveryNeeded callback.
+    await producer.flush();
+    // The recovery callback runs as a microtask and enqueues its snapshot,
+    // which is picked up by whichever drain is live at that moment; a second
+    // flush settles that drain.
+    await producer.flush();
+
     expect(published.some((document) => document.kind === 'snapshot')).toBe(
       true,
     );

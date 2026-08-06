@@ -3,7 +3,8 @@
  * Analyzes code relationships: call graphs, type hierarchies, symbol references,
  * module dependencies, and exports using @ast-grep/napi.
  *
- * This is name-based (not type-resolved) analysis. See overview.md for limitations.
+ * Matching is by identifier name, so same-named symbols in different types are
+ * not disambiguated.
  *
  * The analysis logic is decomposed into per-mode sub-modules under
  * `./structural-analysis/`. This file is the public facade that wires the
@@ -134,6 +135,12 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       );
     }
 
+    if ((mode as Mode) === 'dependencies' && !target && !this.params.path) {
+      return this.makeError(
+        'Error: `target` (or `path`) parameter is required for "dependencies" mode.',
+      );
+    }
+
     return {
       mode,
       resolvedLang,
@@ -238,6 +245,33 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
   }
 }
 
+/**
+ * Worked examples matter more than prose here: models need to see the
+ * per-mode parameter matrix and one concrete call shape per mode.
+ */
+const DESCRIPTION = `Performs multi-hop AST-based code analysis: call graphs, type hierarchies,
+symbol references, module dependencies, and exports. Matching is by identifier
+name, so same-named symbols in different types are not disambiguated. Unlike
+ast_grep (single-query), this chains multiple queries to walk relationships
+across files.
+
+Required parameters by mode:
+- callers, callees, definitions, hierarchy, references: "symbol" (plus "language").
+- dependencies: "target" (or "path") — an explicit search root (plus "language").
+- exports: optional "target", defaults to the workspace root (plus "language").
+- depth and maxNodes apply only to callers/callees.
+
+Examples:
+  { "mode": "callers", "language": "typescript", "symbol": "myFunc" }
+  { "mode": "callees", "language": "typescript", "symbol": "myFunc", "depth": 2 }
+  { "mode": "definitions", "language": "typescript", "symbol": "MyClass" }
+  { "mode": "hierarchy", "language": "typescript", "symbol": "MyClass" }
+  { "mode": "references", "language": "typescript", "symbol": "MyClass" }
+  { "mode": "dependencies", "language": "typescript", "target": "src/utils" }
+  { "mode": "exports", "language": "typescript", "target": "src/utils" }
+
+Operations: ${VALID_MODES.join(', ')}.`;
+
 export class StructuralAnalysisTool extends BaseDeclarativeTool<
   StructuralAnalysisParams,
   ToolResult
@@ -248,9 +282,7 @@ export class StructuralAnalysisTool extends BaseDeclarativeTool<
     super(
       StructuralAnalysisTool.Name,
       'StructuralAnalysis',
-      'Performs multi-hop AST-based code analysis: call graphs, type hierarchies, symbol references, ' +
-        'module dependencies, and exports. This is name-based (not type-resolved) analysis. ' +
-        'Use for understanding code relationships. Unlike ast_grep (single-query), this chains multiple queries.',
+      DESCRIPTION,
       Kind.Search,
       {
         properties: {
@@ -264,26 +296,28 @@ export class StructuralAnalysisTool extends BaseDeclarativeTool<
             type: 'string',
           },
           path: {
-            description: 'Directory to search. Defaults to workspace root.',
+            description:
+              'Directory to search. Defaults to workspace root. For dependencies/exports, prefer target.',
             type: 'string',
           },
           symbol: {
             description:
-              'Symbol name for callers/callees/definitions/hierarchy/references modes.',
+              'Symbol name. Required for callers, callees, definitions, hierarchy, references.',
             type: 'string',
           },
           depth: {
             description:
-              'Recursion depth for callers/callees. Default 1, max 5.',
+              'Recursion depth for callers/callees only. Default 1, max 5.',
             type: 'number',
           },
           maxNodes: {
             description:
-              'Max symbols to visit during recursive traversal. Default 50.',
+              'Max symbols to visit during callers/callees traversal. Default 50.',
             type: 'number',
           },
           target: {
-            description: 'File/directory for dependencies/exports modes.',
+            description:
+              'File/directory to analyze. Required for dependencies; optional for exports.',
             type: 'string',
           },
           reverse: {

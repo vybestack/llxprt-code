@@ -13,12 +13,12 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import type {
-  OpDescriptor,
-  ParamKind,
-  ValidationError,
-} from './github-broker-types.js';
+import type { OpDescriptor, ValidationError } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
+import {
+  GITHUB_OP_SPECS,
+  type GithubOpSpec,
+} from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { watchChecks } from './github-broker-watch.js';
 import { resolveOwnerName } from './github-broker-multistep-ops.js';
 import {
@@ -33,32 +33,25 @@ import {
   assertListShape,
 } from './github-broker-shaping.js';
 
-// ─── pr.list ─────────────────────────────────────────────────────────────────
+const PR_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.list'];
+const PR_VIEW_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.view'];
+const PR_DIFF_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.diff'];
+const PR_CHECKS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.checks'];
+const PR_REVIEWS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.reviews'];
 
-/**
- * The accepted parameters for pr.list.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 120-123
- */
-const PR_LIST_PARAMS: Readonly<Record<string, ParamKind>> = {
-  state: 'state',
-  limit: 'limit',
-  repo: 'repo',
-};
+// ─── pr.list ─────────────────────────────────────────────────────────────────
 
 /**
  * Validates parameters for the pr.list operation.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
 export function validatePrListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_LIST_PARAMS, params);
+  return validateParams(PR_LIST_SPEC.params, params);
 }
 
 /**
@@ -132,8 +125,9 @@ export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
  */
 export const prListDescriptor: OpDescriptor = {
   name: 'pr.list',
-  mutating: false,
-  params: PR_LIST_PARAMS,
+  requiredParams: PR_LIST_SPEC.required,
+  mutating: PR_LIST_SPEC.mutating,
+  params: PR_LIST_SPEC.params,
   buildArgv: (params) => buildPrListArgv(params),
   shape: (rawJson) => ({ prs: shapePrList(rawJson) }),
 };
@@ -141,22 +135,9 @@ export const prListDescriptor: OpDescriptor = {
 // ─── pr.view ─────────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for pr.view.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 101-103
- */
-const PR_VIEW_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  comments: 'boolean',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for the pr.view operation.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
@@ -169,7 +150,7 @@ export function validatePrViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_VIEW_PARAMS, params);
+  return validateParams(PR_VIEW_SPEC.params, params);
 }
 
 /**
@@ -252,9 +233,9 @@ export function shapePrView(rawJson: unknown): ShapedPrView {
  */
 export const prViewDescriptor: OpDescriptor = {
   name: 'pr.view',
-  requiredParams: ['number'],
-  mutating: false,
-  params: PR_VIEW_PARAMS,
+  requiredParams: PR_VIEW_SPEC.required,
+  mutating: PR_VIEW_SPEC.mutating,
+  params: PR_VIEW_SPEC.params,
   buildArgv: (params) => {
     const comments = params.comments === true;
     return buildPrViewArgv(params, comments);
@@ -265,21 +246,9 @@ export const prViewDescriptor: OpDescriptor = {
 // ─── pr.diff ─────────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for pr.diff.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 125-126
- */
-const PR_DIFF_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for the pr.diff operation.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
@@ -292,7 +261,7 @@ export function validatePrDiffParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_DIFF_PARAMS, params);
+  return validateParams(PR_DIFF_SPEC.params, params);
 }
 
 /**
@@ -348,9 +317,9 @@ export function shapePrDiff(rawText: unknown): ShapedPrDiff {
  */
 export const prDiffDescriptor: OpDescriptor = {
   name: 'pr.diff',
-  requiredParams: ['number'],
-  mutating: false,
-  params: PR_DIFF_PARAMS,
+  requiredParams: PR_DIFF_SPEC.required,
+  mutating: PR_DIFF_SPEC.mutating,
+  params: PR_DIFF_SPEC.params,
   buildArgv: (params) => buildPrDiffArgv(params),
   shape: (rawText) => shapePrDiff(rawText),
   rawOutput: true,
@@ -359,22 +328,9 @@ export const prDiffDescriptor: OpDescriptor = {
 // ─── pr.checks ───────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for pr.checks.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 105-109
- */
-const PR_CHECKS_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  repo: 'repo',
-  watch: 'boolean',
-};
-
-/**
  * Validates parameters for the pr.checks operation.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
@@ -387,7 +343,7 @@ export function validatePrChecksParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_CHECKS_PARAMS, params);
+  return validateParams(PR_CHECKS_SPEC.params, params);
 }
 
 /**
@@ -498,9 +454,9 @@ function countByBucket(checks: readonly ShapedCheck[]): {
  */
 export const prChecksDescriptor: OpDescriptor = {
   name: 'pr.checks',
-  requiredParams: ['number'],
-  mutating: false,
-  params: PR_CHECKS_PARAMS,
+  requiredParams: PR_CHECKS_SPEC.required,
+  mutating: PR_CHECKS_SPEC.mutating,
+  params: PR_CHECKS_SPEC.params,
   buildArgv: (params) => buildPrChecksArgv(params),
   shape: (rawJson) => shapePrChecks(rawJson),
   tolerateNonZeroExit: true,
@@ -524,22 +480,9 @@ export const prChecksDescriptor: OpDescriptor = {
 // ─── pr.reviews ──────────────────────────────────────────────────────────────
 
 /**
- * The accepted parameters for pr.reviews.
- *
- * @plan PLAN-20260731-GHBROKER.P10
- * @requirement REQ-009, REQ-013
- * @pseudocode 003-github-broker.md lines 111-118
- */
-const PR_REVIEWS_PARAMS: Readonly<Record<string, ParamKind>> = {
-  number: 'number',
-  actionable: 'boolean',
-  repo: 'repo',
-};
-
-/**
  * Validates parameters for the pr.reviews operation.
  *
- * @plan PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002
  * @pseudocode 003-github-broker.md lines 13-31
  */
@@ -552,7 +495,7 @@ export function validatePrReviewsParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_REVIEWS_PARAMS, params);
+  return validateParams(PR_REVIEWS_SPEC.params, params);
 }
 
 /**
@@ -797,9 +740,9 @@ function extractReviewComments(value: unknown): readonly ShapedReviewComment[] {
  */
 export const prReviewsDescriptor: OpDescriptor = {
   name: 'pr.reviews',
-  requiredParams: ['number'],
-  mutating: false,
-  params: PR_REVIEWS_PARAMS,
+  requiredParams: PR_REVIEWS_SPEC.required,
+  mutating: PR_REVIEWS_SPEC.mutating,
+  params: PR_REVIEWS_SPEC.params,
   buildArgv: (params) => buildPrReviewsArgv(params),
   shape: (rawJson, params) =>
     shapePrReviews(rawJson, params.actionable === true),

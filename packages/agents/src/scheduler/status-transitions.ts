@@ -27,6 +27,7 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
+import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 /**
@@ -127,6 +128,8 @@ export function buildCancelledTransition(
     }
   }
 
+  const cancelReason = `[Operation Cancelled] Reason: ${reason}`;
+
   return {
     request: ctx.request,
     tool: ctx.tool,
@@ -140,8 +143,11 @@ export function buildCancelledTransition(
           callId: ctx.request.callId,
           toolName: ctx.request.name,
           result: {
-            error: `[Operation Cancelled] Reason: ${reason}`,
+            error: cancelReason,
           },
+          // Issue #3063: mark the cancellation as a failure so a cancelled call
+          // in a mixed batch reaches the provider as a failure.
+          error: toolFailureMarker(cancelReason),
         },
       ],
       resultDisplay,
@@ -212,6 +218,7 @@ export function buildCancelAllEntry(
     | ExecutingToolCall
     | WaitingToolCall,
 ): CancelledToolCall {
+  const cancelMessage = 'Tool call cancelled by user.';
   return {
     status: 'cancelled',
     request: call.request,
@@ -223,8 +230,10 @@ export function buildCancelAllEntry(
           callId: call.request.callId,
           toolName: call.request.name,
           result: {
-            error: 'Tool call cancelled by user.',
+            error: cancelMessage,
           },
+          // Issue #3063: mark the cancellation as a failure.
+          error: toolFailureMarker(cancelMessage),
         },
       ],
       resultDisplay: undefined,

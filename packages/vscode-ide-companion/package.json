@@ -128,9 +128,10 @@
     "watch:esbuild": "bun esbuild.ts --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "vsce package --no-dependencies",
-    "test": "vitest run",
-    "test:ci": "vitest run --coverage",
-    "validate:notices": "node ./scripts/validate-notices.js"
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace vscode-ide-companion --junit junit.xml",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace vscode-ide-companion --junit junit.xml",
+    "validate:notices": "node ./scripts/validate-notices.js",
+    "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace vscode-ide-companion"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

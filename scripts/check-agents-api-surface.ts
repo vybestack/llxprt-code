@@ -176,6 +176,18 @@ function createTempTsConfig(): string {
       // directory and break the relative path mappings.
       baseUrl: AGENTS_PACKAGE_DIR,
     },
+    // `files` entries are not filtered by `exclude`, which is why Bun's
+    // declarations go here rather than in `include`: they live under
+    // node_modules, and `exclude` deliberately drops that whole tree.
+    //
+    // This config replaces (rather than extends) the source tsconfig's file
+    // list, so the `bun:test` declarations the source config pulls in have to
+    // be re-added. The agents test helpers import the workspace's test API
+    // facade, which is typed against `bun:test`; without this the declaration
+    // build cannot resolve that module and the surface cannot be determined.
+    files: [`${REPO_ROOT}/node_modules/bun-types/test.d.ts`].map(
+      normalizePathForTsConfig,
+    ),
     include: [
       normalizePathForTsConfig(join(AGENTS_PACKAGE_DIR, 'index.ts')),
       `${agentsPackageGlob}/src/**/*.ts`,

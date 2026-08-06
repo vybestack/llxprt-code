@@ -16,7 +16,7 @@
  * agents through public createAgent and keeps internal assertions test-only.
  */
 
-import { describe, it, expect, expectTypeOf } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import type {
   Agent,
   AgentConfig,
@@ -27,6 +27,31 @@ import type {
   AgentLspControl,
 } from '@vybestack/llxprt-code-agents';
 import { buildAgent } from './helpers/agentHarness.js';
+
+// Compile-time type assertions that the typecheck gate enforces.
+// These fail tsc --noEmit if the Agent interface diverges from the control types.
+type Equal<A, B> =
+  (<G>() => G extends A ? 1 : 2) extends <G>() => G extends B ? 1 : 2
+    ? true
+    : false;
+type Expect<T extends true> = T;
+type NotEqual<A, B> = Equal<A, B> extends true ? false : true;
+type HasProperty<T, K extends string | number | symbol> = K extends keyof T
+  ? true
+  : false;
+
+type _MemoryIsControl = Expect<Equal<Agent['memory'], AgentMemoryControl>>;
+type _SkillsIsControl = Expect<Equal<Agent['skills'], AgentSkillsControl>>;
+type _WorkspaceIsControl = Expect<
+  Equal<Agent['workspace'], AgentWorkspaceControl>
+>;
+type _LspIsControl = Expect<Equal<Agent['lsp'], AgentLspControl>>;
+type _AgentDoesNotHaveGetConfig = Expect<
+  NotEqual<HasProperty<Agent, 'getConfig'>, true>
+>;
+type _SkillInfoDoesNotHaveBody = Expect<
+  NotEqual<HasProperty<SkillInfo, 'body'>, true>
+>;
 
 describe('new public surfaces are exported from the public root @plan:PLAN-20260626-RUNTIMEBOUNDARY.P06', () => {
   it('a public-root-created Agent exposes live memory, skills, workspace, and lsp controls @requirement:boundary', async () => {
@@ -56,10 +81,8 @@ describe('new public surfaces are exported from the public root @plan:PLAN-20260
   });
 
   it('Agent interface carries memory, skills, workspace, and lsp readonly controls @requirement:boundary', () => {
-    expectTypeOf<Agent['memory']>().toEqualTypeOf<AgentMemoryControl>();
-    expectTypeOf<Agent['skills']>().toEqualTypeOf<AgentSkillsControl>();
-    expectTypeOf<Agent['workspace']>().toEqualTypeOf<AgentWorkspaceControl>();
-    expectTypeOf<Agent['lsp']>().toEqualTypeOf<AgentLspControl>();
+    // Compile-time type equality is enforced by the _MemoryIsControl,
+    // _SkillsIsControl, _WorkspaceIsControl, _LspIsControl type aliases above.
     const requiredControls: Record<
       keyof Pick<Agent, 'memory' | 'skills' | 'workspace' | 'lsp'>,
       true
@@ -78,7 +101,7 @@ describe('new public surfaces are exported from the public root @plan:PLAN-20260
   });
 
   it('Agent public interface does not expose raw Config access @requirement:boundary', async () => {
-    expectTypeOf<Agent>().not.toHaveProperty('getConfig');
+    // Compile-time check is enforced by _AgentDoesNotHaveGetConfig above.
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       expect(agent).toHaveProperty('memory');
@@ -103,7 +126,7 @@ describe('new public surfaces are exported from the public root @plan:PLAN-20260
   });
 
   it('SkillInfo shape omits prompt body from public metadata @requirement:boundary', () => {
-    expectTypeOf<SkillInfo>().not.toHaveProperty('body');
+    // Compile-time check is enforced by _SkillInfoDoesNotHaveBody above.
     const skill = { name: 'x' } satisfies SkillInfo;
     expect(skill.name).toBe('x');
     expect(skill).not.toHaveProperty('body');

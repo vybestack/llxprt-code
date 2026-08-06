@@ -16,7 +16,7 @@
  *    available, not just config.getModel.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
@@ -145,6 +145,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
   const config = {
     getMaxSessionTurns: vi.fn(() => 0),
     getIdeMode: vi.fn(() => false),
+    getContinueOnFailedApiCall: vi.fn(() => false),
     getEphemeralSetting: vi.fn((key: string) =>
       key === 'context-limit' ? state.contextLimit : undefined,
     ),

@@ -84,6 +84,26 @@ const CAPABILITY_CAPTURE_STANZA = [
 ].join(NL);
 
 /**
+ * Pins the container-local data/cache/log roots to the REAL container HOME.
+ *
+ * These cannot be omitted: `resolveGlobalDataDir`/`CacheDir`/`LogDir` fall
+ * back to `LLXPRT_CONFIG_HOME` (the mounted host config dir), so leaving them
+ * unset would redirect container-local data, cache and logs into the mounted
+ * host config directory. They are exported INSIDE the entrypoint rather than
+ * passed as `--env` from the host so they follow the image's default user
+ * home — a host-side hard-coded home would break custom sandbox images whose
+ * default user home is elsewhere (#3081). The export is unconditional (not
+ * `${VAR:-...}`) so no image-inherited or host override can redirect these
+ * roots back into the mounted config directory; SANDBOX_ENV is additionally
+ * filtered for these keys in sandbox-containers.ts.
+ */
+const XDG_HOME_PIN_STANZA = [
+  'export LLXPRT_DATA_HOME="$HOME/.local/share/llxprt-code"',
+  'export LLXPRT_CACHE_HOME="$HOME/.cache/llxprt-code"',
+  'export LLXPRT_LOG_HOME="$HOME/.local/state/llxprt-code"',
+].join(NL);
+
+/**
  * Builds the final CLI exec stanza. Opens fd 3 and sets `LLXPRT_CAPABILITY_FD=3`
  * only when a capability token was captured; otherwise execs the CLI without
  * capability transport (tokenless path). The captured shell variable is unset
@@ -133,6 +153,12 @@ export function entrypoint(
 
   // STEP 1 (security): capture and scrub the capability BEFORE anything else.
   shellCmds.push(CAPABILITY_CAPTURE_STANZA);
+
+  // STEP 1.5: pin the container-local data/cache/log roots to the real
+  // container HOME before the CLI is exec'd on every path this entrypoint
+  // takes (default and current-user `su -p` modes, docker and podman). Runs
+  // before prefixes/relays/exec; the exports propagate to the exec'd CLI.
+  shellCmds.push(XDG_HOME_PIN_STANZA);
 
   // STEP 2: trusted prefixes (ssh-agent / cred-proxy bridges) run AFTER capture
   // and env scrub, so they have neither the token nor (it was never on fd 3

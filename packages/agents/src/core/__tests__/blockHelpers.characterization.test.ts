@@ -25,7 +25,7 @@
  * ≥30% property-based tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import * as fc from 'fast-check';
 
 // P17 will rename googlePartHelpers.ts → contentBlockHelpers.ts and replace

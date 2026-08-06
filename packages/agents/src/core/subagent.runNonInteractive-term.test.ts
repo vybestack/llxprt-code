@@ -8,8 +8,8 @@
  * SubAgentScope termination, recovery, runInteractive, scheduling timeout, dispose.
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { Mock } from '../testApi.js';
+import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { SubAgentScope } from './subagent.js';
 import {
@@ -42,7 +42,16 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('./chatSession.js');
+vi.mock('./chatSession.js', (importOriginal) => {
+  const apply = (actual: typeof import('./chatSession.js')) => ({
+    ...actual,
+    ChatSession: vi.fn(),
+  });
+  const result = importOriginal() as
+    | typeof import('./chatSession.js')
+    | Promise<typeof import('./chatSession.js')>;
+  return result instanceof Promise ? result.then(apply) : apply(result);
+});
 vi.mock(
   '@vybestack/llxprt-code-core/core/contentGenerator.js',
   async (importOriginal) => {
@@ -96,6 +105,7 @@ import {
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
@@ -222,6 +232,17 @@ describe('subagent.ts', () => {
       const runPromise = scope.runNonInteractive(new ContextState());
 
       // Advance time beyond the limit (6 minutes) while the agent is awaiting the LLM response.
+      // Wait for the executor to enter the LLM call before advancing time.
+      expect(
+        await waitForCondition(
+          () => mockSendMessageStream.mock.calls.length > 0,
+        ),
+      ).toBe(true);
+      // Advance with the async variant so the termination recheck runs as part
+      // of draining the fake timers. A real event-loop yield must not be used
+      // after the fake clock moves: Bun's fake timers leave `setImmediate`
+      // real, but on Linux it does not reliably fire once the clock has been
+      // advanced, which made this test flaky on CI.
       await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
 
       // Now resolve the stream. The model returns 'stop'.
@@ -255,23 +276,22 @@ describe('subagent.ts', () => {
               value: mockChunk({ text: 'partial output' }),
             };
 
-            await new Promise<void>((_resolve, reject) => {
+            await new Promise<void>((resolve) => {
               if (!capturedSignal) {
-                reject(new Error('Abort signal was not provided'));
-                return;
+                throw new Error('Abort signal was not provided');
               }
               if (capturedSignal.aborted) {
-                reject(createAbortError());
-                return;
+                throw createAbortError();
               }
               capturedSignal.addEventListener(
                 'abort',
                 () => {
-                  queueMicrotask(() => reject(createAbortError()));
+                  resolve();
                 },
                 { once: true },
               );
             });
+            throw createAbortError();
           })();
         },
       );
@@ -300,6 +320,11 @@ describe('subagent.ts', () => {
         },
       );
 
+      // Wait for the executor's async setup chain to register the
+      // stream-idle-timeout timer before advancing fake time.
+      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+        true,
+      );
       await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
       await runRejection;
@@ -346,26 +371,26 @@ describe('subagent.ts', () => {
       mockSendMessageStream.mockImplementation(
         async ({ config: messageConfig }) => {
           capturedSignal = messageConfig.abortSignal;
-          return (async function* () {
-            await new Promise<void>((resolve, reject) => {
+          const stall = async function* () {
+            await new Promise<void>((resolve) => {
               if (!capturedSignal) {
-                reject(new Error('Abort signal was not provided'));
-                return;
+                throw new Error('Abort signal was not provided');
               }
               if (capturedSignal.aborted) {
-                reject(createAbortError());
-                return;
+                throw createAbortError();
               }
               capturedSignal.addEventListener(
                 'abort',
                 () => {
-                  queueMicrotask(() => reject(createAbortError()));
+                  resolve();
                 },
                 { once: true },
               );
             });
             yield* [];
-          })();
+            throw createAbortError();
+          };
+          return stall();
         },
       );
 
@@ -393,6 +418,9 @@ describe('subagent.ts', () => {
         },
       );
 
+      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
+        true,
+      );
       await vi.advanceTimersByTimeAsync(100);
 
       await runRejection;
@@ -466,6 +494,13 @@ describe('subagent.ts', () => {
         },
       );
 
+      // Wait for the interactive run to enter the scheduler before advancing
+      // time past the timeout.
+      expect(
+        await waitForCondition(
+          () => mockSendMessageStream.mock.calls.length > 0,
+        ),
+      ).toBe(true);
       await vi.advanceTimersByTimeAsync(100);
 
       await runRejection;
@@ -675,6 +710,13 @@ describe('subagent.ts', () => {
         },
       );
 
+      // Wait for the interactive run to enter the hanging scheduler before
+      // advancing time past the timeout.
+      expect(
+        await waitForCondition(
+          () => mockSendMessageStream.mock.calls.length > 0,
+        ),
+      ).toBe(true);
       await vi.advanceTimersByTimeAsync(100);
 
       await runRejection;

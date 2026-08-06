@@ -413,6 +413,13 @@ export interface ProcessedFileReadResult {
   isTruncated?: boolean;
   originalLineCount?: number;
   linesShown?: [number, number];
+  /**
+   * True when at least one returned line was shortened because it exceeded the
+   * maximum line length. Distinct from `isTruncated` (which also covers range
+   * narrowing), so consumers like read_line_range can flag genuine per-line
+   * truncation without implying the requested range was incomplete.
+   */
+  linesShortened?: boolean;
 }
 
 export function isAssetExplicitlyRequested(
@@ -647,6 +654,7 @@ async function processTextFile(
     isTruncated,
     originalLineCount,
     linesShown: [actualStartLine + 1, endLine],
+    linesShortened: linesWereTruncatedInLength,
   };
 }
 

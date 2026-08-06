@@ -10,7 +10,7 @@
  * avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { ChatSession } from './chatSession.js';
 
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -34,6 +34,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 function createContentGeneratorStub(): ContentGenerator {
   return {
@@ -318,10 +319,10 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
         .catch((error: unknown) => error);
 
-      await vi.waitFor(() => expect(pendingReads).toBe(1), {
-        interval: 1,
-        timeout: 100,
-      });
+      // Wait for the provider stream to be entered so pendingReads has
+      // incremented before advancing fake timers.
+      expect(await waitForCondition(() => pendingReads >= 1)).toBe(true);
+      expect(pendingReads).toBeGreaterThanOrEqual(1);
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
       const firstError = await firstSend;
       expect(firstTransportSignal?.aborted).toBe(true);
@@ -450,12 +451,11 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
         .catch((error: unknown) => error);
 
-      // Wait for both sends to reach the blocked read.
-      await vi.waitFor(
-        () => {
-          expect(capturedSignals.length).toBeGreaterThanOrEqual(2);
-        },
-        { interval: 1, timeout: 100 },
+      // Wait for BOTH sends to reach the blocked read before advancing time.
+      // Reaching the second provider call crosses a macrotask boundary, so a
+      // microtask-only drain would spin forever.
+      expect(await waitForCondition(() => capturedSignals.length >= 2)).toBe(
+        true,
       );
 
       // Advance past timeout for BOTH concurrent streams.

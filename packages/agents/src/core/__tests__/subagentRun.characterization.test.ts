@@ -10,7 +10,7 @@
  * Mock boundary: only the provider stream is mocked. The subagent tool
  * processing and execution helpers run with REAL logic.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import fc from 'fast-check';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {

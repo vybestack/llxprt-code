@@ -6,7 +6,7 @@
  * @issue #1846 — Indefinite pipeline hangs caused by collect-then-yield
  * @plan PLAN-20260707-AGENTNEUTRAL.P11 — updated to use neutral ModelStreamChunk
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';

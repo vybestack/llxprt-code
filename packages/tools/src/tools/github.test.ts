@@ -24,6 +24,7 @@ import {
   renderChecks,
   type GitHubBrokerClient,
 } from './github.js';
+import { GITHUB_OP_SPECS, type GithubParamKind } from './github-ops.js';
 
 /** Records the operations dispatched to the broker. */
 function stubClient(
@@ -37,6 +38,47 @@ function stubClient(
       return result;
     },
   };
+}
+
+/**
+ * A valid sample value for every parameter kind. Typed as
+ * `Record<GithubParamKind, unknown>` so adding a kind to the catalog without
+ * supplying a sample here is a compile error — the fixture can no longer go
+ * stale the way a hand-maintained switch with a `default` case can.
+ */
+const VALID_SAMPLE_BY_KIND: Record<GithubParamKind, unknown> = {
+  repo: 'o/n',
+  number: 1,
+  boolean: true,
+  state: 'open',
+  stateIssue: 'open',
+  label: ['x'],
+  threadId: 'PRRT_kwDOabc',
+  body: 'x',
+  freetext: 'x',
+  limit: 5,
+  closeReason: 'completed',
+  color: '#ff0000',
+  assignee: ['x'],
+  milestone: 'x',
+  project: 'x',
+  branch: 'x',
+};
+
+/**
+ * Minimal valid parameters for an operation: each op's required parameters
+ * supplied with a kind-appropriate sample, nothing else. Derived from the
+ * catalog's `required` list, so a new op or a changed required set is picked
+ * up automatically — there is no hand-maintained `default` case to mask a
+ * missing op or supply the wrong shape.
+ */
+function validParamsFor(op: string): Record<string, unknown> {
+  const spec = GITHUB_OP_SPECS[op];
+  const params: Record<string, unknown> = {};
+  for (const name of spec.required) {
+    params[name] = VALID_SAMPLE_BY_KIND[spec.params[name]];
+  }
+  return params;
 }
 
 describe('github tool', () => {
@@ -77,9 +119,28 @@ describe('github tool', () => {
       const tool = new GithubTool(stubClient());
       for (const op of SUPPORTED_OPS) {
         expect(
-          tool.validateToolParams({ op }),
+          tool.validateToolParams({ op, ...validParamsFor(op) }),
           `${op} must validate`,
         ).toBeNull();
+      }
+    });
+
+    /**
+     * The fixture must derive straight from the catalog so it cannot go stale:
+     * it returns exactly each op's required parameters (no more, no less) with
+     * kind-appropriate samples. A future op or a changed required set is picked
+     * up automatically; there is no `default` case to mask a missing op.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('validParamsFor returns exactly each op catalog required set', () => {
+      for (const op of SUPPORTED_OPS) {
+        const required = GITHUB_OP_SPECS[op].required;
+        expect(
+          Object.keys(validParamsFor(op)).sort(),
+          `${op} fixture must equal its required set`,
+        ).toStrictEqual([...required].sort());
       }
     });
   });
@@ -95,7 +156,7 @@ describe('github tool', () => {
     it('prompts for every mutating operation', async () => {
       const tool = new GithubTool(stubClient());
       for (const op of MUTATING_OPS) {
-        const invocation = tool.build({ op, number: 1 });
+        const invocation = tool.build({ op, ...validParamsFor(op) });
         const confirmation = await invocation.shouldConfirmExecute(
           new AbortController().signal,
         );
@@ -236,6 +297,31 @@ describe('github tool', () => {
       expect(result.error?.message).toContain('NOT_FOUND');
       expect(String(result.llmContent)).toContain('NOT_FOUND');
     });
+
+    /**
+     * A bare broker message like "404 Not Found" gives the model no clue it
+     * came from a GitHub operation, so the failure path must prefix it like
+     * every other tool in the package. An empty message must not blank the
+     * display — it falls back to a non-empty "Unknown error" detail.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-013
+     */
+    it('prefixes a failure with the github context and guards an empty message', async () => {
+      const empty: GitHubBrokerClient = {
+        async runOperation() {
+          throw new Error('');
+        },
+      };
+      const tool = new GithubTool(empty);
+      const result = await tool
+        .build({ op: 'issue.view', number: 1 })
+        .execute(new AbortController().signal);
+      expect(result.returnDisplay).not.toBe('');
+      expect(result.returnDisplay).toContain('GitHub operation failed');
+      expect(result.error?.message ?? '').not.toBe('');
+      expect(result.error?.message).toContain('Unknown error');
+    });
   });
 
   describe('watch presentation', () => {
@@ -258,7 +344,7 @@ describe('github tool', () => {
      * @requirement REQ-011
      */
     it('lists failures first', () => {
-      const rendered = renderChecks(watchResult);
+      const rendered = renderChecks(watchResult, true);
       const lines = rendered.split(String.fromCharCode(10));
       expect(lines[1]).toContain('lint');
       expect(lines[0]).toContain('complete');
@@ -271,9 +357,12 @@ describe('github tool', () => {
      */
     it('distinguishes cancelled from complete', () => {
       expect(
-        renderChecks({ ...watchResult, concluded: false, cancelled: true }),
+        renderChecks(
+          { ...watchResult, concluded: false, cancelled: true },
+          true,
+        ),
       ).toContain('cancelled');
-      expect(renderChecks({ ...watchResult })).toContain('complete');
+      expect(renderChecks({ ...watchResult }, true)).toContain('complete');
     });
 
     /**
@@ -281,7 +370,7 @@ describe('github tool', () => {
      * @requirement REQ-011
      */
     it('handles a watch that reported no checks', () => {
-      expect(renderChecks({ checks: [] })).toBe('No checks reported.');
+      expect(renderChecks({ checks: [] }, true)).toBe('No checks reported.');
     });
 
     /**
@@ -317,6 +406,22 @@ describe('github tool', () => {
         });
       expect(updates).toStrictEqual([]);
     });
+
+    /**
+     * A watched pr.checks must still render through renderGithubResult so the
+     * explicit repo suffix appears. The render path no longer special-cases
+     * isWatching().
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-013
+     */
+    it('a watched pr.checks renders the repo suffix', async () => {
+      const tool = new GithubTool(stubClient(watchResult));
+      const result = await tool
+        .build({ op: 'pr.checks', number: 1, watch: true, repo: 'o/n' })
+        .execute(new AbortController().signal);
+      expect(result.returnDisplay).toContain('o/n');
+    });
   });
 
   describe('description', () => {
@@ -333,6 +438,226 @@ describe('github tool', () => {
       expect(tool.description).toContain('owner/name');
       expect(tool.description).toContain('BLOCKS');
       expect(tool.description).toContain('actionable');
+    });
+
+    /**
+     * The per-op reference block in the description names each operation and
+     * its required parameters, so a model reading the declaration can tell
+     * what a given op needs without a failed round trip.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('contains a per-op reference line for every op naming its required params', () => {
+      const tool = new GithubTool(stubClient());
+      for (const op of SUPPORTED_OPS) {
+        expect(tool.description, `${op} must be documented`).toContain(op);
+        for (const required of GITHUB_OP_SPECS[op].required) {
+          expect(
+            tool.description,
+            `${op} must name required ${required}`,
+          ).toContain(required);
+        }
+      }
+    });
+  });
+
+  describe('parameter schema and op-specific validation (issue #3030)', () => {
+    /**
+     * The regression test for the reported defect: the model must be able to
+     * SEE every parameter any operation accepts in the function declaration,
+     * so a typo now fails at schema validation with a precise message instead
+     * of reaching the broker.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('declares every op-accepted parameter in PARAMETER_SCHEMA.properties', () => {
+      const tool = new GithubTool(stubClient());
+      const schema = tool.parameterSchema as {
+        properties: Record<string, unknown>;
+      };
+      const declared = Object.keys(schema.properties);
+      for (const op of SUPPORTED_OPS) {
+        for (const param of Object.keys(GITHUB_OP_SPECS[op].params)) {
+          expect(
+            declared,
+            `${op} param ${param} must be in schema properties`,
+          ).toContain(param);
+        }
+      }
+    });
+
+    /**
+     * A declared parameter with an empty description is invisible guidance:
+     * the model sees the name but not which operations take it or what shape
+     * the value has. Adding a parameter to the catalog must therefore force a
+     * description to be written for it.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('gives every declared parameter a non-empty description', () => {
+      const tool = new GithubTool(stubClient());
+      const schema = tool.parameterSchema as {
+        properties: Record<string, { description?: string }>;
+      };
+      for (const [name, prop] of Object.entries(schema.properties)) {
+        expect(
+          prop.description ?? '',
+          `${name} must document what it is and which ops accept it`,
+        ).not.toBe('');
+      }
+    });
+
+    /**
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('sets additionalProperties to false', () => {
+      const tool = new GithubTool(stubClient());
+      const schema = tool.parameterSchema as {
+        additionalProperties: boolean;
+      };
+      expect(schema.additionalProperties).toBe(false);
+    });
+
+    /**
+     * A missing required parameter is rejected before any broker call, with a
+     * message that names what the op needs.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('rejects issue.comment missing body with a message naming body', () => {
+      const tool = new GithubTool(stubClient());
+      const err = tool.validateToolParams({ op: 'issue.comment', number: 438 });
+      expect(err).not.toBeNull();
+      expect(err).toContain('body');
+    });
+
+    /**
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('accepts a complete issue.comment', () => {
+      const tool = new GithubTool(stubClient());
+      expect(
+        tool.validateToolParams({
+          op: 'issue.comment',
+          number: 438,
+          body: 'hi',
+        }),
+      ).toBeNull();
+    });
+
+    /**
+     * A parameter that is valid for one op but not another is rejected at
+     * build time: `body` is not accepted by `issue.view`.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('build throws when a param is not accepted by the op', () => {
+      const tool = new GithubTool(stubClient());
+      expect(() =>
+        tool.build({ op: 'issue.view', number: 1, body: 'x' }),
+      ).toThrow(/body/);
+    });
+
+    /**
+     * A `type: ['string','array']` union is unprojectable: every provider's
+     * `normalizeType` collapses it to `'string'`, so the model would be told
+     * arrays are invalid. The label/assignee family must declare a concrete
+     * array type so a model can pass an array.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('declares label/assignee params as array<string>, never a type union', () => {
+      const tool = new GithubTool(stubClient());
+      const schema = tool.parameterSchema as {
+        properties: Record<
+          string,
+          { type?: unknown; items?: { type?: string } }
+        >;
+      };
+      for (const name of [
+        'label',
+        'addLabel',
+        'removeLabel',
+        'assignee',
+        'addAssignee',
+        'removeAssignee',
+      ]) {
+        const prop = schema.properties[name];
+        expect(prop.type, `${name} must be type array`).toBe('array');
+        expect(prop.items?.type, `${name} items must be string`).toBe('string');
+      }
+    });
+
+    /**
+     * No property in the whole schema may declare `type` as an array. A
+     * future addition that reintroduces a union type would silently break
+     * provider projection, so loop over every property to catch it.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('no schema property declares type as an array', () => {
+      const tool = new GithubTool(stubClient());
+      const schema = tool.parameterSchema as {
+        properties: Record<string, { type?: unknown }>;
+      };
+      for (const [name, prop] of Object.entries(schema.properties)) {
+        expect(
+          Array.isArray(prop.type),
+          `${name} must not use an array type`,
+        ).toBe(false);
+      }
+    });
+
+    /**
+     * `number` and `limit` must be `integer`, not `number`, so a value like
+     * 1.5 is rejected by value validation rather than passing the schema and
+     * being rejected only by the broker.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-008
+     */
+    it('declares number and limit as integer type', () => {
+      const tool = new GithubTool(stubClient());
+      const schema = tool.parameterSchema as {
+        properties: Record<string, { type?: string }>;
+      };
+      expect(schema.properties.number.type).toBe('integer');
+      expect(schema.properties.limit.type).toBe('integer');
+    });
+
+    /**
+     * Per-op value rules are enforced before the call is made: issue.list
+     * uses the stateIssue kind (open/closed/all) so "merged" is rejected at
+     * the tool boundary, not after a broker round trip.
+     *
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-002, REQ-008
+     */
+    it('rejects issue.list state:merged at the tool boundary', () => {
+      const tool = new GithubTool(stubClient());
+      expect(
+        tool.validateToolParams({ op: 'issue.list', state: 'merged' }),
+      ).not.toBeNull();
+    });
+
+    /**
+     * @plan PLAN-20260731-GHBROKER.P15
+     * @requirement REQ-002
+     */
+    it('rejects a non-integer number at the tool boundary', () => {
+      const tool = new GithubTool(stubClient());
+      expect(
+        tool.validateToolParams({ op: 'issue.view', number: 1.5 }),
+      ).not.toBeNull();
     });
   });
 });

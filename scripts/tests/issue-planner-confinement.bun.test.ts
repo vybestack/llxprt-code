@@ -9,8 +9,8 @@
 // symlinks; because a symlink's own mode is always lrwxrwxrwx on Linux (and
 // chmod without -h cannot change it), `bun install`-materialized symlinks
 // false-positived the writable check and failed every issues-triggered run.
-// These run under Bun's native runner (see scripts/bun-test-manifest.ts);
-// vitest skips `*.bun.test.ts` files (see scripts/tests/vitest.config.ts).
+// These run under Bun's native runner via the scripts-tests root (see
+// scripts/bun-test-manifest.ts).
 //
 // The textual suite guards the regression marker on hosts without bash; the
 // behavioral suite runs the actual confinement script under a POSIX shell.

@@ -17,7 +17,7 @@
  * No mock theater: structural/identity assertions only. No deep /src/ imports.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '../../testApi.js';
 import * as fc from 'fast-check';
 
 import * as root from '@vybestack/llxprt-code-agents';
@@ -147,7 +147,7 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
  * signature anchors) lives in the sibling additiveSurface.types.ts, NOT here:
  * the workspace tsconfig excludes "**\/*.test.ts" from `tsc --noEmit`, so
  * compile anchors placed in this file would be VACUOUS. The ".types.ts" file
- * IS typecheck-visible (and build-excluded + vitest-ignored). This file holds
+ * IS typecheck-visible (and build-excluded + runner-ignored). This file holds
  * only the RUNTIME (introspection) half of the fence.
  */
 

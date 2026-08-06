@@ -22,7 +22,7 @@
  *       NEXT turn reflects it (through the high-level loop).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import {
   buildAgent,
   drain,

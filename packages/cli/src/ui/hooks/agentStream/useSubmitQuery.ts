@@ -44,6 +44,7 @@ import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import {
   observeAgentEvent,
   observeTurnFailed,
+  observeTurnSettled,
   observeTurnStarted,
 } from '../../../observation/jspWiring.js';
 
@@ -716,6 +717,14 @@ async function runSubmitQueryCore(
       } catch {
         /* non-fatal */
       }
+    }
+    // The stream has settled: every event for this turn, including tool
+    // results that arrive after the terminal `done`, has been processed. This
+    // is the honest moment a pause-ended turn can open a user_input
+    // wait (issue #3071). Guarded so a superseded turn cannot open a wait for
+    // a turn that no longer owns the controller.
+    if (isCurrentTurn(cbd, turn.abortSignal)) {
+      observeTurnSettled();
     }
   }
 }

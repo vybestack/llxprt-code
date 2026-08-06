@@ -8,7 +8,7 @@
  * SubAgentScope core tests: ContextState, SubAgentScope, stateless compliance.
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { PromptConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';

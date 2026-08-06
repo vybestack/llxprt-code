@@ -14,6 +14,7 @@ import {
   makeRelative,
   extractCalleeName,
   deduplicateCallRanges,
+  findFunctionContainer,
 } from './helpers.js';
 
 interface CalleeRef {
@@ -53,7 +54,9 @@ async function findCalleesOfFile(
 }
 
 /**
- * Collects callee references from a single parsed file's method definitions.
+ * Collects callee references from a single parsed file by locating every
+ * function-like container whose name matches `sym`, regardless of how it is
+ * declared (function, generator, arrow bound to a const, or class/object method).
  */
 function collectCalleeRefs(
   parsed: ParsedFile,
@@ -63,56 +66,168 @@ function collectCalleeRefs(
   ctx: CalleeCtx,
 ): CalleeRef[] {
   const results: CalleeRef[] = [];
-  try {
-    const methodMatches = parsed.root.findAll({
-      rule: {
-        kind: 'method_definition',
-        has: {
-          kind: 'property_identifier',
-          regex: `^${escapeRegex(sym)}$`,
-        },
-      },
-    } as NapiConfig);
-
-    for (const methodNode of methodMatches) {
-      collectCalleesFromMethod(methodNode, relPath, visited, ctx, results);
-    }
-  } catch {
-    /* skip */
+  for (const container of findNamedContainers(parsed, sym)) {
+    collectCalleesFromContainer(container, relPath, visited, ctx, results);
   }
   return results;
 }
 
 /**
- * Collects outermost call expressions within a single method node.
+ * Finds function-like container nodes whose declared name matches `sym`.
+ * Covers function_declaration, generator_function_declaration,
+ * method_definition, and variable-bound function expressions — arrow_function,
+ * function_expression and generator_function — each matched via its
+ * variable_declarator binding so the const name is the lookup key, but the
+ * inner function node itself is returned — NOT the declarator. Returning the
+ * inner node is deliberate: collectCalleesFromContainer keeps a call only when
+ * its nearest enclosing function-container (per findFunctionContainer) IS the
+ * container node. findFunctionContainer recognises those function kinds as
+ * function-container kinds but not variable_declarator, so returning the
+ * declarator would make every call inside the body vanish (its nearest function
+ * container would be the inner function node, whose range never matches the
+ * declarator's). Do not "simplify" this back to returning the declarator.
  */
-function collectCalleesFromMethod(
-  methodNode: SgNode,
+function findNamedContainers(parsed: ParsedFile, sym: string): SgNode[] {
+  const escaped = escapeRegex(sym);
+  const rules: Array<{ kind: string; nameKind: string }> = [
+    { kind: 'function_declaration', nameKind: 'identifier' },
+    { kind: 'generator_function_declaration', nameKind: 'identifier' },
+    { kind: 'method_definition', nameKind: 'property_identifier' },
+  ];
+
+  const containers: SgNode[] = [];
+  for (const { kind, nameKind } of rules) {
+    try {
+      const matches = parsed.root.findAll({
+        rule: {
+          kind,
+          has: { kind: nameKind, regex: `^${escaped}$` },
+        },
+      } as NapiConfig);
+      for (const m of matches) containers.push(m);
+    } catch {
+      // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
+    }
+  }
+
+  // Variable-bound function expressions (arrow_function, function_expression,
+  // generator_function): match the variable_declarator that binds them so the
+  // const name is the lookup key. Return the inner function node itself (not
+  // the declarator) so the nearest-enclosing-container comparison in
+  // collectCalleesFromContainer lines up: the nearest function container of a
+  // call inside the body is the inner function node, not the declarator.
+  const declaratorFunctionKinds = [
+    'arrow_function',
+    'function_expression',
+    'generator_function',
+  ] as const;
+  try {
+    const declarators = parsed.root.findAll({
+      rule: {
+        kind: 'variable_declarator',
+        all: [
+          { has: { kind: 'identifier', regex: `^${escaped}$` } },
+          {
+            has: {
+              any: declaratorFunctionKinds.map((k) => ({ kind: k })),
+            },
+          },
+        ],
+      },
+    } as NapiConfig);
+    for (const d of declarators) {
+      const fn = d
+        .children()
+        .find((c: SgNode) =>
+          (declaratorFunctionKinds as readonly string[]).includes(
+            String(c.kind()),
+          ),
+        );
+      if (fn) containers.push(fn);
+    }
+  } catch {
+    // Rule names TS node kinds; ast-grep throws for languages whose grammar lacks them.
+  }
+
+  return containers;
+}
+
+/**
+ * Checks a single call-expression node and returns a CalleeRef if it belongs
+ * directly to the target container (its nearest function-like container),
+ * or null if it should be skipped (nested in a different function or already
+ * visited). The maxNodes traversal limit is enforced upstream in
+ * findCalleesOfFile, not in this function.
+ *
+ * Extracted so the caller loop uses zero `continue` statements.
+ */
+function tryCollectCallee(
+  node: SgNode,
+  containerStart: number,
+  containerEnd: number,
+  relPath: string,
+  visited: Set<string>,
+  ctx: CalleeCtx,
+): CalleeRef | null {
+  const nearest = findFunctionContainer(node);
+  if (nearest === null) {
+    return null;
+  }
+  if (
+    nearest.range().start.index !== containerStart ||
+    nearest.range().end.index !== containerEnd
+  ) {
+    return null;
+  }
+  const callText = node.text().substring(0, 200);
+  const key = `${callText}@${relPath}@${node.range().start.index}`;
+  if (visited.has(key)) {
+    return null;
+  }
+  visited.add(key);
+  ctx.nodesVisited++;
+  return {
+    text: callText,
+    file: relPath,
+    line: node.range().start.line + 1,
+    calleeNode: node,
+  };
+}
+
+/**
+ * Collects outermost call expressions that belong directly to a single
+ * container node. Only calls whose NEAREST enclosing function-like container
+ * is the target container are kept, so calls inside nested functions are not
+ * misattributed to the outer container. Containers are compared by range
+ * index (node identity is not reliable across ast-grep queries).
+ */
+function collectCalleesFromContainer(
+  containerNode: SgNode,
   relPath: string,
   visited: Set<string>,
   ctx: CalleeCtx,
   results: CalleeRef[],
 ): void {
-  const callMatches = methodNode.findAll({
+  const callMatches = containerNode.findAll({
     rule: { kind: 'call_expression' },
   } as NapiConfig);
   const outermost = deduplicateCallRanges(callMatches);
 
-  for (const { node } of outermost) {
-    const callText = node.text().substring(0, 200);
-    const key = `${callText}@${relPath}`;
-    if (visited.has(key)) {
-      continue;
-    }
-    visited.add(key);
-    ctx.nodesVisited++;
+  const containerStart = containerNode.range().start.index;
+  const containerEnd = containerNode.range().end.index;
 
-    results.push({
-      text: callText,
-      file: relPath,
-      line: node.range().start.line + 1,
-      calleeNode: node,
-    });
+  for (const { node } of outermost) {
+    const ref = tryCollectCallee(
+      node,
+      containerStart,
+      containerEnd,
+      relPath,
+      visited,
+      ctx,
+    );
+    if (ref !== null) {
+      results.push(ref);
+    }
   }
 }
 

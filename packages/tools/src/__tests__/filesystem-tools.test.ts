@@ -235,7 +235,8 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain(READ_FILE_FIXTURE.exampleContent);
-      expect(result.returnDisplay).toContain(READ_FILE_FIXTURE.exampleContent);
+      // execute() is now a pure passthrough to build().execute(); the removed
+      // empty-returnDisplay substitution belongs to the AC12 test, not here.
     });
 
     it('returns error ToolResult when reading a nonexistent file', async () => {
@@ -247,8 +248,12 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
         { file_path: nonexistentPath },
       );
 
-      expect(result.error).toContain('does-not-exist.txt');
-      expect(result.llmContent).toContain('does-not-exist.txt');
+      // Issue #3063 Part 2: execute() is a pure passthrough; the structured
+      // error is no longer coerced to a string, and llmContent carries the
+      // model-facing remedy rather than the terse error.message.
+      expect(result.error?.message).toContain('does-not-exist.txt');
+      expect(result.error?.type).toBe('file_not_found');
+      expect(result.llmContent).toContain('no file was found');
     });
 
     it('resizes an oversized image according to effective profile limits', async () => {
@@ -354,7 +359,8 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
         file_path: filePath,
       });
 
-      expect(result.error).toContain(
+      // Issue #3063 Part 2: error is the structured { message, type } object.
+      expect(result.error?.message).toContain(
         'image-resize.maxLongEdge must be a positive integer',
       );
       expect(result.returnDisplay).toContain(
@@ -381,7 +387,10 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
         file_path: filePath,
       });
 
-      expect(result.error).toContain('Unable to resize image corrupt.png');
+      // Issue #3063 Part 2: error is the structured { message, type } object.
+      expect(result.error?.message).toContain(
+        'Unable to resize image corrupt.png',
+      );
     });
   });
 

@@ -124,6 +124,13 @@ export interface ResponsesExecutorDeps {
    * for subsequent requests (issue #2041 A5).
    */
   readonly onWebSocketFallback?: () => void;
+  /**
+   * Called once when a Codex WebSocket attempt completes successfully, so the
+   * provider can reset its consecutive-failure counter. Mirrors the Codex
+   * client treating a healthy stream as proof that a single transient blip
+   * must not permanently demote the session to HTTP (issue #3034).
+   */
+  readonly onWebSocketSuccess?: () => void;
 }
 
 export interface PreparedResponsesRequestContext {
@@ -823,6 +830,7 @@ async function* streamResponses(
       () => streamOverHttp(params, deps),
       deps.onWebSocketFallback,
       deps.logger,
+      deps.onWebSocketSuccess,
     );
     return;
   }

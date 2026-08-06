@@ -394,14 +394,22 @@ function asRenderableBlock(value: unknown): ContentBlock | null {
  * block carries an error (ToolResponseBlock.error) OR its result is an object
  * with a non-empty string `error` property OR a nested `error.message` string
  * (the { error } and { error: { message } } failure shapes produced by
- * createErrorResponse, FINDING F3), else 'completed'. The displayed text is
- * extracted with a
- * precedence that mirrors how results are actually recorded: result.output
- * (the { output } success shape), then a string result.content, then an
- * MCP-style result.content array (joined text elements), then the failure error
- * text, then the shared extractToolResultText fallback. Only non-empty text
- * yields a content entry; otherwise the update carries an empty content array
- * (mirroring the live suppressed-display behavior).
+ * createErrorResponse, FINDING F3), else 'completed'. Classification honours
+ * either field (see {@link failureText}). The DISPLAYED text, however, prefers
+ * the model-facing remedy carried in `result` over the terse top-level marker:
+ * it is extracted with a precedence that mirrors how results are actually
+ * recorded: result.output (the { output } success shape), then a string
+ * result.content, then an MCP-style result.content array (joined text
+ * elements), then the display-preferred failure text (result's `error`/
+ * `error.message`, falling back to the top-level marker only when `result`
+ * carries no usable text), then the shared extractToolResultText fallback.
+ * Only non-empty text yields a content entry; otherwise the update carries an
+ * empty content array (mirroring the live suppressed-display behavior).
+ *
+ * Separating classification from display (issue #3063): once createErrorResponse
+ * sets the top-level marker, a failed block carries the terse marker in `error`
+ * AND the model-facing remedy in `result.error`. Without this split the replay
+ * would display the terse marker where it previously displayed the remedy.
  *
  * Diff replay gap: the recorded IContent does NOT persist the display/FileDiff
  * metadata the live path uses to emit a { type: 'diff' } ToolCallContent, so a
@@ -414,9 +422,8 @@ function mapToolResponseBlock(
   kind: acp.ToolKind,
 ): acp.SessionUpdate {
   const record = asRecord(block.result);
-  const errorText = failureText(block, record);
-  const failed = errorText !== null;
-  const text = extractResponseText(block, record, failed, errorText);
+  const failed = failureText(block, record) !== null;
+  const text = extractResponseText(block, record, failed);
   const content: acp.ToolCallContent[] =
     text !== null && text.length > 0
       ? [{ type: 'content', content: { type: 'text', text } }]
@@ -454,15 +461,16 @@ function resultErrorText(record: Dict | null): string | null {
 /**
  * Extracts the display text for a tool response with the precedence documented
  * on mapToolResponseBlock: result.output, then string result.content, then an
- * MCP-style result.content array, then (for failures) the error text, then the
- * shared extractToolResultText fallback. Returns null when no non-empty text is
+ * MCP-style result.content array, then (for failures) the display-preferred
+ * failure text (the model-facing remedy in `result`, falling back to the
+ * top-level marker only when `result` carries no usable text), then the shared
+ * extractToolResultText fallback. Returns null when no non-empty text is
  * representable.
  */
 function extractResponseText(
   block: ToolResponseBlock,
   record: Dict | null,
   failed: boolean,
-  precomputedErrorText: string | null = null,
 ): string | null {
   const output = record?.output;
   if (typeof output === 'string' && output.length > 0) {
@@ -477,7 +485,7 @@ function extractResponseText(
     return arrayText;
   }
   if (failed) {
-    const errorText = precomputedErrorText ?? failureText(block, record);
+    const errorText = displayFailureText(block, record);
     if (errorText !== null) {
       return errorText;
     }
@@ -527,9 +535,12 @@ function textOfContentElement(element: unknown): string | null {
 }
 
 /**
- * Returns the failure text for a failed response: the block-level error string
- * when present, else the result object's error text (string `error` OR nested
- * `error.message`, via {@link resultErrorText}, FINDING F3), else null.
+ * Classification helper: returns the failure text used to decide whether a
+ * response is `failed`. Honours EITHER failure field — the block-level error
+ * string when present, else the result object's error text (string `error` OR
+ * nested `error.message`, via {@link resultErrorText}, FINDING F3), else null.
+ * Classification precedence does not matter for display; see
+ * {@link displayFailureText}.
  */
 function failureText(
   block: ToolResponseBlock,
@@ -539,6 +550,27 @@ function failureText(
     return block.error;
   }
   return resultErrorText(record);
+}
+
+/**
+ * Display helper: returns the failure text shown to the user. Unlike
+ * {@link failureText} (which is for classification only), this prefers the
+ * model-facing remedy carried in `result` (`resultErrorText`) and falls back
+ * to the terse top-level `error` marker only when `result` carries no usable
+ * text (issue #3063). Returns null when neither field is representable.
+ */
+function displayFailureText(
+  block: ToolResponseBlock,
+  record: Dict | null,
+): string | null {
+  const resultText = resultErrorText(record);
+  if (resultText !== null) {
+    return resultText;
+  }
+  if (typeof block.error === 'string' && block.error.length > 0) {
+    return block.error;
+  }
+  return null;
 }
 
 /**

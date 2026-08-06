@@ -9,7 +9,7 @@
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { TaskTool } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
@@ -148,10 +148,20 @@ describe('TaskTool', () => {
         expect.any(AbortSignal),
       );
 
-      await resultPromise;
+      const result = await resultPromise;
+
+      // Assert the clamp is actually surfaced in the result metadata and
+      // model-facing content, not just in the launch arguments (Issue #3031).
+      expect(result.metadata?.timeoutClamped).toBe(true);
+      expect(result.metadata?.requestedTimeoutSeconds).toBe(999999);
+      expect(result.metadata?.effectiveTimeoutSeconds).toBe(120);
+      expect(String(result.llmContent)).toContain(
+        'reduced to the configured ceiling of 120s',
+      );
+      expect(String(result.llmContent)).toContain('task-max-timeout-seconds');
     });
 
-    it('skips timeout when timeout_seconds is -1', async () => {
+    it('clamps timeout_seconds: -1 to the configured maximum (Issue #3031)', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
       const scope = {
         output: {
@@ -196,6 +206,66 @@ describe('TaskTool', () => {
 
       await vi.advanceTimersByTimeAsync(0);
 
+      // -1 under a finite maximum is bounded by the ceiling (120s = 2min),
+      // not unbounded (Issue #3031).
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_time_minutes: 2,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+
+      await resultPromise;
+    });
+
+    it('skips the timer only when the maximum itself is -1 (Issue #3031)', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-unbounded',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': -1,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () => orchestrator,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        timeout_seconds: -1,
+      });
+
+      const resultPromise = invocation.execute(
+        new AbortController().signal,
+        undefined,
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Unbounded is reachable only when the operator declines a ceiling.
       expect(launch).toHaveBeenCalledWith(
         expect.not.objectContaining({ runConfig: expect.anything() }),
         expect.any(AbortSignal),

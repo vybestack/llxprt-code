@@ -38,7 +38,8 @@ export function shouldRetryError(error: unknown): boolean {
   if (isNetworkTransientError(error)) {
     return true;
   }
-  if (status === 401 || status === 403) {
+  // 403 means the request is forbidden, not throttled; retrying only delays the error (issue #2917).
+  if (status === 401) {
     return true;
   }
   return isStreamTimeoutError(error);

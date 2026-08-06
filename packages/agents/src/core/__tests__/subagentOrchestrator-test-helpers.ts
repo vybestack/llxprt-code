@@ -10,7 +10,7 @@
  * max-lines disable is needed.
  */
 
-import { vi } from 'vitest';
+import { vi } from '../../testApi.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';

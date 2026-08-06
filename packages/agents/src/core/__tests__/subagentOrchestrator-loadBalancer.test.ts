@@ -20,7 +20,7 @@
  *       profile so failover/round-robin routing downstream is not lost.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from '../../testApi.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
