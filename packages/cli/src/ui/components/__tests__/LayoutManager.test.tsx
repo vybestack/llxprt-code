@@ -12,7 +12,7 @@ import { Colors } from '../../colors.js';
 import { LayoutManager, useLayout } from '../LayoutManager.js';
 
 // Mock the useTerminalSize hook
-vi.mock('../../hooks/useTerminalSize.js', () => ({
+void vi.mock('../../hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(() => ({ rows: 24, columns: 80 })),
 }));
 

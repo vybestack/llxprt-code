@@ -20,7 +20,7 @@ const { readFileSyncMock } = {
   readFileSyncMock: vi.fn(),
 };
 
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   readFileSync: readFileSyncMock,
 }));
 

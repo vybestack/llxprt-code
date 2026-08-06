@@ -23,7 +23,7 @@ import type * as Ai from 'ai';
  */
 const realAiModule = { ...(await import('ai')) };
 
-vi.mock('ai', () => {
+void vi.mock('ai', () => {
   const actual = realAiModule;
   return {
     ...actual,
@@ -32,7 +32,7 @@ vi.mock('ai', () => {
   };
 });
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => ({
     chat: vi.fn(() => 'mock-model'),
   })),

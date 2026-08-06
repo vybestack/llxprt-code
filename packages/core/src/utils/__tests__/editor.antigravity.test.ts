@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 
-vi.mock('child_process', () => ({
+void vi.mock('child_process', () => ({
   execSync: vi.fn(),
   execFileSync: vi.fn(),
   spawn: vi.fn(() => ({

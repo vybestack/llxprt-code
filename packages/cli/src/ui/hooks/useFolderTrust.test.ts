@@ -35,7 +35,7 @@ const mockedCwd = vi.fn();
 const mockedExit = vi.fn((_code: number) => undefined);
 const temporaryDirectories: string[] = [];
 
-vi.mock('node:process', () => {
+void vi.mock('node:process', () => {
   const actual = realNodeProcessModule;
   const mockedProcess = {
     ...actual,

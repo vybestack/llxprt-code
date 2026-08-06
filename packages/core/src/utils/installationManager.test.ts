@@ -23,7 +23,7 @@ import { randomUUID } from 'crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 const actual = { ...(await import('node:fs')) };
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   return {
     ...actual,
     readFileSync: vi.fn(actual.readFileSync),
@@ -32,7 +32,7 @@ vi.mock('node:fs', () => {
 });
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock('os', () => {
 });
 
 const crypto = { ...(await import('crypto')) };
-vi.mock('crypto', () => {
+void vi.mock('crypto', () => {
   return {
     ...crypto,
     randomUUID: vi.fn(),

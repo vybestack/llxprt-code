@@ -24,7 +24,7 @@ import { assertDefined } from '../../test-utils/assertions.js';
 const mockKeyStore = new Map<string, string>();
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     ToolKeyStorage: class MockToolKeyStorage {

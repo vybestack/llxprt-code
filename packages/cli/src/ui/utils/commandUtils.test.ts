@@ -22,7 +22,7 @@ const BEL = '\u0007';
 const ST = '\u001B\\';
 
 // Mock clipboardy
-vi.mock('clipboardy', () => ({
+void vi.mock('clipboardy', () => ({
   default: {
     write: vi.fn(),
   },
@@ -31,7 +31,7 @@ vi.mock('clipboardy', () => ({
 // Mock child_process — provide an explicit factory so spawn is a vi.fn()
 // under Bun (automocking of builtins differs from Vitest).
 const mockSpawnHoisted = vi.fn();
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   spawn: mockSpawnHoisted,
   exec: vi.fn(),
   execSync: vi.fn(),
@@ -44,7 +44,7 @@ const mockFs = {
   writeSync: vi.fn(),
   constants: { W_OK: 2 },
 };
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   default: mockFs,
 }));
 

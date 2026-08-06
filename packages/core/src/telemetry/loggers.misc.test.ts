@@ -59,7 +59,7 @@ const mockIsTelemetrySdkInitialized = vi.fn(() => true);
 const __actual = {
   ...(await import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js')),
 };
-vi.mock('@vybestack/llxprt-code-telemetry/telemetry/sdk.js', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry/telemetry/sdk.js', () => {
   const actual =
     __actual as typeof import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js');
   return {

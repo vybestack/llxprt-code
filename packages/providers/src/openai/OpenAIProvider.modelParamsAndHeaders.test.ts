@@ -24,20 +24,20 @@ let settingsServiceRef: { current: SettingsService } = {
   current: new SettingsService(),
 };
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: mockOpenAIConstructor,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
 // REQ-RETRY-001: retryWithBackoff removed from providers
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: () => settingsServiceRef.current,
   SETTINGS_REGISTRY: [],

@@ -64,39 +64,41 @@ const hoistedConfigMocks = {
 } as HoistedConfigMocks;
 
 const __actual = { ...(await import('fs')) };
-vi.mock('fs', () => buildFsMockBody(__actual));
+void vi.mock('fs', () => buildFsMockBody(__actual));
 
 const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
-vi.mock('@vybestack/llxprt-code-tools', () => buildToolsMockBody(__actual2));
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  buildToolsMockBody(__actual2),
+);
 
 const __actual3 = { ...(await import('../core/contentGenerator.js')) };
-vi.mock('../core/contentGenerator.js', () =>
+void vi.mock('../core/contentGenerator.js', () =>
   buildContentGeneratorMockBody(__actual3),
 );
 
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
+void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 const __actual4 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
-vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
   buildIdeIntegrationMockBody(__actual4),
 );
 
-vi.mock('../utils/memoryDiscovery.js', () =>
+void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
 const __actual5 = { ...(await import('../utils/events.js')) };
-vi.mock('../utils/events.js', () =>
+void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
 
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 const DEFAULT_WRITE_RULE_PRIORITY = 1.01;
 const AUTO_EDIT_RULE_PRIORITY = 1.015;

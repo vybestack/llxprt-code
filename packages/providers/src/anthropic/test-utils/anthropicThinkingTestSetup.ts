@@ -24,14 +24,14 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { setActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 // Mock the prompts module
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async () => "You are Claude Code, Anthropic's official CLI for Claude.",
   ),
 }));
 
 // Mock the retry utility
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   getErrorStatus: vi.fn(() => undefined),
   isNetworkTransientError: vi.fn(() => false),
 }));
@@ -40,7 +40,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 export const mockMessagesCreate = vi.fn();
 
 // Mock the Anthropic SDK
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: {
       create: mockMessagesCreate,

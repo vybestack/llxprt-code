@@ -26,7 +26,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: class FakeOpenAI {
     readonly responses = {
       create: vi.fn(async () => ({ output: [] })),
@@ -34,7 +34,7 @@ vi.mock('openai', () => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 

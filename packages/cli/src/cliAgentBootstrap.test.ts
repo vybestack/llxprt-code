@@ -27,7 +27,7 @@ const { fromConfigMock } = {
   fromConfigMock: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-agents', () => ({
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
   fromConfig: fromConfigMock,
 }));
 

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { patchStdio, createInkStdio } from './stdio.js';
 import { coreEvents } from './events.js';
 
-vi.mock('./events.js', () => ({
+void vi.mock('./events.js', () => ({
   coreEvents: {
     emitOutput: vi.fn(),
   },

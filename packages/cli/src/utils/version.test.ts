@@ -19,7 +19,7 @@ import { getPackageJson } from '@vybestack/llxprt-code-core';
 const originalCliVersion = process.env.CLI_VERSION;
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     getPackageJson: vi.fn(),

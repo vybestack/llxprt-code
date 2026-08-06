@@ -73,11 +73,11 @@ const inkMock = (() => {
   return module;
 })();
 
-vi.mock('ink', () => inkMock);
+void vi.mock('ink', () => inkMock);
 
 const mockStartNewPrompt = vi.fn();
 const mockAddUsage = vi.fn();
-vi.mock('../contexts/SessionContext.js', () => ({
+void vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({
     startNewPrompt: mockStartNewPrompt,
     addUsage: mockAddUsage,
@@ -85,11 +85,11 @@ vi.mock('../contexts/SessionContext.js', () => ({
   })),
 }));
 
-vi.mock('./slashCommandProcessor.js', () => ({
+void vi.mock('./slashCommandProcessor.js', () => ({
   handleSlashCommand: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('./useKeypress.js', () => ({
+void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
 }));
 
@@ -151,7 +151,7 @@ const originalReactToolScheduler = {
   ...(await import('./useReactToolScheduler.js')),
 };
 const { mapToDisplay } = await import('./toolMapping.js');
-vi.mock('./useReactToolScheduler.js', () => ({
+void vi.mock('./useReactToolScheduler.js', () => ({
   ...originalReactToolScheduler,
   useReactToolScheduler: vi.fn(),
   mapToDisplay,

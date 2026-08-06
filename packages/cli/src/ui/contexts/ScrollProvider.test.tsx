@@ -19,7 +19,7 @@ import type { MouseEvent } from '../utils/mouse.js';
 const mockUseMouseCallbacks = new Set<(event: MouseEvent) => void | boolean>();
 const React = await import('react');
 
-vi.mock('../hooks/useMouse.js', () => {
+void vi.mock('../hooks/useMouse.js', () => {
   return {
     useMouse: (callback: (event: MouseEvent) => void | boolean) => {
       React.useLayoutEffect(() => {
@@ -33,7 +33,7 @@ vi.mock('../hooks/useMouse.js', () => {
 });
 
 const actual = { ...(await import('ink')) };
-vi.mock('ink', () => {
+void vi.mock('ink', () => {
   return {
     ...actual,
     getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),

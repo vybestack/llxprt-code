@@ -30,7 +30,7 @@ const debugLogger = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     debugLogger,
@@ -38,7 +38,7 @@ vi.mock('@vybestack/llxprt-code-telemetry', () => {
 });
 
 const actualActual = { ...(await import('../../config/settings.js')) };
-vi.mock('../../config/settings.js', () => {
+void vi.mock('../../config/settings.js', () => {
   return {
     ...actualActual,
     loadSettings: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('../../config/settings.js', () => {
   };
 });
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 

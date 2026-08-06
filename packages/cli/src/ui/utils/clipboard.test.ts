@@ -12,7 +12,7 @@ import {
 } from './clipboard.js';
 
 const copyToClipboard = vi.fn(async () => undefined);
-vi.mock('./commandUtils.js', () => ({
+void vi.mock('./commandUtils.js', () => ({
   copyToClipboard,
 }));
 

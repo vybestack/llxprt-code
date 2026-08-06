@@ -10,7 +10,7 @@ import { renderHook } from '../../test-utils/render.js';
 import { useBanner } from './useBanner.js';
 import { persistentState } from '../../utils/persistentState.js';
 
-vi.mock('../../utils/persistentState.js', () => ({
+void vi.mock('../../utils/persistentState.js', () => ({
   persistentState: {
     get: vi.fn(),
     set: vi.fn(),

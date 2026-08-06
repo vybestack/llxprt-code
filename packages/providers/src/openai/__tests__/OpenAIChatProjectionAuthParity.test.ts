@@ -32,7 +32,7 @@ import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 
-vi.mock('openai', () => {
+void vi.mock('openai', () => {
   class FakeOpenAI {
     readonly chat = {
       completions: { create: vi.fn(async () => ({})) },
@@ -41,7 +41,7 @@ vi.mock('openai', () => {
   return { default: FakeOpenAI };
 });
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 

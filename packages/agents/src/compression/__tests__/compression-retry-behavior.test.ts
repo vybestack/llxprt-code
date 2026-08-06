@@ -39,7 +39,7 @@ import {
 } from './compression-retry-helpers.js';
 
 // Mock the delay utility so retryWithBackoff doesn't actually wait in tests
-vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
   delay: vi.fn().mockResolvedValue(undefined),
   createAbortError: () => {
     const err = new Error('Aborted');

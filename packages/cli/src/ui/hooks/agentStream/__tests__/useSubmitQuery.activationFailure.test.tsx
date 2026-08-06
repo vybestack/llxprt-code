@@ -38,7 +38,7 @@ import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
-vi.mock('../useStreamEventHandlers.js', () => ({
+void vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     processStreamEvent: vi.fn(),
     displayUserMessage: vi.fn(),
@@ -49,21 +49,21 @@ vi.mock('../useStreamEventHandlers.js', () => ({
   }),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,
   }),
 }));
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock streamUtils so we can assert whether handleSubmissionError is called
 // (i.e. the activation error is surfaced to the user).
 const handleSubmissionErrorMock = vi.fn();
-vi.mock('../streamUtils.js', () => ({
+void vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: handleSubmissionErrorMock,
   processSlashCommandResult: vi.fn(),
 }));

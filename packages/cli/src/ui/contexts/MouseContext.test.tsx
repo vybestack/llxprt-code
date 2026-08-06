@@ -14,7 +14,7 @@ import { MouseProvider, useMouseContext } from './MouseContext.js';
 import { useMouse } from '../hooks/useMouse.js';
 
 const original = { ...(await import('ink')) };
-vi.mock('ink', () => {
+void vi.mock('ink', () => {
   return {
     ...original,
     useStdin: vi.fn(),

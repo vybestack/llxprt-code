@@ -33,11 +33,11 @@ const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),
 };
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: runtimeMocks.getRuntimeApiMock,
 }));
 
-vi.mock('../../utils/version.js', () => ({
+void vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 

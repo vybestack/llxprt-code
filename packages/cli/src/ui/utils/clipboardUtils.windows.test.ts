@@ -21,7 +21,7 @@ import { saveClipboardImage } from './clipboardUtils.js';
 // Mock dependencies
 const realPromisesModule = { ...(await import('fs/promises')) };
 
-vi.mock('fs/promises', () => automock(realPromisesModule));
+void vi.mock('fs/promises', () => automock(realPromisesModule));
 
 const { mockSpawn } = {
   mockSpawn: vi.fn(),
@@ -31,7 +31,7 @@ const { mockSpawn } = {
 // the module under test to capture the real spawn before the mock resolves.
 // We also provide a promisify-compatible exec to keep secure-browser-launcher
 // (imported transitively via @vybestack/llxprt-code-core) from throwing.
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   const execFn = Object.assign(vi.fn(), {
     [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
   });

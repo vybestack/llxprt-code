@@ -38,7 +38,7 @@ const { mockPlatform, mockTmpdir } = {
 };
 
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
     ...actual,

@@ -19,12 +19,15 @@ import {
   type LocalOAuthCallbackOptions,
 } from './local-oauth-callback.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
-  openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-  shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  () => ({
+    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+  }),
+);
 
-vi.mock('./local-oauth-callback.js', () => ({
+void vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(
     async (options: LocalOAuthCallbackOptions) => ({
       redirectUri: 'http://127.0.0.1:1455/callback',

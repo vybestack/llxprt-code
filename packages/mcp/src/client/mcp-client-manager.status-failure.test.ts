@@ -20,7 +20,7 @@ import {
 const { mockMcpClient } = {
   mockMcpClient: vi.fn(),
 };
-vi.mock('./mcp-client.js', () => ({
+void vi.mock('./mcp-client.js', () => ({
   McpClient: mockMcpClient,
   MCPDiscoveryState: {
     NOT_STARTED: 'not_started',

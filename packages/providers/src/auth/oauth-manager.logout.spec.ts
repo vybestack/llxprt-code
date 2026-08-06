@@ -24,7 +24,7 @@ const { flushMockRef, providerManagerRef, providerRef } = {
   },
 };
 
-vi.mock('@vybestack/llxprt-code-auth', () => {
+void vi.mock('@vybestack/llxprt-code-auth', () => {
   const actual = realLlxprtCodeAuthModule;
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',

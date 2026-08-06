@@ -34,7 +34,7 @@ const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
 const realNodeOsModule = { ...(await import('node:os')) };
 
 const actual = { ...(await import('node:fs')) };
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   return {
     ...(actual as object),
     promises: {
@@ -45,15 +45,15 @@ vi.mock('node:fs', () => {
     existsSync: () => false,
   };
 });
-vi.mock('./process-utils.js', () => automock(realProcessUtilsModule));
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+void vi.mock('./process-utils.js', () => automock(realProcessUtilsModule));
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () =>
+void vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () =>
   automock(realStreamableHttpModule),
 );
-vi.mock('./detect-ide.js', () => automock(realDetectIdeModule));
-vi.mock('node:os', () => automock(realNodeOsModule));
+void vi.mock('./detect-ide.js', () => automock(realDetectIdeModule));
+void vi.mock('node:os', () => automock(realNodeOsModule));
 
 /**
  * A controllable fake MCP Client that lets tests drive connect/ping and fire

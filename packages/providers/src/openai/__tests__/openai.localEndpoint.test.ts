@@ -23,7 +23,7 @@ import {
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { isLocalEndpoint } from '../../utils/localEndpoint.js';
 
-vi.mock('openai', () => {
+void vi.mock('openai', () => {
   class FakeOpenAI {
     static instances: Set<symbol> = new Set();
     static created: symbol[] = [];

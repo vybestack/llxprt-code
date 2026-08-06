@@ -18,21 +18,21 @@ function getSkillsBuilder(): SkillsBuilder {
   return builder;
 }
 
-vi.mock('./skills/list.js', () => ({ listCommand: { command: 'list' } }));
-vi.mock('./skills/enable.js', () => ({
+void vi.mock('./skills/list.js', () => ({ listCommand: { command: 'list' } }));
+void vi.mock('./skills/enable.js', () => ({
   enableCommand: { command: 'enable <name>' },
 }));
-vi.mock('./skills/disable.js', () => ({
+void vi.mock('./skills/disable.js', () => ({
   disableCommand: { command: 'disable <name>' },
 }));
-vi.mock('./skills/install.js', () => ({
+void vi.mock('./skills/install.js', () => ({
   installCommand: { command: 'install <source> [--scope] [--path]' },
 }));
-vi.mock('./skills/uninstall.js', () => ({
+void vi.mock('./skills/uninstall.js', () => ({
   uninstallCommand: { command: 'uninstall <name> [--scope]' },
 }));
 
-vi.mock('../session/outputListeners.js', () => ({
+void vi.mock('../session/outputListeners.js', () => ({
   initializeOutputListenersAndFlush: vi.fn(),
 }));
 

@@ -12,13 +12,13 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 // throw before the component could register its keypress handler.
 
 // Mock string-width
-vi.mock('string-width', () => ({
+void vi.mock('string-width', () => ({
   default: (str: string) => str.length,
 }));
 
 // Mock the clipboard module
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     unescapePath: (path: string) => path,
@@ -26,14 +26,14 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 });
 
 // Mock clipboardy
-vi.mock('clipboardy', () => ({
+void vi.mock('clipboardy', () => ({
   default: {
     read: vi.fn(),
   },
 }));
 
 // Mock the required hooks
-vi.mock('../hooks/useShellHistory.js', () => ({
+void vi.mock('../hooks/useShellHistory.js', () => ({
   useShellHistory: () => ({
     addToHistory: vi.fn(),
     navigateHistory: vi.fn(),
@@ -44,7 +44,7 @@ vi.mock('../hooks/useShellHistory.js', () => ({
   }),
 }));
 
-vi.mock('../hooks/useCompletion.js', () => ({
+void vi.mock('../hooks/useCompletion.js', () => ({
   useCompletion: () => ({
     completionItems: [],
     selectedIndex: 0,
@@ -60,7 +60,7 @@ vi.mock('../hooks/useCompletion.js', () => ({
   }),
 }));
 
-vi.mock('../hooks/useInputHistory.js', () => ({
+void vi.mock('../hooks/useInputHistory.js', () => ({
   useInputHistory: () => ({
     history: [],
     currentIndex: -1,
@@ -70,7 +70,7 @@ vi.mock('../hooks/useInputHistory.js', () => ({
   }),
 }));
 
-vi.mock('../utils/clipboardUtils.js', () => ({
+void vi.mock('../utils/clipboardUtils.js', () => ({
   pasteClipboardImage: vi.fn(),
   clipboardHasImage: vi.fn(),
 }));
@@ -85,7 +85,7 @@ let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 // Mock useKeypress hook to capture the handler
 // Must match the specifier the consumer imports ('.js'), not the file on disk:
 // Bun's mock.module keys on the specifier string.
-vi.mock('../hooks/useKeypress.js', () => ({
+void vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (
     handler: (key: Record<string, unknown>) => void,
     _options?: unknown,
@@ -98,7 +98,7 @@ vi.mock('../hooks/useKeypress.js', () => ({
 }));
 
 // Mock useMouse hook
-vi.mock('../hooks/useMouse.js', () => ({
+void vi.mock('../hooks/useMouse.js', () => ({
   useMouse: vi.fn(),
 }));
 

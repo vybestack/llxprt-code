@@ -40,7 +40,7 @@ const mockTurnRun = vi.fn();
 const __actual = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
   const result = __actual as
     | typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')
     | Promise<typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')>;
@@ -72,7 +72,7 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
 });
 
 const __actual2 = { ...(await import('./turn.js')) };
-vi.mock('./turn.js', () => {
+void vi.mock('./turn.js', () => {
   const result = __actual2 as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;

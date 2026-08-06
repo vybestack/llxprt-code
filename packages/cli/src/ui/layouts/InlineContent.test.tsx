@@ -32,9 +32,9 @@ const realRealInkModule = {
   ...(await import('../../../test-utils/real-ink.js')),
 };
 
-vi.mock('ink', () => realRealInkModule);
+void vi.mock('ink', () => realRealInkModule);
 
-vi.mock('../components/ContextSummaryDisplay.js', () => {
+void vi.mock('../components/ContextSummaryDisplay.js', () => {
   return {
     ContextSummaryDisplay: () => (
       <Text color="white">context-summary-mock</Text>

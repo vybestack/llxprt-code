@@ -11,7 +11,7 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { copyToClipboard } from '../utils/commandUtils.js';
 
-vi.mock('../utils/commandUtils.js', () => ({
+void vi.mock('../utils/commandUtils.js', () => ({
   copyToClipboard: vi.fn(),
 }));
 

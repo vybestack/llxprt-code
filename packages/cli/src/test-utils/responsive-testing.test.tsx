@@ -20,7 +20,7 @@ const realUseTerminalSizeModule = {
 type RenderResult = ReturnType<typeof render>;
 
 // Mock the useTerminalSize hook
-vi.mock('../ui/hooks/useTerminalSize', () =>
+void vi.mock('../ui/hooks/useTerminalSize', () =>
   automock(realUseTerminalSizeModule),
 );
 

@@ -19,7 +19,7 @@ import * as crypto from 'crypto';
 const realOsModule = { ...(await import('os')) };
 const realCryptoModule = { ...(await import('crypto')) };
 
-vi.mock('fs/promises', () => ({
+void vi.mock('fs/promises', () => ({
   default: {
     readFile: vi.fn(),
     writeFile: vi.fn(),
@@ -29,10 +29,10 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
 }));
-vi.mock('os', () => automock(realOsModule));
-vi.mock('crypto', () => automock(realCryptoModule));
+void vi.mock('os', () => automock(realOsModule));
+void vi.mock('crypto', () => automock(realCryptoModule));
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   return {
     ...actualFs,
     mkdirSync: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock('fs', () => {
 });
 const pathModule = await import('path');
 const actual = { ...(await import('@vybestack/llxprt-code-settings')) };
-vi.mock('@vybestack/llxprt-code-settings', () => {
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   class Storage {
     getProjectTempDir(): string {
       return pathModule.join('/test/home/', '.llxprt', 'tmp', 'mocked_hash');

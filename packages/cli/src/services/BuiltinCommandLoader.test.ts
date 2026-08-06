@@ -8,7 +8,7 @@ const realInstallationInfoModule = {
   ...(await import('./../utils/installationInfo.js')),
 };
 
-vi.mock('../ui/commands/profileCommand.js', () => ({
+void vi.mock('../ui/commands/profileCommand.js', () => ({
   profileCommand: {
     name: 'profile',
     description: 'Profile command',
@@ -16,7 +16,7 @@ vi.mock('../ui/commands/profileCommand.js', () => ({
   },
 }));
 
-vi.mock('../ui/commands/uiprofileCommand.js', () => ({
+void vi.mock('../ui/commands/uiprofileCommand.js', () => ({
   uiprofileCommand: {
     name: 'uiprofile',
     description: 'UI Profile command',
@@ -24,7 +24,7 @@ vi.mock('../ui/commands/uiprofileCommand.js', () => ({
   },
 }));
 
-vi.mock('../ui/commands/aboutCommand.js', () => ({
+void vi.mock('../ui/commands/aboutCommand.js', () => ({
   aboutCommand: {
     name: 'about',
     description: 'About the CLI',
@@ -32,17 +32,17 @@ vi.mock('../ui/commands/aboutCommand.js', () => ({
   },
 }));
 
-vi.mock('../ui/commands/ideCommand.js', () => ({
+void vi.mock('../ui/commands/ideCommand.js', () => ({
   ideCommand: vi.fn().mockReturnValue({
     name: 'ide',
     description: 'IDE command',
     kind: CommandKind.BUILT_IN,
   }),
 }));
-vi.mock('../ui/commands/restoreCommand.js', () => ({
+void vi.mock('../ui/commands/restoreCommand.js', () => ({
   restoreCommand: vi.fn(),
 }));
-vi.mock('../ui/commands/permissionsCommand.js', () => ({
+void vi.mock('../ui/commands/permissionsCommand.js', () => ({
   permissionsCommand: {
     name: 'permissions',
     description: 'Permissions command',
@@ -57,37 +57,41 @@ import { CommandKind } from '../ui/commands/types.js';
 
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 
-vi.mock('../ui/commands/authCommand.js', () => ({ authCommand: {} }));
-vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
-vi.mock('../ui/commands/chatCommand.js', () => ({ chatCommand: {} }));
-vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
-vi.mock('../ui/commands/compressCommand.js', () => ({ compressCommand: {} }));
-vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
-vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
-vi.mock('../ui/commands/extensionsCommand.js', () => ({
+void vi.mock('../ui/commands/authCommand.js', () => ({ authCommand: {} }));
+void vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
+void vi.mock('../ui/commands/chatCommand.js', () => ({ chatCommand: {} }));
+void vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
+void vi.mock('../ui/commands/compressCommand.js', () => ({
+  compressCommand: {},
+}));
+void vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
+void vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
+void vi.mock('../ui/commands/extensionsCommand.js', () => ({
   extensionsCommand: () => ({}),
 }));
-vi.mock('../ui/commands/helpCommand.js', () => ({ helpCommand: {} }));
-vi.mock('../ui/commands/memoryCommand.js', () => ({ memoryCommand: {} }));
-vi.mock('../ui/commands/modelCommand.js', () => ({
+void vi.mock('../ui/commands/helpCommand.js', () => ({ helpCommand: {} }));
+void vi.mock('../ui/commands/memoryCommand.js', () => ({ memoryCommand: {} }));
+void vi.mock('../ui/commands/modelCommand.js', () => ({
   modelCommand: { name: 'model' },
 }));
-vi.mock('../ui/commands/privacyCommand.js', () => ({ privacyCommand: {} }));
-vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-vi.mock('../ui/commands/quotaCommand.js', () => ({
+void vi.mock('../ui/commands/privacyCommand.js', () => ({
+  privacyCommand: {},
+}));
+void vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
+void vi.mock('../ui/commands/quotaCommand.js', () => ({
   quotaCommand: {
     name: 'quota',
     description: 'Quota command',
     kind: CommandKind.BUILT_IN,
   },
 }));
-vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
-vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
-vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
-vi.mock('../ui/commands/skillsCommand.js', () => ({
+void vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
+void vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
+void vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
+void vi.mock('../ui/commands/skillsCommand.js', () => ({
   skillsCommand: { name: 'skills' },
 }));
-vi.mock('../ui/commands/mcpCommand.js', () => ({
+void vi.mock('../ui/commands/mcpCommand.js', () => ({
   mcpCommand: {
     name: 'mcp',
     description: 'MCP command',
@@ -97,7 +101,7 @@ vi.mock('../ui/commands/mcpCommand.js', () => ({
 
 // Default the file to production behavior. The dedicated development case at
 // the end re-registers this module immediately before exercising uiprofile.
-vi.mock('../utils/installationInfo.js', () => {
+void vi.mock('../utils/installationInfo.js', () => {
   const actual = realInstallationInfoModule;
   return {
     ...actual,
@@ -254,7 +258,7 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should include uiprofile command when isDevelopment is true', async () => {
-    vi.mock('../utils/installationInfo.js', () => {
+    void vi.mock('../utils/installationInfo.js', () => {
       const actual = realInstallationInfoModule;
       return {
         ...actual,

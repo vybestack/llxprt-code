@@ -19,6 +19,6 @@
     // "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
     //     "noUnusedParameters": true,  /* Report errors on unused parameters. */
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["../../bun-test-corrections.d.ts", "src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", "vitest.config.ts"]
 }

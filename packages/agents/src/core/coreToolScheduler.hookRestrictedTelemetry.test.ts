@@ -9,7 +9,7 @@ import { describe, it, expect, vi } from '../testApi.js';
 const __actual = {
   ...(await import('@vybestack/llxprt-code-core/telemetry/loggers.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/telemetry/loggers.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/telemetry/loggers.js', () => {
   const result = __actual as
     | typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
     | Promise<

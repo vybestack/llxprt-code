@@ -17,7 +17,7 @@ const realLlxprtCodeCoreModule = {
 };
 
 const mockSetValue = vi.fn();
-vi.mock('../../config/trustedFolders.js', () => {
+void vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return {
     ...actual,
@@ -33,7 +33,7 @@ vi.mock('../../config/trustedFolders.js', () => {
 });
 
 // Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

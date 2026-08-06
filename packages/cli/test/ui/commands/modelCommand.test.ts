@@ -18,7 +18,7 @@ import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
 
 // Mock the RuntimeContext
 const mockSetActiveModel = vi.fn();
-vi.mock('../../../src/ui/contexts/RuntimeContext.js', () => ({
+void vi.mock('../../../src/ui/contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     setActiveModel: mockSetActiveModel,
   }),

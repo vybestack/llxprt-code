@@ -10,7 +10,7 @@ import {
   createBootstrapResult,
 } from '../profileBootstrap.js';
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   ephemeralSettingHelp: {},

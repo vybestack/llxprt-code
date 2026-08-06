@@ -40,7 +40,7 @@ function rejectWhenAborted(signal: AbortSignal): Promise<never> {
   });
 }
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
@@ -49,7 +49,7 @@ const actual = {
     '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
   )),
 };
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => {
     return {

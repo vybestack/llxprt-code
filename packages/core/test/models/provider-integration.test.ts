@@ -32,7 +32,7 @@ import { transformModel } from '../../src/models/transformer.js';
 
 // Mock fs module
 const __actual = { ...(await import('node:fs')) };
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   const actual = __actual as typeof fs;
   return {
     ...actual,
@@ -54,7 +54,7 @@ const registryState = {
 
 // Reset singleton between tests
 const __actual2 = { ...(await import('../../src/models/registry.js')) };
-vi.mock('../../src/models/registry.js', () => {
+void vi.mock('../../src/models/registry.js', () => {
   const actual = __actual2 as typeof import('../../src/models/registry.js');
 
   return {

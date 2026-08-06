@@ -10,7 +10,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 // Mock retryWithBackoff to immediately call the function once without delays
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn(
     async <T>(
       fn: () => Promise<T>,

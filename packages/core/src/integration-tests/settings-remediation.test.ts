@@ -19,7 +19,7 @@ import process from 'process';
 import { performance } from 'node:perf_hooks';
 
 const actual = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   return {
     ...actual,
     existsSync: vi.fn(() => true),

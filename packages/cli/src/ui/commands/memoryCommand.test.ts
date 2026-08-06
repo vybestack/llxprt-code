@@ -20,7 +20,7 @@ import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js'
 import { assertDefined } from '../../test-utils/assertions.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     getErrorMessage: vi.fn((error: unknown) => {
@@ -43,7 +43,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 const actualOriginal = {
   ...(await import('../../config/environmentLoader.js')),
 };
-vi.mock('../../config/environmentLoader.js', () => {
+void vi.mock('../../config/environmentLoader.js', () => {
   return {
     ...actualOriginal,
     loadHierarchicalLlxprtMemory: vi.fn(),

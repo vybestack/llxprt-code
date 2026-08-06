@@ -17,13 +17,13 @@ const getPackageJson = vi.fn();
 const debugLogger = {
   warn: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   getPackageJson,
   debugLogger,
 }));
 
 const updateNotifier = vi.fn();
-vi.mock('update-notifier', () => ({
+void vi.mock('update-notifier', () => ({
   default: updateNotifier,
 }));
 

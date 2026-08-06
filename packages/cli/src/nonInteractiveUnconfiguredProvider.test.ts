@@ -42,7 +42,7 @@ const realAtCommandProcessorModule = {
 };
 
 const original = { ...(await import('@vybestack/llxprt-code-agents')) };
-vi.mock('@vybestack/llxprt-code-agents', () => {
+void vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...original,
     fromConfig: vi.fn(),
@@ -50,7 +50,7 @@ vi.mock('@vybestack/llxprt-code-agents', () => {
 });
 
 const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualOriginal,
     shutdownTelemetry: vi.fn(),
@@ -58,16 +58,16 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn().mockResolvedValue(undefined),
   cleanupCheckpoints: vi.fn().mockResolvedValue(undefined),
   registerSyncCleanup: vi.fn(),
 }));
 
-vi.mock('./ui/hooks/atCommandProcessor.js', () =>
+void vi.mock('./ui/hooks/atCommandProcessor.js', () =>
   automock(realAtCommandProcessorModule),
 );
-vi.mock('./services/CommandService.js', () => ({
+void vi.mock('./services/CommandService.js', () => ({
   CommandService: {
     create: vi.fn().mockResolvedValue({ getCommands: () => [] }),
   },

@@ -11,7 +11,7 @@ import { normalizeTrustPathInput } from './trustPaths.js';
 const MOCK_HOME = path.resolve('/mock/home/user');
 
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actual,
     homedir: vi.fn(() => MOCK_HOME),

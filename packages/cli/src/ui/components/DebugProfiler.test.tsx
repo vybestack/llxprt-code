@@ -28,7 +28,7 @@ import { FixedDeque } from 'mnemonist';
 import { debugState } from '../debug.js';
 import { act } from 'react';
 
-vi.mock('../contexts/UIStateContext.js', () => ({
+void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(),
 }));
 

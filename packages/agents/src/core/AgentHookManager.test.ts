@@ -8,10 +8,13 @@ import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { AgentHookManager } from './AgentHookManager.js';
 import { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js', () => ({
-  triggerBeforeAgentHook: vi.fn(),
-  triggerAfterAgentHook: vi.fn(),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js',
+  () => ({
+    triggerBeforeAgentHook: vi.fn(),
+    triggerAfterAgentHook: vi.fn(),
+  }),
+);
 
 import {
   triggerBeforeAgentHook,

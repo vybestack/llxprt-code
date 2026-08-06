@@ -12,7 +12,7 @@ const { mockReadFile, mockWriteFile } = {
   mockWriteFile: vi.fn(),
 };
 
-vi.mock('fs/promises', () => ({
+void vi.mock('fs/promises', () => ({
   default: { readFile: mockReadFile, writeFile: mockWriteFile },
   readFile: mockReadFile,
   writeFile: mockWriteFile,

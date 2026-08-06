@@ -39,7 +39,7 @@ const realSingleSettingSaverModule = {
   ...(await import('./utils/singleSettingSaver.js')),
 };
 
-vi.mock('./utils/settingsUtils.js', () => {
+void vi.mock('./utils/settingsUtils.js', () => {
   const actual = realSettingsUtilsModule;
   return {
     ...actual,
@@ -49,7 +49,7 @@ vi.mock('./utils/settingsUtils.js', () => {
   };
 });
 
-vi.mock('./utils/singleSettingSaver.js', () => {
+void vi.mock('./utils/singleSettingSaver.js', () => {
   const actual = realSingleSettingSaverModule;
   return {
     ...actual,

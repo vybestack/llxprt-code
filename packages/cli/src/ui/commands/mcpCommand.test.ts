@@ -22,12 +22,12 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 
 // Mock external dependencies
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-vi.mock('@vybestack/llxprt-code-mcp', () => {
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),

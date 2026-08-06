@@ -21,7 +21,7 @@ import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     Config: vi.fn().mockImplementation((params) => {
@@ -160,7 +160,7 @@ const runtimeConfigRef = {
   value: null as unknown,
 };
 
-vi.mock('./profileBootstrap.js', () => ({
+void vi.mock('./profileBootstrap.js', () => ({
   parseBootstrapArgs: vi.fn(() => ({
     bootstrapArgs: {
       profileName: null,
@@ -191,7 +191,7 @@ vi.mock('./profileBootstrap.js', () => ({
   ),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () => runtimeStateRef.value.providerManager;
   const applyProfileSnapshot = vi.fn(async () => ({
     providerName: 'openai',

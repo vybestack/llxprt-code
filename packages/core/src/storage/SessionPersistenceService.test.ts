@@ -17,7 +17,7 @@ import * as crypto from 'node:crypto';
 
 // Mock fs before importing the module under test
 const actual = { ...(await import('node:fs')) };
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   return {
     ...actual,
     promises: {

@@ -21,7 +21,7 @@ const mockUninstallExtension: Mock<typeof extensionModule.uninstallExtension> =
   vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
-vi.mock('../../config/extension.js', () => {
+void vi.mock('../../config/extension.js', () => {
   return {
     ...actual,
     uninstallExtension: mockUninstallExtension,

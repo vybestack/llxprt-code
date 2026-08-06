@@ -20,7 +20,7 @@ import { MessageType } from '../types.js';
 
 const maybeGetCliOAuthManagerMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     maybeGetCliOAuthManager: maybeGetCliOAuthManagerMock,
   }),

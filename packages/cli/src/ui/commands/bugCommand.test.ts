@@ -25,16 +25,16 @@ const realOpenModule = { ...(await import('open')) };
 const realVersionModule = { ...(await import('../../utils/version.js')) };
 const realFormattersModule = { ...(await import('../utils/formatters.js')) };
 
-vi.mock('open', () => automock(realOpenModule));
-vi.mock('../../utils/version.js', () => automock(realVersionModule));
-vi.mock('../utils/formatters.js', () => automock(realFormattersModule));
+void vi.mock('open', () => automock(realOpenModule));
+void vi.mock('../../utils/version.js', () => automock(realVersionModule));
+void vi.mock('../utils/formatters.js', () => automock(realFormattersModule));
 // Mock the git-commit loader to a deterministic value so the assertion below
 // verifies bugCommand embeds the loader's return value, rather than comparing
 // the real loader's output against itself (a tautology).
-vi.mock('../../utils/gitCommitInfo.js', () => ({
+void vi.mock('../../utils/gitCommitInfo.js', () => ({
   getGitCommitInfo: vi.fn().mockReturnValue('test-commit-hash'),
 }));
-vi.mock('node:process', () => ({
+void vi.mock('node:process', () => ({
   default: {
     platform: 'test-platform',
     version: 'v20.0.0',
@@ -44,7 +44,7 @@ vi.mock('node:process', () => ({
   },
 }));
 
-vi.mock('../utils/terminalCapabilityManager.js', () => ({
+void vi.mock('../utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     getTerminalName: vi.fn().mockReturnValue('Test Terminal'),
     getTerminalBackgroundColor: vi.fn().mockReturnValue('#000000'),

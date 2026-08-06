@@ -9,7 +9,7 @@ import type { ExtensionSetting } from './extensionSettings.js';
 // Mock readline for testing prompts
 const mockQuestion = vi.fn();
 const mockClose = vi.fn();
-vi.mock('node:readline', () => ({
+void vi.mock('node:readline', () => ({
   createInterface: vi.fn().mockReturnValue({
     question: mockQuestion,
     close: mockClose,

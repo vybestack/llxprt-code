@@ -21,7 +21,7 @@ const realLlxprtCodeIdeIntegrationModule = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
 
-vi.mock('vscode', () => ({
+void vi.mock('vscode', () => ({
   window: {
     createOutputChannel: vi.fn(() => ({
       appendLine: vi.fn(),
@@ -77,7 +77,7 @@ const { mockDetectIdeFromEnv } = (() => {
   return { mockDetectIdeFromEnv: mock };
 })();
 
-vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   const actual = realLlxprtCodeIdeIntegrationModule;
   return {
     ...actual,

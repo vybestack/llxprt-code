@@ -19,7 +19,7 @@ const loaderState = {
   mcpCommands: [] as SlashCommand[],
 };
 
-vi.mock('../../services/BuiltinCommandLoader.js', () => ({
+void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: class {
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(loaderState.builtinCommands);
@@ -27,7 +27,7 @@ vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   },
 }));
 
-vi.mock('../../services/FileCommandLoader.js', () => ({
+void vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: class {
     constructor(private readonly config: CliUiRuntime) {}
 
@@ -41,7 +41,7 @@ vi.mock('../../services/FileCommandLoader.js', () => ({
   },
 }));
 
-vi.mock('../../services/McpPromptLoader.js', () => ({
+void vi.mock('../../services/McpPromptLoader.js', () => ({
   McpPromptLoader: class {
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(loaderState.mcpCommands);
@@ -50,7 +50,7 @@ vi.mock('../../services/McpPromptLoader.js', () => ({
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-vi.mock('@vybestack/llxprt-code-mcp', () => {
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
   return {
     ...actual,
     addMCPStatusChangeListener: vi.fn(),
@@ -59,7 +59,7 @@ vi.mock('@vybestack/llxprt-code-mcp', () => {
 });
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualActual,
     IdeClient: {

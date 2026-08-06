@@ -51,11 +51,11 @@ import {
   createQueueOperations,
 } from './submitQueryTestFixtures.js';
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,

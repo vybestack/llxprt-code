@@ -25,7 +25,7 @@ import {
 // Mock os module and set homedir before imports
 const realOsModule = { ...(await import('os')) };
 
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const actual = realOsModule;
   return {
     ...actual,
@@ -35,7 +35,7 @@ vi.mock('os', () => {
 });
 
 // Mock stripJsonComments
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 

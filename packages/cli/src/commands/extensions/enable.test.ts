@@ -18,7 +18,7 @@ import yargs from 'yargs';
 import { FatalConfigError } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
@@ -27,14 +27,14 @@ const mockEnableExtension: Mock<
 > = vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
-vi.mock('../../config/extension.js', () => {
+void vi.mock('../../config/extension.js', () => {
   return {
     ...actual,
     enableExtension: mockEnableExtension,
   };
 });
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: Error) => error.message),
 }));
 

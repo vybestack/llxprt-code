@@ -11,7 +11,7 @@ import type { MouseEvent } from '../contexts/MouseContext.js';
 let capturedMouseHandler: ((event: MouseEvent) => void) | null = null;
 let capturedIsActive = true;
 
-vi.mock('../contexts/MouseContext.js', () => ({
+void vi.mock('../contexts/MouseContext.js', () => ({
   useMouse: (
     handler: (event: MouseEvent) => void,
     opts: { isActive?: boolean },
@@ -21,7 +21,7 @@ vi.mock('../contexts/MouseContext.js', () => ({
   },
 }));
 
-vi.mock('ink', () => ({
+void vi.mock('ink', () => ({
   getBoundingBox: vi.fn(() => ({ x: 10, y: 5, width: 40, height: 10 })),
 }));
 

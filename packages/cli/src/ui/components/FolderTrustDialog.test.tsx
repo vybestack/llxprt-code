@@ -18,7 +18,7 @@ const realNodeProcessModule = { ...(await import('node:process')) };
 const mockedExit = vi.fn();
 const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
-vi.mock('node:process', () => {
+void vi.mock('node:process', () => {
   const actual = realNodeProcessModule;
   return {
     ...actual,

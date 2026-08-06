@@ -26,7 +26,7 @@ const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
 };
 
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),
     writeFile: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock('node:fs', () => ({
 }));
 
 // Mock Storage module
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   Storage: {
     getMcpOAuthTokensPath: vi.fn().mockReturnValue('/test/path/tokens.json'),
@@ -45,7 +45,7 @@ vi.mock('@vybestack/llxprt-code-settings', () => ({
 
 // Mock OS methods that might be causing issues
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actual,
     hostname: vi.fn().mockReturnValue('test-hostname'),

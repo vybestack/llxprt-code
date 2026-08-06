@@ -60,18 +60,18 @@ const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
 
-vi.mock('../trustedFolders.js', () => {
+void vi.mock('../trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return { ...actual, isWorkspaceTrusted: vi.fn().mockReturnValue(true) };
 });
 
-vi.mock('../sandboxConfig.js', () => ({
+void vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
 const pathMod = await import('node:path');
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([MOCK_CWD, process.cwd()]);
   return {
@@ -89,21 +89,21 @@ vi.mock('fs', () => {
 });
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
   };
 });
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-vi.mock('../profileBootstrap.js', () => {
+void vi.mock('../profileBootstrap.js', () => {
   const actual = realProfileBootstrapModule;
   const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
@@ -137,41 +137,47 @@ const profileSnapshotCalls = [] as Array<{
   profileName?: string;
 }>;
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', () => ({
-  applyProfileSnapshot: vi.fn(
-    async (
-      profile: { provider?: string; model?: string; baseUrl?: string },
-      opts?: { profileName?: string },
-    ) => {
-      profileSnapshotCalls.push({
-        provider: profile.provider,
-        profileName: opts?.profileName,
-      });
-      return {
-        providerName: profile.provider ?? '',
-        modelName: profile.model ?? '',
-        baseUrl: profile.baseUrl,
-        warnings: [],
-      };
-    },
-  ),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js',
+  () => ({
+    applyProfileSnapshot: vi.fn(
+      async (
+        profile: { provider?: string; model?: string; baseUrl?: string },
+        opts?: { profileName?: string },
+      ) => {
+        profileSnapshotCalls.push({
+          provider: profile.provider,
+          profileName: opts?.profileName,
+        });
+        return {
+          providerName: profile.provider ?? '',
+          modelName: profile.model ?? '',
+          baseUrl: profile.baseUrl,
+          warnings: [],
+        };
+      },
+    ),
+  }),
+);
 
 // Track switchActiveProvider calls
 // config.ts: import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js'
 const switchProviderCalls = [] as string[];
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/providerSwitch.js', () => ({
-  switchActiveProvider: vi.fn(async (providerName: string) => {
-    switchProviderCalls.push(providerName);
-    return {
-      changed: true,
-      previousProvider: null,
-      nextProvider: providerName,
-      infoMessages: [],
-    };
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/providerSwitch.js',
+  () => ({
+    switchActiveProvider: vi.fn(async (providerName: string) => {
+      switchProviderCalls.push(providerName);
+      return {
+        changed: true,
+        previousProvider: null,
+        nextProvider: providerName,
+        infoMessages: [],
+      };
+    }),
   }),
-}));
+);
 
 // config.ts: import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js'
 const runtimeSettingsState = {
@@ -185,74 +191,80 @@ const runtimeSettingsState = {
   oauthManager: null as unknown,
 };
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
-  resetCliProviderInfrastructure: vi.fn(),
-  setCliRuntimeContext: vi.fn(
-    (
-      svc: SettingsService,
-      cfg?: ServerConfig.Config,
-      opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-    ) => {
-      runtimeSettingsState.context = {
-        settingsService: svc,
-        config: cfg ?? null,
-        runtimeId: opts.runtimeId ?? 'mock-runtime',
-        metadata: opts.metadata ?? {},
-      };
-    },
-  ),
-  registerCliProviderInfrastructure: vi.fn(
-    (
-      mgr: ProviderManager,
-      oauth: unknown,
-      _options?: {
-        messageBus?: unknown;
-        runtimeId?: string;
-        metadata?: Record<string, unknown>;
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js',
+  () => ({
+    resetCliProviderInfrastructure: vi.fn(),
+    setCliRuntimeContext: vi.fn(
+      (
+        svc: SettingsService,
+        cfg?: ServerConfig.Config,
+        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
+      ) => {
+        runtimeSettingsState.context = {
+          settingsService: svc,
+          config: cfg ?? null,
+          runtimeId: opts.runtimeId ?? 'mock-runtime',
+          metadata: opts.metadata ?? {},
+        };
       },
-    ) => {
-      runtimeSettingsState.providerManager = mgr;
-      runtimeSettingsState.oauthManager = oauth ?? null;
-    },
-  ),
-}));
+    ),
+    registerCliProviderInfrastructure: vi.fn(
+      (
+        mgr: ProviderManager,
+        oauth: unknown,
+        _options?: {
+          messageBus?: unknown;
+          runtimeId?: string;
+          metadata?: Record<string, unknown>;
+        },
+      ) => {
+        runtimeSettingsState.providerManager = mgr;
+        runtimeSettingsState.oauthManager = oauth ?? null;
+      },
+    ),
+  }),
+);
 
 // config.ts: import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js'
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js', () => ({
-  getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-  getCliRuntimeConfig: vi.fn(
-    () => runtimeSettingsState.context?.config ?? null,
-  ),
-  getCliRuntimeServices: vi.fn(() => ({
-    config: runtimeSettingsState.context?.config ?? null,
-    settingsService:
-      runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-    providerManager:
-      runtimeSettingsState.providerManager ??
-      ({
-        listProviders: vi.fn(() => []),
-        getActiveProviderName: vi.fn(() => null),
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => undefined),
-        getAvailableModels: vi.fn(async () => []),
-      } as unknown as ProviderManager),
-  })),
-  getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-  getCliOAuthManager: vi.fn(() => {
-    if (runtimeSettingsState.oauthManager === null) {
-      throw new Error('OAuthManager missing from runtime registration');
-    }
-    return runtimeSettingsState.oauthManager;
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js',
+  () => ({
+    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
+    getCliRuntimeConfig: vi.fn(
+      () => runtimeSettingsState.context?.config ?? null,
+    ),
+    getCliRuntimeServices: vi.fn(() => ({
+      config: runtimeSettingsState.context?.config ?? null,
+      settingsService:
+        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
+      providerManager:
+        runtimeSettingsState.providerManager ??
+        ({
+          listProviders: vi.fn(() => []),
+          getActiveProviderName: vi.fn(() => null),
+          setActiveProvider: vi.fn(),
+          getActiveProvider: vi.fn(() => undefined),
+          getAvailableModels: vi.fn(async () => []),
+        } as unknown as ProviderManager),
+    })),
+    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
+    getCliOAuthManager: vi.fn(() => {
+      if (runtimeSettingsState.oauthManager === null) {
+        throw new Error('OAuthManager missing from runtime registration');
+      }
+      return runtimeSettingsState.oauthManager;
+    }),
+    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    listProviders: vi.fn(() => []),
+    getActiveProviderName: vi.fn(() => null),
+    getActiveModelName: vi.fn(() => null),
+    getEphemeralSettings: vi.fn(() => ({})),
+    getEphemeralSetting: vi.fn(() => undefined),
   }),
-  getActiveProviderStatus: vi.fn(() => ({ name: null })),
-  listProviders: vi.fn(() => []),
-  getActiveProviderName: vi.fn(() => null),
-  getActiveModelName: vi.fn(() => null),
-  getEphemeralSettings: vi.fn(() => ({})),
-  getEphemeralSetting: vi.fn(() => undefined),
-}));
+);
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -400,7 +412,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

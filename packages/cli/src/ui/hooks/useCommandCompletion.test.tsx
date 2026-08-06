@@ -23,13 +23,15 @@ const realUseSlashCompletionModule = {
   ...(await import('./useSlashCompletion')),
 };
 
-vi.mock('./useAtCompletion', () => ({
+void vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),
 }));
 
-vi.mock('./useSlashCompletion', () => automock(realUseSlashCompletionModule));
+void vi.mock('./useSlashCompletion', () =>
+  automock(realUseSlashCompletionModule),
+);
 
-vi.mock('./useCompletion', () => ({
+void vi.mock('./useCompletion', () => ({
   useCompletion: vi.fn(() => {
     const [suggestions, setSuggestions] = useState([]);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
@@ -87,7 +89,7 @@ vi.mock('./useCompletion', () => ({
   }),
 }));
 
-vi.mock('./usePromptCompletion', () => ({
+void vi.mock('./usePromptCompletion', () => ({
   usePromptCompletion: vi.fn(() => ({
     suggestions: [],
     activeSuggestionIndex: -1,

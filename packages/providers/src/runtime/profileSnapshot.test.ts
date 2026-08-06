@@ -22,7 +22,7 @@ const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
 };
 
-vi.mock('./runtimeAccessors.js', () => ({
+void vi.mock('./runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({
     config: {},
     settingsService: { setCurrentProfileName: vi.fn() },
@@ -39,7 +39,7 @@ vi.mock('./runtimeAccessors.js', () => ({
   },
 }));
 
-vi.mock('./profileApplication.js', () => ({
+void vi.mock('./profileApplication.js', () => ({
   applyProfileWithGuards: vi.fn(
     async (profile: { provider: string; model: string }) => ({
       providerName: profile.provider,
@@ -56,7 +56,7 @@ vi.mock('./profileApplication.js', () => ({
 
 const profileManagerLoadProfileMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-settings', () => {
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,

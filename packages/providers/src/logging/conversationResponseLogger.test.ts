@@ -12,11 +12,11 @@ import {
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
-vi.mock('./telemetryEmitter.js', () => ({
+void vi.mock('./telemetryEmitter.js', () => ({
   writeConversationLog: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('./conversationLogger.js', () => ({
+void vi.mock('./conversationLogger.js', () => ({
   logConversationRequestEntry: vi.fn().mockResolvedValue(undefined),
 }));
 

@@ -64,18 +64,18 @@ const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
 
-vi.mock('../trustedFolders.js', () => {
+void vi.mock('../trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return { ...actual, isWorkspaceTrusted: vi.fn().mockReturnValue(true) };
 });
 
-vi.mock('../sandboxConfig.js', () => ({
+void vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
 const pathMod = await import('node:path');
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([MOCK_CWD, process.cwd()]);
   return {
@@ -93,21 +93,21 @@ vi.mock('fs', () => {
 });
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
   };
 });
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-vi.mock('../profileBootstrap.js', () => {
+void vi.mock('../profileBootstrap.js', () => {
   const actual = realProfileBootstrapModule;
   const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
@@ -144,7 +144,7 @@ const runtimeSettingsState = {
   ephemeral: {} as Record<string, unknown>,
 };
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -273,7 +273,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

@@ -21,7 +21,7 @@ const mockVimContext = {
   setVimMode: vi.fn(),
 };
 
-vi.mock('../contexts/VimModeContext.js', () => ({
+void vi.mock('../contexts/VimModeContext.js', () => ({
   useVimMode: () => mockVimContext,
   VimModeProvider: ({ children }: { children: React.ReactNode }) => children,
 }));

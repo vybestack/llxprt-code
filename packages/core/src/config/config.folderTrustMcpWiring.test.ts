@@ -32,7 +32,7 @@ function createInstanceMock(): InstanceMock {
   };
 }
 
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => {
     const mock = createInstanceMock();
     instances.push(mock);
@@ -40,7 +40,7 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
   }),
 }));
 
-vi.mock('../hooks/hookSystem.js', () => ({
+void vi.mock('../hooks/hookSystem.js', () => ({
   HookSystem: vi.fn().mockImplementation(() => {
     const initialize = vi.fn().mockResolvedValue(undefined);
     hookInitializers.push(initialize);

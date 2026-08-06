@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 let mockPlatform: NodeJS.Platform = 'win32';
 
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actual,
     default: {

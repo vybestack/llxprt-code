@@ -65,7 +65,7 @@ const reactStub = (() => {
 })();
 
 const actual = { ...(await import('react')) };
-vi.mock('react', () => {
+void vi.mock('react', () => {
   return {
     ...actual,
     ...reactStub.module,
@@ -138,7 +138,7 @@ const coreMocks = (() => {
   };
 })();
 
-vi.mock('@vybestack/llxprt-code-core', () => coreMocks);
+void vi.mock('@vybestack/llxprt-code-core', () => coreMocks);
 
 const sessionStatsMock = {
   stats: {},
@@ -146,7 +146,7 @@ const sessionStatsMock = {
 };
 
 const actualActual = { ...(await import('../contexts/SessionContext.js')) };
-vi.mock('../contexts/SessionContext.js', () => {
+void vi.mock('../contexts/SessionContext.js', () => {
   return {
     ...actualActual,
     useSessionStats: vi.fn(() => sessionStatsMock),
@@ -169,15 +169,15 @@ const loaderMocks = (() => {
   };
 })();
 
-vi.mock('../../services/BuiltinCommandLoader.js', () => ({
+void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: loaderMocks.BuiltinCommandLoader,
 }));
 
-vi.mock('../../services/FileCommandLoader.js', () => ({
+void vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: loaderMocks.FileCommandLoader,
 }));
 
-vi.mock('../../services/McpPromptLoader.js', () => ({
+void vi.mock('../../services/McpPromptLoader.js', () => ({
   McpPromptLoader: loaderMocks.McpPromptLoader,
 }));
 

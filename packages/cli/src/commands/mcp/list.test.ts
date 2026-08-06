@@ -18,17 +18,17 @@ const realIndexModule = {
   ...(await import('@modelcontextprotocol/sdk/client/index.js')),
 };
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings: vi.fn(),
 }));
-vi.mock('../../config/extension.js', () => ({
+void vi.mock('../../config/extension.js', () => ({
   loadExtensions: vi.fn(),
   ExtensionStorage: {
     getUserExtensionsDir: vi.fn(),
   },
 }));
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-vi.mock('@vybestack/llxprt-code-mcp', () => {
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
   return {
     ...actual,
     createTransport: vi.fn(),
@@ -48,7 +48,7 @@ vi.mock('@vybestack/llxprt-code-mcp', () => {
     },
   };
 });
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
 

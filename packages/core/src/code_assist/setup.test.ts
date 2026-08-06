@@ -12,7 +12,7 @@ import type { GeminiUserTier } from './types.js';
 import { UserTierId } from './types.js';
 
 const __actual = { ...(await import('../code_assist/server.js')) };
-vi.mock('../code_assist/server.js', () => {
+void vi.mock('../code_assist/server.js', () => {
   const actual = __actual as typeof import('../code_assist/server.js');
   return {
     ...actual,

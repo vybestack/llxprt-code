@@ -16,7 +16,7 @@ import {
 import { getPackageJson } from './package.js';
 import { readPackageUp } from 'read-package-up';
 
-vi.mock('read-package-up', () => ({
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(),
 }));
 

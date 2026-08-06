@@ -20,7 +20,7 @@ import type {
 import { EventEmitter } from 'node:events';
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 
-vi.mock('./mcp-client.js', () => ({
+void vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
   MCPDiscoveryState: {
     NOT_STARTED: 'not_started',

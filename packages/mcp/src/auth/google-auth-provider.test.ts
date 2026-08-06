@@ -19,7 +19,7 @@ const { MockGoogleAuth } = (() => {
   return { MockGoogleAuth };
 })();
 
-vi.mock('google-auth-library', () => ({
+void vi.mock('google-auth-library', () => ({
   GoogleAuth: MockGoogleAuth,
 }));
 

@@ -15,7 +15,7 @@ const mockGetClient = vi.fn(() => ({
 
 // Mock the google-auth-library to use a shared mock function
 const actual = { ...(await import('google-auth-library')) };
-vi.mock('google-auth-library', () => {
+void vi.mock('google-auth-library', () => {
   return {
     ...actual,
     GoogleAuth: vi.fn().mockImplementation(() => ({

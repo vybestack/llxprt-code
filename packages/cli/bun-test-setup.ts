@@ -145,7 +145,7 @@ const wantsRealProviderAliases = process.argv.some((arg) =>
 );
 
 if (!wantsRealProviderAliases) {
-  vi.mock(
+  void vi.mock(
     '@vybestack/llxprt-code-providers/composition/providerAliases.js',
     () => ({
       loadProviderAliasEntries: () => [

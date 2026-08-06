@@ -21,7 +21,7 @@ const mockDebugLogger = {
   debug: vi.fn(),
 };
 
-vi.mock('../debug/index.js', () => ({
+void vi.mock('../debug/index.js', () => ({
   DebugLogger: {
     getLogger: vi.fn(() => mockDebugLogger),
   },

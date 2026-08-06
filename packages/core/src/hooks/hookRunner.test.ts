@@ -63,7 +63,7 @@ type MockChildProcessWithoutNullStreams = ChildProcessWithoutNullStreams & {
 
 // Mock child_process with sync importOriginal for partial mocking
 const __actual = { ...(await import('node:child_process')) };
-vi.mock('node:child_process', () => {
+void vi.mock('node:child_process', () => {
   const actual = __actual as typeof import('node:child_process');
   return {
     ...actual,
@@ -79,7 +79,7 @@ const mockDebugLogger = {
   debug: vi.fn(),
 };
 
-vi.mock('../debug/index.js', () => {
+void vi.mock('../debug/index.js', () => {
   // Create a constructor function that returns the mock
   const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
   // Add getLogger as a static method

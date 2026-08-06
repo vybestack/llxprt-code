@@ -28,7 +28,7 @@ const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
 
-vi.mock('../contexts/RuntimeContext.js', () => {
+void vi.mock('../contexts/RuntimeContext.js', () => {
   // resolveModelIdentity formats from status.providerName + status.modelName.
   // Without modelName the identity collapses to the bare provider name, which
   // is why this mock has to carry both.
@@ -61,7 +61,7 @@ vi.mock('../contexts/RuntimeContext.js', () => {
   };
 });
 
-vi.mock('../hooks/useHistoryManager.js', () => ({
+void vi.mock('../hooks/useHistoryManager.js', () => ({
   useHistory: vi.fn(() => ({
     history: [],
     addItem: vi.fn(),
@@ -90,7 +90,7 @@ import { useHistory } from '../hooks/useHistoryManager.js';
 const mockHistoryManager = useHistory as Mock<typeof useHistory>;
 
 // Mock dependencies
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
   () => ({
     getProviderManager: vi.fn(() => ({
@@ -104,7 +104,7 @@ vi.mock(
   }),
 );
 
-vi.mock('../../config/environmentLoader.js', () => ({
+void vi.mock('../../config/environmentLoader.js', () => ({
   loadHierarchicalLlxprtMemory: vi.fn(() =>
     Promise.resolve({
       memoryContent: 'test memory content',
@@ -120,11 +120,11 @@ export const loadSettings = vi.fn((_dir) => ({
   },
 }));
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

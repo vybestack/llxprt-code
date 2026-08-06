@@ -12,7 +12,7 @@ import { Config } from '../config/config.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 // Mock Config class
-vi.mock('../config/config.js', () => ({
+void vi.mock('../config/config.js', () => ({
   Config: vi.fn().mockImplementation((params) => ({
     getSessionId: vi
       .fn()

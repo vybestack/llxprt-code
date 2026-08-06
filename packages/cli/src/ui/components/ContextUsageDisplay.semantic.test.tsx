@@ -11,7 +11,7 @@ import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';
 
 // Mock the tokenLimit function
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   tokenLimit: vi.fn(
     (model: string, contextLimit?: number) =>
       contextLimit !== undefined && contextLimit !== 0 ? contextLimit : 100000, // Default 100k tokens

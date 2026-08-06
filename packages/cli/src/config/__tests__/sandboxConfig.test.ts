@@ -16,11 +16,11 @@ const baseSettings: Settings = {
   sandbox: true,
 };
 
-vi.mock('../../utils/resolvePath.js', () => ({
+void vi.mock('../../utils/resolvePath.js', () => ({
   resolvePath: (value: string) => value.replace('~', '/mock/home/user'),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
@@ -32,7 +32,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('command-exists', () => ({
+void vi.mock('command-exists', () => ({
   default: {
     sync: vi.fn(
       (command: string) => command === 'docker' || command === 'podman',
@@ -40,7 +40,7 @@ vi.mock('command-exists', () => ({
   },
 }));
 
-vi.mock('../sandboxProfiles.js', () => ({
+void vi.mock('../sandboxProfiles.js', () => ({
   ensureDefaultSandboxProfiles: vi.fn(async () => undefined),
   loadSandboxProfile: vi.fn(async () => ({
     engine: 'docker',

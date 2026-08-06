@@ -39,7 +39,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const mockShellProcess = vi.fn();
 
-vi.mock('./prompt-processors/shellProcessor.js', () => ({
+void vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({
     process: mockShellProcess,
   })),
@@ -57,14 +57,14 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
 // Capture the real constructor before Bun patches the live module namespace.
 // The mock keeps constructor-call assertions while executing the production
 // processor, so changes to argument processing cannot drift from this suite.
-vi.mock('./prompt-processors/argumentProcessor.js', () => ({
+void vi.mock('./prompt-processors/argumentProcessor.js', () => ({
   DefaultArgumentProcessor: vi
     .fn()
     .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
 
 // atFileProcessor.js does not exist in the codebase; the hoisted fn is unused.
-vi.mock('glob', () => ({
+void vi.mock('glob', () => ({
   glob: vi.fn(),
 }));
 
@@ -79,7 +79,7 @@ vi.mock('glob', () => ({
 const fsMock = new FsMockContext();
 const settingsMockHoisted = { mock: fsMock.settingsMock() };
 
-vi.mock('@vybestack/llxprt-code-settings', () => settingsMockHoisted.mock);
+void vi.mock('@vybestack/llxprt-code-settings', () => settingsMockHoisted.mock);
 
 describe('FileCommandLoader', () => {
   const signal: AbortSignal = new AbortController().signal;

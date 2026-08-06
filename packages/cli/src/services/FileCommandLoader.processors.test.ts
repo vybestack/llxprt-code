@@ -45,7 +45,7 @@ const settingsMockHoisted: {
   >;
 } = {};
 
-vi.mock('@vybestack/llxprt-code-settings', () => {
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   // Resolved with vi.importActual inside the factory: it returns the genuine
   // module on both runners, and the factory is the earliest point at which the
   // helper can be loaded on Vitest (which hoists this call above the imports).
@@ -55,7 +55,7 @@ vi.mock('@vybestack/llxprt-code-settings', () => {
   return ctx.settingsMock();
 });
 
-vi.mock('./prompt-processors/shellProcessor.js', () => ({
+void vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({
     process: mockShellProcess,
   })),
@@ -72,13 +72,13 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
 
 // Capture the real constructor before Bun patches the live module namespace.
 // Constructor calls stay observable while processor behavior remains real.
-vi.mock('./prompt-processors/argumentProcessor.js', () => ({
+void vi.mock('./prompt-processors/argumentProcessor.js', () => ({
   DefaultArgumentProcessor: vi
     .fn()
     .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
 
-vi.mock('glob', () => ({
+void vi.mock('glob', () => ({
   glob: vi.fn(),
 }));
 

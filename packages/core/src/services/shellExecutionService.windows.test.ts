@@ -9,7 +9,7 @@ import { spawn } from 'child_process';
 
 const mockPlatform = vi.fn(() => 'win32');
 const __actual = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const actual = __actual as typeof import('os');
   return { ...actual, platform: mockPlatform };
 });
@@ -31,18 +31,18 @@ const fakeChildFactory = () => {
 
 const realChildProcessModule = { ...(await import('child_process')) };
 
-vi.mock('child_process', () => ({
+void vi.mock('child_process', () => ({
   ...realChildProcessModule,
   spawn: vi.fn(() => fakeChildFactory()),
 }));
 
-vi.mock('../utils/systemEncoding.js', () => ({
+void vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('shift_jis'),
   getCachedEncodingForBuffer: vi.fn().mockReturnValue('shift_jis'),
 }));
 
-vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
-vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
+void vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
+void vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
 
 import { ShellExecutionService } from './shellExecutionService.js';
 

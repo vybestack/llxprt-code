@@ -52,7 +52,7 @@ export const mockSendMessageStream = coreMocks.mockSendMessageStream;
 export const mockStartChat = coreMocks.mockStartChat;
 
 const actualCoreModule = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualCoreModule,
     GitService: vi.fn(),

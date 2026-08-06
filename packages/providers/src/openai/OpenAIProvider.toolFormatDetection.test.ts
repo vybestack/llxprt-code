@@ -15,11 +15,11 @@ const mockSettingsService = {
   settings: { providers: { openai: {} } },
 };
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],

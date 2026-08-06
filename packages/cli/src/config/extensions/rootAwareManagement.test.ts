@@ -33,14 +33,14 @@ import {
 import { SettingScope } from '../settings.js';
 
 const mockedOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
   };
 });
 
-vi.mock('../settings.js', () => ({
+void vi.mock('../settings.js', () => ({
   loadSettings: vi.fn().mockReturnValue({ merged: {} }),
   SettingScope: {
     User: 'User',

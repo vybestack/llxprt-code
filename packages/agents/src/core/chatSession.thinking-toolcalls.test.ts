@@ -35,7 +35,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createConfigParams } from './chatSession-thinking-helpers.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
 

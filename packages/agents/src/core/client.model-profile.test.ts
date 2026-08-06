@@ -32,7 +32,7 @@ const realConfigModule = {
   ...(await import('@vybestack/llxprt-code-core/config/config.js')),
 };
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
     Promise.resolve('Test system instruction'),
   ),
@@ -42,7 +42,7 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
     Array.isArray(v)
@@ -91,20 +91,23 @@ const {
   };
 })();
 
-vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
-  ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
-    analyzeComplexity: vi.fn().mockReturnValue({
-      complexityScore: 0.2,
-      isComplex: false,
-      detectedTasks: [],
-      sequentialIndicators: [],
-      questionCount: 0,
-      shouldSuggestTodos: false,
-    }),
-  })),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/services/complexity-analyzer.js',
+  () => ({
+    ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
+      analyzeComplexity: vi.fn().mockReturnValue({
+        complexityScore: 0.2,
+        isComplex: false,
+        detectedTasks: [],
+        sequentialIndicators: [],
+        questionCount: 0,
+        shouldSuggestTodos: false,
+      }),
+    })),
+  }),
+);
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
     TodoReminderService: vi.fn().mockImplementation(() => ({
@@ -116,14 +119,14 @@ vi.mock(
   }),
 );
 const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
-vi.mock('@vybestack/llxprt-code-tools', () => {
+void vi.mock('@vybestack/llxprt-code-tools', () => {
   return {
     ...actual,
     LocalTodoStore: mockTodoStoreConstructor,
   };
 });
 const __actual = { ...(await import('./turn')) };
-vi.mock('./turn', () => {
+void vi.mock('./turn', () => {
   const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
@@ -144,16 +147,16 @@ vi.mock('./turn', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
   automock(realConfigModule),
 );
-vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
     getResponseText: (result: MockResponseShape) =>
@@ -162,16 +165,16 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
 const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual3,
     ideContext: {
@@ -186,7 +189,7 @@ vi.mock('@vybestack/llxprt-code-ide-integration', () => {
 const actual4 = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
   const tokenLimit = vi.fn();
   return {
     ...actual4,
@@ -202,7 +205,7 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
     getLastPromptTokenCount: vi.fn(),

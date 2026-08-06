@@ -27,11 +27,11 @@ const realLlxprtCodeToolsModule = {
   ...(await import('@vybestack/llxprt-code-tools')),
 };
 
-vi.mock('../config/config.js', () => automock(realConfigModule));
-vi.mock('./getFolderStructure.js', () => ({
+void vi.mock('../config/config.js', () => automock(realConfigModule));
+void vi.mock('./getFolderStructure.js', () => ({
   getFolderStructure: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-tools', () =>
+void vi.mock('@vybestack/llxprt-code-tools', () =>
   automock(realLlxprtCodeToolsModule),
 );
 

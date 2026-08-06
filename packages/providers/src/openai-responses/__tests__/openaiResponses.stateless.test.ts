@@ -28,7 +28,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: class FakeOpenAI {
     readonly options: Record<string, unknown>;
     static requests: Array<{ request: Record<string, unknown> }> = [];
@@ -57,7 +57,7 @@ vi.mock('openai', () => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async (options) =>
       `mock system prompt with memory: ${options.userMemory ?? 'none'}`,

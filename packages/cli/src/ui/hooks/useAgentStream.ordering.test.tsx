@@ -80,7 +80,7 @@ const inkMock = (() => {
   return module;
 })();
 
-vi.mock('ink', () => inkMock);
+void vi.mock('ink', () => inkMock);
 
 type InternalCarrier = {
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: {
@@ -123,7 +123,7 @@ ensureReactSharedInternals();
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
-vi.mock('./useReactToolScheduler.js', () => {
+void vi.mock('./useReactToolScheduler.js', () => {
   return {
     ...actualSchedulerModule,
     useReactToolScheduler: vi.fn(),
@@ -133,25 +133,25 @@ const mockUseReactToolScheduler = useReactToolScheduler as Mock<
   (...args: never[]) => unknown
 >;
 
-vi.mock('./useKeypress.js', () => ({
+void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
 }));
 
-vi.mock('./shellCommandProcessor.js', () => ({
+void vi.mock('./shellCommandProcessor.js', () => ({
   useShellCommandProcessor: vi.fn().mockReturnValue({
     handleShellCommand: vi.fn(),
   }),
 }));
 
-vi.mock('./atCommandProcessor.js', () =>
+void vi.mock('./atCommandProcessor.js', () =>
   automock(realAtCommandProcessorModule),
 );
 
-vi.mock('../utils/markdownUtilities.js', () => ({
+void vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),
 }));
 
-vi.mock('./useStateAndRef.js', () => ({
+void vi.mock('./useStateAndRef.js', () => ({
   useStateAndRef: <T,>(
     initial: T,
   ): [
@@ -176,7 +176,7 @@ vi.mock('./useStateAndRef.js', () => ({
   },
 }));
 
-vi.mock('./useLogger.js', () => ({
+void vi.mock('./useLogger.js', () => ({
   useLogger: vi.fn().mockReturnValue({
     logMessage: vi.fn().mockResolvedValue(undefined),
   }),
@@ -184,7 +184,7 @@ vi.mock('./useLogger.js', () => ({
 
 const mockStartNewPrompt = vi.fn();
 const mockAddUsage = vi.fn();
-vi.mock('../contexts/SessionContext.js', () => ({
+void vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({
     startNewPrompt: mockStartNewPrompt,
     addUsage: mockAddUsage,
@@ -192,7 +192,7 @@ vi.mock('../contexts/SessionContext.js', () => ({
   })),
 }));
 
-vi.mock('./slashCommandProcessor.js', () => ({
+void vi.mock('./slashCommandProcessor.js', () => ({
   handleSlashCommand: vi.fn().mockReturnValue(false),
 }));
 

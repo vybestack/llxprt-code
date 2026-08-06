@@ -15,7 +15,7 @@ const realUIStateContextModule = {
   ...(await import('../../contexts/UIStateContext.js')),
 };
 
-vi.mock('../../contexts/UIStateContext.js', () =>
+void vi.mock('../../contexts/UIStateContext.js', () =>
   automock(realUIStateContextModule),
 );
 

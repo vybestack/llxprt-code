@@ -33,15 +33,15 @@ const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
   },
 }));
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: mockOpenAIConstructor,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
   createCodeAssistContentGenerator: vi.fn(),
 }));
 
@@ -53,7 +53,7 @@ const mockSettingsService = {
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 };
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
   SETTINGS_REGISTRY: [],

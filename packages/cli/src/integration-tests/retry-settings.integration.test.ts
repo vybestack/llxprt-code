@@ -14,7 +14,7 @@ import type { Config } from '@vybestack/llxprt-code-core';
 // The real accessor resolves the CLI runtime scope, which this test does not
 // establish, so the bridge is supplied here and asserted on directly.
 const setEphemeralSetting = vi.fn();
-vi.mock('../ui/contexts/RuntimeContext.js', () => ({
+void vi.mock('../ui/contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     setEphemeralSetting,
     getEphemeralSettings: () => ({}),

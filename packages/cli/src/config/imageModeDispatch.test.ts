@@ -16,7 +16,7 @@ const realLlxprtCodeCoreModule = {
 const stdoutChunks: string[] = [];
 const stderrChunks: string[] = [];
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

@@ -28,7 +28,7 @@ const realLoggersModule = {
   ...(await import('@vybestack/llxprt-code-telemetry/telemetry/loggers.js')),
 };
 
-vi.mock('@vybestack/llxprt-code-telemetry/telemetry/loggers.js', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry/telemetry/loggers.js', () => {
   const actual = realLoggersModule;
   return {
     ...actual,

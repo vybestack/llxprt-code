@@ -23,10 +23,10 @@ import * as core from '@vybestack/llxprt-code-core';
 const realChildProcessModule = { ...(await import('child_process')) };
 const realGlobModule = { ...(await import('glob')) };
 
-vi.mock('child_process', () => automock(realChildProcessModule));
-vi.mock('glob', () => automock(realGlobModule));
+void vi.mock('child_process', () => automock(realChildProcessModule));
+void vi.mock('glob', () => automock(realGlobModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     getIdeInstaller: vi.fn(),

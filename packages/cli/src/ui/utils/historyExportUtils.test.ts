@@ -18,7 +18,7 @@ const { mockRandomBytes } = {
 };
 
 const actual = { ...(await import('node:crypto')) };
-vi.mock('node:crypto', () => {
+void vi.mock('node:crypto', () => {
   mockRandomBytes.mockImplementation((size: number) =>
     actual.randomBytes(size),
   );

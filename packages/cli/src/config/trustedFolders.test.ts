@@ -7,7 +7,7 @@
 // Mock 'os' first.
 import * as osActual from 'os';
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
@@ -16,7 +16,7 @@ vi.mock('os', () => {
 });
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     getIdeTrust: vi.fn(),
@@ -69,7 +69,7 @@ function createErrorWithCode(message: string, code: string): Error {
 const TRUSTED_FOLDERS_FILE_MODE = 0o600;
 
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   return {
     ...actualFs,
     existsSync: vi.fn(),
@@ -84,7 +84,7 @@ vi.mock('fs', () => {
   };
 });
 
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),
 }));
 

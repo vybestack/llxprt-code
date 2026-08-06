@@ -27,7 +27,7 @@ const realLlxprtCodeCoreModule = {
 const isActivePtyMock = vi.fn();
 const getLastActivePtyIdMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
 
   return {
@@ -40,7 +40,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('../RespondingSpinner.js', () => ({
+void vi.mock('../RespondingSpinner.js', () => ({
   RespondingSpinner: ({
     nonRespondingDisplay,
   }: {
@@ -55,7 +55,7 @@ vi.mock('../RespondingSpinner.js', () => ({
     ) : null;
   },
 }));
-vi.mock('./DiffRenderer.js', () => ({
+void vi.mock('./DiffRenderer.js', () => ({
   DiffRenderer: function MockDiffRenderer({
     diffContent,
   }: {
@@ -64,12 +64,12 @@ vi.mock('./DiffRenderer.js', () => ({
     return <Text color={Colors.Foreground}>MockDiff:{diffContent}</Text>;
   },
 }));
-vi.mock('../../utils/MarkdownDisplay.js', () => ({
+void vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({ text }: { text: string }) {
     return <Text color={Colors.Foreground}>MockMarkdown:{text}</Text>;
   },
 }));
-vi.mock('../ShellInputPrompt.js', () => ({
+void vi.mock('../ShellInputPrompt.js', () => ({
   ShellInputPrompt: ({ focus }: { focus: boolean }) =>
     focus ? React.createElement(Text, null, 'MockShellInput') : null,
 }));

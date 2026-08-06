@@ -24,7 +24,7 @@ const realUseSelectionListModule = {
 
 type Theme = typeof import('../../semantic-colors.js').theme;
 
-vi.mock('../../hooks/useSelectionList.js', () =>
+void vi.mock('../../hooks/useSelectionList.js', () =>
   automock(realUseSelectionListModule),
 );
 
@@ -33,7 +33,7 @@ const mockTheme = {
   status: { success: 'COLOR_SUCCESS' },
 } as Theme;
 
-vi.mock('../../semantic-colors.js', () => ({
+void vi.mock('../../semantic-colors.js', () => ({
   theme: {
     text: { primary: 'COLOR_PRIMARY', secondary: 'COLOR_SECONDARY' },
     status: { success: 'COLOR_SUCCESS' },

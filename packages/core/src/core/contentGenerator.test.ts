@@ -24,7 +24,7 @@ const mockGoogleGenAIWrapperInstance = {
   embedContent: async (): Promise<unknown> => ({}),
 };
 
-vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
+void vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
   GoogleGenAIWrapper: vi
     .fn()
     .mockImplementation((config: unknown, requestOptions: unknown) => {
@@ -33,7 +33,7 @@ vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
     }),
 }));
 
-vi.mock('../utils/installationManager.js', () => ({
+void vi.mock('../utils/installationManager.js', () => ({
   InstallationManager: vi.fn().mockImplementation(() => ({
     getInstallationId: () => 'test-installation-id',
   })),

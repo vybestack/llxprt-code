@@ -19,7 +19,7 @@ import { renderWithProviders } from '../../test-utils/render.js';
 // component test does not establish. Preserve the complete module shape and
 // replace only the hook so unrelated exports keep their production contract.
 const actual = { ...(await import('../contexts/RuntimeContext.js')) };
-vi.mock('../contexts/RuntimeContext.js', () => {
+void vi.mock('../contexts/RuntimeContext.js', () => {
   return {
     ...actual,
     useRuntimeApi: () => ({
@@ -30,7 +30,7 @@ vi.mock('../contexts/RuntimeContext.js', () => {
 });
 
 // Mock child components
-vi.mock('./messages/ToolGroupMessage.js', () => ({
+void vi.mock('./messages/ToolGroupMessage.js', () => ({
   ToolGroupMessage: vi.fn(() => <div />),
 }));
 

@@ -10,7 +10,7 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 // Mock the welcome config module
-vi.mock('../../config/welcomeConfig.js', () => ({
+void vi.mock('../../config/welcomeConfig.js', () => ({
   saveWelcomeConfig: vi.fn(),
   resetWelcomeConfigForTesting: vi.fn(),
 }));

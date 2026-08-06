@@ -17,7 +17,7 @@ import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { resolveProviderAndModel } from '../providerModelResolver.js';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 
-vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
   loadProviderAliasEntries: vi.fn(() => []),
 }));
 

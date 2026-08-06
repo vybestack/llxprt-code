@@ -6,20 +6,20 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
 }));
 
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getEnabledToolNamesForPrompt: vi.fn().mockReturnValue(['tool1', 'tool2']),
   shouldIncludeSubagentDelegationForConfig: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 

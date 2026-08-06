@@ -11,15 +11,15 @@ const realFsModule = { ...(await import('fs')) };
 const realOsModule = { ...(await import('os')) };
 
 const actual = { ...(await import('node:child_process')) };
-vi.mock('node:child_process', () => {
+void vi.mock('node:child_process', () => {
   return {
     ...actual,
     execSync: vi.fn(),
     spawnSync: vi.fn(() => ({ status: 0 })),
   };
 });
-vi.mock('fs', () => automock(realFsModule));
-vi.mock('os', () => automock(realOsModule));
+void vi.mock('fs', () => automock(realFsModule));
+void vi.mock('os', () => automock(realOsModule));
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { getIdeInstaller } from './ide-installer.js';

@@ -10,7 +10,7 @@ import { DirectWebFetchTool } from './direct-web-fetch.js';
 import type { IToolHost, ToolResult as _ToolResult } from '../index.js';
 
 const { mockedFetch } = { mockedFetch: vi.fn() };
-vi.mock('node-fetch', () => ({
+void vi.mock('node-fetch', () => ({
   default: mockedFetch,
 }));
 

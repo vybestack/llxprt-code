@@ -11,13 +11,13 @@ import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 const runWithScopeMock = vi.fn();
 const createDetachedAutoPromptClientMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: () => ({
     runWithScope: runWithScopeMock,
   }),
 }));
 
-vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
+void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
   createDetachedAutoPromptClient: createDetachedAutoPromptClientMock,
 }));
 

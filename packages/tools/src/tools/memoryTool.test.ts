@@ -33,7 +33,7 @@ import type { IStorageService } from '../interfaces/index.js';
 const realOsModule = { ...(await import('os')) };
 
 const actual = { ...(await import('fs/promises')) };
-vi.mock('fs/promises', () => {
+void vi.mock('fs/promises', () => {
   return {
     ...actual,
     mkdir: vi.fn(),
@@ -41,11 +41,11 @@ vi.mock('fs/promises', () => {
   };
 });
 
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('os', () => automock(realOsModule));
+void vi.mock('os', () => automock(realOsModule));
 
 const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 

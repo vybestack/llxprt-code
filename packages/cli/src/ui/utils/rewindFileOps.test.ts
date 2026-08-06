@@ -30,9 +30,9 @@ import path from 'node:path';
 
 const realPromisesModule = { ...(await import('node:fs/promises')) };
 
-vi.mock('node:fs/promises', () => automock(realPromisesModule));
+void vi.mock('node:fs/promises', () => automock(realPromisesModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     coreEvents: {

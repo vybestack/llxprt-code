@@ -17,7 +17,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { activate } from './extension.js';
 
-vi.mock('vscode', () => ({
+void vi.mock('vscode', () => ({
   window: {
     createOutputChannel: vi.fn(() => ({
       appendLine: vi.fn(),

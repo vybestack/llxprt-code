@@ -10,7 +10,7 @@ const realLlxprtCodeAuthModule = {
   ...(await import('@vybestack/llxprt-code-auth')),
 };
 
-vi.mock('@vybestack/llxprt-code-auth', () => {
+void vi.mock('@vybestack/llxprt-code-auth', () => {
   const actual = realLlxprtCodeAuthModule;
   return {
     ...actual,

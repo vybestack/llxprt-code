@@ -22,7 +22,7 @@ import { describe, it, expect, vi, afterEach, mock } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Self-load reads run through strip-json-comments; keep them passthrough.
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 

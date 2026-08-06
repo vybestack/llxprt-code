@@ -38,7 +38,7 @@ const authMocks = {
   getProxyCapabilityToken: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
   getProxySocketPath: authMocks.getProxySocketPath,
   stopProxy: authMocks.stopProxy,

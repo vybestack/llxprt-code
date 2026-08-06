@@ -13,7 +13,7 @@ const realProviderMutationsModule = {
 const realRuntimeAccessorsModule = {
   ...(await import('./runtimeAccessors.js')),
 };
-vi.mock('./runtimeAccessors.js', () => {
+void vi.mock('./runtimeAccessors.js', () => {
   const mockConfig = {
     setEphemeralSetting: vi.fn(),
     getEphemeralSetting: vi.fn(),
@@ -76,7 +76,7 @@ vi.mock('./runtimeAccessors.js', () => {
   };
 });
 
-vi.mock('./providerMutations.js', () => ({
+void vi.mock('./providerMutations.js', () => ({
   ...realProviderMutationsModule,
   computeModelDefaults: vi.fn(() => ({})),
   normalizeProviderBaseUrl: vi.fn(),
@@ -96,7 +96,7 @@ const realOauthProviderRegistrationModule = {
   )),
 };
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerAliases.js',
   () => ({
     ...realProviderAliasesModule,
@@ -104,7 +104,7 @@ vi.mock(
   }),
 );
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/oauth-provider-registration.js',
   () => ({
     ...realOauthProviderRegistrationModule,

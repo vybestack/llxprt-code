@@ -19,7 +19,7 @@ const keypress = {
   handler: undefined as KeypressHandler | undefined,
 };
 
-vi.mock('../hooks/useKeypress.js', () => ({
+void vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (handler: KeypressHandler): void => {
     keypress.handler = handler;
   },

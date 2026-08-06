@@ -32,7 +32,7 @@ const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
 };
 
 // Mock file discovery service and tool registry
-vi.mock('@vybestack/llxprt-code-storage', () => {
+void vi.mock('@vybestack/llxprt-code-storage', () => {
   const actual = realLlxprtCodeStorageModule;
   return {
     ...actual,
@@ -41,7 +41,7 @@ vi.mock('@vybestack/llxprt-code-storage', () => {
     })),
   };
 });
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

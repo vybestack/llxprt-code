@@ -16,7 +16,7 @@ const real = await import(
   '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
 );
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   return {
     parseEphemeralSettingValue: real.parseEphemeralSettingValue,
     ephemeralSettingHelp: real.ephemeralSettingHelp,
@@ -79,7 +79,7 @@ function createStatefulRuntime(
 
 let activeRuntime: ReturnType<typeof createStatefulRuntime>;
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => activeRuntime,
 }));
 

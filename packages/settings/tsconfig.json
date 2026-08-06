@@ -12,6 +12,6 @@
       "@vybestack/llxprt-code-settings/*": ["./src/*"]
     }
   },
-  "include": ["index.ts", "src/**/*.ts"],
+  "include": ["../../bun-test-corrections.d.ts", "index.ts", "src/**/*.ts"],
   "exclude": ["dist", "node_modules"]
 }

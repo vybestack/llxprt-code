@@ -47,7 +47,7 @@ const mockGit = {
   path: vi.fn(),
 };
 
-vi.mock('simple-git', () => ({
+void vi.mock('simple-git', () => ({
   simpleGit: vi.fn((path?: string) => {
     if (path) {
       mockGit.path.mockReturnValue(path);
@@ -57,7 +57,7 @@ vi.mock('simple-git', () => ({
 }));
 
 const mockedOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
@@ -65,7 +65,7 @@ vi.mock('os', () => {
 });
 
 const actual = { ...(await import('./trustedFolders.js')) };
-vi.mock('./trustedFolders.js', () => {
+void vi.mock('./trustedFolders.js', () => {
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn(),
@@ -77,7 +77,7 @@ const mockLogExtensionInstallEvent = vi.fn();
 const mockLogExtensionUninstall = vi.fn();
 const mockLogExtensionDisable = vi.fn();
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualActual,
 
@@ -93,7 +93,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 });
 
 const actualActual2 = { ...(await import('child_process')) };
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   return {
     ...actualActual2,
     execSync: vi.fn(),
@@ -102,7 +102,7 @@ vi.mock('child_process', () => {
 
 const mockLoadSettings = vi.fn();
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   loadSettings: mockLoadSettings,
   SettingScope: {
     User: 'User',

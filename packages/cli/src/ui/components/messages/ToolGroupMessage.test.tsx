@@ -23,7 +23,7 @@ import { Colors } from '../../colors.js';
 // Mock child components to isolate ToolGroupMessage behavior
 const mockToolMessage = vi.fn();
 
-vi.mock('./ToolMessage.js', () => ({
+void vi.mock('./ToolMessage.js', () => ({
   ToolMessage: function MockToolMessage({
     callId,
     name,
@@ -63,7 +63,7 @@ vi.mock('./ToolMessage.js', () => ({
   },
 }));
 
-vi.mock('./ToolConfirmationMessage.js', () => ({
+void vi.mock('./ToolConfirmationMessage.js', () => ({
   ToolConfirmationMessage: function MockToolConfirmationMessage({
     confirmationDetails,
   }: {

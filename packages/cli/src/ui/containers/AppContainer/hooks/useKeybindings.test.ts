@@ -25,7 +25,7 @@ const enableMouseEventsMock = vi.fn();
 const getLastActivePtyIdMock = vi.fn();
 const isActivePtyMock = vi.fn();
 
-vi.mock('../../../hooks/useKeypress.js', () => {
+void vi.mock('../../../hooks/useKeypress.js', () => {
   const actual = realUseKeypressModule;
 
   return {
@@ -34,14 +34,14 @@ vi.mock('../../../hooks/useKeypress.js', () => {
   };
 });
 
-vi.mock('../../../utils/mouse.js', () => ({
+void vi.mock('../../../utils/mouse.js', () => ({
   isMouseEventsActive: isMouseEventsActiveMock,
   setMouseEventsActive: setMouseEventsActiveMock,
   disableMouseEvents: disableMouseEventsMock,
   enableMouseEvents: enableMouseEventsMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
 
   return {

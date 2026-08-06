@@ -15,7 +15,7 @@ import { appEvents, AppEvent } from '../../utils/events.js';
 // Mock ink's measureElement
 const realInkModule = { ...(await import('ink')) };
 
-vi.mock('ink', () => {
+void vi.mock('ink', () => {
   const actualInk = realInkModule;
   return {
     ...actualInk,

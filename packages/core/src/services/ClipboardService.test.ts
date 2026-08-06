@@ -17,7 +17,7 @@ import { spawn } from 'child_process';
 import { ClipboardService } from './ClipboardService.js';
 
 const __actual = { ...(await import('child_process')) };
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   const actual = __actual as typeof import('child_process');
   return {
     ...actual,

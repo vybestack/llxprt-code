@@ -13,7 +13,7 @@ const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
 };
 
-vi.mock('@vybestack/llxprt-code-settings', () => {
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,

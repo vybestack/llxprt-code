@@ -40,7 +40,7 @@ import {
 
 const realPromisesModule = { ...(await import('node:fs/promises')) };
 
-vi.mock('node:fs/promises', () => {
+void vi.mock('node:fs/promises', () => {
   const actual = realPromisesModule;
   return {
     ...actual,
@@ -48,7 +48,7 @@ vi.mock('node:fs/promises', () => {
   };
 });
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,

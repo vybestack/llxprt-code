@@ -92,7 +92,7 @@ function toJsonl(entries: LogEntry[]): string {
   return entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
 }
 
-vi.mock('../utils/session.js', () => ({
+void vi.mock('../utils/session.js', () => ({
   sessionId: 'test-session-id',
 }));
 

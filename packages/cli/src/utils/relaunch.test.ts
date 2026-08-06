@@ -21,7 +21,7 @@ import { RELAUNCH_EXIT_CODE } from './bootstrap.js';
 
 const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
-vi.mock('node:child_process', () => automock(realNodeChildProcessModule));
+void vi.mock('node:child_process', () => automock(realNodeChildProcessModule));
 
 /**
  * Bun ships no deep-mock type, so the members each suite actually drives are

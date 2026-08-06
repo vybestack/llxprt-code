@@ -18,11 +18,11 @@ import {
   type RenderItemContext,
 } from './BaseSelectionList.js';
 
-vi.mock('./BaseSelectionList.js', () => ({
+void vi.mock('./BaseSelectionList.js', () => ({
   BaseSelectionList: vi.fn(() => null),
 }));
 
-vi.mock('../../semantic-colors.js', () => ({
+void vi.mock('../../semantic-colors.js', () => ({
   theme: {
     text: { secondary: 'COLOR_SECONDARY' },
   },

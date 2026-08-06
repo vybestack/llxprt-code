@@ -22,7 +22,7 @@ const mockGetExtensionAndConfig: Mock<
 > = vi.fn();
 const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
-vi.mock('../../config/extensions/settingsIntegration.js', () => ({
+void vi.mock('../../config/extensions/settingsIntegration.js', () => ({
   updateSetting: mockUpdateSetting,
   getEnvContents: mockGetEnvContents,
   ExtensionSettingScope: {
@@ -31,15 +31,15 @@ vi.mock('../../config/extensions/settingsIntegration.js', () => ({
   },
 }));
 
-vi.mock('./utils.js', () => ({
+void vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings: mockLoadSettings,
 }));
 

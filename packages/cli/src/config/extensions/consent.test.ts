@@ -37,13 +37,13 @@ const originalReaddir = {
   current: null as typeof fs.readdir | null,
 };
 
-vi.mock('node:readline', () => ({
+void vi.mock('node:readline', () => ({
   default: mockReadline,
   createInterface: mockReadline.createInterface,
 }));
 
 const actual = { ...(await import('node:fs/promises')) };
-vi.mock('node:fs/promises', () => {
+void vi.mock('node:fs/promises', () => {
   originalReaddir.current = actual.readdir;
   return {
     ...actual,
@@ -52,7 +52,7 @@ vi.mock('node:fs/promises', () => {
 });
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actualActual,
     debugLogger: {

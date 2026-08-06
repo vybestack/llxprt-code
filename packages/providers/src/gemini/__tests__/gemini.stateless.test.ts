@@ -19,7 +19,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
@@ -30,7 +30,7 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-vi.mock('@google/genai', () => {
+void vi.mock('@google/genai', () => {
   class FakeGoogleGenAI {
     readonly models: {
       generateContentStream: ReturnType<typeof vi.fn>;

@@ -69,7 +69,7 @@ const { TodoStoreMock } = (() => {
 })();
 
 const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
-vi.mock('@vybestack/llxprt-code-tools', () => {
+void vi.mock('@vybestack/llxprt-code-tools', () => {
   return {
     ...actual,
     LocalTodoStore: TodoStoreMock,
@@ -77,7 +77,7 @@ vi.mock('@vybestack/llxprt-code-tools', () => {
 });
 
 const __actual = { ...(await import('./chatSession.js')) };
-vi.mock('./chatSession.js', () => {
+void vi.mock('./chatSession.js', () => {
   const apply = (actual: typeof import('./chatSession.js')) => ({
     ...actual,
     ChatSession: vi.fn(),
@@ -90,20 +90,20 @@ vi.mock('./chatSession.js', () => {
 const actual3 = {
   ...(await import('@vybestack/llxprt-code-core/core/contentGenerator.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => {
   return {
     ...actual3,
     createContentGenerator: vi.fn(),
   };
 });
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
   automock(realEnvironmentContextModule),
 );
-vi.mock('./nonInteractiveToolExecutor.js', () =>
+void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
 const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual4,
     IdeClient: {
@@ -118,7 +118,7 @@ vi.mock('@vybestack/llxprt-code-ide-integration', () => {
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
   return {
     ...actual5,
     getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),

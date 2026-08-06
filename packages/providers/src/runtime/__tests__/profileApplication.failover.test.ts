@@ -205,7 +205,7 @@ function wrapRegisterProviderToCaptureLB(): {
   };
 }
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
   ...realRuntimeSettingsModule,
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,

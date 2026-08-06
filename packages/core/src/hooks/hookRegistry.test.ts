@@ -21,7 +21,7 @@ import type { HookDefinition } from './types.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock fs
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
 }));
@@ -34,7 +34,7 @@ const mockDebugLogger = {
   debug: vi.fn(),
 };
 
-vi.mock('../debug/index.js', () => ({
+void vi.mock('../debug/index.js', () => ({
   DebugLogger: {
     getLogger: vi.fn(() => mockDebugLogger),
   },
@@ -47,7 +47,7 @@ const mockTrustManager = {
   trustHooks: vi.fn(),
 };
 
-vi.mock('./trustedHooks.js', () => ({
+void vi.mock('./trustedHooks.js', () => ({
   TrustedHooksManager: vi.fn(() => mockTrustManager),
 }));
 

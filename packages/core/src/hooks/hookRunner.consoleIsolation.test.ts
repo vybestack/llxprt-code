@@ -25,7 +25,7 @@ import type { Config } from '../config/config.js';
 
 const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
-vi.mock('node:child_process', () => {
+void vi.mock('node:child_process', () => {
   const actual = realNodeChildProcessModule;
   return { ...actual, spawn: vi.fn() };
 });

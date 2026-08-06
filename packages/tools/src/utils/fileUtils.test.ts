@@ -22,7 +22,7 @@ import mime from 'mime-types';
 import sharp from 'sharp';
 import { detectFileType, processSingleFileContent } from './fileUtils.js';
 
-vi.mock('mime-types', () => ({
+void vi.mock('mime-types', () => ({
   default: { lookup: vi.fn() },
   lookup: vi.fn(),
 }));

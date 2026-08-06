@@ -19,20 +19,20 @@ import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Mock the hooks
-vi.mock('../hooks/useResponsive.js', () => ({
+void vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: vi.fn(() => ({ breakpoint: 'NARROW' })),
 }));
 
 // Footer reads the runtime bridge, which is infrastructure this test does not
 // exercise. Supplying it here keeps the subject the context indicator itself.
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getActiveProviderStatus: () => ({ providerName: 'openai' }),
   }),
 }));
 
 // Mock the provider manager
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
   () => ({
     getProviderManager: vi.fn(),

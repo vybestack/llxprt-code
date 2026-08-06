@@ -29,7 +29,7 @@ const mockedTrustedConfig: { value: Record<string, TrustLevel> } = {
   value: {},
 };
 
-vi.mock('../../config/trustedFolders.js', () => {
+void vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return {
     ...actual,
@@ -54,7 +54,7 @@ vi.mock('../../config/trustedFolders.js', () => {
   };
 });
 
-vi.mock('./useIdeTrustListener.js', () => ({
+void vi.mock('./useIdeTrustListener.js', () => ({
   useIdeTrustListener: () => ({ isIdeTrusted: undefined }),
 }));
 

@@ -18,7 +18,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => {
+void vi.mock('openai', () => {
   class FakeOpenAI {
     static instances: Set<symbol> = new Set();
     static created: symbol[] = [];

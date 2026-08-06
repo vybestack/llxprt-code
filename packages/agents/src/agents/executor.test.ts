@@ -46,7 +46,7 @@ const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } = {
 };
 
 const __actual = { ...(await import('../core/chatSession.js')) };
-vi.mock('../core/chatSession.js', () => {
+void vi.mock('../core/chatSession.js', () => {
   const apply = (actual: typeof import('../core/chatSession.js')) => ({
     ...actual,
     ChatSession: MockedChatSession,
@@ -57,11 +57,11 @@ vi.mock('../core/chatSession.js', () => {
   return result instanceof Promise ? result.then(apply) : apply(result);
 });
 
-vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
+void vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
   automock(realEnvironmentContextModule),
 );
 

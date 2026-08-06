@@ -8,7 +8,7 @@ import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { vi } from 'bun:test';
 import { validateAuthMethod } from './auth.js';
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   loadEnvironment: vi.fn(),
   loadSettings: vi.fn().mockReturnValue({
     merged: {},

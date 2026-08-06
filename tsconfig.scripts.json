@@ -8,6 +8,7 @@
     "types": ["node", "bun"]
   },
   "include": [
+    "bun-test-corrections.d.ts",
     "scripts/agents-neutral-gate.ts",
     "scripts/agents-neutral-gate-config.ts",
     "scripts/agents-neutral-gate-ast.ts",

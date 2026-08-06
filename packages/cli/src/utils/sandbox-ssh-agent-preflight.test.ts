@@ -24,7 +24,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 // automocked: automocking walks every export, which throws on ChildProcess's
 // private `#stdin` getter under Bun's native runner.
 const __actual = { ...(await import('node:child_process')) };
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   ...__actual,
   spawn: vi.fn(),
 }));

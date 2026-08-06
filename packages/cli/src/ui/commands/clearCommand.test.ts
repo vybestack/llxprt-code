@@ -17,7 +17,7 @@ const realLlxprtCodeTelemetryModule = {
   ...(await import('@vybestack/llxprt-code-telemetry')),
 };
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
@@ -26,7 +26,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   const actual = realLlxprtCodeTelemetryModule;
   return {
     ...actual,

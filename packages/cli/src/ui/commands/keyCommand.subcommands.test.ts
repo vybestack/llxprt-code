@@ -80,14 +80,14 @@ const mockRuntime = {
   getActiveProviderStatus: vi.fn(),
 };
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => mockRuntime,
 }));
 
 let mockStorage: ProviderKeyStorage;
 
 const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
-vi.mock('@vybestack/llxprt-code-storage', () => {
+void vi.mock('@vybestack/llxprt-code-storage', () => {
   return {
     ...actual,
     getProviderKeyStorage: () => mockStorage,
@@ -101,7 +101,7 @@ vi.mock('@vybestack/llxprt-code-storage', () => {
 const actualActual = {
   ...(await import('@vybestack/llxprt-code-providers/auth.js')),
 };
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
   return {
     ...actualActual,
     createProviderKeyStorage: () => mockStorage,

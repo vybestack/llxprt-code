@@ -25,7 +25,7 @@ const mockRequestConsentNonInteractive: Mock<
 const mockStat: Mock<typeof fs.stat> = vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
-vi.mock('../../config/extension.js', () => {
+void vi.mock('../../config/extension.js', () => {
   return {
     ...actual,
     installOrUpdateExtension: mockInstallOrUpdateExtension,
@@ -34,11 +34,11 @@ vi.mock('../../config/extension.js', () => {
   };
 });
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: Error) => error.message),
 }));
 
-vi.mock('node:fs/promises', () => ({
+void vi.mock('node:fs/promises', () => ({
   stat: mockStat,
   default: {
     stat: mockStat,

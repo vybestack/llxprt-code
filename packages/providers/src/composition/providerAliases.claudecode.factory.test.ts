@@ -25,7 +25,7 @@ const sdkConstructorCalls = [] as Array<{
   authToken?: string;
 }>;
 
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation((opts: Record<string, unknown>) => {
     sdkConstructorCalls.push({
       apiKey: opts.apiKey as string | undefined,

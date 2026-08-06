@@ -46,7 +46,7 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 // scope; a stub there would produce an execAsync that never settles and
 // would hang the first test to reach that path.
 const __actual = { ...(await import('node:child_process')) };
-vi.mock('node:child_process', () => {
+void vi.mock('node:child_process', () => {
   const actual: typeof import('node:child_process') = __actual;
   return {
     ...actual,

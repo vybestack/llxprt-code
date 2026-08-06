@@ -27,7 +27,7 @@ const mockShellExecutionService = vi.fn();
 const mockIsActivePty = vi.fn();
 const mockGetLastActivePtyId = vi.fn();
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     ShellExecutionService: {
@@ -38,10 +38,10 @@ vi.mock('@vybestack/llxprt-code-core', () => {
     isBinary: mockIsBinary,
   };
 });
-vi.mock('fs', () => automock(realFsModule));
+void vi.mock('fs', () => automock(realFsModule));
 // Mock os to always return 'linux' for consistent testing across platforms
 const actual = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const mockedOs = {
     ...actual,
     platform: vi.fn(() => 'linux'),
@@ -53,8 +53,8 @@ vi.mock('os', () => {
     default: mockedOs,
   };
 });
-vi.mock('crypto', () => automock(realCryptoModule));
-vi.mock('../utils/textUtils.js', () => automock(realTextUtilsModule));
+void vi.mock('crypto', () => automock(realCryptoModule));
+void vi.mock('../utils/textUtils.js', () => automock(realTextUtilsModule));
 
 import {
   useShellCommandProcessor,

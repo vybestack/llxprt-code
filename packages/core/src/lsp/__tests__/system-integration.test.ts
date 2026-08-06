@@ -21,7 +21,7 @@ import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxpr
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 
 const __actual = { ...(await import('@vybestack/llxprt-code-tools')) };
-vi.mock('@vybestack/llxprt-code-tools', () => {
+void vi.mock('@vybestack/llxprt-code-tools', () => {
   const actual = __actual as typeof import('@vybestack/llxprt-code-tools');
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
@@ -78,7 +78,7 @@ vi.mock('@vybestack/llxprt-code-tools', () => {
   };
 });
 const __actual2 = { ...(await import('../../core/contentGenerator.js')) };
-vi.mock('../../core/contentGenerator.js', () => {
+void vi.mock('../../core/contentGenerator.js', () => {
   const actual = __actual2 as typeof import('../../core/contentGenerator.js');
   return {
     ...actual,
@@ -86,7 +86,7 @@ vi.mock('../../core/contentGenerator.js', () => {
   };
 });
 
-vi.mock('../../telemetry/index.js', () => ({
+void vi.mock('../../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
   logCliConfiguration: vi.fn(),
   StartSessionEvent: vi.fn(),
@@ -95,7 +95,7 @@ vi.mock('../../telemetry/index.js', () => ({
 const __actual3 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
-vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   const actual =
     __actual3 as typeof import('@vybestack/llxprt-code-ide-integration');
   return {
@@ -109,19 +109,19 @@ vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   };
 });
 
-vi.mock('../../services/fileDiscoveryService.js', () => ({
+void vi.mock('../../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({
     discoverFiles: vi.fn().mockResolvedValue([]),
   })),
 }));
 
-vi.mock('../../services/gitService.js', () => ({
+void vi.mock('../../services/gitService.js', () => ({
   GitService: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
@@ -141,14 +141,14 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
   },
 }));
 
-vi.mock('../../utils/extensionLoader.js', () => ({
+void vi.mock('../../utils/extensionLoader.js', () => ({
   SimpleExtensionLoader: vi.fn().mockImplementation(() => ({
     start: vi.fn().mockResolvedValue(undefined),
     getExtensions: vi.fn().mockReturnValue([]),
   })),
 }));
 
-vi.mock('../../runtime/providerRuntimeContext.js', () => ({
+void vi.mock('../../runtime/providerRuntimeContext.js', () => ({
   setProviderRuntimeStateFactory: vi.fn(),
   setActiveProviderRuntimeContext: vi.fn(),
   peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
@@ -172,7 +172,7 @@ vi.mock('../../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),
@@ -189,7 +189,7 @@ vi.mock('@vybestack/llxprt-code-settings', () => ({
   registerSettingsService: vi.fn(),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: vi.fn().mockImplementation(() => ({
     connect: vi.fn().mockResolvedValue(undefined),
     getServerCapabilities: vi.fn().mockReturnValue({ tools: {} }),
@@ -218,7 +218,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   })),
 }));
 
-vi.mock('../../utils/memoryDiscovery.js', () => ({
+void vi.mock('../../utils/memoryDiscovery.js', () => ({
   loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadJitSubdirectoryMemory: vi.fn().mockResolvedValue({ files: [] }),
@@ -228,7 +228,7 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
 }));
 
 const actual = { ...(await import('../../utils/events.js')) };
-vi.mock('../../utils/events.js', () => {
+void vi.mock('../../utils/events.js', () => {
   // Spy on emit rather than replacing the whole object — spreading loses the
   // EventEmitter prototype chain (on, listenerCount, emitFeedback, etc.)
   vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);

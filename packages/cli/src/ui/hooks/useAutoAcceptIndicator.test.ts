@@ -20,7 +20,7 @@ import { MessageType } from '../types.js';
 
 const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
 
-vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
+void vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
 
 interface AgentStub {
   getApprovalMode: Mock<() => ApprovalMode>;

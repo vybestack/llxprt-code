@@ -15,7 +15,7 @@ import type { Mock } from 'bun:test';
 
 // Mock the 'ink' module to control stdin
 const original = { ...(await import('ink')) };
-vi.mock('ink', () => {
+void vi.mock('ink', () => {
   return {
     ...original,
     useStdin: vi.fn(),

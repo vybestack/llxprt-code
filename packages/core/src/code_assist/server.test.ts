@@ -10,7 +10,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { UserTierId } from './types.js';
 
 const __actual = { ...(await import('google-auth-library')) };
-vi.mock('google-auth-library', () => {
+void vi.mock('google-auth-library', () => {
   const actual = __actual as typeof import('google-auth-library');
   return {
     ...actual,

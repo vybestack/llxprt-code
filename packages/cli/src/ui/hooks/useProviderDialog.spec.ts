@@ -20,11 +20,11 @@ import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
 const useRuntimeApiMock = vi.fn();
 const useAppDispatchMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
 }));
 
-vi.mock('../contexts/AppDispatchContext.js', () => ({
+void vi.mock('../contexts/AppDispatchContext.js', () => ({
   useAppDispatch: useAppDispatchMock,
 }));
 

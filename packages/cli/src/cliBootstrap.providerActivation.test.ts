@@ -26,7 +26,7 @@ const { preflightAgentActivationMock } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
-vi.mock('@vybestack/llxprt-code-agents', () => {
+void vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...actual,
     preflightAgentActivation: preflightAgentActivationMock,

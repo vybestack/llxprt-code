@@ -20,22 +20,22 @@ import {
 } from './apiKeyQuotaResolver.js';
 
 // Mock all the usage info modules
-vi.mock('./zai/usageInfo.js', () => ({
+void vi.mock('./zai/usageInfo.js', () => ({
   fetchZaiUsage: vi.fn(),
   formatZaiUsage: vi.fn(),
 }));
 
-vi.mock('./synthetic/usageInfo.js', () => ({
+void vi.mock('./synthetic/usageInfo.js', () => ({
   fetchSyntheticUsage: vi.fn(),
   formatSyntheticUsage: vi.fn(),
 }));
 
-vi.mock('./chutes/usageInfo.js', () => ({
+void vi.mock('./chutes/usageInfo.js', () => ({
   fetchChutesUsage: vi.fn(),
   formatChutesUsage: vi.fn(),
 }));
 
-vi.mock('./kimi/usageInfo.js', () => ({
+void vi.mock('./kimi/usageInfo.js', () => ({
   fetchKimiUsage: vi.fn(),
   formatKimiUsage: vi.fn(),
   fetchKimiCodeUsage: vi.fn(),

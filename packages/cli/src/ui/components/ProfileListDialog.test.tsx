@@ -23,7 +23,7 @@ enum TerminalKeys {
 }
 
 const mockIsNarrow = { value: false };
-vi.mock('../hooks/useResponsive.js', () => ({
+void vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: () => ({
     width: mockIsNarrow.value ? 60 : 120,
     breakpoint: mockIsNarrow.value ? 'NARROW' : 'WIDE',

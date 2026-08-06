@@ -41,7 +41,7 @@ import type { QueuedSubmission } from '../types.js';
 // reference across the module mock factory and the test body.
 const displayUserMessageMock = vi.fn();
 
-vi.mock('../useStreamEventHandlers.js', () => ({
+void vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     processStreamEvent: vi.fn(),
     displayUserMessage: displayUserMessageMock,
@@ -52,18 +52,18 @@ vi.mock('../useStreamEventHandlers.js', () => ({
   }),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,
   }),
 }));
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../streamUtils.js', () => ({
+void vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: vi.fn(),
   processSlashCommandResult: vi.fn(),
 }));

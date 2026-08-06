@@ -15,7 +15,7 @@ const realLlxprtCodeTelemetryModule = {
   ...(await import('@vybestack/llxprt-code-telemetry')),
 };
 
-vi.mock('fs/promises', () => {
+void vi.mock('fs/promises', () => {
   const actual = realPromisesModule;
   return {
     ...actual,
@@ -24,7 +24,7 @@ vi.mock('fs/promises', () => {
   };
 });
 
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const homedir = vi.fn(() => '/home/user');
   return {
     default: {
@@ -34,7 +34,7 @@ vi.mock('os', () => {
   };
 });
 
-vi.mock('../../config/settings.js', () => {
+void vi.mock('../../config/settings.js', () => {
   const actual = realSettingsModule;
   return {
     ...actual,
@@ -42,7 +42,7 @@ vi.mock('../../config/settings.js', () => {
   };
 });
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn((exitCode = 0) => {
     if (exitCode !== 0) {
       throw new Error('process.exit called');
@@ -58,7 +58,7 @@ const mockDebugLogger = {
   debug: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   const actual = realLlxprtCodeTelemetryModule;
   return {
     ...actual,

@@ -36,7 +36,7 @@ const mockedIdeTrust: { value: boolean | undefined } = {
   value: undefined,
 };
 
-vi.mock('../../config/trustedFolders.js', () => {
+void vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return {
     ...actual,
@@ -64,12 +64,12 @@ vi.mock('../../config/trustedFolders.js', () => {
   };
 });
 
-vi.mock('./useIdeTrustListener.js', () => ({
+void vi.mock('./useIdeTrustListener.js', () => ({
   useIdeTrustListener: () => ({ isIdeTrusted: mockedIdeTrust.value }),
 }));
 
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actual,
     homedir: () => '/mock/home/user',

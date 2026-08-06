@@ -29,12 +29,12 @@ const { mockDebugLogger } = {
   },
 };
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   isGitRepository: vi.fn(),
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     debugLogger: mockDebugLogger,
@@ -42,7 +42,7 @@ vi.mock('@vybestack/llxprt-code-telemetry', () => {
 });
 
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   return {
     ...actualFs,
     realpathSync: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('fs', () => {
 });
 
 const actualActual = { ...(await import('child_process')) };
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   return {
     ...actualActual,
     execSync: vi.fn(),

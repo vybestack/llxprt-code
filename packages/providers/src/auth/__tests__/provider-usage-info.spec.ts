@@ -33,7 +33,7 @@ const {
   };
 })();
 
-vi.mock('@vybestack/llxprt-code-providers', () => {
+void vi.mock('@vybestack/llxprt-code-providers', () => {
   const actual = realLlxprtCodeProvidersModule;
   return {
     ...actual,
@@ -43,7 +43,7 @@ vi.mock('@vybestack/llxprt-code-providers', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

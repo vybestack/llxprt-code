@@ -19,7 +19,7 @@ import type { NormalizedToolCall } from './ToolCallNormalizer.js';
 import { ToolCallNormalizer } from './ToolCallNormalizer.js';
 
 // Mock processToolParameters to simulate different return values
-vi.mock('@vybestack/llxprt-code-tools/doubleEscapeUtils.js', () => ({
+void vi.mock('@vybestack/llxprt-code-tools/doubleEscapeUtils.js', () => ({
   processToolParameters: vi.fn(),
 }));
 

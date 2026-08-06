@@ -29,7 +29,7 @@ import type { MessageBus } from '../../confirmation-bus/message-bus.js';
 // ---------------------------------------------------------------------------
 
 const realDebugModule = { ...(await import('../../debug/index.js')) };
-vi.mock('../../debug/index.js', () => {
+void vi.mock('../../debug/index.js', () => {
   const mockLogger = {
     log: vi.fn(),
     warn: vi.fn(),
@@ -47,7 +47,7 @@ vi.mock('../../debug/index.js', () => {
   };
 });
 
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
   promises: {},

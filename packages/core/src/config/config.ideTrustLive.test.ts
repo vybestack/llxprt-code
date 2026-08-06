@@ -24,14 +24,14 @@ const mcpManager = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual,
     IdeClient: { getInstance: getIdeClient },
   };
 });
 
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn(() => mcpManager),
 }));
 

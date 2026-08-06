@@ -23,7 +23,7 @@ import type { HookExecutionResult } from './types.js';
 import { coreEvents } from '../utils/events.js';
 
 // Mock DebugLogger
-vi.mock('../debug/index.js', () => {
+void vi.mock('../debug/index.js', () => {
   const createLogger = () => ({
     debug: vi.fn(),
     log: vi.fn(),
@@ -50,7 +50,7 @@ vi.mock('../debug/index.js', () => {
 });
 
 // Mock coreEvents
-vi.mock('../utils/events.js', () => ({
+void vi.mock('../utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },

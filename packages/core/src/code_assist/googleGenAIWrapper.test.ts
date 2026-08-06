@@ -10,7 +10,7 @@ import { GoogleGenAI } from '@google/genai';
 import type { ModelGenerationRequest } from '../llm-types/modelRequest.js';
 
 const __actual = { ...(await import('@google/genai')) };
-vi.mock('@google/genai', () => {
+void vi.mock('@google/genai', () => {
   const actual = __actual as typeof import('@google/genai');
   return {
     ...actual,

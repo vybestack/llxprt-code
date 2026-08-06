@@ -129,7 +129,7 @@ function createMockFacade() {
 // Register runtime accessors via the bridge (no mock theater)
 
 // Mock @vybestack/llxprt-code-core ProfileManager
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

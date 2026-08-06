@@ -26,7 +26,7 @@ const { mockWarn } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     DebugLogger: {

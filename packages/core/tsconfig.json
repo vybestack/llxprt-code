@@ -20,6 +20,7 @@
     }
   },
   "include": [
+    "../../bun-test-corrections.d.ts",
     "index.ts",
     "src/**/*.ts",
     "src/prompts/*.d.ts",

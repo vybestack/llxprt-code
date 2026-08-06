@@ -25,7 +25,7 @@ const { mockWriteToStdout } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     createInkStdio: vi.fn(() => ({
@@ -36,30 +36,30 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('./utils/version.js', () => ({
+void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./utils/terminalTheme.js', () => ({
+void vi.mock('./utils/terminalTheme.js', () => ({
   setupTerminalAndTheme: vi.fn(() => Promise.resolve(undefined)),
 }));
 
-vi.mock('./ui/utils/updateCheck.js', () => ({
+void vi.mock('./ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
   runExitCleanup: vi.fn(),
 }));
 
-vi.mock('./ui/utils/terminalProtocolCleanup.js', () => ({
+void vi.mock('./ui/utils/terminalProtocolCleanup.js', () => ({
   restoreTerminalProtocolsSync: vi.fn(),
 }));
 
-vi.mock('./ui/utils/mouse.js', () => ({
+void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
   disableMouseEvents: vi.fn(),
   parseMouseEvent: vi.fn(),

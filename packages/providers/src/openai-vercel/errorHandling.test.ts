@@ -56,14 +56,14 @@ interface MockStreamTextResult {
   experimental_providerMetadata: Promise<Record<string, unknown>>;
 }
 
-vi.mock('ai', () => ({
+void vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
   extractReasoningMiddleware: vi.fn(() => ({})),
   wrapLanguageModel: vi.fn((model) => model),
 }));
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 

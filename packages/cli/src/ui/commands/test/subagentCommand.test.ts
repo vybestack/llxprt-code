@@ -13,14 +13,14 @@ const getRuntimeBridgeMock = vi.fn(() => ({
   runWithScope: runWithScopeMock,
 }));
 
-vi.mock('../../contexts/RuntimeContext.js', () => ({
+void vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: getRuntimeBridgeMock,
 }));
 
 let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
 
 const actual = { ...(await import('../../utils/autoPromptGenerator.js')) };
-vi.mock('../../utils/autoPromptGenerator.js', () => {
+void vi.mock('../../utils/autoPromptGenerator.js', () => {
   // Capture the real function before mock.module patches the namespace
   // in place — otherwise actual.generateAutoPrompt becomes the override
   // itself, causing infinite recursion.

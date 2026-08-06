@@ -26,7 +26,7 @@ const realLlxprtCodeAuthModule = {
   ...(await import('@vybestack/llxprt-code-auth')),
 };
 
-vi.mock('./ClipboardService.js', () => ({
+void vi.mock('./ClipboardService.js', () => ({
   ClipboardService: {
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
   },
@@ -39,18 +39,21 @@ import { ClipboardService } from './ClipboardService.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 // Mock the device flow implementation
-vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => {
-  const actual = realSecureBrowserLauncherModule;
-  return {
-    ...actual,
-    // Mock shouldLaunchBrowser to return true for tests
-    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-    // Mock openBrowserSecurely to prevent actual browser opening
-    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-  };
-});
+void vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  () => {
+    const actual = realSecureBrowserLauncherModule;
+    return {
+      ...actual,
+      // Mock shouldLaunchBrowser to return true for tests
+      shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+      // Mock openBrowserSecurely to prevent actual browser opening
+      openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+    };
+  },
+);
 
-vi.mock('@vybestack/llxprt-code-auth', () => {
+void vi.mock('@vybestack/llxprt-code-auth', () => {
   const actual = realLlxprtCodeAuthModule;
   return {
     ...actual,
@@ -115,7 +118,7 @@ describe('AnthropicOAuthProvider', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
     // Mock local OAuth callback to prevent actual server startup
-    vi.mock('./local-oauth-callback.js', () => ({
+    void vi.mock('./local-oauth-callback.js', () => ({
       startLocalOAuthCallback: vi.fn().mockResolvedValue({
         redirectUri: 'http://localhost:8787/callback',
         waitForCallback: vi

@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { CodeSearchTool, type CodeSearchToolParams } from './codesearch.js';
 
 const { mockedFetch } = { mockedFetch: vi.fn() };
-vi.mock('node-fetch', () => ({
+void vi.mock('node-fetch', () => ({
   default: mockedFetch,
 }));
 

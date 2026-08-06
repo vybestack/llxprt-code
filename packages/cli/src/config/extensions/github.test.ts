@@ -28,7 +28,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 const mockPlatform = vi.fn();
 const mockArch = vi.fn();
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actual,
     platform: mockPlatform,
@@ -37,17 +37,17 @@ vi.mock('node:os', () => {
 });
 
 const mockHttpsGet = vi.fn();
-vi.mock('node:https', () => ({
+void vi.mock('node:https', () => ({
   get: mockHttpsGet,
 }));
 
 const mockSimpleGit = vi.fn();
-vi.mock('simple-git', () => ({
+void vi.mock('simple-git', () => ({
   simpleGit: mockSimpleGit,
 }));
 
 const mockLoadExtension = vi.fn();
-vi.mock('../extension.js', () => ({
+void vi.mock('../extension.js', () => ({
   loadExtension: mockLoadExtension,
 }));
 

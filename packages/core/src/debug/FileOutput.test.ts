@@ -66,7 +66,7 @@ function matchesDebugFilePath(value: string): boolean {
 }
 
 // Mock fs module
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   promises: {
     access: vi.fn(),
     mkdir: vi.fn(),
@@ -78,7 +78,7 @@ vi.mock('fs', () => ({
 }));
 
 // Mock path module
-vi.mock('path', () => ({
+void vi.mock('path', () => ({
   join: vi.fn((...args) => args.join('/')),
 }));
 

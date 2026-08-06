@@ -22,7 +22,7 @@ import { type CommandContext } from './types.js';
 // Mock the 'fs' module
 const realFsModule = { ...(await import('fs')) };
 
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   const actual = realFsModule;
   return {
     ...actual,

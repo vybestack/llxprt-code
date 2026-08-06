@@ -13,7 +13,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => {
+void vi.mock('openai', () => {
   class FakeOpenAI {
     static created: symbol[] = [];
     static lastOptions: Record<string, unknown> | null = null;

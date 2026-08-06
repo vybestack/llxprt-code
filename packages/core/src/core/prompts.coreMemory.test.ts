@@ -41,7 +41,7 @@ const realLlxprtCodeSettingsModule = {
 const PROJECT_DIR = path.resolve('/my/project');
 
 const actual = { ...(await import('node:fs/promises')) };
-vi.mock('node:fs/promises', () => {
+void vi.mock('node:fs/promises', () => {
   return {
     ...actual,
     readFile: vi
@@ -56,7 +56,7 @@ const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
 }));

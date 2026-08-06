@@ -25,7 +25,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 // Mock os so Storage.getGlobalSettingsPath() resolves under a fake homedir.
 const realOsModule = { ...(await import('os')) };
 
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const actual = realOsModule;
   return {
     ...actual,
@@ -35,13 +35,13 @@ vi.mock('os', () => {
 });
 
 // Mock strip-json-comments so the raw settings read is a passthrough.
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
 // Keep the concrete-provider completion proof hermetic: stub the system-prompt
 // resolution so no prompt files are read from disk.
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 

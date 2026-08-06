@@ -20,7 +20,7 @@ import { IDEServer } from './ide-server.js';
 import type { DiffContentProvider } from './diff-manager.js';
 import { DiffManager } from './diff-manager.js';
 
-vi.mock('vscode', () => ({
+void vi.mock('vscode', () => ({
   EventEmitter: vi.fn(() => ({
     event: vi.fn((_listener: () => void) => ({ dispose: vi.fn() })),
     fire: vi.fn(),
@@ -45,7 +45,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-vi.mock('node:fs/promises', () => ({
+void vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn(() => Promise.resolve(undefined)),
   unlink: vi.fn(() => Promise.resolve(undefined)),
   chmod: vi.fn(() => Promise.resolve(undefined)),
@@ -53,7 +53,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 const actual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actual,
     tmpdir: vi.fn(() => '/tmp'),

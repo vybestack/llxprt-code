@@ -23,7 +23,7 @@ import {
 const mockMessagesCreate = vi.fn();
 
 // Mock the ToolFormatter
-vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
+void vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn((tools: unknown[], format: string) => {
       if (format === 'anthropic') {
@@ -69,18 +69,18 @@ vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async () => "You are Claude Code, Anthropic's official CLI for Claude.",
   ),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   getErrorStatus: vi.fn(() => undefined),
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: { create: mockMessagesCreate },
     beta: {

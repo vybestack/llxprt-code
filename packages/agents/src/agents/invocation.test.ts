@@ -22,7 +22,7 @@ import { type z } from 'zod';
 
 const realExecutorModule = { ...(await import('./executor.js')) };
 
-vi.mock('./executor.js', () => automock(realExecutorModule));
+void vi.mock('./executor.js', () => automock(realExecutorModule));
 
 const MockAgentExecutor = AgentExecutor as unknown as Mock<
   (...args: never[]) => unknown

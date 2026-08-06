@@ -21,21 +21,21 @@ const mockPlatform = vi.fn();
 const mockGetPty = vi.fn();
 
 // Top-level Mocks
-vi.mock('@lydell/node-pty', () => ({
+void vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
 const __actual = { ...(await import('child_process')) };
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   const actual = __actual as typeof import('child_process');
   return {
     ...actual,
     spawn: mockCpSpawn,
   };
 });
-vi.mock('../utils/textUtils.js', () => ({
+void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
-vi.mock('os', () => ({
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: () => '/tmp/test-home',
@@ -55,7 +55,7 @@ vi.mock('os', () => ({
     },
   },
 }));
-vi.mock('../utils/getPty.js', () => ({
+void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 

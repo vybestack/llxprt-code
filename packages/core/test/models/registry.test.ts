@@ -20,7 +20,7 @@ import { mockApiResponse } from './__fixtures__/mock-data.js';
 // Mock fs module
 const realNodeFsModule = { ...(await import('node:fs')) };
 
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   const actual = realNodeFsModule;
   return {
     ...actual,

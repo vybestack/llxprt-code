@@ -12,9 +12,9 @@ import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
 const realPromisesModule = { ...(await import('fs/promises')) };
 
-vi.mock('fs/promises', () => automock(realPromisesModule));
+void vi.mock('fs/promises', () => automock(realPromisesModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     getErrorMessage: vi.fn(),

@@ -46,7 +46,7 @@ import {
 const realPromisesModule = { ...(await import('node:fs/promises')) };
 
 const actual = { ...(await import('node:fs/promises')) };
-vi.mock('node:fs/promises', () => {
+void vi.mock('node:fs/promises', () => {
   return {
     ...actual,
     writeFile: vi.fn(actual.writeFile),

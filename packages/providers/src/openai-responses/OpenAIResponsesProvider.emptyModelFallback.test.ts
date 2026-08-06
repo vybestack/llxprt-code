@@ -31,7 +31,7 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 
 const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
 }));
 

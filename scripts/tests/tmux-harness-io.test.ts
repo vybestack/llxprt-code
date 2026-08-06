@@ -36,7 +36,7 @@ const { spawnSyncMock } = {
   spawnSyncMock: vi.fn(),
 };
 
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   spawnSync: (...args: unknown[]) => spawnSyncMock(...args),
 }));
 

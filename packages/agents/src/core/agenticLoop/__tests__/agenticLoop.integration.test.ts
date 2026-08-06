@@ -44,7 +44,7 @@ const realLlxprtCodeToolsModule = {
 const { modifyWithEditorMock } = {
   modifyWithEditorMock: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-tools', () => {
+void vi.mock('@vybestack/llxprt-code-tools', () => {
   const actual = realLlxprtCodeToolsModule;
   return { ...actual, modifyWithEditor: modifyWithEditorMock };
 });

@@ -10,7 +10,15 @@
  * main() entrypoint to verify observable contracts.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, mock } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   guardUnconfiguredProvider,
@@ -59,7 +67,9 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       callOrder.push('dispatch');
     },
   }));
-  mock.module('./cliSandbox.js', () => ({ maybeHopIntoSandbox: async () => {} }));
+  mock.module('./cliSandbox.js', () => ({
+    maybeHopIntoSandbox: async () => {},
+  }));
   mock.module('./config/cliArgParser.js', () => ({
     parseArguments: async () => ({ prompt: 'hello' }),
   }));

@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import { updateSettingsFilePreservingFormat } from './commentJson.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },

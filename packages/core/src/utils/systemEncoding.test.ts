@@ -20,12 +20,12 @@ import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
 const __actual = { ...(await import('child_process')) };
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   const actual = __actual as typeof import('child_process');
   return { ...actual, execSync: vi.fn() };
 });
 const __actual2 = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   const actual = __actual2 as typeof import('node:os');
   const mockPlatform = vi.fn(() => actual.platform());
   const mockHomedir = vi.fn(() => actual.homedir());
@@ -38,7 +38,7 @@ vi.mock('node:os', () => {
   return { ...mockExports, default: mockExports };
 });
 const __actual3 = { ...(await import('chardet')) };
-vi.mock('chardet', () => {
+void vi.mock('chardet', () => {
   const actual = __actual3 as typeof import('chardet');
   return { ...actual, detect: vi.fn() };
 });

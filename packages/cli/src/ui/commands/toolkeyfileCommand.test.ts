@@ -30,12 +30,12 @@ const mockKeyfileStore = new Map<string, string>();
 const mockedHomedir = vi.fn();
 
 const original = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return { ...original, homedir: mockedHomedir };
 });
 
 const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualOriginal,
     ToolKeyStorage: class MockToolKeyStorage {

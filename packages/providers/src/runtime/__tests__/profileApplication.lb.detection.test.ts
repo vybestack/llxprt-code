@@ -41,7 +41,7 @@ import {
 } from './lbProfileApplicationTestSetup.js';
 import type { ProfileApplicationResult } from './lbProfileApplicationTestSetup.js';
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,

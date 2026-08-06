@@ -36,7 +36,7 @@ const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
 
-vi.mock('./trustedFolders.js', () => {
+void vi.mock('./trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return {
     ...actual,
@@ -44,13 +44,13 @@ vi.mock('./trustedFolders.js', () => {
   };
 });
 
-vi.mock('./sandboxConfig.js', () => ({
+void vi.mock('./sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
 const pathMod = await import('node:path');
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   const mockHome = pathMod.resolve(pathMod.sep, 'mock', 'home', 'user');
   const MOCK_CWD1 = process.cwd();
   const MOCK_CWD2 = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
@@ -81,18 +81,18 @@ vi.mock('fs', () => {
 });
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
   };
 });
 
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('read-package-up', () => ({
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
@@ -112,7 +112,7 @@ const runtimeSettingsState = {
 const actual = {
   ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
 };
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -248,7 +248,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actualServer = realLlxprtCodeCoreModule;
   return {
     ...actualServer,

@@ -25,9 +25,9 @@ const realRealInkModule = {
   ...(await import('../../../test-utils/real-ink.js')),
 };
 
-vi.mock('ink', () => realRealInkModule);
+void vi.mock('ink', () => realRealInkModule);
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getCliOAuthManager: () => ({
       authenticate: mockAuthenticate,

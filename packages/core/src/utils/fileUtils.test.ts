@@ -32,7 +32,7 @@ import {
 } from './fileUtils.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 
-vi.mock('mime-types', () => ({
+void vi.mock('mime-types', () => ({
   default: { lookup: vi.fn() },
   lookup: vi.fn(),
 }));

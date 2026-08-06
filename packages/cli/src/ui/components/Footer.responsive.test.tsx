@@ -16,17 +16,17 @@ const realUseTerminalSizeModule = {
   ...(await import('../hooks/useTerminalSize.js')),
 };
 
-vi.mock('../hooks/useTerminalSize.js', () =>
+void vi.mock('../hooks/useTerminalSize.js', () =>
   automock(realUseTerminalSizeModule),
 );
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getActiveProviderStatus: () => ({ providerName: 'gemini' }),
   }),
 }));
 
-vi.mock('node:v8', () => ({
+void vi.mock('node:v8', () => ({
   default: {
     getHeapStatistics: vi.fn(() => ({
       heap_size_limit: 8 * 1024 * 1024 * 1024,

@@ -32,7 +32,7 @@ import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(),

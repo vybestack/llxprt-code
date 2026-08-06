@@ -91,7 +91,7 @@ function createStubProvider(): IProvider {
 let mockStorageRef: ProviderKeyStorage | null = null;
 
 const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
-vi.mock('@vybestack/llxprt-code-storage', () => {
+void vi.mock('@vybestack/llxprt-code-storage', () => {
   return {
     ...actual,
     getProviderKeyStorage: () => mockStorageRef,
@@ -104,7 +104,7 @@ vi.mock('@vybestack/llxprt-code-storage', () => {
 const actualActual = {
   ...(await import('@vybestack/llxprt-code-providers/auth.js')),
 };
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
   return {
     ...actualActual,
     createProviderKeyStorage: () => mockStorageRef,

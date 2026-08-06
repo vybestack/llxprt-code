@@ -34,12 +34,12 @@ const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
   },
 }));
 
-vi.mock('@google/genai', () => ({
+void vi.mock('@google/genai', () => ({
   GoogleGenAI: googleGenAIConstructor,
   Type: { OBJECT: 'object' },
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
@@ -51,7 +51,7 @@ const mockSettingsService = {
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 };
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
   SETTINGS_REGISTRY: [],

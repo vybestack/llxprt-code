@@ -25,7 +25,7 @@ const realFsModule = { ...(await import('fs')) };
 const realOsModule = { ...(await import('os')) };
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
@@ -34,7 +34,7 @@ vi.mock('os', () => {
 });
 
 const actualFs = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   return {
     ...actualFs,
     existsSync: vi.fn(),
@@ -54,7 +54,7 @@ const mockCoreEvents = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     coreEvents: mockCoreEvents,

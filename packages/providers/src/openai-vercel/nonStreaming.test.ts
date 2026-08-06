@@ -28,7 +28,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderToolset } from '../IProvider.js';
 
 // Mock the 'ai' module
-vi.mock('ai', () => ({
+void vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
   extractReasoningMiddleware: vi.fn(() => ({})),
@@ -36,7 +36,7 @@ vi.mock('ai', () => ({
 }));
 
 // Mock @ai-sdk/openai
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 

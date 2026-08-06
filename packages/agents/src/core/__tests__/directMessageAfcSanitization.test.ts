@@ -48,7 +48,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
 

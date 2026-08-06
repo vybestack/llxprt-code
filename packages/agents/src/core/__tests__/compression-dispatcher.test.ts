@@ -37,9 +37,12 @@ import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 // Mock the lifecycle hook triggers
-vi.mock('@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js', () => ({
-  triggerPreCompressHook: vi.fn().mockResolvedValue(undefined),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js',
+  () => ({
+    triggerPreCompressHook: vi.fn().mockResolvedValue(undefined),
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Message helpers (same pattern as sandwich-compression.test.ts)

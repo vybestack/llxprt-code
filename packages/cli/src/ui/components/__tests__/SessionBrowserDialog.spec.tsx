@@ -52,7 +52,7 @@ enum TerminalKeys {
 
 // Mock useResponsive hook to control narrow/wide mode
 const mockIsNarrow = { value: false };
-vi.mock('../../hooks/useResponsive.js', () => ({
+void vi.mock('../../hooks/useResponsive.js', () => ({
   useResponsive: () => ({
     width: mockIsNarrow.value ? 60 : 120,
     breakpoint: mockIsNarrow.value ? 'NARROW' : 'WIDE',
@@ -83,7 +83,7 @@ const mockHookState = {
   handleKeypress: vi.fn(),
 };
 
-vi.mock('../../hooks/useSessionBrowser.js', () => ({
+void vi.mock('../../hooks/useSessionBrowser.js', () => ({
   useSessionBrowser: () => mockHookState,
 }));
 

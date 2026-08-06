@@ -24,7 +24,7 @@ import { terminalCapabilityManager } from '../ui/utils/terminalCapabilityManager
 import { themeManager } from '../ui/themes/theme-manager.js';
 
 // Mock terminalCapabilityManager
-vi.mock('../ui/utils/terminalCapabilityManager.js', () => ({
+void vi.mock('../ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn().mockResolvedValue(undefined),
     getTerminalBackgroundColor: vi.fn().mockReturnValue(undefined),
@@ -32,7 +32,7 @@ vi.mock('../ui/utils/terminalCapabilityManager.js', () => ({
 }));
 
 // Mock themeManager
-vi.mock('../ui/themes/theme-manager.js', () => ({
+void vi.mock('../ui/themes/theme-manager.js', () => ({
   themeManager: {
     loadCustomThemes: vi.fn(),
     setActiveTheme: vi.fn().mockReturnValue(true),

@@ -21,7 +21,7 @@ const { schemaHandlerSpy, createHandlerMock } = (() => {
   return { schemaHandlerSpy, createHandlerMock };
 })();
 
-vi.mock('../schema/index.js', () => ({
+void vi.mock('../schema/index.js', () => ({
   createCompletionHandler: createHandlerMock,
 }));
 

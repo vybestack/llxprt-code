@@ -20,7 +20,7 @@ const getRuntimeDiagnosticsSnapshotMock = vi.fn();
 const getCliOAuthManagerMock = vi.fn();
 const getSessionTokenUsageMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     getCliOAuthManager: getCliOAuthManagerMock,
     getActiveProviderStatus: getActiveProviderStatusMock,

@@ -17,12 +17,12 @@ import { TerminalCapabilityManager } from './terminalCapabilityManager.js';
 import { EventEmitter } from 'node:events';
 
 // Mock fs
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   writeSync: vi.fn(),
 }));
 
 // Mock core
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   enableKittyKeyboardProtocol: vi.fn(),
   disableKittyKeyboardProtocol: vi.fn(),
   enableModifyOtherKeys: vi.fn(),

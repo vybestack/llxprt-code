@@ -29,14 +29,14 @@ import {
 import { ExtensionUpdateState } from '../state/extensions.js';
 
 const mockedOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
   };
 });
 
-vi.mock('../../config/extensions/update.js', () => ({
+void vi.mock('../../config/extensions/update.js', () => ({
   checkForAllExtensionUpdates: vi.fn(),
   updateExtension: vi.fn(),
 }));

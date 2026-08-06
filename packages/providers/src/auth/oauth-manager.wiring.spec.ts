@@ -52,25 +52,25 @@ const wiring = (() => {
   };
 })();
 
-vi.mock('./provider-registry.js', () => ({
+void vi.mock('./provider-registry.js', () => ({
   ProviderRegistry: wiring.ProviderRegistry,
 }));
-vi.mock('./proactive-renewal-manager.js', () => ({
+void vi.mock('./proactive-renewal-manager.js', () => ({
   ProactiveRenewalManager: wiring.ProactiveRenewalManager,
 }));
-vi.mock('./OAuthBucketManager.js', () => ({
+void vi.mock('./OAuthBucketManager.js', () => ({
   OAuthBucketManager: wiring.OAuthBucketManager,
 }));
-vi.mock('./token-access-coordinator.js', () => ({
+void vi.mock('./token-access-coordinator.js', () => ({
   TokenAccessCoordinator: wiring.TokenAccessCoordinator,
 }));
-vi.mock('./auth-flow-orchestrator.js', () => ({
+void vi.mock('./auth-flow-orchestrator.js', () => ({
   AuthFlowOrchestrator: wiring.AuthFlowOrchestrator,
 }));
-vi.mock('./auth-status-service.js', () => ({
+void vi.mock('./auth-status-service.js', () => ({
   AuthStatusService: wiring.AuthStatusService,
 }));
-vi.mock('./provider-usage-info.js', () => ({
+void vi.mock('./provider-usage-info.js', () => ({
   getAnthropicUsageInfo: wiring.getAnthropicUsageInfo,
   getAllAnthropicUsageInfo: wiring.getAllAnthropicUsageInfo,
   getAllCodexUsageInfo: wiring.getAllCodexUsageInfo,

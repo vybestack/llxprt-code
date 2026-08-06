@@ -15,7 +15,7 @@ import { Colors } from '../../colors.js';
 
 let mockGetEphemeralSetting = vi.fn().mockReturnValue(true);
 
-vi.mock('../../contexts/RuntimeContext.js', () => ({
+void vi.mock('../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getEphemeralSetting: mockGetEphemeralSetting,
   }),
@@ -38,7 +38,7 @@ vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({ getEphemeralSetting: mockGetEphemeralSetting }),
 }));
 
-vi.mock('../../utils/MarkdownDisplay.js', () => ({
+void vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({
     text,
     isPending,
@@ -55,7 +55,7 @@ vi.mock('../../utils/MarkdownDisplay.js', () => ({
   },
 }));
 
-vi.mock('./ThinkingBlockDisplay.js', () => ({
+void vi.mock('./ThinkingBlockDisplay.js', () => ({
   ThinkingBlockDisplay: function MockThinkingBlockDisplay({
     block,
     visible,

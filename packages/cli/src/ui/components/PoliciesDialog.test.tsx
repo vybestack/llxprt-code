@@ -14,7 +14,7 @@ const realRealInkModule = {
   ...(await import('../../../test-utils/real-ink.js')),
 };
 
-vi.mock('ink', () => realRealInkModule);
+void vi.mock('ink', () => realRealInkModule);
 
 import {
   PoliciesDialog,
@@ -36,7 +36,7 @@ const mockDuplicateEditableRule = vi.fn();
 const mockReloadUserPolicyRules = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     PolicyDecision,

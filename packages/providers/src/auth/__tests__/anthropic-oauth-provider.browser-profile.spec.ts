@@ -15,7 +15,7 @@ import {
 } from 'bun:test';
 import type { BrowserLaunchOptions } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
-vi.mock('../local-oauth-callback.js', () => ({
+void vi.mock('../local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
 }));
 

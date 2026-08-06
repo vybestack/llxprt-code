@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'bun:test';
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     checkHasEditorType: vi.fn().mockReturnValue(true),

@@ -40,7 +40,7 @@ const { mockSendMessageStream, mockGetHistory } = {
   mockGetHistory: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 

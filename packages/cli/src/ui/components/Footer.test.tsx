@@ -9,18 +9,18 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { Footer } from './Footer.js';
 
 // Mock the responsive hooks and utilities
-vi.mock('../hooks/useResponsive.js', () => ({
+void vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: vi.fn(),
 }));
 
-vi.mock('../utils/responsive.js', () => ({
+void vi.mock('../utils/responsive.js', () => ({
   truncateMiddle: vi.fn((text: string, maxLength: number) =>
     text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text,
   ),
 }));
 
 const actual = { ...(await import('node:process')) };
-vi.mock('node:process', () => {
+void vi.mock('node:process', () => {
   // Under Bun, require('node:process') returns the process namespace
   // directly (no .default wrapper), so normalize the shape.
   const actualDefault =
@@ -44,7 +44,7 @@ vi.mock('node:process', () => {
   };
 });
 
-vi.mock('node:v8', () => ({
+void vi.mock('node:v8', () => ({
   default: {
     getHeapStatistics: vi.fn(() => ({
       heap_size_limit: 8 * 1024 * 1024 * 1024,
@@ -52,7 +52,7 @@ vi.mock('node:v8', () => ({
   },
 }));
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getActiveProviderStatus: () => ({ providerName: 'gemini' }),
   }),

@@ -20,11 +20,14 @@ const mockHttpServer = {
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
 };
 
-vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
-  openBrowserSecurely: mockOpenBrowserSecurely,
-}));
-vi.mock('node:crypto', () => automock(realNodeCryptoModule));
-vi.mock('node:http', () => ({
+void vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  () => ({
+    openBrowserSecurely: mockOpenBrowserSecurely,
+  }),
+);
+void vi.mock('node:crypto', () => automock(realNodeCryptoModule));
+void vi.mock('node:http', () => ({
   createServer: vi.fn(() => mockHttpServer),
 }));
 

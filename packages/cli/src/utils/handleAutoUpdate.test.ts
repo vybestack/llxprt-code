@@ -32,7 +32,7 @@ const realUpdateEventEmitterModule = {
   ...(await import('./updateEventEmitter.js')),
 };
 
-vi.mock('./installationInfo.js', () => {
+void vi.mock('./installationInfo.js', () => {
   const actual = realInstallationInfoModule;
   return {
     ...actual,
@@ -40,7 +40,7 @@ vi.mock('./installationInfo.js', () => {
   };
 });
 
-vi.mock('./updateEventEmitter.js', () => {
+void vi.mock('./updateEventEmitter.js', () => {
   const actual = realUpdateEventEmitterModule;
   return {
     ...actual,
@@ -52,7 +52,7 @@ vi.mock('./updateEventEmitter.js', () => {
 });
 
 const actual = { ...(await import('node:fs')) };
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   return {
     ...actual,
     existsSync: vi.fn(),
@@ -70,7 +70,7 @@ vi.mock('node:fs', () => {
 });
 
 const actualActual = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actualActual,
     homedir: vi.fn(),

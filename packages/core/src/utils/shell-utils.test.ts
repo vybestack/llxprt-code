@@ -26,7 +26,7 @@ import type { AnyToolInvocation } from '../index.js';
 
 const mockPlatform = vi.fn();
 const mockHomedir = vi.fn();
-vi.mock('os', () => ({
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: mockHomedir,
@@ -36,7 +36,7 @@ vi.mock('os', () => ({
 }));
 
 const mockQuote = vi.fn();
-vi.mock('shell-quote', () => ({
+void vi.mock('shell-quote', () => ({
   quote: mockQuote,
 }));
 

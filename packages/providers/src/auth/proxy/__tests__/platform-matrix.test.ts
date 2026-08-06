@@ -28,7 +28,7 @@ import * as path from 'node:path';
 // intercepts the server's own fs calls.
 const realNodeFsModule = { ...(await import('node:fs')) };
 
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   const actual = realNodeFsModule;
   return { ...actual };
 });

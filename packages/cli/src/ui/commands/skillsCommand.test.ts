@@ -27,7 +27,7 @@ import {
 } from '../../config/settings.js';
 
 const actual = { ...(await import('../../config/settings.js')) };
-vi.mock('../../config/settings.js', () => {
+void vi.mock('../../config/settings.js', () => {
   return {
     ...actual,
     isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),

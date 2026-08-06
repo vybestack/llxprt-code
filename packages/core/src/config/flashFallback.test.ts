@@ -11,7 +11,7 @@ import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 
 const __actual = { ...(await import('node:fs')) };
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   const actual = __actual as typeof import('node:fs');
   const mockExistsSync = vi.fn();
   const mockStatSync = vi.fn();

@@ -23,14 +23,14 @@ const bridgeMocks = {
   podmanCleanup: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
   getProxySocketPath: authMocks.getProxySocketPath,
   stopProxy: authMocks.stopProxy,
   getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 const original = { ...(await import('./sandbox-ssh.js')) };
-vi.mock('./sandbox-ssh.js', () => {
+void vi.mock('./sandbox-ssh.js', () => {
   return {
     ...original,
     setupCredentialProxyDockerMacOS:
@@ -38,7 +38,7 @@ vi.mock('./sandbox-ssh.js', () => {
   };
 });
 const actualOriginal = { ...(await import('./sandbox-podman.js')) };
-vi.mock('./sandbox-podman.js', () => {
+void vi.mock('./sandbox-podman.js', () => {
   return {
     ...actualOriginal,
     setupCredentialProxyPodmanMacOS:

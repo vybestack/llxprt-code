@@ -20,10 +20,10 @@ import type {
   ToolInfo,
 } from '@vybestack/llxprt-code-agents';
 
-vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('open', () => ({ default: vi.fn() }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-vi.mock('@vybestack/llxprt-code-mcp', () => {
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),

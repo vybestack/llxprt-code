@@ -28,7 +28,7 @@ const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
 
 type UseKeypressMockOptions = { isActive: boolean };
 
-vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
+void vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
 
 let activeKeypressHandler: KeypressHandler | null = null;
 

@@ -11,6 +11,6 @@
       "@vybestack/llxprt-code-ide-integration": ["./index.ts"]
     }
   },
-  "include": ["index.ts", "src/**/*.ts"],
+  "include": ["../../bun-test-corrections.d.ts", "index.ts", "src/**/*.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

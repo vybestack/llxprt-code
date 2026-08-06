@@ -85,7 +85,7 @@ import { appEvents, AppEvent } from '../utils/events.js';
 // Capture which branch dispatch selected by recording mock invocations.
 const dispatchTrace: string[] = [];
 
-vi.mock('../cliAgentBootstrap.js', () => ({
+void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
     return { fake: true } as unknown;
@@ -93,22 +93,22 @@ vi.mock('../cliAgentBootstrap.js', () => ({
 }));
 
 // The actual module path used by session-dispatch is utils/startupWarnings.js
-vi.mock('../utils/startupWarnings.js', () => ({
+void vi.mock('../utils/startupWarnings.js', () => ({
   getStartupWarnings: vi.fn(async () => []),
 }));
 
-vi.mock('../utils/userStartupWarnings.js', () => ({
+void vi.mock('../utils/userStartupWarnings.js', () => ({
   getUserStartupWarnings: vi.fn(async () => []),
 }));
 
-vi.mock('../nonInteractiveCli.js', () => ({
+void vi.mock('../nonInteractiveCli.js', () => ({
   runNonInteractive: vi.fn(async () => {
     dispatchTrace.push('runNonInteractive');
     return 0;
   }),
 }));
 
-vi.mock('../validateNonInteractiveAuth.js', () => ({
+void vi.mock('../validateNonInteractiveAuth.js', () => ({
   validateNonInteractiveAuth: vi.fn(
     async (_external: unknown, config: unknown) => {
       dispatchTrace.push('validateNonInteractiveAuth');
@@ -117,19 +117,19 @@ vi.mock('../validateNonInteractiveAuth.js', () => ({
   ),
 }));
 
-vi.mock('../utils/version.js', () => ({
+void vi.mock('../utils/version.js', () => ({
   getCliVersion: vi.fn(async () => 'test-version'),
 }));
 
-vi.mock('../ui/utils/updateCheck.js', () => ({
+void vi.mock('../ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(async () => null),
 }));
 
-vi.mock('../utils/handleAutoUpdate.js', () => ({
+void vi.mock('../utils/handleAutoUpdate.js', () => ({
   handleAutoUpdate: vi.fn(),
 }));
 
-vi.mock('../utils/cleanup.js', () => ({
+void vi.mock('../utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(async () => {}),
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),

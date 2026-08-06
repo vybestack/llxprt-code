@@ -24,7 +24,7 @@ import { testRegex } from '../../test-utils/regex.js';
 
 const realPromisesModule = { ...(await import('fs/promises')) };
 
-vi.mock('fs/promises', () => {
+void vi.mock('fs/promises', () => {
   const actual = realPromisesModule;
   return {
     ...actual,
@@ -33,7 +33,7 @@ vi.mock('fs/promises', () => {
   };
 });
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 

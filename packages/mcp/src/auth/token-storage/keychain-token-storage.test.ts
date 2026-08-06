@@ -24,13 +24,13 @@ const mockKeytar = {
 const mockServiceName = 'service-name';
 const mockCryptoRandomBytesString = 'random-string';
 
-vi.mock('node:crypto', () => ({
+void vi.mock('node:crypto', () => ({
   randomBytes: vi.fn(() => ({
     toString: vi.fn(() => mockCryptoRandomBytesString),
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },

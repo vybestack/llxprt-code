@@ -16,7 +16,7 @@ import type {
 } from '@vybestack/llxprt-code-storage';
 
 // Mock the dependency
-vi.mock('../utils/rewindFileOps.js', () => ({
+void vi.mock('../utils/rewindFileOps.js', () => ({
   calculateTurnStats: vi.fn(),
   calculateRewindImpact: vi.fn(),
 }));

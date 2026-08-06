@@ -9,14 +9,14 @@ import { renderHook, waitFor } from '../../test-utils/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   parseEphemeralSettingValue: vi.fn(),
   applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers', () => ({
+void vi.mock('@vybestack/llxprt-code-providers', () => ({
   registerAgentRuntimeFactories: vi.fn(),
 }));
 
@@ -83,15 +83,15 @@ let mockUiActions: {
 let mockAddItem: ReturnType<typeof vi.fn>;
 let callSequence: string[];
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => fakeRuntime,
 }));
 
-vi.mock('../contexts/UIActionsContext.js', () => ({
+void vi.mock('../contexts/UIActionsContext.js', () => ({
   useUIActions: () => mockUiActions,
 }));
 
-vi.mock('../contexts/UIStateContext.js', () => ({
+void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: () => ({
     constrainHeight: false,
     terminalHeight: 40,

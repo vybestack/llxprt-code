@@ -14,7 +14,7 @@ import { Colors } from '../colors.js';
 import { vi } from 'bun:test';
 
 // Mock RespondingSpinner
-vi.mock('./RespondingSpinner.js', () => ({
+void vi.mock('./RespondingSpinner.js', () => ({
   RespondingSpinner: ({
     nonRespondingDisplay,
   }: {

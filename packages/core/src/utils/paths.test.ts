@@ -12,7 +12,7 @@ import * as path from 'node:path';
 const mockPlatform = vi.fn(() => process.platform);
 
 const __actual = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const actual = __actual as typeof import('node:os');
   return {
     ...actual,

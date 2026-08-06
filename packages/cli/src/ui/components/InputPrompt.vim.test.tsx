@@ -49,20 +49,22 @@ const realUseKittyKeyboardProtocolModule = {
   ...(await import('../hooks/useKittyKeyboardProtocol.js')),
 };
 
-vi.mock('../hooks/useShellHistory.js', () =>
+void vi.mock('../hooks/useShellHistory.js', () =>
   automock(realUseShellHistoryModule),
 );
-vi.mock('../hooks/useCommandCompletion.js', () =>
+void vi.mock('../hooks/useCommandCompletion.js', () =>
   automock(realUseCommandCompletionModule),
 );
-vi.mock('../hooks/useInputHistory.js', () =>
+void vi.mock('../hooks/useInputHistory.js', () =>
   automock(realUseInputHistoryModule),
 );
-vi.mock('../hooks/useReverseSearchCompletion.js', () =>
+void vi.mock('../hooks/useReverseSearchCompletion.js', () =>
   automock(realUseReverseSearchCompletionModule),
 );
-vi.mock('../utils/clipboardUtils.js', () => automock(realClipboardUtilsModule));
-vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
+void vi.mock('../utils/clipboardUtils.js', () =>
+  automock(realClipboardUtilsModule),
+);
+void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
   automock(realUseKittyKeyboardProtocolModule),
 );
 

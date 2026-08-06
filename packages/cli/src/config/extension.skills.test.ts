@@ -25,7 +25,7 @@ import { createExtension } from '../test-utils/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 const mockedOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('os', () => {
 });
 
 const actual = { ...(await import('./trustedFolders.js')) };
-vi.mock('./trustedFolders.js', () => {
+void vi.mock('./trustedFolders.js', () => {
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),
@@ -41,7 +41,7 @@ vi.mock('./trustedFolders.js', () => {
 });
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualActual,
     logExtensionEnable: vi.fn(),

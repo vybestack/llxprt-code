@@ -14,7 +14,7 @@ import {
   useOpenAIProviderContext,
 } from './OpenAIProviderContext.js';
 
-vi.mock('../hooks/useOpenAIProviderInfo.js', () => ({
+void vi.mock('../hooks/useOpenAIProviderInfo.js', () => ({
   useOpenAIProviderInfo: vi.fn(),
 }));
 

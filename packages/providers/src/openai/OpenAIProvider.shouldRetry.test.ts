@@ -21,7 +21,7 @@ const mockSettingsService = {
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 };
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],

@@ -26,7 +26,7 @@ import {
 
 const realChildProcessModule = { ...(await import('child_process')) };
 
-vi.mock('child_process', () => automock(realChildProcessModule));
+void vi.mock('child_process', () => automock(realChildProcessModule));
 
 describe('isGitHubRepository', async () => {
   beforeEach(() => {

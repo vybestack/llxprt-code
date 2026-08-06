@@ -20,7 +20,7 @@ import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js'
 
 const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
 }));
 

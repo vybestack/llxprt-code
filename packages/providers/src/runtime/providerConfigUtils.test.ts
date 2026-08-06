@@ -17,7 +17,7 @@ const {
   })),
 };
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   sanitizeForByteString: sanitizeForByteStringMock,
   needsSanitization: needsSanitizationMock,
   DebugLogger: class {
@@ -27,7 +27,7 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
   },
 }));
 
-vi.mock('./providerMutations.js', () => ({
+void vi.mock('./providerMutations.js', () => ({
   updateActiveProviderApiKey: updateActiveProviderApiKeyMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
 }));

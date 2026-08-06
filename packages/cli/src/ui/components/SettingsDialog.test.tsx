@@ -55,7 +55,7 @@ const realSettingsUtilsModule = {
   ...(await import('../../utils/settingsUtils.js')),
 };
 
-vi.mock('../contexts/UIStateContext.js', () => ({
+void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: () => ({ mainAreaWidth: 120 }),
 }));
 
@@ -110,7 +110,7 @@ const createMockSettings = (
 // We use the real SETTINGS_SCHEMA from settingsSchema.js
 // Tests that need a custom schema can override it by mocking the module
 
-vi.mock('../contexts/VimModeContext.js', () => {
+void vi.mock('../contexts/VimModeContext.js', () => {
   const actual = realVimModeContextModule;
   return {
     ...actual,
@@ -123,7 +123,7 @@ vi.mock('../contexts/VimModeContext.js', () => {
   };
 });
 
-vi.mock('../../utils/settingsUtils.js', () => {
+void vi.mock('../../utils/settingsUtils.js', () => {
   const actual = realSettingsUtilsModule;
   return {
     ...actual,

@@ -32,7 +32,7 @@ const packagesDir = path.dirname(companionDir);
 const repositoryRoot = path.dirname(packagesDir);
 const readmePath = path.join(repositoryRoot, 'README.md');
 
-vi.mock('vscode', () => {
+void vi.mock('vscode', () => {
   class TestEventEmitter<T> {
     private readonly listeners = new Set<(event: T) => unknown>();
 

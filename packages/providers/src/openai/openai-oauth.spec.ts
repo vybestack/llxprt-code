@@ -28,7 +28,7 @@ const skipInCI = process.env.CI === 'true';
 // Helper functions and utilities for OpenAI OAuth testing
 
 // Mock OpenAI module
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: vi.fn().mockImplementation(() => ({
     chat: {
       completions: {

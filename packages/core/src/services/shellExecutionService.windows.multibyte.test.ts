@@ -16,18 +16,18 @@ const mockPlatform = vi.fn(() => 'win32');
 const mockSpawn = vi.fn();
 
 const __actual = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const actual = __actual as typeof import('os');
   return { ...actual, platform: mockPlatform };
 });
 const __actual2 = { ...(await import('child_process')) };
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   const actual = __actual2 as typeof import('child_process');
   return { ...actual, spawn: mockSpawn };
 });
-vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
-vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
-vi.mock('../utils/systemEncoding.js', () => ({
+void vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
+void vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
+void vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('utf-8'),
   getCachedEncodingForBuffer: vi.fn().mockReturnValue('utf-8'),
 }));

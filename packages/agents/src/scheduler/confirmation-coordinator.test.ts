@@ -11,7 +11,7 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool
 // Module-scope mock for modifiable-tool — hoisted by the test runner before imports.
 // Per-test behavior can be overridden by casting the mocked export to Mock.
 const mod = { ...(await import('@vybestack/llxprt-code-tools')) };
-vi.mock('@vybestack/llxprt-code-tools', () => {
+void vi.mock('@vybestack/llxprt-code-tools', () => {
   return {
     ...mod,
     isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),

@@ -18,7 +18,7 @@ import {
   type Mock,
 } from 'bun:test';
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(async () => {}),
 }));
 

@@ -8,12 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 const mockInstallSkill = vi.fn();
 
-vi.mock('../../utils/skillUtils.js', () => ({
+void vi.mock('../../utils/skillUtils.js', () => ({
   installSkill: mockInstallSkill,
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...(actual as object),
     debugLogger: { log: vi.fn(), error: vi.fn() },

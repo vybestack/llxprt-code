@@ -183,7 +183,7 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('../composition/providerAliases.js', () => {
+void vi.mock('../composition/providerAliases.js', () => {
   const actual = realProviderAliasesModule;
   return {
     ...actual,
@@ -191,7 +191,7 @@ vi.mock('../composition/providerAliases.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
 
   let activeContext: {

@@ -22,7 +22,7 @@ import { MessageType } from '../types.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
 // Mock the 'open' library
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 

@@ -9,7 +9,7 @@ const { mockModelsList } = {
   mockModelsList: vi.fn(),
 };
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: class MockOpenAI {
     readonly models = {
       list: mockModelsList,

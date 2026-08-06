@@ -18,7 +18,7 @@ const realLlxprtCodeCoreModule = {
 const isActivePtyMock = vi.fn();
 const getLastActivePtyIdMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
 
   return {

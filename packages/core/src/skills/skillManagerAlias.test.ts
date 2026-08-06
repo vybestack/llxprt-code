@@ -13,7 +13,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 const mockGetBuiltinSkillsDir = vi.fn();
 
 const __actual = { ...(await import('./skillLoader.js')) };
-vi.mock('./skillLoader.js', () => {
+void vi.mock('./skillLoader.js', () => {
   const actual = __actual as typeof import('./skillLoader.js');
   mockGetBuiltinSkillsDir.mockImplementation(actual.getBuiltinSkillsDir);
   return {

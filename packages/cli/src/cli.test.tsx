@@ -51,7 +51,7 @@ class MockProcessExitError extends Error {
 }
 
 // Mock dependencies
-vi.mock('./config/settings.js', () => ({
+void vi.mock('./config/settings.js', () => ({
   loadSettings: vi.fn().mockReturnValue({
     merged: {
       advanced: {},
@@ -71,14 +71,14 @@ vi.mock('./config/settings.js', () => ({
   },
 }));
 
-vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(),
     getTerminalBackgroundColor: vi.fn(),
   },
 }));
 
-vi.mock('./config/config.js', () => ({
+void vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn().mockResolvedValue({
     getSandbox: vi.fn(() => false),
     getQuestion: vi.fn(() => ''),
@@ -86,7 +86,7 @@ vi.mock('./config/config.js', () => ({
   } as unknown as Config),
 }));
 
-vi.mock('./config/cliArgParser.js', () => ({
+void vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn().mockResolvedValue({
     model: undefined,
     sandbox: undefined,
@@ -99,21 +99,21 @@ vi.mock('./config/cliArgParser.js', () => ({
   }),
 }));
 
-vi.mock('read-package-up', () => ({
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn().mockResolvedValue({
     packageJson: { name: 'test-pkg', version: 'test-version' },
     path: '/fake/path/package.json',
   }),
 }));
 
-vi.mock('update-notifier', () => ({
+void vi.mock('update-notifier', () => ({
   default: vi.fn(() => ({
     notify: vi.fn(),
   })),
 }));
 
 const actual = { ...(await import('./utils/events.js')) };
-vi.mock('./utils/events.js', () => {
+void vi.mock('./utils/events.js', () => {
   return {
     ...actual,
     appEvents: {
@@ -122,14 +122,14 @@ vi.mock('./utils/events.js', () => {
   };
 });
 
-vi.mock('./utils/sandbox.js', () => ({
+void vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
   start_sandbox: vi.fn(() => Promise.resolve(0)), // Mock as an async function that resolves
 }));
 
 // Mock bootstrap utilities for deferred init tests
 const actualActual = { ...(await import('./utils/bootstrap.js')) };
-vi.mock('./utils/bootstrap.js', () => {
+void vi.mock('./utils/bootstrap.js', () => {
   return {
     ...actualActual,
     shouldRelaunchForMemory: vi.fn(() => []),
@@ -137,23 +137,23 @@ vi.mock('./utils/bootstrap.js', () => {
   };
 });
 
-vi.mock('./utils/relaunch.js', () => ({
+void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn().mockResolvedValue(0),
 }));
 
-vi.mock('./utils/version.js', () => ({
+void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./utils/terminalTheme.js', () => ({
+void vi.mock('./utils/terminalTheme.js', () => ({
   setupTerminalAndTheme: vi.fn(() => Promise.resolve(undefined)),
 }));
 
-vi.mock('./ui/utils/updateCheck.js', () => ({
+void vi.mock('./ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
@@ -164,7 +164,7 @@ vi.mock('./utils/cleanup.js', () => ({
 // real Agent via fromConfig (which would require a fully wired Config). The
 // fake exposes getMessageBus() because dispatch reads the session bus from the
 // Agent (#2378).
-vi.mock('./cliAgentBootstrap.js', () => ({
+void vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
     dispose: vi.fn().mockResolvedValue(undefined),
     getMessageBus: vi.fn(() => ({})),
@@ -182,14 +182,14 @@ const { preflightAgentActivationMock } = {
   }),
 };
 const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
-vi.mock('@vybestack/llxprt-code-agents', () => {
+void vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...actualActual2,
     preflightAgentActivation: preflightAgentActivationMock,
   };
 });
 
-vi.mock('./ui/utils/mouse.js', () => ({
+void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
   disableMouseEvents: vi.fn(),
   parseMouseEvent: vi.fn(),
@@ -207,7 +207,7 @@ const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
 };
 const actualActual3 = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualActual3,
     writeToStdout: mockWriteToStdout,

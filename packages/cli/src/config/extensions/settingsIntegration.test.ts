@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi, type Mock, mock } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+  mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -32,7 +41,7 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 const realGitUtilsModule = { ...(await import('../../utils/gitUtils.js')) };
 
 const actual = { ...(await import('./settingsStorage.js')) };
-vi.mock('./settingsStorage.js', () => {
+void vi.mock('./settingsStorage.js', () => {
   const entries = new Map<string, string>();
   const keyring = {
     async getPassword(service: string, account: string) {
@@ -67,7 +76,7 @@ vi.mock('./settingsStorage.js', () => {
 });
 
 const actualActual = { ...(await import('../../utils/gitUtils.js')) };
-vi.mock('../../utils/gitUtils.js', () => {
+void vi.mock('../../utils/gitUtils.js', () => {
   return {
     ...actualActual,
     getWorkspaceIdentity: vi.fn(actualActual.getWorkspaceIdentity),

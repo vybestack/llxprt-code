@@ -12,7 +12,7 @@ import { useTerminalSize } from './useTerminalSize.js';
 
 const realUseTerminalSizeModule = { ...(await import('./useTerminalSize.js')) };
 
-vi.mock('./useTerminalSize', () => automock(realUseTerminalSizeModule));
+void vi.mock('./useTerminalSize', () => automock(realUseTerminalSizeModule));
 
 describe('useResponsive', () => {
   let mockUseTerminalSize: Mock<typeof useTerminalSize>;

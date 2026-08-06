@@ -19,12 +19,12 @@ import * as trustedFoldersModule from '../../config/trustedFolders.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 
 // Mock the trustedFolders module
-vi.mock('../../config/trustedFolders.js', () => ({
+void vi.mock('../../config/trustedFolders.js', () => ({
   loadTrustedFolders: vi.fn(),
 }));
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     loadServerHierarchicalMemory: vi.fn(),

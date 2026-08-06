@@ -17,7 +17,7 @@ import {
 import * as vscode from 'vscode';
 import { OpenFilesManager, MAX_FILES } from './open-files-manager.js';
 
-vi.mock('vscode', () => ({
+void vi.mock('vscode', () => ({
   EventEmitter: vi.fn(() => {
     const listeners: Array<(e: void) => unknown> = [];
     return {

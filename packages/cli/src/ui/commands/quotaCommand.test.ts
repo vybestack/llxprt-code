@@ -28,7 +28,7 @@ const getEphemeralSettingMock = vi.fn();
 const getActiveProviderNameMock = vi.fn();
 const getCliProviderManagerMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     getCliOAuthManager: getCliOAuthManagerMock,
     maybeGetCliOAuthManager: maybeGetCliOAuthManagerMock,
@@ -38,7 +38,7 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers', () => {
+void vi.mock('@vybestack/llxprt-code-providers', () => {
   const actual = realLlxprtCodeProvidersModule;
   return {
     ...actual,

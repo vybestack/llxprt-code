@@ -22,11 +22,11 @@ const runtimeApi = {
   }),
 };
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => runtimeApi,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   DebugLogger: vi.fn().mockImplementation(() => ({
     debug: vi.fn(),
     log: vi.fn(),

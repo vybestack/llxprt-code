@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { type ExtensionUpdateAction } from '../state/extensions.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
-vi.mock('../../config/extensions/update.js', () => ({
+void vi.mock('../../config/extensions/update.js', () => ({
   updateExtension: vi.fn(),
   checkForAllExtensionUpdates: vi.fn(),
 }));

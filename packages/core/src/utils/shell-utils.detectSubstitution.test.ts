@@ -16,7 +16,7 @@ import { expect, describe, it, vi } from 'bun:test';
 // Hoisted mock: applies to all tests in this file.
 
 const realShellParserModule = { ...(await import('./shell-parser.js')) };
-vi.mock('./shell-parser.js', () => ({
+void vi.mock('./shell-parser.js', () => ({
   ...realShellParserModule,
   isParserAvailable: () => false,
   parseShellCommand: () => null,

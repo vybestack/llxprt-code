@@ -32,7 +32,7 @@ import * as path from 'node:path';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 
 const loggerErrorSpy = vi.fn();
-vi.mock('../utils/logger.js', () => ({
+void vi.mock('../utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
     error: loggerErrorSpy,

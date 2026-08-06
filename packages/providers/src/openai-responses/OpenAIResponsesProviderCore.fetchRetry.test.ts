@@ -27,17 +27,17 @@ const parseResponsesStreamMock = vi.fn(async function* () {
 
 const fetchMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-vi.mock('../openai/parseResponsesStream.js', () => ({
+void vi.mock('../openai/parseResponsesStream.js', () => ({
   parseResponsesStream: parseResponsesStreamMock,
 }));
 

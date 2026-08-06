@@ -15,7 +15,7 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 // no longer imported by the SUT and does not need to be mocked here.
 
 const iContentToHistoryItemsMock = vi.fn().mockReturnValue([]);
-vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
+void vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
   iContentToHistoryItems: iContentToHistoryItemsMock,
 }));
 

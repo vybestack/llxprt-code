@@ -27,11 +27,11 @@ const createFakeAgent = (config: Config): Agent =>
     getConfig: () => config,
   }) as unknown as Agent;
 
-vi.mock('./utils/version.js', () => ({
+void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(() => Promise.resolve()),
     isKittyProtocolEnabled: vi.fn(() => false),
@@ -42,17 +42,17 @@ vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   },
 }));
 
-vi.mock('./ui/utils/updateCheck.js', () => ({
+void vi.mock('./ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     writeToStdout: vi.fn().mockReturnValue(true),
@@ -61,7 +61,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('./utils/sandbox.js', () => ({
+void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 

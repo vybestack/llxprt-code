@@ -43,19 +43,19 @@ const spyOnGetter = vi.spyOn as unknown as <
 
 const realChildProcessModule = { ...(await import('child_process')) };
 
-vi.mock('child_process', () => automock(realChildProcessModule));
+void vi.mock('child_process', () => automock(realChildProcessModule));
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
-vi.mock('../../utils/gitUtils.js', () => ({
+void vi.mock('../../utils/gitUtils.js', () => ({
   isGitHubRepository: vi.fn(),
   getGitRepoRoot: vi.fn(),
   getLatestGitHubRelease: vi.fn(),
   getGitHubRepoInfo: vi.fn(),
 }));
 
-vi.mock('../utils/commandUtils.js', () => ({
+void vi.mock('../utils/commandUtils.js', () => ({
   getUrlOpenCommand: vi.fn(),
 }));
 

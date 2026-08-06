@@ -24,13 +24,13 @@ import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
 
 const mockHomedir = vi.fn(() => '/mock/home');
-vi.mock('node:os', () => ({
+void vi.mock('node:os', () => ({
   homedir: mockHomedir,
 }));
 
 // Mock external dependencies
 const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-vi.mock('@vybestack/llxprt-code-mcp', () => {
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
   const actual = __actual as typeof import('@vybestack/llxprt-code-mcp');
   class MockKeychainTokenStorage {
     readToken = vi.fn();
@@ -48,13 +48,13 @@ vi.mock('@vybestack/llxprt-code-mcp', () => {
       .mockImplementation(() => new MockKeychainTokenStorage()),
   };
 });
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),
     rm: vi.fn(),
   },
 }));
-vi.mock('../utils/events.js', () => ({
+void vi.mock('../utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },

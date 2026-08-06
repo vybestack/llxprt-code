@@ -23,7 +23,7 @@ const runtimeMocks = {
   getEphemeralSettings: vi.fn(),
 };
 
-vi.mock('../../contexts/RuntimeContext.js', () => ({
+void vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => runtimeMocks,
 }));
 

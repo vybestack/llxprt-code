@@ -8,7 +8,7 @@ import {
   type Mock,
 } from 'bun:test';
 
-vi.mock('./local-oauth-callback.js', () => ({
+void vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
 }));
 

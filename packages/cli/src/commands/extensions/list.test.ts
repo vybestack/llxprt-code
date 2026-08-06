@@ -22,7 +22,7 @@ const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
 const mockToOutputString: Mock<typeof extensionModule.toOutputString> = vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
-vi.mock('../../config/extension.js', () => {
+void vi.mock('../../config/extension.js', () => {
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -30,7 +30,7 @@ vi.mock('../../config/extension.js', () => {
   };
 });
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: unknown) => {
     if (error instanceof Error) {
       return error.message;

@@ -33,7 +33,7 @@ function createStubSecureStore(): ISecureStore {
 }
 
 // Mock the file system to simulate missing OAuth credentials
-vi.mock('node:fs', () => {
+void vi.mock('node:fs', () => {
   const actual = realNodeFsModule;
   return {
     ...actual,

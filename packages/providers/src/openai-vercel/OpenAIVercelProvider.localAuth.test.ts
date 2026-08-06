@@ -30,14 +30,14 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-vi.mock('ai', () => ({
+void vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
   extractReasoningMiddleware: vi.fn(() => ({})),
   wrapLanguageModel: vi.fn((model) => model),
 }));
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 

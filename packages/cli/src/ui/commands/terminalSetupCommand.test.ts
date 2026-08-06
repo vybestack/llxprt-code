@@ -18,7 +18,9 @@ const realTerminalSetupModule = {
   ...(await import('../utils/terminalSetup.js')),
 };
 
-vi.mock('../utils/terminalSetup.js', () => automock(realTerminalSetupModule2));
+void vi.mock('../utils/terminalSetup.js', () =>
+  automock(realTerminalSetupModule2),
+);
 
 describe('terminalSetupCommand', () => {
   beforeEach(() => {

@@ -56,7 +56,7 @@ import {
 } from './helpers/directMessageObservers.js';
 
 // retry must be a no-op so the real DMP runs the provider call exactly once
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
 

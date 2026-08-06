@@ -16,11 +16,11 @@ const realLlxprtCodeTelemetryModule = {
 const useRuntimeApiMock = vi.fn();
 const setTokenTrackingMetricsMock = vi.fn();
 
-vi.mock('../../../contexts/RuntimeContext.js', () => ({
+void vi.mock('../../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   const actual = realLlxprtCodeTelemetryModule;
 
   class DebugLoggerStub {

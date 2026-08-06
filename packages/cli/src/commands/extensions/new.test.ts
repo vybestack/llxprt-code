@@ -13,9 +13,9 @@ import * as fsPromises from 'node:fs/promises';
 
 const realPromisesModule = { ...(await import('node:fs/promises')) };
 
-vi.mock('node:fs/promises', () => automock(realPromisesModule));
+void vi.mock('node:fs/promises', () => automock(realPromisesModule));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 

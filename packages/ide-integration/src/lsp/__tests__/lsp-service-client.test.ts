@@ -72,11 +72,11 @@ const createConnection = () => ({
   dispose: vi.fn(),
 });
 
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   spawn: spawnMock,
 }));
 
-vi.mock('vscode-jsonrpc/node.js', () => ({
+void vi.mock('vscode-jsonrpc/node.js', () => ({
   createMessageConnection: createMessageConnectionMock,
   StreamMessageReader: streamMessageReaderMock,
   StreamMessageWriter: streamMessageWriterMock,

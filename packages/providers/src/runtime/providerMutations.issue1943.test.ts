@@ -27,7 +27,7 @@ const mockProviderManager = {
   getActiveProviderName: vi.fn().mockReturnValue('openai'),
 };
 
-vi.mock('./runtimeAccessors.js', () => ({
+void vi.mock('./runtimeAccessors.js', () => ({
   getCliRuntimeServices: () => ({
     config: mockConfig,
     settingsService: mockSettingsService,

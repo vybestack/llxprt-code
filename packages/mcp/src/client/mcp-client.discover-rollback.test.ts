@@ -30,20 +30,22 @@ const realOauthTokenStorageModule = {
 };
 const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
   automock(realStdioModule),
 );
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
-vi.mock('../auth/oauth-provider.js', () => automock(realOauthProviderModule));
-vi.mock('../auth/oauth-token-storage.js', () =>
+void vi.mock('../auth/oauth-provider.js', () =>
+  automock(realOauthProviderModule),
+);
+void vi.mock('../auth/oauth-token-storage.js', () =>
   automock(realOauthTokenStorageModule),
 );
-vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
-vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
+void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },

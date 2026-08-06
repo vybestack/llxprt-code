@@ -23,8 +23,8 @@ import { getAllSessionFiles } from './sessionUtils.js';
 
 const realPromisesModule = { ...(await import('fs/promises')) };
 
-vi.mock('fs/promises', () => automock(realPromisesModule));
-vi.mock('./sessionUtils.js', () => ({
+void vi.mock('fs/promises', () => automock(realPromisesModule));
+void vi.mock('./sessionUtils.js', () => ({
   getAllSessionFiles: vi.fn(),
 }));
 

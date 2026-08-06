@@ -16,12 +16,12 @@ import type { CliArgs } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import type { ContextResolutionResult } from '../interactiveContext.js';
 
-vi.mock('../policy.js', () => ({
+void vi.mock('../policy.js', () => ({
   createPolicyEngineConfig: vi.fn().mockResolvedValue({}),
 }));
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     isRipgrepAvailable: vi.fn().mockResolvedValue(false),

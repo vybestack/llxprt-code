@@ -40,6 +40,11 @@
       "@vybestack/llxprt-code-storage/testing": ["./src/testing.ts"]
     }
   },
-  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
+  "include": [
+    "../../bun-test-corrections.d.ts",
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json"
+  ],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

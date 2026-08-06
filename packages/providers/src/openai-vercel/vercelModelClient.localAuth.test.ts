@@ -25,7 +25,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 

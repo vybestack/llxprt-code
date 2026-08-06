@@ -26,7 +26,7 @@ import {
 const mockHomedir = vi.fn();
 
 const actualOs = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actualOs,
     ...(actualOs.default !== null &&
@@ -43,7 +43,7 @@ vi.mock('node:os', () => {
   };
 });
 
-vi.mock('../config/trustedFolders.js', () => ({
+void vi.mock('../config/trustedFolders.js', () => ({
   isFolderTrustEnabled: vi.fn(),
   isWorkspaceTrusted: vi.fn(),
 }));

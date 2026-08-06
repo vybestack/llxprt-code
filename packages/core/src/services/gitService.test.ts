@@ -14,7 +14,7 @@ import type { ChildProcess } from 'node:child_process';
 import { getProjectHash, LLXPRT_DIR } from '../utils/paths.js';
 
 const hoistedMockExec = vi.fn();
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   exec: hoistedMockExec,
 }));
 
@@ -25,7 +25,7 @@ const hoistedMockInit = vi.fn();
 const hoistedMockRaw = vi.fn();
 const hoistedMockAdd = vi.fn();
 const hoistedMockCommit = vi.fn();
-vi.mock('simple-git', () => ({
+void vi.mock('simple-git', () => ({
   simpleGit: hoistedMockSimpleGit.mockImplementation(() => ({
     checkIsRepo: hoistedMockCheckIsRepo,
     init: hoistedMockInit,
@@ -38,13 +38,13 @@ vi.mock('simple-git', () => ({
 }));
 
 const hoistedIsGitRepositoryMock = vi.fn();
-vi.mock('../utils/gitUtils.js', () => ({
+void vi.mock('../utils/gitUtils.js', () => ({
   isGitRepository: hoistedIsGitRepositoryMock,
 }));
 
 const hoistedMockHomedir = vi.fn();
 const actual = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actual,
     homedir: hoistedMockHomedir,
@@ -56,7 +56,7 @@ const hoistedMockDebugLogger = {
   warn: vi.fn(),
   error: vi.fn(),
 };
-vi.mock('../utils/debugLogger.js', () => ({
+void vi.mock('../utils/debugLogger.js', () => ({
   debugLogger: hoistedMockDebugLogger,
 }));
 

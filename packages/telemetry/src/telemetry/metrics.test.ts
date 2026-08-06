@@ -43,7 +43,7 @@ const {
   };
 })();
 
-vi.mock('@opentelemetry/api', () => ({
+void vi.mock('@opentelemetry/api', () => ({
   metrics: {
     getMeter: mockGetMeterFn,
   },

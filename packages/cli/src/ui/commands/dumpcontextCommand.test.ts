@@ -10,7 +10,7 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
-vi.mock('@vybestack/llxprt-code-providers', () => {
+void vi.mock('@vybestack/llxprt-code-providers', () => {
   return {
     ...actual,
     dumpRequestContext: vi.fn().mockResolvedValue({
@@ -23,7 +23,7 @@ vi.mock('@vybestack/llxprt-code-providers', () => {
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: vi.fn(() => ({
     getEphemeralSetting: vi.fn((key: string) => {
       if (key === 'dumpcontext') {

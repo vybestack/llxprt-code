@@ -11,7 +11,7 @@ import { MessageType } from '../../../types.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';
 
-vi.mock('../../../../config/environmentLoader.js', () => ({
+void vi.mock('../../../../config/environmentLoader.js', () => ({
   loadHierarchicalLlxprtMemory: vi.fn(),
 }));
 

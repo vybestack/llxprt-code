@@ -26,7 +26,7 @@ const realRetryModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
 };
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => {
   const actual = realRetryModule;
   return {
     ...actual,
@@ -35,7 +35,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => {
 });
 
 // Mock turnLogging
-vi.mock('./turnLogging.js', () => ({
+void vi.mock('./turnLogging.js', () => ({
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),

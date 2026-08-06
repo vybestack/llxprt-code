@@ -29,9 +29,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-vi.mock('node:fs', () => automock(realNodeFsModule));
+void vi.mock('node:fs', () => automock(realNodeFsModule));
 const actualOs = { ...(await import('node:os')) };
-vi.mock('node:os', () => {
+void vi.mock('node:os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(),

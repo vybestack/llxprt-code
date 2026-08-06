@@ -12,11 +12,11 @@ import { ConsentPrompt } from './ConsentPrompt.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { MarkdownDisplay } from '../utils/MarkdownDisplay.js';
 
-vi.mock('./shared/RadioButtonSelect.js', () => ({
+void vi.mock('./shared/RadioButtonSelect.js', () => ({
   RadioButtonSelect: vi.fn(() => null),
 }));
 
-vi.mock('../utils/MarkdownDisplay.js', () => ({
+void vi.mock('../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: vi.fn(() => null),
 }));
 

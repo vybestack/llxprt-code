@@ -194,7 +194,7 @@ function makeCoordinator(opts?: {
 // Register runtime accessors via the bridge
 
 // Mock @vybestack/llxprt-code-core ProfileManager
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

@@ -9,7 +9,7 @@
 // Mock 'os' first.
 import * as osActual from 'os';
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
@@ -19,14 +19,14 @@ vi.mock('os', () => {
 
 // Mock './settings.js' to ensure it uses the mocked 'os.homedir()' for its internal constants.
 const actualSettingsModule = { ...(await import('./settings.js')) };
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   __esModule: true, // Ensure correct module shape
   ...actualSettingsModule, // Re-export all original members
   // We are relying on originalModule's USER_SETTINGS_PATH being constructed with mocked os.homedir()
 }));
 
 // Mock trustedFolders
-vi.mock('./trustedFolders.js', () => ({
+void vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn(),
   isFolderTrustEnabled: vi.fn(),
 }));
@@ -56,7 +56,7 @@ const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency
 
 const __actual = { ...(await import('fs')) };
-vi.mock('fs', () => {
+void vi.mock('fs', () => {
   // Get all the functions from the real 'fs' module
   const actualFs = __actual;
 
@@ -77,14 +77,14 @@ const mockCoreEvents = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     coreEvents: mockCoreEvents,
   };
 });
 
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),
 }));
 

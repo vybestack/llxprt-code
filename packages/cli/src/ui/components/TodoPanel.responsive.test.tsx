@@ -18,7 +18,7 @@ const realUseTerminalSizeModule = {
   ...(await import('../hooks/useTerminalSize.js')),
 };
 
-vi.mock('../hooks/useTerminalSize.js', () =>
+void vi.mock('../hooks/useTerminalSize.js', () =>
   automock(realUseTerminalSizeModule),
 );
 

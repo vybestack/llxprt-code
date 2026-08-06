@@ -58,7 +58,7 @@ class RecordingTokenUsageLogger extends TokenUsageLogger {
 const actual = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
   const tokenLimit = vi.fn(
     (_model: string, userContextLimit?: number) =>
       userContextLimit ?? 1_000_000,
@@ -79,7 +79,7 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
 });
 
 const actual2 = { ...(await import('./turn.js')) };
-vi.mock('./turn.js', () => {
+void vi.mock('./turn.js', () => {
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;

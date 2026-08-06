@@ -19,11 +19,11 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => {
+void vi.mock('@anthropic-ai/sdk', () => {
   class FakeAnthropic {
     static created: Array<{
       instanceId: symbol;

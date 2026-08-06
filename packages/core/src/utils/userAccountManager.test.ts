@@ -14,7 +14,7 @@ import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 const actualOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(),

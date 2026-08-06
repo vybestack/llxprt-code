@@ -46,7 +46,7 @@ type TestPart = Parameters<typeof splitPartsByRole>[0][number];
 
 const mockGetCodeAssistServer = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
@@ -56,7 +56,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('../../../utils/markdownUtilities.js', () => ({
+void vi.mock('../../../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((text: string) => text.length),
 }));
 

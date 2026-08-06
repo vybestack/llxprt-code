@@ -10,7 +10,7 @@ import { createProviderWithRuntime } from '../test-utils/runtime.js';
 
 // Mock the settings service instance
 const __actual = { ...(await import('@vybestack/llxprt-code-settings')) };
-vi.mock('@vybestack/llxprt-code-settings', () => ({
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...(__actual as typeof import('@vybestack/llxprt-code-settings')),
   getSettingsService: vi.fn(),
 }));

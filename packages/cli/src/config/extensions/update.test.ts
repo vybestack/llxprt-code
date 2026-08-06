@@ -35,7 +35,7 @@ const mockGit = {
   path: vi.fn(),
 };
 
-vi.mock('simple-git', () => ({
+void vi.mock('simple-git', () => ({
   simpleGit: vi.fn((path?: string) => {
     // Return the provided path or an empty string if not provided
     mockGit.path.mockReturnValue(path ?? '');
@@ -44,7 +44,7 @@ vi.mock('simple-git', () => ({
 }));
 
 const mockedOs = { ...(await import('os')) };
-vi.mock('os', () => {
+void vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock('os', () => {
 });
 
 const actual = { ...(await import('../trustedFolders.js')) };
-vi.mock('../trustedFolders.js', () => {
+void vi.mock('../trustedFolders.js', () => {
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn(),
@@ -63,7 +63,7 @@ const mockLogExtensionInstallEvent = vi.fn();
 const mockLogExtensionUninstall = vi.fn();
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualActual,
     logExtensionInstallEvent: mockLogExtensionInstallEvent,

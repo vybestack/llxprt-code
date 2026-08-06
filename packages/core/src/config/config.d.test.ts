@@ -59,7 +59,7 @@ const mcpInstances: Array<{
 }> = [];
 
 const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-vi.mock('@vybestack/llxprt-code-mcp', () => {
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
   const actual = __actual as Record<string, unknown>;
   return {
     ...actual,
@@ -90,42 +90,44 @@ vi.mock('@vybestack/llxprt-code-mcp', () => {
 });
 
 const __actual2 = { ...(await import('fs')) };
-vi.mock('fs', () => buildFsMockBody(__actual2));
+void vi.mock('fs', () => buildFsMockBody(__actual2));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
 const __actual3 = { ...(await import('@vybestack/llxprt-code-tools')) };
-vi.mock('@vybestack/llxprt-code-tools', () => buildToolsMockBody(__actual3));
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  buildToolsMockBody(__actual3),
+);
 
 // Mock individual tools if their constructors are complex or have side effects
 
 const __actual4 = { ...(await import('../core/contentGenerator.js')) };
-vi.mock('../core/contentGenerator.js', () =>
+void vi.mock('../core/contentGenerator.js', () =>
   buildContentGeneratorMockBody(__actual4),
 );
 
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
+void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 const __actual5 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
-vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
   buildIdeIntegrationMockBody(__actual5),
 );
 
-vi.mock('../utils/memoryDiscovery.js', () =>
+void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
 const __actual6 = { ...(await import('../utils/events.js')) };
-vi.mock('../utils/events.js', () =>
+void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual6, hoistedConfigMocks),
 );
 
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('setApprovalMode with folder trust', () => {
   const baseParams: ConfigParameters = {

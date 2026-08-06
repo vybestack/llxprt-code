@@ -23,7 +23,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import * as debugLoggerModule from '../utils/debugLogger.js';
 
 const __actual = { ...(await import('node:fs/promises')) };
-vi.mock('node:fs/promises', () => {
+void vi.mock('node:fs/promises', () => {
   const actual = __actual as typeof import('node:fs/promises');
   const mockExports = {
     ...actual,
@@ -41,7 +41,7 @@ vi.mock('node:fs/promises', () => {
   return { ...mockExports, default: mockExports };
 });
 const __actual2 = { ...(await import('@vybestack/llxprt-code-settings')) };
-vi.mock('@vybestack/llxprt-code-settings', () => {
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   const actual = __actual2 as typeof import('@vybestack/llxprt-code-settings');
   return {
     ...actual,

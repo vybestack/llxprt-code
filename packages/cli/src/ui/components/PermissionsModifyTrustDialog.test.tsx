@@ -36,7 +36,7 @@ const mockedRestoreSnapshot = vi.fn();
 const mockedResolvePathTrust = vi.fn();
 const mockedTrustedConfig = {} as Record<string, TrustLevel>;
 
-vi.mock('node:process', () => {
+void vi.mock('node:process', () => {
   const actual = realNodeProcessModule;
   return {
     ...actual,
@@ -46,7 +46,7 @@ vi.mock('node:process', () => {
 });
 
 // Mock the trustedFolders module
-vi.mock('../../config/trustedFolders.js', () => {
+void vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;
   return {
     ...actual,
@@ -66,7 +66,7 @@ vi.mock('../../config/trustedFolders.js', () => {
 });
 
 // Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,

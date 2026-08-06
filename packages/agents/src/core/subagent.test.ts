@@ -23,7 +23,7 @@ import {
 } from './subagent-test-helpers.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual,
     IdeClient: {
@@ -38,7 +38,7 @@ vi.mock('@vybestack/llxprt-code-ide-integration', () => {
 const actual2 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
   return {
     ...actual2,
     getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),

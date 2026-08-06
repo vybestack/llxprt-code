@@ -43,7 +43,7 @@ const mockConfirmOverwrite: Mock<(promptType: unknown) => boolean> = vi.fn();
 const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
 // Mock readline module to control confirmOverwrite
-vi.mock('node:readline', () => ({
+void vi.mock('node:readline', () => ({
   createInterface: vi.fn(() => ({
     question: vi.fn((prompt: string, callback: (answer: string) => void) => {
       // Call the mocked confirmOverwrite function and resolve based on its return value
@@ -68,7 +68,7 @@ function resolvePromptType(prompt: string): string {
   return 'unknown';
 }
 
-vi.mock('../../config/extensions/settingsIntegration.js', () => {
+void vi.mock('../../config/extensions/settingsIntegration.js', () => {
   const actual = realSettingsIntegrationModule;
   return {
     updateSetting: mockUpdateSetting,
@@ -78,11 +78,11 @@ vi.mock('../../config/extensions/settingsIntegration.js', () => {
   };
 });
 
-vi.mock('./utils.js', () => ({
+void vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../../config/extension.js', () => {
+void vi.mock('../../config/extension.js', () => {
   const actual = realExtensionModule;
   return {
     ...actual,
@@ -91,19 +91,19 @@ vi.mock('../../config/extension.js', () => {
   };
 });
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   promptForSetting: mockPromptForSetting,
 }));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-vi.mock('./utils.js', () => ({
+void vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../../config/extension.js', () => {
+void vi.mock('../../config/extension.js', () => {
   const actual = realExtensionModule;
   return {
     ...actual,
@@ -112,20 +112,20 @@ vi.mock('../../config/extension.js', () => {
   };
 });
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   promptForSetting: mockPromptForSetting,
 }));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings: mockLoadSettings,
 }));
 
 // Mock confirmOverwrite in the config module
-vi.mock('./config.js', () => {
+void vi.mock('./config.js', () => {
   const actual = realConfigModule;
   return {
     ...actual,

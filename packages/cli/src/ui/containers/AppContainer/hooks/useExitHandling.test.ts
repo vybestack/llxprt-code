@@ -15,7 +15,7 @@ const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
 
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
 
   return {
@@ -24,7 +24,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock('../../../utils/terminalProtocolCleanup.js', () => ({
+void vi.mock('../../../utils/terminalProtocolCleanup.js', () => ({
   restoreTerminalProtocolsSync: vi.fn(),
 }));
 

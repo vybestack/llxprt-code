@@ -39,7 +39,7 @@ const debugLogger = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-vi.mock('@vybestack/llxprt-code-core', () => {
+void vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     // discoverSkillsForConfig owns the session MessageBus + Config.initialize
@@ -56,14 +56,14 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 // #2378), so mock THAT package here — not core — to capture the command's
 // output via the emitConsoleLog spy while core events stay real.
 const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-vi.mock('@vybestack/llxprt-code-telemetry', () => {
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   Object.assign(actualActual.debugLogger, debugLogger);
   return actualActual;
 });
 
-vi.mock('../../config/settings.js', () => automock(realSettingsModule));
-vi.mock('../../config/config.js', () => automock(realConfigModule));
-vi.mock('../utils.js', () => ({
+void vi.mock('../../config/settings.js', () => automock(realSettingsModule));
+void vi.mock('../../config/config.js', () => automock(realConfigModule));
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
