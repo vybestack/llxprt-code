@@ -32,6 +32,7 @@ export interface ShellJobInfo {
   command: string;
   cwd: string;
   status: AsyncTaskStatus;
+  pid?: number;
   launchedAt?: number;
   completedAt?: number;
   exitCode?: number;

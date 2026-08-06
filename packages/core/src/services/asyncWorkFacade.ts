@@ -24,6 +24,7 @@ export interface FacadeWorkInfo {
   // shell-specific
   command?: string;
   cwd?: string;
+  pid?: number;
   exitCode?: number;
   signal?: string;
   failureReason?: string;
@@ -64,6 +65,7 @@ function jobToInfo(job: ShellJob): FacadeWorkInfo {
     kind: 'shell',
     id: job.id,
     status: job.state,
+    pid: job.pid,
     launchedAt: job.startedAt,
     completedAt: job.endedAt,
     command: job.command,
