@@ -281,7 +281,8 @@ export function buildWindowsBackgroundBootstrap(
  *
  * The outer PowerShell process is spawned WITHOUT `detached: true` (which is
  * broken on Windows — see file header) but `unref()`'d with all-stdio ignored
- * so it never holds the parent open. The inner command runs via Start-Process
+ * so it never holds the parent open. Bun uses its reliable `exited` promise;
+ * Node uses the child-process exit event. The inner command runs via Start-Process
  * with -EncodedCommand, writing stdout and stderr to separate log files.
  *
  * The returned `pid` is the outer PowerShell PID; `taskkill /T /F /PID <pid>`
@@ -303,28 +304,64 @@ export function spawnWindowsBackground(
     errLogPath,
     cwd,
   });
+  const args = ['-NoProfile', '-NonInteractive', '-Command', bootstrap];
+  const bunSpawn = getBunSpawn();
+  if (bunSpawn !== null) {
+    return spawnWindowsBackgroundWithBun(bunSpawn, executable, args, cwd, env);
+  }
+  return spawnWindowsBackgroundWithNode(executable, args, cwd, env);
+}
 
-  const child = cpSpawn(
-    executable,
-    ['-NoProfile', '-NonInteractive', '-Command', bootstrap],
-    {
-      cwd,
-      env,
-      shell: false,
-      stdio: ['ignore', 'ignore', 'ignore'],
-    },
+function spawnWindowsBackgroundWithBun(
+  bun: BunSpawnGlobal,
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string | undefined>,
+): SpawnedProcess {
+  const subprocess = bun.spawn({
+    cmd: [executable, ...args],
+    cwd,
+    env,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+  const exited = subprocess.exited.then(
+    (): ProcessExitInfo => ({
+      exitCode: subprocess.exitCode,
+      signal: subprocess.signalCode,
+    }),
   );
+  subprocess.unref();
+  return {
+    pid: subprocess.pid,
+    child: subprocess as unknown as ChildProcess,
+    exited,
+    onError: (handler) => {
+      void subprocess.exited.catch((err: unknown) => {
+        handler(err instanceof Error ? err : new Error(String(err)));
+      });
+    },
+  };
+}
 
-  // Detach the child from the parent's event loop so background jobs do not
-  // keep the process alive.
+function spawnWindowsBackgroundWithNode(
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string | undefined>,
+): SpawnedProcess {
+  const child = cpSpawn(executable, args, {
+    cwd,
+    env,
+    shell: false,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
   child.unref();
-
   const exited = new Promise<ProcessExitInfo>((resolve) => {
     child.on('exit', (code, signal) => {
       resolve({ exitCode: code, signal });
     });
   });
-
   return {
     pid: child.pid ?? -1,
     child,
