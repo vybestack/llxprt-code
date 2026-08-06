@@ -130,6 +130,9 @@ describe('Trusted Folders Loading', () => {
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -567,6 +570,9 @@ describe('isWorkspaceTrusted', () => {
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
     // Clear the object
     Object.keys(mockRules).forEach((key) => delete mockRules[key]);
