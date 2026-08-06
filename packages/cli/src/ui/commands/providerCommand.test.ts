@@ -54,18 +54,10 @@ const mocks = (() => {
   };
 })();
 
-// This test writes real alias files, but the workspace test preload replaces
-// providerAliases.js with a stub whose writeProviderAliasConfig is a no-op.
-// Restore the genuine module, then re-export its real functions through the
-// composition.js mock that providerCommand.ts imports from.
-// Bun runs each test file in its own process, so providerAliases is never
-// globally mocked and needs no unmocking here.
-
+// This test writes real alias files, so it opts out of the preload's
+// providerAliases stub (see bun-test-setup.ts) and re-exports the genuine
+// functions through the composition.js mock that providerCommand.ts imports.
 vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
-  // vi.importActual resolves the genuine module on both runners: Vitest
-  // bypasses its own mock registry, and the Bun shim returns the snapshot it
-  // captured before the preload registered its stub. It must be read inside
-  // the factory because Vitest hoists this call above the module body.
   const real = realProviderAliasesModule;
   return {
     getProviderManager: mocks.getProviderManagerMock,

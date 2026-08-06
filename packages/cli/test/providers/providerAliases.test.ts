@@ -18,26 +18,8 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// This integration test needs the real config files, but the workspace preload
-// globally stubs providerAliases. mock.module does not intercept require(), so
-// require reaches the genuine module, which is then registered back over the
-// stub. This must run before the awaited imports below, which pull in the
-// consumers that read the alias entries.
-const ALIASES_SPECIFIER =
-  '@vybestack/llxprt-code-providers/composition/providerAliases.js';
-const aliasesRequire = createRequire(import.meta.url);
-const realProviderAliasesModule = aliasesRequire(
-  ALIASES_SPECIFIER,
-) as typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js');
-// Register under both the package specifier and the resolved path: consumers
-// inside the providers package import it relatively, and mock.module keys on
-// whatever string the importer used.
-for (const id of new Set([
-  ALIASES_SPECIFIER,
-  aliasesRequire.resolve(ALIASES_SPECIFIER),
-])) {
-  mock.module(id, () => realProviderAliasesModule);
-}
+// This integration test exercises the real alias config files, so it opts
+// out of the preload's providerAliases stub (see bun-test-setup.ts).
 
 // Loaded with top-level await rather than a static import so the modules that
 // consume providerAliases are evaluated AFTER the unmock above. Static imports
