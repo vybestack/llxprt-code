@@ -4,18 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { isBunRuntime, isBunPosix, isWindows } from './runtime.js';
 
 describe('runtime detection', () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 
   describe('isBunRuntime', () => {
     it('returns false when process.versions.bun is undefined', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: undefined },
       });
@@ -23,7 +24,7 @@ describe('runtime detection', () => {
     });
 
     it('returns true when process.versions.bun is a version string', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: '1.3.14' },
       });
@@ -31,7 +32,7 @@ describe('runtime detection', () => {
     });
 
     it('is synchronous (returns a boolean, not a promise)', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: '1.3.14' },
       });
@@ -40,7 +41,7 @@ describe('runtime detection', () => {
     });
 
     it('does not throw when versions object is missing bun key entirely', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: {},
       });
@@ -49,7 +50,7 @@ describe('runtime detection', () => {
     });
 
     it('does not throw when versions is undefined', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: undefined,
       });
@@ -58,19 +59,19 @@ describe('runtime detection', () => {
     });
 
     it('does not throw when process global is undefined', () => {
-      vi.stubGlobal('process', undefined);
+      setGlobal('process', undefined);
       expect(() => isBunRuntime()).not.toThrow();
       expect(isBunRuntime()).toBe(false);
     });
 
     it('does not throw when process global is null', () => {
-      vi.stubGlobal('process', null);
+      setGlobal('process', null);
       expect(() => isBunRuntime()).not.toThrow();
       expect(isBunRuntime()).toBe(false);
     });
 
     it('returns false when bun version is a non-string value', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: 1 },
       });
@@ -78,7 +79,7 @@ describe('runtime detection', () => {
     });
 
     it('returns false when bun version is null', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: null },
       });
@@ -86,7 +87,7 @@ describe('runtime detection', () => {
     });
 
     it('returns false when bun version is an empty string', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: '' },
       });
@@ -96,7 +97,7 @@ describe('runtime detection', () => {
 
   describe('isBunPosix', () => {
     it('returns false when not running under Bun', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: undefined },
       });
@@ -104,7 +105,7 @@ describe('runtime detection', () => {
     });
 
     it('returns true when under Bun on linux', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'linux',
         versions: { bun: '1.3.14' },
       });
@@ -112,7 +113,7 @@ describe('runtime detection', () => {
     });
 
     it('returns true when under Bun on darwin', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'darwin',
         versions: { bun: '1.3.14' },
       });
@@ -120,7 +121,7 @@ describe('runtime detection', () => {
     });
 
     it('returns false when under Bun on an unsupported POSIX platform', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'freebsd',
         versions: { bun: '1.3.14' },
       });
@@ -128,7 +129,7 @@ describe('runtime detection', () => {
     });
 
     it('returns false when under Bun on win32', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         platform: 'win32',
         versions: { bun: '1.3.14' },
       });
@@ -136,12 +137,12 @@ describe('runtime detection', () => {
     });
 
     it('returns false when process global is undefined', () => {
-      vi.stubGlobal('process', undefined);
+      setGlobal('process', undefined);
       expect(isBunPosix()).toBe(false);
     });
 
     it('returns false when under Bun but platform key is absent', () => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         versions: { bun: '1.3.14' },
       });
       expect(isBunPosix()).toBe(false);
@@ -150,32 +151,32 @@ describe('runtime detection', () => {
 
   describe('isWindows', () => {
     it('returns true when platform is win32', () => {
-      vi.stubGlobal('process', { platform: 'win32', versions: {} });
+      setGlobal('process', { platform: 'win32', versions: {} });
       expect(isWindows()).toBe(true);
     });
 
     it('returns false when platform is linux', () => {
-      vi.stubGlobal('process', { platform: 'linux', versions: {} });
+      setGlobal('process', { platform: 'linux', versions: {} });
       expect(isWindows()).toBe(false);
     });
 
     it('returns false when platform is darwin', () => {
-      vi.stubGlobal('process', { platform: 'darwin', versions: {} });
+      setGlobal('process', { platform: 'darwin', versions: {} });
       expect(isWindows()).toBe(false);
     });
 
     it('returns false when platform is freebsd', () => {
-      vi.stubGlobal('process', { platform: 'freebsd', versions: {} });
+      setGlobal('process', { platform: 'freebsd', versions: {} });
       expect(isWindows()).toBe(false);
     });
 
     it('returns false when platform is undefined', () => {
-      vi.stubGlobal('process', { platform: undefined, versions: {} });
+      setGlobal('process', { platform: undefined, versions: {} });
       expect(isWindows()).toBe(false);
     });
 
     it('does not throw when process global is undefined', () => {
-      vi.stubGlobal('process', undefined);
+      setGlobal('process', undefined);
       expect(() => isWindows()).not.toThrow();
       expect(isWindows()).toBe(false);
     });

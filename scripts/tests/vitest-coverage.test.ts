@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  restoreEnv,
+  setEnv,
+} from '../../packages/test-utils/src/env-test-helpers.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
@@ -26,8 +30,8 @@ const helperPath = resolve(
 describe('isCoverageEnabled', () => {
   // Snapshot the original env state so the "unset" test (which performs a real
   // deletion to verify genuine unset semantics) cannot leak into sibling test
-  // files in the same worker. vi.unstubAllEnvs only restores stubEnv mutations,
-  // not a key deleted directly off process.env.
+  // files in the same worker. restoreEnv only reverts setEnv mutations, not a
+  // key deleted directly off process.env.
   const originalValue = process.env['LLXPRT_COVERAGE'];
   const hadKey = Object.prototype.hasOwnProperty.call(
     process.env,
@@ -61,7 +65,7 @@ describe('isCoverageEnabled', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     if (hadKey) {
       process.env['LLXPRT_COVERAGE'] = originalValue;
     } else {
@@ -76,19 +80,19 @@ describe('isCoverageEnabled', () => {
   });
 
   it('returns false when LLXPRT_COVERAGE === "false"', async () => {
-    vi.stubEnv('LLXPRT_COVERAGE', 'false');
+    setEnv('LLXPRT_COVERAGE', 'false');
     const mod = await loadHelper();
     expect(mod.isCoverageEnabled).toBe(false);
   });
 
   it('returns true when LLXPRT_COVERAGE === "true"', async () => {
-    vi.stubEnv('LLXPRT_COVERAGE', 'true');
+    setEnv('LLXPRT_COVERAGE', 'true');
     const mod = await loadHelper();
     expect(mod.isCoverageEnabled).toBe(true);
   });
 
   it('returns true for any value other than "false"', async () => {
-    vi.stubEnv('LLXPRT_COVERAGE', '1');
+    setEnv('LLXPRT_COVERAGE', '1');
     const mod = await loadHelper();
     expect(mod.isCoverageEnabled).toBe(true);
   });

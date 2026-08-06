@@ -7,6 +7,7 @@
  * should not require authentication, as they are typically used with
  * local AI servers like Ollama that don't require API keys.
  */
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
@@ -133,8 +134,8 @@ describe('OpenAI local endpoint tests', () => {
     FakeOpenAIClass.reset();
     // Clear environment variables that could interfere with auth tests
     // This is critical for CI environments which may have OPENAI_API_KEY set
-    vi.stubEnv('OPENAI_API_KEY', '');
-    vi.stubEnv('OPENAI_BASE_URL', '');
+    setEnv('OPENAI_API_KEY', '');
+    setEnv('OPENAI_BASE_URL', '');
 
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
@@ -146,7 +147,7 @@ describe('OpenAI local endpoint tests', () => {
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   describe('isLocalEndpoint utility', () => {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { spawn } from 'child_process';
 import EventEmitter from 'events';
@@ -45,7 +46,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       value: platform,
       configurable: true,
     });
-    vi.stubGlobal('process', processStub);
+    setGlobal('process', processStub);
   }
 
   beforeEach(() => {
@@ -68,7 +69,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
   });
 
   it('should handle Japanese text in shell commands without hanging', async () => {

@@ -15,6 +15,7 @@
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-18
  */
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -349,13 +350,13 @@ describe('First provider selection from no active provider (#2481)', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(new Response('{}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     try {
       await switchActiveProvider('anthropic');
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
-      vi.unstubAllGlobals();
+      restoreGlobals();
     }
   });
 

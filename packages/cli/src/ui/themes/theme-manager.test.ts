@@ -9,6 +9,7 @@ if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -125,9 +126,9 @@ describe('ThemeManager', () => {
   });
 
   it('should return NoColorTheme if NO_COLOR is set', () => {
-    vi.stubEnv('NO_COLOR', '1');
+    setEnv('NO_COLOR', '1');
     expect(themeManager.getActiveTheme().name).toBe('NoColor');
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   describe('getSemanticColors', () => {

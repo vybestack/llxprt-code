@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '../../test-utils/src/env-test-helpers.js';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as vscode from 'vscode';
 import {
@@ -132,7 +133,7 @@ function createExtensionContext(): vscode.ExtensionContext {
     environmentVariableCollection: {
       replace: (variable: string, value: string) => {
         environmentVariables.add(variable);
-        vi.stubEnv(variable, value);
+        setEnv(variable, value);
       },
       clear: () => {
         for (const variable of environmentVariables) {
@@ -206,7 +207,7 @@ async function buildConnectedStack(): Promise<{
   diffManager: DiffManager;
   context: vscode.ExtensionContext;
 }> {
-  vi.stubEnv('TERM_PROGRAM', 'vscode');
+  setEnv('TERM_PROGRAM', 'vscode');
   seedActiveEditor();
   const context = createExtensionContext();
   const diffManager = new DiffManager(
@@ -283,7 +284,7 @@ describe('IdeClient with the VS Code companion server', () => {
       configurable: true,
       value: true,
     });
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it('stores initial editor context before connect resolves (no polling)', async () => {
@@ -556,7 +557,7 @@ describe('IdeClient with the VS Code companion server', () => {
     // NOT cause a false Connected state. The client must end Disconnected.
     // The test timeout must exceed the client's internal context-receipt
     // timeout (5s) so the Disconnected result is observable.
-    vi.stubEnv('TERM_PROGRAM', 'vscode');
+    setEnv('TERM_PROGRAM', 'vscode');
     seedActiveEditor();
 
     // Create a bare MCP server (no ping interception, no ide/contextUpdate).
@@ -619,9 +620,9 @@ describe('IdeClient with the VS Code companion server', () => {
       typeof bareAddress === 'object' && bareAddress ? bareAddress.port : 0;
 
     // Make IdeClient connect to the bare server via env (no port file).
-    vi.stubEnv('LLXPRT_CODE_IDE_SERVER_PORT', String(barePort));
-    vi.stubEnv('LLXPRT_CODE_IDE_AUTH_TOKEN', authToken);
-    vi.stubEnv('LLXPRT_CODE_IDE_WORKSPACE_PATH', repositoryRoot);
+    setEnv('LLXPRT_CODE_IDE_SERVER_PORT', String(barePort));
+    setEnv('LLXPRT_CODE_IDE_AUTH_TOKEN', authToken);
+    setEnv('LLXPRT_CODE_IDE_WORKSPACE_PATH', repositoryRoot);
 
     IdeClient.resetInstance();
     ideClient = await IdeClient.getInstance();

@@ -4,8 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchZaiUsage, formatZaiUsage } from './usageInfo.js';
+
+afterEach(() => {
+  restoreGlobals();
+});
 
 describe('usageInfo', () => {
   describe('fetchZaiUsage', () => {
@@ -13,7 +18,7 @@ describe('usageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {

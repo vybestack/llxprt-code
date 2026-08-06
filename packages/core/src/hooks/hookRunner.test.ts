@@ -10,6 +10,7 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
+import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -25,6 +26,10 @@ import type { HookConfig } from './types.js';
 import type { Config } from '../config/config.js';
 import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
+
+afterEach(() => {
+  restoreGlobals();
+});
 
 function decodeSpawnCommand(args: readonly string[]): string {
   const shellCommand = String(args.at(-1) ?? '');
@@ -90,7 +95,7 @@ const mockConsole = {
   debug: vi.fn(),
 };
 
-vi.stubGlobal('console', mockConsole);
+setGlobal('console', mockConsole);
 
 // Dynamic import AFTER vi.mock calls so mocks are applied.
 const { HookRunner } = await import('./hookRunner.js');

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -36,7 +37,7 @@ describe('docsCommand', () => {
 
   afterEach(() => {
     // Restore any stubbed environment variables
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it("should add an info message and call 'open' in a non-sandbox environment", async () => {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -512,14 +513,14 @@ describe('loadCliConfig disableYoloMode', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
   });
 
@@ -570,14 +571,14 @@ describe('loadCliConfig secureModeEnabled', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
   });
 

@@ -49,10 +49,10 @@ vi.mock('node:fs', () => ({
 }));
 
 // Mock process.platform for platform-specific tests
-// Use Object.defineProperty directly on process (not vi.stubGlobal) so the
-// getter persists across nested describe beforeEach hooks. vi.stubGlobal
-// restores the original process in afterEach, causing the stub to be lost
-// before nested describe beforeEach runs.
+// Use Object.defineProperty directly on process (not setGlobal) so the
+// getter persists across nested describe beforeEach hooks. setGlobal is
+// undone in afterEach, which would lose the stub before a nested describe
+// beforeEach runs.
 const mockProcess = { platform: 'darwin' };
 
 // The per-test hooks below replace process.stdout / process.stderr with mock

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it, vi } from 'bun:test';
 import path from 'node:path';
 import { resolveBunEntry } from './bun-entry-resolver.js';
@@ -146,7 +147,7 @@ describe('resolveBunEntry', () => {
       const pathChecker = vi.fn(async (target: string) =>
         [bundlePath, sourcePath].includes(target),
       );
-      vi.stubEnv('LLXPRT_FORCE_SOURCE_ENTRY', '1');
+      setEnv('LLXPRT_FORCE_SOURCE_ENTRY', '1');
 
       try {
         const result = await resolveBunEntry({
@@ -156,7 +157,7 @@ describe('resolveBunEntry', () => {
 
         expect(result).toBe(sourcePath);
       } finally {
-        vi.unstubAllEnvs();
+        restoreEnv();
       }
     });
 

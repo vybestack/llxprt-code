@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  restoreGlobals,
+  setGlobal,
+} from '../../packages/test-utils/src/global-test-helpers.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -68,7 +72,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  restoreGlobals();
   process.env = { ...ORIGINAL_ENV };
   rmSync(testDir, { recursive: true, force: true });
 });
@@ -78,7 +82,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -95,7 +99,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -112,7 +116,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'OPENAI_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     await main();
 
@@ -138,7 +142,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -157,7 +161,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     delete process.env.OPENAI_API_KEY;
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -176,7 +180,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -193,7 +197,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -210,7 +214,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     delete process.env.OPENAI_API_KEY_2;
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(quotaResponse(10)));
+    setGlobal('fetch', vi.fn().mockResolvedValueOnce(quotaResponse(10)));
 
     await main();
 
@@ -222,7 +226,7 @@ describe('ci quota key selection outputs', () => {
     delete process.env.OPENAI_API_KEY;
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
     // Only key2 is configured so checkQuota is called exactly once (for key2).
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(quotaResponse(10)));
+    setGlobal('fetch', vi.fn().mockResolvedValueOnce(quotaResponse(10)));
 
     await main();
 
@@ -247,7 +251,7 @@ describe('ci quota key selection outputs', () => {
     delete process.env.OPENAI_API_KEY;
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     await main();
 
@@ -274,7 +278,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -290,7 +294,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -313,7 +317,7 @@ describe('ci quota key selection outputs', () => {
       process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
       process.env.OPENAI_API_KEY = 'primary-secret';
       process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-      vi.stubGlobal(
+      setGlobal(
         'fetch',
         vi
           .fn()
@@ -333,7 +337,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -351,7 +355,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -370,7 +374,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'primary-secret';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()
@@ -388,7 +392,7 @@ describe('ci quota key selection outputs', () => {
     process.env.KEY_VAR_NAME = 'SYNTHETIC_API_KEY';
     process.env.OPENAI_API_KEY = 'evil\nGITHUB_TOKEN=stolen';
     process.env.OPENAI_API_KEY_2 = 'secondary-secret';
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi
         .fn()

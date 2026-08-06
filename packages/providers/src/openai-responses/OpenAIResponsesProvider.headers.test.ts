@@ -1,3 +1,4 @@
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
@@ -40,7 +41,7 @@ describe('OpenAIResponsesProvider custom headers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue({});
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
     fetchMock.mockResolvedValue({
       ok: true,
       body: undefined,
@@ -48,7 +49,7 @@ describe('OpenAIResponsesProvider custom headers', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '../../test-utils/src/env-test-helpers.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as vscode from 'vscode';
 import { DiffContentProvider, DiffManager } from './diff-manager.js';
@@ -111,7 +112,7 @@ function createExtensionContext(): vscode.ExtensionContext {
     environmentVariableCollection: {
       replace: (variable: string, value: string) => {
         environmentVariables.add(variable);
-        vi.stubEnv(variable, value);
+        setEnv(variable, value);
       },
       clear: () => {
         for (const variable of environmentVariables) {
@@ -490,7 +491,7 @@ describe('IDEServer initial-context delivery concurrency', () => {
         configurable: true,
         value: undefined,
       });
-      vi.unstubAllEnvs();
+      restoreEnv();
       ideServer = undefined;
     }
   });

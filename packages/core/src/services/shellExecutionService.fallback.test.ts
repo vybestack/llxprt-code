@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -69,7 +70,7 @@ const mockProcessKill = vi
   .mockImplementation(() => true);
 
 const stubProcessPlatform = (platform: NodeJS.Platform): void => {
-  vi.stubGlobal('process', { ...process, env: process.env, platform });
+  setGlobal('process', { ...process, env: process.env, platform });
 };
 
 describe('ShellExecutionService child_process fallback', () => {
@@ -103,7 +104,7 @@ describe('ShellExecutionService child_process fallback', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
   });
 
   // Default shell execution config for tests

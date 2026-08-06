@@ -20,6 +20,7 @@
  * Uses fake timers/signals deterministically — no wall-clock sleeps.
  */
 
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -142,7 +143,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 
@@ -156,7 +157,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,
@@ -178,7 +179,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       metadataAbortSignal: controller.signal,
@@ -201,7 +202,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: invocationController.signal,
@@ -228,7 +229,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
           'data: [DONE]\n\n',
         ]),
       });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,
@@ -265,7 +266,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
     // First attempt: aborted fetch rejects with an AbortError (not retried).
     const abortError = new DOMException('aborted', 'AbortError');
     const fetchSpy = vi.fn().mockRejectedValueOnce(abortError);
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,

@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { computeTerminalTitle } from './windowTitle.js';
 import { StreamingState } from '../ui/types.js';
 
 describe('computeTerminalTitle', () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it.each([
@@ -150,7 +151,7 @@ describe('computeTerminalTitle', () => {
   });
 
   it('should prioritize CLI_TITLE environment variable over folder name when thoughts are disabled', () => {
-    vi.stubEnv('CLI_TITLE', 'EnvOverride');
+    setEnv('CLI_TITLE', 'EnvOverride');
 
     const title = computeTerminalTitle({
       streamingState: StreamingState.Idle,
@@ -180,7 +181,7 @@ describe('computeTerminalTitle', () => {
   });
 
   it('should truncate very long CLI_TITLE to fit within 80 characters', () => {
-    vi.stubEnv('CLI_TITLE', 'B'.repeat(100));
+    setEnv('CLI_TITLE', 'B'.repeat(100));
 
     const title = computeTerminalTitle({
       streamingState: StreamingState.Idle,

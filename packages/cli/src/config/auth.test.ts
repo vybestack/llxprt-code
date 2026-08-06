@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { vi } from 'bun:test';
 import { validateAuthMethod } from './auth.js';
 
@@ -16,14 +17,14 @@ vi.mock('./settings.js', () => ({
 
 describe('validateAuthMethod', () => {
   beforeEach(() => {
-    vi.stubEnv('GEMINI_API_KEY', undefined);
-    vi.stubEnv('GOOGLE_CLOUD_PROJECT', undefined);
-    vi.stubEnv('GOOGLE_CLOUD_LOCATION', undefined);
-    vi.stubEnv('GOOGLE_API_KEY', undefined);
+    setEnv('GEMINI_API_KEY', undefined);
+    setEnv('GOOGLE_CLOUD_PROJECT', undefined);
+    setEnv('GOOGLE_CLOUD_LOCATION', undefined);
+    setEnv('GOOGLE_API_KEY', undefined);
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it('should return null for oauth-personal', () => {
@@ -36,12 +37,12 @@ describe('validateAuthMethod', () => {
 
   describe('gemini-api-key', () => {
     it('should return null if GEMINI_API_KEY is set', () => {
-      vi.stubEnv('GEMINI_API_KEY', 'test-key');
+      setEnv('GEMINI_API_KEY', 'test-key');
       expect(validateAuthMethod('gemini-api-key')).toBeNull();
     });
 
     it('should return an error message if GEMINI_API_KEY is not set', () => {
-      vi.stubEnv('GEMINI_API_KEY', '');
+      setEnv('GEMINI_API_KEY', '');
       expect(validateAuthMethod('gemini-api-key')).toBe(
         'GEMINI_API_KEY environment variable not found. Add that to your environment and try again (no reload needed if using .env)!',
       );
@@ -50,13 +51,13 @@ describe('validateAuthMethod', () => {
 
   describe('vertex-ai', () => {
     it('should return null if GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are set', () => {
-      vi.stubEnv('GOOGLE_CLOUD_PROJECT', 'test-project');
-      vi.stubEnv('GOOGLE_CLOUD_LOCATION', 'test-location');
+      setEnv('GOOGLE_CLOUD_PROJECT', 'test-project');
+      setEnv('GOOGLE_CLOUD_LOCATION', 'test-location');
       expect(validateAuthMethod('vertex-ai')).toBeNull();
     });
 
     it('should return null if GOOGLE_API_KEY is set', () => {
-      vi.stubEnv('GOOGLE_API_KEY', 'test-api-key');
+      setEnv('GOOGLE_API_KEY', 'test-api-key');
       expect(validateAuthMethod('vertex-ai')).toBeNull();
     });
 

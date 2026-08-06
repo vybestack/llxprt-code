@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { createBunPty } from './bunPtyAdapter.js';
 import { isBunPosix } from './runtime.js';
+
+afterEach(() => {
+  restoreGlobals();
+});
 
 /**
  * End-to-end behavioral tests for the Bun.Terminal PTY adapter.
@@ -67,7 +72,7 @@ function createMockBunSubprocess(
 
 /**
  * Saves the original Bun.spawn so tests can restore it in afterEach.
- * Bun is non-configurable on globalThis, so vi.stubGlobal('Bun') fails.
+ * Bun is non-configurable on globalThis, so setGlobal('Bun') fails.
  * Instead we directly overwrite Bun.spawn (which IS writable).
  */
 const originalBunSpawn = Bun.spawn;

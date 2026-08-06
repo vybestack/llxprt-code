@@ -21,6 +21,7 @@
  *   - trustedFolder true / false
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -342,7 +343,7 @@ describe('approvalModeParity: approval mode resolution', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Scrub env vars that may leak from CI environment
     delete process.env.LLXPRT_PROFILE;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
@@ -360,7 +361,7 @@ describe('approvalModeParity: approval mode resolution', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });

@@ -20,6 +20,7 @@
  *   CLI --model > profile model > settings.model > env vars > alias default > Gemini default
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -333,14 +334,14 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Scrub env vars that may leak from CI environment
     delete process.env.LLXPRT_PROFILE;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -350,7 +351,7 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -362,13 +363,13 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
   });
 
   it('level 3: LLXPRT_DEFAULT_PROVIDER env sets the provider', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({});
     expect(config.getProvider()).toBe('anthropic');
   });
 
   it('level 1: CLI --provider overrides LLXPRT_DEFAULT_PROVIDER env', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({}, ['--provider', 'openai']);
     expect(config.getProvider()).toBe('openai');
   });
@@ -392,8 +393,8 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
-    vi.unstubAllEnvs();
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    restoreEnv();
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Scrub env vars that may leak from CI environment
     delete process.env.LLXPRT_PROFILE;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
@@ -403,7 +404,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -420,33 +421,33 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
   });
 
   it('level 5: GEMINI_MODEL env provides model when resolved provider is explicit gemini', async () => {
-    vi.stubEnv('GEMINI_MODEL', 'gemini-1.5-flash');
+    setEnv('GEMINI_MODEL', 'gemini-1.5-flash');
     const config = await runConfig({}, ['--provider', 'gemini']);
     expect(config.getProvider()).toBe('gemini');
     expect(config.getModel()).toBe('gemini-1.5-flash');
   });
 
   it('level 5: LLXPRT_DEFAULT_MODEL env provides model when no other override', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'gemini-env-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'gemini-env-model');
     const config = await runConfig({});
     expect(config.getModel()).toBe('gemini-env-model');
   });
 
   it('level 5: LLXPRT_DEFAULT_MODEL beats GEMINI_MODEL', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'preferred-model');
-    vi.stubEnv('GEMINI_MODEL', 'fallback-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'preferred-model');
+    setEnv('GEMINI_MODEL', 'fallback-model');
     const config = await runConfig({});
     expect(config.getModel()).toBe('preferred-model');
   });
 
   it('level 4: settings.model beats env vars', async () => {
-    vi.stubEnv('GEMINI_MODEL', 'env-model');
+    setEnv('GEMINI_MODEL', 'env-model');
     const config = await runConfig({ model: 'settings-model' });
     expect(config.getModel()).toBe('settings-model');
   });
 
   it('level 1: CLI --model beats settings.model and env', async () => {
-    vi.stubEnv('GEMINI_MODEL', 'env-model');
+    setEnv('GEMINI_MODEL', 'env-model');
     const config = await runConfig({ model: 'settings-model' }, [
       '--model',
       'cli-model',
@@ -455,7 +456,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
   });
 
   it('level 1: CLI --model beats LLXPRT_DEFAULT_MODEL env', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'env-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'env-model');
     const config = await runConfig({}, ['--model', 'cli-model']);
     expect(config.getModel()).toBe('cli-model');
   });

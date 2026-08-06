@@ -8,7 +8,11 @@
  * the mock setup without exceeding max-lines.
  */
 
-import { vi, type Mock } from 'bun:test';
+import {
+  setGlobal,
+  restoreGlobals,
+} from '../../../test-utils/src/global-test-helpers.js';
+import { vi, type Mock, afterEach } from 'bun:test';
 import type { MockInstance } from 'bun:test';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
@@ -16,6 +20,10 @@ import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import type { MCPOAuthToken } from './oauth-token-storage.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import * as crypto from 'node:crypto';
+
+afterEach(() => {
+  restoreGlobals();
+});
 
 export const mockFetch = vi.fn();
 
@@ -113,7 +121,7 @@ export function setupOAuthTestSpies(
 ): OAuthSpies {
   vi.clearAllMocks();
   openBrowserFn.mockClear();
-  vi.stubGlobal('fetch', mockFetch);
+  setGlobal('fetch', mockFetch);
   vi.spyOn(DebugLogger.prototype, 'log').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'warn').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});

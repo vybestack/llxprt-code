@@ -1,3 +1,4 @@
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -43,11 +44,11 @@ describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue({});
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 

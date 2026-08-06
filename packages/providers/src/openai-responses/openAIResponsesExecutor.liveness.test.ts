@@ -14,6 +14,7 @@
  * executor and real SSE parser run.
  */
 
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
@@ -120,7 +121,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 
@@ -131,10 +132,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
       'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
       'data: [DONE]\n\n',
     ]);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: true, body: sseBody }),
-    );
+    setGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: sseBody }));
 
     const livenessEvents: StreamLivenessEvent[] = [];
     const options = buildNormalizedOptions({
@@ -159,10 +157,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
       'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
       'data: [DONE]\n\n',
     ]);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: true, body: sseBody }),
-    );
+    setGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: sseBody }));
 
     const options = buildNormalizedOptions();
     const iterator = executeOpenAIResponsesRequest(options, buildDeps());
@@ -212,7 +207,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     if (originalCacheHome !== undefined) {
       process.env['LLXPRT_CACHE_HOME'] = originalCacheHome;
     }
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
     if (tempDumpDir) {
       await fsp.rm(tempDumpDir, { recursive: true, force: true });
@@ -246,10 +241,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
       'data: [DONE]\n\n',
     ]);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: true, body: sseBody }),
-    );
+    setGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: sseBody }));
 
     const options = buildNormalizedOptions({
       ephemerals: { dumpcontext: 'on' },
@@ -273,7 +265,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
 
   it('A3: emits finalized request dump when Codex WebSocket path is selected', async () => {
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const options = buildNormalizedOptions({
       ephemerals: { dumpcontext: 'on' },

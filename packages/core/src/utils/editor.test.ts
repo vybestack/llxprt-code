@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -35,7 +36,7 @@ const originalPlatform = process.platform;
 describe('editor utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllEnvs();
+    restoreEnv();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
       writable: true,
@@ -44,7 +45,7 @@ describe('editor utils', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllEnvs();
+    restoreEnv();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
       writable: true,
@@ -423,7 +424,7 @@ describe('editor utils', () => {
 
   describe('allowEditorTypeInSandbox', () => {
     it('should allow vim in sandbox mode', () => {
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('vim')).toBe(true);
     });
 
@@ -432,7 +433,7 @@ describe('editor utils', () => {
     });
 
     it('should allow emacs in sandbox mode', () => {
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('emacs')).toBe(true);
     });
 
@@ -441,7 +442,7 @@ describe('editor utils', () => {
     });
 
     it('should allow neovim in sandbox mode', () => {
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('neovim')).toBe(true);
     });
 
@@ -450,7 +451,7 @@ describe('editor utils', () => {
     });
 
     it('should allow hx in sandbox mode', () => {
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('hx')).toBe(true);
     });
 
@@ -467,7 +468,7 @@ describe('editor utils', () => {
     ];
     for (const editor of guiEditors) {
       it(`should not allow ${editor} in sandbox mode`, () => {
-        vi.stubEnv('SANDBOX', 'sandbox');
+        setEnv('SANDBOX', 'sandbox');
         expect(allowEditorTypeInSandbox(editor)).toBe(false);
       });
 
@@ -504,31 +505,31 @@ describe('editor utils', () => {
 
     it('should return false for vscode when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/code'));
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('vscode')).toBe(false);
     });
 
     it('should return true for vim when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/vim'));
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('vim')).toBe(true);
     });
 
     it('should return true for emacs when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/emacs'));
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('emacs')).toBe(true);
     });
 
     it('should return true for hx when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/hx'));
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('hx')).toBe(true);
     });
 
     it('should return true for neovim when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/nvim'));
-      vi.stubEnv('SANDBOX', 'sandbox');
+      setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('neovim')).toBe(true);
     });
   });

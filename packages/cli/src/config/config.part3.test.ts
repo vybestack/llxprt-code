@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -301,7 +302,7 @@ describe('loadCliConfig interactive', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
@@ -309,7 +310,7 @@ describe('loadCliConfig interactive', () => {
   afterEach(() => {
     process.argv = originalArgv;
     process.stdin.isTTY = originalIsTTY;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -563,14 +564,14 @@ describe('loadCliConfig fileFiltering', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });

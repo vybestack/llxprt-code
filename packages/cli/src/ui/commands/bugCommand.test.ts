@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -52,11 +53,11 @@ describe('bugCommand', () => {
     (formatMemoryUsage as Mock<typeof formatMemoryUsage>).mockReturnValue(
       '100 MB',
     );
-    vi.stubEnv('SANDBOX', 'gemini-test');
+    setEnv('SANDBOX', 'gemini-test');
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.clearAllMocks();
   });
 

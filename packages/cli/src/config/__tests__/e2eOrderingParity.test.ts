@@ -27,6 +27,7 @@
  *   - Full provider and model precedence chain is honored end-to-end
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -469,9 +470,9 @@ describe('e2eOrderingParity: step ordering constraints', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -481,7 +482,7 @@ describe('e2eOrderingParity: step ordering constraints', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -542,9 +543,9 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -554,13 +555,13 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
 
   it('CLI --provider wins over LLXPRT_DEFAULT_PROVIDER env', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({}, ['--provider', 'openai']);
     expect(config.getProvider()).toBe('openai');
     expect(
@@ -569,7 +570,7 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
   });
 
   it('LLXPRT_DEFAULT_PROVIDER env wins over gemini default', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({});
     expect(config.getProvider()).toBe('anthropic');
     expect(

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -302,13 +303,13 @@ describe('loadCliConfig chatCompression', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -361,7 +362,7 @@ describe('loadCliConfig useRipgrep', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     // Default: ripgrep is available
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
@@ -371,7 +372,7 @@ describe('loadCliConfig useRipgrep', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -464,13 +465,13 @@ describe('screenReader configuration', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -558,7 +559,7 @@ describe('loadCliConfig tool exclusions', () => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
@@ -569,7 +570,7 @@ describe('loadCliConfig tool exclusions', () => {
   afterEach(() => {
     process.argv = originalArgv;
     process.stdin.isTTY = originalIsTTY;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });

@@ -17,6 +17,7 @@
  * @issue #2483
  */
 
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -105,7 +106,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   beforeEach(() => {
     vi.clearAllMocks();
     getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
@@ -115,7 +116,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 

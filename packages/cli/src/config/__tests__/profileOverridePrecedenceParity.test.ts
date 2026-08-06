@@ -21,6 +21,7 @@
  *     (only when --provider is NOT explicit)
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -472,14 +473,14 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Remove provider/model env vars that may leak from CI environment
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     delete process.env.LLXPRT_PROFILE;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -489,7 +490,7 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -535,14 +536,14 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Remove provider/model env vars that may leak from CI environment
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     delete process.env.LLXPRT_PROFILE;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -552,13 +553,13 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
 
   it('with --provider, profile from LLXPRT_PROFILE env is skipped (no crash)', async () => {
-    vi.stubEnv('LLXPRT_PROFILE', 'nonexistent-profile');
+    setEnv('LLXPRT_PROFILE', 'nonexistent-profile');
     const config = await runConfig({}, ['--provider', 'gemini']);
     expect(config).toBeDefined();
     expect(config.getProvider()).toBe('gemini');
@@ -637,14 +638,14 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Remove provider/model env vars that may leak from CI environment
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     delete process.env.LLXPRT_PROFILE;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -654,7 +655,7 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });

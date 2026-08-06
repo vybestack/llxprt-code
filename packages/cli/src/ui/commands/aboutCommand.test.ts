@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -100,7 +101,7 @@ describe('aboutCommand', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
     });

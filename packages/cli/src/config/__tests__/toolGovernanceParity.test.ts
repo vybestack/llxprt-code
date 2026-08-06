@@ -19,6 +19,7 @@
  *   - Profile-allowed vs explicit-allowed tool interactions
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -340,7 +341,7 @@ describe('toolGovernanceParity: interactive mode', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
@@ -360,7 +361,7 @@ describe('toolGovernanceParity: interactive mode', () => {
   afterEach(() => {
     process.argv = originalArgv;
     process.stdin.isTTY = originalIsTTY;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -406,7 +407,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
@@ -426,7 +427,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
   afterEach(() => {
     process.argv = originalArgv;
     process.stdin.isTTY = originalIsTTY;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -515,7 +516,7 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
@@ -535,7 +536,7 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
   afterEach(() => {
     process.argv = originalArgv;
     process.stdin.isTTY = originalIsTTY;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
