@@ -135,14 +135,30 @@ export function parseImageName(image: string): string {
   return tag ? `${name}-${tag}` : name;
 }
 
-/** Checks if any ID_LIKE= line in /etc/os-release contains the given keyword. */
-function osReleaseContainsLike(content: string, keyword: string): boolean {
-  for (const line of content.split('\n')) {
-    if (line.startsWith('ID_LIKE=') && line.includes(keyword)) {
-      return true;
-    }
+function osReleaseValue(content: string, key: string): string | undefined {
+  const prefix = `${key}=`;
+  const line = content.split('\n').find((entry) => entry.startsWith(prefix));
+  if (line === undefined) {
+    return undefined;
   }
-  return false;
+  const value = line.slice(prefix.length).trim();
+  const quote = value.at(0);
+  return quote !== undefined && (quote === '"' || quote === "'")
+    ? value.slice(1, value.endsWith(quote) ? -1 : undefined)
+    : value;
+}
+
+function isDebianLikeOsRelease(content: string): boolean {
+  const id = osReleaseValue(content, 'ID');
+  if (id === 'debian' || id === 'ubuntu') {
+    return true;
+  }
+  const idLike = osReleaseValue(content, 'ID_LIKE');
+  return (
+    idLike
+      ?.split(/\s+/)
+      .some((value) => value === 'debian' || value === 'ubuntu') ?? false
+  );
 }
 
 export function shouldUseCurrentUserInSandbox(): boolean {
@@ -158,12 +174,7 @@ export function shouldUseCurrentUserInSandbox(): boolean {
   if (os.platform() === 'linux') {
     try {
       const osReleaseContent = fs.readFileSync('/etc/os-release', 'utf8');
-      if (
-        osReleaseContent.includes('ID=debian') ||
-        osReleaseContent.includes('ID=ubuntu') ||
-        osReleaseContainsLike(osReleaseContent, 'debian') ||
-        osReleaseContainsLike(osReleaseContent, 'ubuntu')
-      ) {
+      if (isDebianLikeOsRelease(osReleaseContent)) {
         debugLogger.log(
           'INFO: Defaulting to use current user UID/GID for Debian/Ubuntu-based Linux.',
         );

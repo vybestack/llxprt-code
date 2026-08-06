@@ -105,20 +105,26 @@ describe('#3081 shouldUseCurrentUserInSandbox — Linux os-release auto-detect',
     });
   }
 
-  it('detects Debian via ID=debian', () => {
-    stubOsRelease('ID=debian\nVERSION_ID="12"\n');
+  it.each(['ID=debian', 'ID="debian"', "ID='debian'"])(
+    'detects Debian via %s',
+    (idLine) => {
+      stubOsRelease(`${idLine}\nVERSION_ID="12"\n`);
+      expect(shouldUseCurrentUserInSandbox()).toBe(true);
+    },
+  );
+
+  it.each(['ID=ubuntu', 'ID="ubuntu"'])('detects Ubuntu via %s', (idLine) => {
+    stubOsRelease(`${idLine}\nVERSION_ID="22.04"\n`);
     expect(shouldUseCurrentUserInSandbox()).toBe(true);
   });
 
-  it('detects Ubuntu via ID=ubuntu', () => {
-    stubOsRelease('ID=ubuntu\nVERSION_ID="22.04"\n');
-    expect(shouldUseCurrentUserInSandbox()).toBe(true);
-  });
-
-  it('detects a Debian derivative via ID_LIKE=debian', () => {
-    stubOsRelease('ID=linuxmint\nID_LIKE=debian\n');
-    expect(shouldUseCurrentUserInSandbox()).toBe(true);
-  });
+  it.each(['ID_LIKE=debian', 'ID_LIKE="debian ubuntu"'])(
+    'detects a Debian derivative via %s',
+    (idLikeLine) => {
+      stubOsRelease(`ID=linuxmint\n${idLikeLine}\n`);
+      expect(shouldUseCurrentUserInSandbox()).toBe(true);
+    },
+  );
 
   it('does NOT auto-detect a non-Debian distro (Fedora)', () => {
     stubOsRelease('ID=fedora\nVERSION_ID="40"\n');
