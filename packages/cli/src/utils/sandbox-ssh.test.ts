@@ -5,15 +5,8 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import type { Mock } from 'bun:test';
 import * as child_process from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

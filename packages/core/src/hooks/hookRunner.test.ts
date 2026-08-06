@@ -12,15 +12,8 @@
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';
