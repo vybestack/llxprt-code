@@ -473,6 +473,7 @@ export class CoderAgentExecutor implements AgentExecutor {
         `[CoderAgentExecutor] Task ${task.id}: Processing agent turn (LLM stream).`,
       );
       const toolCallRequests: ToolCallRequestInfo[] = [];
+      const attemptEvents: ServerAgentStreamEvent[] = [];
       for await (const event of agentEvents) {
         if (abortSignal.aborted) {
           logger.warn(
@@ -482,12 +483,20 @@ export class CoderAgentExecutor implements AgentExecutor {
         }
         if (event.type === AgentEventType.ToolCallRequest) {
           toolCallRequests.push(event.value);
-          continue;
+        } else if (event.type === AgentEventType.Retry) {
+          toolCallRequests.length = 0;
+          attemptEvents.length = 0;
+          await task.acceptAgentMessage(event);
+        } else {
+          attemptEvents.push(event);
         }
-        await task.acceptAgentMessage(event);
       }
 
       if (abortSignal.aborted) throw new Error('Execution aborted');
+
+      for (const event of attemptEvents) {
+        await task.acceptAgentMessage(event);
+      }
 
       if (toolCallRequests.length > 0) {
         logger.info(

@@ -1,0 +1,631 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Behavioral tests for issue #3048 — discard-and-restart in the interactive CLI.
+ *
+ * Drives the REAL `useSubmitQuery` event-routing lifecycle (real
+ * `useStreamEventHandlers`, real `dispatchAgentEvent`, real
+ * `PendingResponseBuffer`, real `CommittedSegmentLedger`). Only leaf
+ * infrastructure (`turnPreparation`, `SessionContext`) is stubbed. React host
+ * state (pending history item, thought) is captured by holders that mirror real
+ * `setState` semantics so assertions read observable rendered values.
+ *
+ * @plan PLAN-20260806-ISSUE3048.P09 P11
+ * @requirement REQ-3048-008 REQ-3048-009
+ */
+
+import { describe, it, expect } from 'bun:test';
+import React, { act, type Dispatch, type SetStateAction } from 'react';
+import { vi } from '../../../../test-utils/bunTest.js';
+import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
+import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
+import type {
+  ThinkingBlock,
+  ThoughtSummary,
+} from '@vybestack/llxprt-code-core';
+import type { AgentEvent } from '@vybestack/llxprt-code-agents';
+import type { QueuedSubmission } from '../types.js';
+import type { UseHistoryManagerReturn } from '../../useHistoryManager.js';
+import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { createDeferred } from './createDeferred.js';
+import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
+import type { StreamRuntime } from '../../../cliUiRuntime.js';
+import {
+  createLoadedSettings,
+  createMockOverrides,
+  createQueueOperations,
+} from './submitQueryTestFixtures.js';
+
+vi.mock('../turnPreparation.js', () => ({
+  prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../../contexts/SessionContext.js', () => ({
+  useSessionStats: () => ({
+    startNewPrompt: vi.fn(),
+    getPromptCount: () => 0,
+  }),
+}));
+
+function createMockAgent() {
+  return createFakeAgentFromMockClient({
+    getCurrentSequenceModel: () => 'test-model',
+  });
+}
+
+interface CoordinatedState {
+  pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
+  setPendingHistoryItem: Dispatch<SetStateAction<HistoryItemWithoutId | null>>;
+  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
+  thoughtRef: React.MutableRefObject<ThoughtSummary | null>;
+  setThought: Dispatch<SetStateAction<ThoughtSummary | null>>;
+}
+
+function createCoordinatedState(): CoordinatedState {
+  let pending: HistoryItemWithoutId | null = null;
+  const thoughtRef: React.MutableRefObject<ThoughtSummary | null> = {
+    current: null,
+  };
+  const thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]> = {
+    current: [],
+  };
+  return {
+    pendingHistoryItemRef: {
+      get current() {
+        return pending;
+      },
+      set current(value: HistoryItemWithoutId | null) {
+        pending = value;
+      },
+    },
+    setPendingHistoryItem: (
+      updater:
+        | HistoryItemWithoutId
+        | null
+        | ((prev: HistoryItemWithoutId | null) => HistoryItemWithoutId | null),
+    ) => {
+      pending = typeof updater === 'function' ? updater(pending) : updater;
+    },
+    thinkingBlocksRef,
+    thoughtRef,
+    setThought: (
+      updater:
+        | ThoughtSummary
+        | null
+        | ((prev: ThoughtSummary | null) => ThoughtSummary | null),
+    ) => {
+      thoughtRef.current =
+        typeof updater === 'function' ? updater(thoughtRef.current) : updater;
+    },
+  };
+}
+
+interface AddItemRecorder {
+  calls: Array<{
+    id: number;
+    item: Parameters<UseHistoryManagerReturn['addItem']>[0];
+    timestamp: number;
+  }>;
+  addItem: UseHistoryManagerReturn['addItem'];
+}
+
+function createRecordingAddItem(seedId = 1000): AddItemRecorder {
+  const calls: AddItemRecorder['calls'] = [];
+  let nextId = seedId;
+  return {
+    calls,
+    addItem: (item, timestamp = Date.now()) => {
+      const id = nextId;
+      nextId += 1;
+      calls.push({ id, item, timestamp });
+      return id;
+    },
+  };
+}
+
+interface RemoveItemsRecorder {
+  calls: Array<{ ids: readonly number[] }>;
+  removeItems: (ids: readonly number[]) => void;
+}
+
+function createRecordingRemoveItems(): RemoveItemsRecorder {
+  const calls: Array<{ ids: readonly number[] }> = [];
+  return {
+    calls,
+    removeItems: (ids) => {
+      calls.push({ ids: [...ids] });
+    },
+  };
+}
+
+interface RetryDiscardDeps {
+  coordinated: CoordinatedState;
+  addItemRecorder: AddItemRecorder;
+  removeItemsRecorder: RemoveItemsRecorder;
+  pendingResponse: PendingResponseBuffer;
+  setIsRespondingCalls: boolean[];
+  setIsResponding: Dispatch<SetStateAction<boolean>>;
+  abortControllerRef: React.MutableRefObject<AbortController | null>;
+  runStreamRef: UseSubmitQueryDeps['runStreamRef'];
+  flushCalls: number[];
+  queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
+}
+
+function createRetryDiscardDeps(
+  options: {
+    pendingHistoryItemRef?: React.MutableRefObject<HistoryItemWithoutId | null>;
+    setPendingHistoryItem?: Dispatch<
+      SetStateAction<HistoryItemWithoutId | null>
+    >;
+  } = {},
+): RetryDiscardDeps {
+  const coordinated = createCoordinatedState();
+  const setIsRespondingCalls: boolean[] = [];
+  const addItemRecorder = createRecordingAddItem();
+  const removeItemsRecorder = createRecordingRemoveItems();
+  const flushCalls: number[] = [];
+  const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
+    current: [],
+  };
+  return {
+    coordinated: {
+      ...coordinated,
+      ...(options.pendingHistoryItemRef
+        ? { pendingHistoryItemRef: options.pendingHistoryItemRef }
+        : {}),
+      ...(options.setPendingHistoryItem
+        ? { setPendingHistoryItem: options.setPendingHistoryItem }
+        : {}),
+    },
+    addItemRecorder,
+    removeItemsRecorder,
+    pendingResponse: new PendingResponseBuffer(undefined),
+    setIsRespondingCalls,
+    setIsResponding: createMockSetState(setIsRespondingCalls),
+    abortControllerRef: { current: null },
+    runStreamRef: { current: null },
+    flushCalls,
+    queuedSubmissionsRef,
+  };
+}
+
+function createMockSetState(
+  calls: boolean[],
+): Dispatch<SetStateAction<boolean>> {
+  return (value) => {
+    if (typeof value === 'boolean') calls.push(value);
+  };
+}
+
+function buildUseSubmitQueryDeps(
+  deps: RetryDiscardDeps,
+  overrides: {
+    runtime?: StreamRuntime;
+  } = {},
+): (streamingState: StreamingState) => UseSubmitQueryDeps {
+  const queueOperations = createQueueOperations(deps.queuedSubmissionsRef);
+  const flushPendingHistoryItem = (timestamp: number) => {
+    deps.flushCalls.push(timestamp);
+  };
+  const stableDeps = {
+    runtime:
+      overrides.runtime ??
+      createStreamRuntimeForTest({}, createMockOverrides()),
+    agent: createMockAgent(),
+    addItem: deps.addItemRecorder.addItem,
+    removeItems: deps.removeItemsRecorder.removeItems,
+    settings: createLoadedSettings(),
+    onDebugMessage: vi.fn(),
+    onCancelSubmit: vi.fn(),
+    onAuthError: vi.fn(),
+    recordingIntegration: undefined,
+    sanitizeContent: (text: string) => ({ text, blocked: false }),
+    flushPendingHistoryItem,
+    pendingResponse: deps.pendingResponse,
+    pendingHistoryItemRef: deps.coordinated.pendingHistoryItemRef,
+    thinkingBlocksRef: deps.coordinated.thinkingBlocksRef,
+    turnCancelledRef: { current: false },
+    setTurnCancelled: vi.fn(),
+    queuedSubmissionsRef: deps.queuedSubmissionsRef,
+    ...queueOperations,
+    drainSuppressedRef: { current: false },
+    tryReserveDrain: vi.fn().mockReturnValue(true),
+    releaseDrain: vi.fn(),
+    setPendingHistoryItem: deps.coordinated.setPendingHistoryItem,
+    setIsResponding: deps.setIsResponding,
+    setInitError: vi.fn(),
+    setThought: deps.coordinated.setThought,
+    setLastAgentActivityTime: vi.fn(),
+    scheduleToolCalls: vi.fn(),
+    abortActiveStream: vi.fn(),
+    handleShellCommand: vi.fn().mockReturnValue(false),
+    handleSlashCommand: vi.fn().mockResolvedValue(false),
+    logger: null,
+    shellModeActive: false,
+    loopDetectedRef: { current: false },
+    lastProfileNameRef: { current: undefined },
+    lastModelInfoRef: { current: null },
+    lastModelIdentityRef: { current: null },
+    abortControllerRef: deps.abortControllerRef,
+    runStreamRef: deps.runStreamRef,
+    submitQueryRef: { current: null },
+    isResponding: false,
+  };
+  return (streamingState) => ({ ...stableDeps, streamingState });
+}
+
+function renderUseSubmitQuery(
+  deps: RetryDiscardDeps,
+  overrides: {
+    runtime?: StreamRuntime;
+    initialStreamingState?: StreamingState;
+  } = {},
+) {
+  const getDeps = buildUseSubmitQueryDeps(deps, overrides);
+  return renderHook(
+    ({ streamingState }: { streamingState: StreamingState }) =>
+      useSubmitQuery(getDeps(streamingState)),
+    {
+      initialProps: {
+        streamingState: overrides.initialStreamingState ?? StreamingState.Idle,
+      },
+    },
+  );
+}
+
+async function startActiveTurn(
+  result: { current: ReturnType<typeof useSubmitQuery> },
+  rerender: (props: { streamingState: StreamingState }) => void,
+  deps: RetryDiscardDeps,
+): Promise<AbortSignal> {
+  deps.runStreamRef.current = vi.fn(() => {
+    const deferred = createDeferred<void>();
+    return deferred.promise;
+  });
+  await act(async () => {
+    void result.current.submitQuery('turn-1');
+  });
+  await waitFor(() => expect(deps.setIsRespondingCalls).toStrictEqual([true]));
+  await act(async () => {
+    rerender({ streamingState: StreamingState.Responding });
+  });
+  const controller = deps.abortControllerRef.current;
+  if (!controller) throw new Error('AbortController not set after submit');
+  return controller.signal;
+}
+
+async function route(
+  result: { current: ReturnType<typeof useSubmitQuery> },
+  event: AgentEvent,
+  signal: AbortSignal,
+): Promise<void> {
+  await act(async () => {
+    result.current.processAgentEvent(event, Date.now(), signal);
+  });
+}
+
+/**
+ * Type-safe accessor for the pending item's text. Uses a discriminated check
+ * instead of a type assertion.
+ */
+function pendingText(item: HistoryItemWithoutId | null): string | undefined {
+  if (item === null) return undefined;
+  if ('text' in item) return item.text;
+  return undefined;
+}
+
+const THINKING_EVENT: AgentEvent = {
+  type: 'thinking',
+  thought: { subject: 'reasoning', description: 'about the answer' },
+};
+
+describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', () => {
+  it('renders only the successful attempt text after a retry', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, { type: 'text', text: 'abandoned partial' }, signal);
+    await route(result, { type: 'retry' }, signal);
+    await route(result, { type: 'text', text: 'kept' }, signal);
+
+    expect(pendingText(deps.coordinated.pendingHistoryItemRef.current)).toBe(
+      'kept',
+    );
+  });
+
+  it('does not commit the abandoned pending item to history', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, { type: 'text', text: 'abandoned partial' }, signal);
+    await route(result, { type: 'retry' }, signal);
+    await route(result, { type: 'text', text: 'kept' }, signal);
+
+    const abandonedCommits = deps.addItemRecorder.calls.filter(
+      (call) =>
+        typeof call.item.text === 'string' &&
+        call.item.text.includes('abandoned partial'),
+    );
+    expect(abandonedCommits).toStrictEqual([]);
+  });
+
+  it('resets the pending response buffer', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, { type: 'text', text: 'abandoned partial' }, signal);
+    expect(deps.pendingResponse.stableText).toBe('abandoned partial');
+
+    await route(result, { type: 'retry' }, signal);
+
+    expect(deps.pendingResponse.stableText).toBe('');
+    expect(deps.pendingResponse.displayText).toBe('');
+  });
+
+  it('clears thinking state produced by the abandoned attempt', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, THINKING_EVENT, signal);
+    expect(deps.coordinated.thinkingBlocksRef.current.length).toBe(1);
+    expect(deps.coordinated.thoughtRef.current).not.toBe(null);
+
+    await route(result, { type: 'retry' }, signal);
+
+    expect(deps.coordinated.thinkingBlocksRef.current).toStrictEqual([]);
+    expect(deps.coordinated.thoughtRef.current).toBe(null);
+  });
+
+  it('leaves a pending tool_group item untouched', async () => {
+    const toolGroupItem: HistoryItemWithoutId = {
+      type: 'tool_group',
+      tools: [],
+    };
+    const deps = createRetryDiscardDeps({
+      pendingHistoryItemRef: { current: toolGroupItem },
+    });
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, { type: 'retry' }, signal);
+
+    expect(deps.coordinated.pendingHistoryItemRef.current).toBe(toolGroupItem);
+  });
+
+  it('does not release the turn or clear the submission queue', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+    const respondingCallsBefore = [...deps.setIsRespondingCalls];
+
+    await route(result, { type: 'retry' }, signal);
+
+    expect(deps.setIsRespondingCalls).toStrictEqual(respondingCallsBefore);
+    expect(deps.queuedSubmissionsRef.current).toStrictEqual([]);
+  });
+
+  it('returns the dispatcher buffer as an empty string for retry', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, { type: 'text', text: 'abandoned' }, signal);
+    await route(result, { type: 'retry' }, signal);
+    await route(result, { type: 'text', text: 'x' }, signal);
+
+    expect(pendingText(deps.coordinated.pendingHistoryItemRef.current)).toBe(
+      'x',
+    );
+  });
+});
+
+describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048-009)', () => {
+  it('retracts stable segments committed by the abandoned attempt', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    // Stream text with a paragraph break so the content processor commits a
+    // stable prefix via addItem. The ledger records the returned id.
+    await route(result, { type: 'text', text: 'para one\n\npara two' }, signal);
+
+    const committedTexts = deps.addItemRecorder.calls
+      .filter((c) => typeof c.item.text === 'string')
+      .map((c) => c.item.text)
+      .filter((text): text is string => text?.includes('para one') === true);
+    expect(committedTexts.length).toBe(1);
+
+    await route(result, { type: 'retry' }, signal);
+
+    expect(deps.removeItemsRecorder.calls.length).toBe(1);
+    const retracted = deps.removeItemsRecorder.calls[0]?.ids ?? [];
+    expect(retracted.length).toBe(1);
+    // The retracted id must be the one addItem returned for the committed segment
+    const committedSegmentCall = deps.addItemRecorder.calls.find(
+      (c) =>
+        typeof c.item.text === 'string' && c.item.text.includes('para one'),
+    );
+    if (committedSegmentCall === undefined) {
+      throw new Error('Expected the stable segment to be committed');
+    }
+    expect(retracted[0]).toBe(committedSegmentCall.id);
+  });
+
+  it('preserves items from before the assistant message', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    // Add a user item that should survive the retraction
+    await route(result, { type: 'text', text: 'para one\n\npara two' }, signal);
+    await route(result, { type: 'retry' }, signal);
+
+    // The removeItems call should only target the committed segment id,
+    // not any earlier items
+    expect(deps.removeItemsRecorder.calls.length).toBe(1);
+    const retracted = deps.removeItemsRecorder.calls[0]?.ids ?? [];
+    expect(retracted.length).toBe(1);
+  });
+
+  it('drains nothing on a second retry', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps);
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    await route(result, { type: 'text', text: 'para one\n\npara two' }, signal);
+    await route(result, { type: 'retry' }, signal);
+
+    // First retry retracts the committed segment
+    expect(deps.removeItemsRecorder.calls.length).toBe(1);
+
+    // Second retry: the ledger was drained, so nothing to retract
+    await route(result, { type: 'retry' }, signal);
+    expect(deps.removeItemsRecorder.calls.length).toBe(1);
+  });
+
+  /**
+   * Runs a turn to completion: starts an active submission, routes the scripted
+   * events, resolves the held `runStream` promise, and waits for the turn to
+   * settle back to idle. Returns the turn's abort signal so a later turn can be
+   * distinguished from it.
+   */
+  async function runTurnToCompletion(
+    result: { current: ReturnType<typeof useSubmitQuery> },
+    rerender: (props: { streamingState: StreamingState }) => void,
+    deps: RetryDiscardDeps,
+    events: readonly AgentEvent[],
+  ): Promise<AbortSignal> {
+    let resolveRun!: () => void;
+    deps.runStreamRef.current = vi.fn(() => {
+      const deferred = createDeferred<void>();
+      resolveRun = deferred.resolve;
+      return deferred.promise;
+    });
+    await act(async () => {
+      void result.current.submitQuery('turn');
+    });
+    await waitFor(() =>
+      expect(deps.setIsRespondingCalls.at(-1) ?? false).toBe(true),
+    );
+    await act(async () => {
+      rerender({ streamingState: StreamingState.Responding });
+    });
+    const controller = deps.abortControllerRef.current;
+    if (!controller) throw new Error('AbortController not set after submit');
+    const signal = controller.signal;
+    for (const event of events) {
+      await route(result, event, signal);
+    }
+    await act(async () => {
+      resolveRun();
+    });
+    await waitFor(() =>
+      expect(deps.setIsRespondingCalls.at(-1) ?? true).toBe(false),
+    );
+    await act(async () => {
+      rerender({ streamingState: StreamingState.Idle });
+    });
+    return signal;
+  }
+
+  /**
+   * Starts a subsequent turn while a previous turn has already completed. Unlike
+   * {@link startActiveTurn} (which asserts the first-ever responding call), this
+   * checks the *latest* responding call so it works after an earlier turn.
+   */
+  async function startNextActiveTurn(
+    result: { current: ReturnType<typeof useSubmitQuery> },
+    rerender: (props: { streamingState: StreamingState }) => void,
+    deps: RetryDiscardDeps,
+  ): Promise<AbortSignal> {
+    deps.runStreamRef.current = vi.fn(() => {
+      const deferred = createDeferred<void>();
+      return deferred.promise;
+    });
+    await act(async () => {
+      void result.current.submitQuery('turn-next');
+    });
+    await waitFor(() =>
+      expect(deps.setIsRespondingCalls.at(-1) ?? false).toBe(true),
+    );
+    await act(async () => {
+      rerender({ streamingState: StreamingState.Responding });
+    });
+    const controller = deps.abortControllerRef.current;
+    if (!controller) throw new Error('AbortController not set after submit');
+    return controller.signal;
+  }
+
+  describe('useSubmitQuery — committed segment ledger lifecycle across turns (issue #3048 review)', () => {
+    /**
+     * @requirement REQ-3048-009 (review finding: ledger lifecycle)
+     * @scenario A completed turn's committed segment must survive a later turn
+     *   that emits thinking/tool output then Retry before any Content.
+     * @given turn A streams a multi-paragraph message that commits a stable
+     *   segment, then completes via `done`.
+     * @when turn B emits a thinking event then Retry before any Content.
+     * @then turn A's history is retracted by nothing; only current-attempt ids
+     *   can be drained.
+     */
+    it('preserves a completed turn history when a later turn retries before content', async () => {
+      const deps = createRetryDiscardDeps();
+      const { result, rerender } = renderUseSubmitQuery(deps);
+
+      // Turn A: commits a stable paragraph segment, then completes.
+      await runTurnToCompletion(result, rerender, deps, [
+        { type: 'text', text: 'para one\n\npara two' },
+        { type: 'done', reason: 'stop' },
+      ]);
+
+      // Turn A committed exactly one stable segment to history.
+      const turnACommitted = deps.addItemRecorder.calls.filter((entry) => {
+        const text = entry.item.text;
+        return typeof text === 'string' && text.includes('para one');
+      });
+      expect(turnACommitted.length).toBe(1);
+      // No retraction happened during turn A.
+      expect(deps.removeItemsRecorder.calls).toStrictEqual([]);
+
+      // Turn B: thinking then Retry BEFORE any Content.
+      const turnBSignal = await startNextActiveTurn(result, rerender, deps);
+
+      await route(result, THINKING_EVENT, turnBSignal);
+      await route(result, { type: 'retry' }, turnBSignal);
+
+      // Turn A's committed segment MUST survive: no retraction requested.
+      expect(deps.removeItemsRecorder.calls).toStrictEqual([]);
+
+      // The discard handler must still preserve a scheduler-owned tool_group
+      // pending item during turn B (REQ-3048-008): the retry must not null it.
+      const toolGroupItem: HistoryItemWithoutId = {
+        type: 'tool_group',
+        tools: [],
+      };
+      deps.coordinated.pendingHistoryItemRef.current = toolGroupItem;
+      await route(result, { type: 'retry' }, turnBSignal);
+      expect(deps.coordinated.pendingHistoryItemRef.current).toBe(
+        toolGroupItem,
+      );
+    });
+  });
+});

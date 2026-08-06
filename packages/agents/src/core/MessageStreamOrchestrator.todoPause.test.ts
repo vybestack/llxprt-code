@@ -201,6 +201,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
     appendSystemReminderToRequest: vi.fn(),
     updateTodoToolAvailabilityFromDeclarations: vi.fn(),
     setLastTodoToolTurn: vi.fn(),
+    checkpoint: vi.fn().mockReturnValue({}),
+    restore: vi.fn(),
     shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
   } as unknown as MessageStreamDeps['todoContinuationService'];
 
@@ -217,6 +219,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
       reset: vi.fn(),
       turnStarted: vi.fn().mockResolvedValue(false),
       addAndCheck: vi.fn().mockReturnValue(false),
+      checkpoint: vi.fn().mockReturnValue({}),
+      restore: vi.fn(),
     } as unknown as LoopDetectionService,
     todoContinuationService,
     ideContextTracker: {
@@ -348,7 +352,8 @@ describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
 
     const modelInfoResult = await iterator.next();
     expect(modelInfoResult.value.type).toBe(AgentEventType.ModelInfo);
-    await expect(iterator.next()).resolves.toMatchObject({
+    const contentResult = await iterator.next();
+    expect(contentResult).toMatchObject({
       done: false,
       value: { type: AgentEventType.Content, value: 'Hello' },
     });

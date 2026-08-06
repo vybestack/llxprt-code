@@ -26,7 +26,10 @@ import {
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
+import {
+  type RemoveHistoryItems,
+  type UseHistoryManagerReturn,
+} from '../useHistoryManager.js';
 import { mergePendingToolGroupsForDisplay } from './streamUtils.js';
 import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
@@ -57,10 +60,12 @@ export const useAgentStream = (
   recordingIntegration?: RecordingIntegration,
   runtimeMessageBus?: MessageBus,
   subagentManager?: UiSubagentManager,
+  removeItems?: RemoveHistoryItems,
 ) => {
   const orchestration = useAgentStreamOrchestration({
     agent,
     addItem,
+    removeItems,
     runtime,
     settings,
     onDebugMessage,
@@ -85,6 +90,7 @@ export const useAgentStream = (
     runtime,
     history,
     agent,
+
     onDebugMessage,
   );
 };

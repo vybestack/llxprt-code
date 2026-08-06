@@ -19,7 +19,10 @@ import {
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
+import {
+  type RemoveHistoryItems,
+  type UseHistoryManagerReturn,
+} from '../useHistoryManager.js';
 import { type TrackedToolCall } from '../useReactToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { useStreamState } from './useStreamState.js';
@@ -40,6 +43,7 @@ import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 export interface AgentStreamOrchestrationDeps {
   agent: Agent;
   addItem: UseHistoryManagerReturn['addItem'];
+  removeItems?: RemoveHistoryItems;
   runtime: StreamRuntime;
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
@@ -276,6 +280,7 @@ function useEventStreamForAgent(
     processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => {
+      st.pendingResponse.endCommittedSegments();
       st.setPendingHistoryItem(null);
       st.pendingResponse.reset();
     },
@@ -371,6 +376,7 @@ function buildSubmitQueryDeps({
     runtime: args.runtime,
     agent: args.agent,
     addItem: args.addItem,
+    removeItems: args.removeItems,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,
     onCancelSubmit: args.onCancelSubmit,
