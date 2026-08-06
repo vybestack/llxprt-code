@@ -14,7 +14,11 @@ import type {
   TrackedCompletedToolCall,
   TrackedToolCall,
 } from './useReactToolScheduler.js';
-import { useReactToolScheduler } from './useReactToolScheduler.js';
+import {
+  useReactToolScheduler,
+  type ScheduleFn,
+  type MarkToolsAsDisplayClearedFn,
+} from './useReactToolScheduler.js';
 import type {
   AgentClientContract as AgentClient,
   AnyDeclarativeTool,
@@ -162,10 +166,10 @@ describe('useAgentStream subagent isolation', () => {
   let mockOverrides: StreamRuntimeTestOverrides;
   let mockSettings: LoadedSettings;
   let mockAddItem: Mock<(...args: never[]) => unknown>;
-  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
+  let mockOnDebugMessage: Mock<(message: string) => void>;
   let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
-  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
+  let mockScheduleToolCalls: Mock<ScheduleFn>;
+  let mockMarkToolsAsDisplayCleared: Mock<MarkToolsAsDisplayClearedFn>;
 
   beforeEach(() => {
     vi.clearAllMocks();

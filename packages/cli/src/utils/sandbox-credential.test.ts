@@ -283,7 +283,9 @@ describe('#1456 credential proxy network policy', () => {
           envFile,
         ]);
         expect(fs.existsSync(envFile)).toBe(true);
-        expect(invocation.prefixes).toStrictEqual(prefix);
+        expect(invocation.prefixes).toStrictEqual(
+          prefix as unknown as string[],
+        );
         expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
         expect(result.credentialProxyBridgeResult?.containerSocketPath).toBe(
           bridgeSocket,

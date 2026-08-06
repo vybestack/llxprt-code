@@ -72,15 +72,18 @@ import * as fs from 'fs';
 // import * as path from 'path';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
-import type { HistoryItemWithoutId } from '../types.js';
+import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { testRegex } from '../../test-utils/regex.js';
 
 describe('useShellCommandProcessor', () => {
-  let addItemToHistoryMock: Mock<(...args: never[]) => unknown>;
-  let setPendingHistoryItemMock: Mock<(...args: never[]) => unknown>;
-  let onExecMock: Mock<(...args: never[]) => unknown>;
-  let onDebugMessageMock: Mock<(...args: never[]) => unknown>;
-  let setShellInputFocusedMock: Mock<(...args: never[]) => unknown>;
+  let addItemToHistoryMock: Mock<UseHistoryManagerReturn['addItem']>;
+  let setPendingHistoryItemMock: Mock<
+    React.Dispatch<React.SetStateAction<HistoryItemWithoutId | null>>
+  >;
+  let onExecMock: Mock<(command: Promise<void>) => void | Promise<void>>;
+  let onDebugMessageMock: Mock<(message: string) => void>;
+  let setShellInputFocusedMock: Mock<(value: boolean) => void>;
   let mockConfig: Config;
   let mockAgentClient: AgentClient;
 
@@ -306,7 +309,8 @@ describe('useShellCommandProcessor', () => {
     });
     await act(async () => await execPromise);
 
-    const finalHistoryItem = addItemToHistoryMock.mock.calls[1][0];
+    const finalHistoryItem = addItemToHistoryMock.mock
+      .calls[1][0] as HistoryItemToolGroup;
     expect(finalHistoryItem.tools[0].status).toBe(ToolCallStatus.Error);
     expect(finalHistoryItem.tools[0].resultDisplay).toContain(
       'Command exited with code 127',
@@ -316,7 +320,7 @@ describe('useShellCommandProcessor', () => {
 
   describe('UI Streaming and Throttling', () => {
     beforeEach(() => {
-      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.useFakeTimers();
     });
     afterEach(() => {
       vi.useRealTimers();
@@ -512,7 +516,8 @@ describe('useShellCommandProcessor', () => {
     });
     await act(async () => await execPromise);
 
-    const finalHistoryItem = addItemToHistoryMock.mock.calls[1][0];
+    const finalHistoryItem = addItemToHistoryMock.mock
+      .calls[1][0] as HistoryItemToolGroup;
     expect(finalHistoryItem.tools[0].status).toBe(ToolCallStatus.Canceled);
     expect(finalHistoryItem.tools[0].resultDisplay).toContain(
       'Command was cancelled.',
@@ -540,7 +545,8 @@ describe('useShellCommandProcessor', () => {
     });
     await act(async () => await execPromise);
 
-    const finalHistoryItem = addItemToHistoryMock.mock.calls[1][0];
+    const finalHistoryItem = addItemToHistoryMock.mock
+      .calls[1][0] as HistoryItemToolGroup;
     expect(finalHistoryItem.tools[0].status).toBe(ToolCallStatus.Success);
     expect(finalHistoryItem.tools[0].resultDisplay).toBe(
       '[Command produced binary output, which is not shown.]',
@@ -629,7 +635,8 @@ describe('useShellCommandProcessor', () => {
       });
       await act(async () => await execPromise);
 
-      const finalHistoryItem = addItemToHistoryMock.mock.calls[1][0];
+      const finalHistoryItem = addItemToHistoryMock.mock
+        .calls[1][0] as HistoryItemToolGroup;
       expect(finalHistoryItem.tools[0].resultDisplay).toContain(
         "WARNING: shell mode is stateless; the directory change to '/test/dir/new' will not persist.",
       );
@@ -655,7 +662,8 @@ describe('useShellCommandProcessor', () => {
       });
       await act(async () => await execPromise);
 
-      const finalHistoryItem = addItemToHistoryMock.mock.calls[1][0];
+      const finalHistoryItem = addItemToHistoryMock.mock
+        .calls[1][0] as HistoryItemToolGroup;
       expect(finalHistoryItem.tools[0].resultDisplay).not.toContain('WARNING');
     });
   });

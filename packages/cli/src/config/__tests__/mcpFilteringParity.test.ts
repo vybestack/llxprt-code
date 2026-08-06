@@ -67,7 +67,7 @@ vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-const reloadSettingsState = vi.hoisted<{ current?: Settings }>(() => ({}));
+const reloadSettingsState = {} as { current?: Settings };
 
 const actual = { ...(await import('../settings.js')) };
 vi.mock('../settings.js', () => {

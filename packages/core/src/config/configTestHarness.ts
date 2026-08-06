@@ -26,6 +26,7 @@ import type { Mock } from 'bun:test';
 import { createRequire } from 'node:module';
 import type { ConfigParameters, SandboxConfig } from './config.js';
 import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
+import type { AgentClientContract } from '../core/clientContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type * as SettingsModule from '@vybestack/llxprt-code-settings';
 import type * as IdeIntegrationModule from '@vybestack/llxprt-code-ide-integration';
@@ -311,7 +312,9 @@ export function createBaseParams(
     model: sharedConfigTestConstants.MODEL,
     settingsService,
     agentClientFactory: (config, runtimeState) =>
-      new AgentClient(config, runtimeState),
+      new (AgentClient as unknown as new (
+        ...args: unknown[]
+      ) => AgentClientContract)(config, runtimeState),
     toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   };
 }

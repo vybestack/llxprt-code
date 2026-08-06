@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { quotaCommand } from './quotaCommand.js';
-import { type CommandContext } from './types.js';
+import { type CommandContext, CommandKind } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -162,7 +162,7 @@ describe('quotaCommand', () => {
   describe('command structure', () => {
     it('has name quota and BUILT_IN kind', () => {
       expect(quotaCommand.name).toBe('quota');
-      expect(quotaCommand.kind).toBe('built-in');
+      expect(quotaCommand.kind).toBe(CommandKind.BUILT_IN);
     });
 
     it('has status, credits, and reset subcommands', () => {

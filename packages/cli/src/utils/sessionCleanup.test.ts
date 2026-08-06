@@ -34,7 +34,18 @@ import {
   createTestSessions,
 } from './sessionCleanup-test-helpers.js';
 
-const mockFs = fs as unknown as Mock<typeof fs>;
+/**
+ * Bun ships no deep-mock type, so the members each suite actually drives are
+ * named explicitly and given Bun's Mock signature.
+ */
+type MockedMembers<T, K extends keyof T> = {
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+};
+
+const mockFs = fs as unknown as MockedMembers<
+  typeof fs,
+  'access' | 'readFile' | 'unlink'
+>;
 const mockGetAllSessionFiles = getAllSessionFiles as Mock<
   typeof getAllSessionFiles
 >;

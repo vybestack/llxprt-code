@@ -121,7 +121,9 @@ describe('FolderTrustDialog', () => {
       stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
 
-    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledOnce();
+    });
     expect(mockedExit).not.toHaveBeenCalled();
     selection.resolve();
     await selection.promise;
@@ -129,7 +131,9 @@ describe('FolderTrustDialog', () => {
     act(() => {
       stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
-    await waitFor(() => expect(mockedExit).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(mockedExit).toHaveBeenCalledOnce();
+    });
   });
 
   it('allows another selection after StrictMode replays the mount effect', async () => {
@@ -150,7 +154,9 @@ describe('FolderTrustDialog', () => {
     act(() => {
       stdin.write('\r');
     });
-    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledOnce();
+    });
 
     selection.resolve();
     await act(async () => selection.promise);

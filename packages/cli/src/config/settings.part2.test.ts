@@ -19,14 +19,12 @@ vi.mock('os', () => {
 });
 
 // Mock './settings.js' to ensure it uses the mocked 'os.homedir()' for its internal constants.
-vi.mock('./settings.js', async (importActual) => {
-  const originalModule = await importActual<typeof import('./settings.js')>();
-  return {
-    __esModule: true, // Ensure correct module shape
-    ...originalModule, // Re-export all original members
-    // We are relying on originalModule's USER_SETTINGS_PATH being constructed with mocked os.homedir()
-  };
-});
+const actualSettingsModule = { ...(await import('./settings.js')) };
+vi.mock('./settings.js', () => ({
+  __esModule: true, // Ensure correct module shape
+  ...actualSettingsModule, // Re-export all original members
+  // We are relying on originalModule's USER_SETTINGS_PATH being constructed with mocked os.homedir()
+}));
 
 // Mock trustedFolders
 vi.mock('./trustedFolders.js', () => ({

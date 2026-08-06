@@ -31,6 +31,8 @@ import {
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { appEvents, AppEvent } from './utils/events.js';
+import type { AppEvents } from './utils/events.js';
+import { EventEmitter } from 'node:events';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
@@ -215,7 +217,17 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 });
 
 describe('cli.tsx main function', () => {
-  let loadSettingsMock: ReturnType<typeof vi.mocked<typeof loadSettings>>;
+  /**
+   * Bun ships no deep-mock type, so the members each suite actually drives are
+   * named explicitly and given Bun's Mock signature.
+   */
+  type MockedMembers<T, K extends keyof T> = {
+    [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+  };
+
+  type MockedEventEmitter = MockedMembers<EventEmitter<AppEvents>, 'emit'>;
+
+  let loadSettingsMock: Mock<typeof loadSettings>;
   let originalEnvGeminiSandbox: string | undefined;
   let originalEnvSandbox: string | undefined;
   let projectTempDir: string;
@@ -396,7 +408,7 @@ describe('cli.tsx main function', () => {
 
   it('should preserve shared sibling objects when stringifying rejection reasons', async () => {
     __resetUnhandledRejectionStateForTesting();
-    const appEventsMock = appEvents as unknown as Mock<typeof appEvents>;
+    const appEventsMock = appEvents as unknown as MockedEventEmitter;
     const shared = { value: 'shared object' };
 
     const removeHandler = setupUnhandledRejectionHandler();
@@ -411,9 +423,11 @@ describe('cli.tsx main function', () => {
       const logErrorCall = appEventsMock.emit.mock.calls.find(
         (call) => call[0] === AppEvent.LogError,
       );
-      expect(logErrorCall?.[1]).toContain('"first"');
-      expect(logErrorCall?.[1]).toContain('"second"');
-      expect(logErrorCall?.[1]).not.toContain('[Circular]');
+      expect(logErrorCall?.[1] as unknown as string).toContain('"first"');
+      expect(logErrorCall?.[1] as unknown as string).toContain('"second"');
+      expect(logErrorCall?.[1] as unknown as string).not.toContain(
+        '[Circular]',
+      );
     } finally {
       removeHandler();
     }
@@ -421,7 +435,7 @@ describe('cli.tsx main function', () => {
 
   it('should log unhandled promise rejections and open debug console on first error', async () => {
     __resetUnhandledRejectionStateForTesting();
-    const appEventsMock = appEvents as unknown as Mock<typeof appEvents>;
+    const appEventsMock = appEvents as unknown as MockedEventEmitter;
     const rejectionError = new Error('Test unhandled rejection');
 
     // Use the returned disposer so the test-installed listener is removed

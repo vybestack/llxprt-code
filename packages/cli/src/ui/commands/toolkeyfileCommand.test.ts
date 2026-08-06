@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { toolkeyfileCommand } from './toolkeyfileCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { CommandKind } from './types.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -75,7 +76,7 @@ describe('toolkeyfileCommand', () => {
       expect(toolkeyfileCommand.description).toBe(
         'manage API key file for a built-in tool',
       );
-      expect(toolkeyfileCommand.kind).toBe('built-in');
+      expect(toolkeyfileCommand.kind).toBe(CommandKind.BUILT_IN);
     });
 
     it('defines schema for autocomplete and argument hints', () => {

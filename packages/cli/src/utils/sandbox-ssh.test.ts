@@ -74,7 +74,9 @@ describe('setupSshAgentDockerMacOS', () => {
       r.cleanup?.(),
     );
     const execCalls = (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mock.calls;
     const dockerInfoCalls = execCalls.filter((c) =>
       String(c[0]).includes('docker info'),
@@ -94,7 +96,9 @@ describe('getPodmanMachineConnection', () => {
 
   it('parses default connection (R7.2)', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockReturnValue(
       Buffer.from(
         JSON.stringify([
@@ -118,7 +122,9 @@ describe('getPodmanMachineConnection', () => {
 
   it('falls back to sole connection when no default (R7.2)', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockReturnValue(
       Buffer.from(
         JSON.stringify([
@@ -138,7 +144,9 @@ describe('getPodmanMachineConnection', () => {
 
   it('throws on empty connection list (R7.2)', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockReturnValue(Buffer.from(JSON.stringify([])));
     expect(() => getPodmanMachineConnection()).toThrow(
       /No Podman machine connections found/,
@@ -147,7 +155,9 @@ describe('getPodmanMachineConnection', () => {
 
   it('throws on multiple non-default connections (R7.2)', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockReturnValue(
       Buffer.from(
         JSON.stringify([
@@ -173,7 +183,9 @@ describe('getPodmanMachineConnection', () => {
 
   it('throws on malformed JSON (R7.6)', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockReturnValue(Buffer.from('not json'));
     expect(() => getPodmanMachineConnection()).toThrow(
       /Failed to parse Podman connection list JSON/,
@@ -182,7 +194,9 @@ describe('getPodmanMachineConnection', () => {
 
   it('throws on command failure with guidance', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockImplementation(() => {
       throw new Error('podman not found');
     });
@@ -254,7 +268,9 @@ describe('setupSshAgentForwarding', () => {
 
 function mockValidPodmanConnection() {
   (
-    child_process.execSync as Mock<typeof child_process.execSync>
+    child_process.execSync as unknown as Mock<
+      (command: string) => NonSharedBuffer | string
+    >
   ).mockImplementation((cmd: string) => {
     const cmdStr = String(cmd);
     if (cmdStr.includes('connection list')) {
@@ -406,7 +422,9 @@ describe('setupSshAgentPodmanMacOS', () => {
 
   it('throws when poll timeout expires and TCP port never ready (R7.4)', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
@@ -466,7 +484,9 @@ describe('setupSshAgentPodmanMacOS', () => {
 
   it('kills tunnel process when poll timeout expires (R7.8)', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
@@ -606,7 +626,9 @@ describe('setupCredentialProxyPodmanMacOS', () => {
 
   it('throws when bridge port never becomes ready and kills tunnel', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<
+        (command: string) => NonSharedBuffer | string
+      >
     ).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
@@ -879,7 +901,11 @@ describe('setupSshAgentDockerLinux', () => {
     // unavailable. The stub is path-conditional: only /etc/os-release throws;
     // every other synchronous read delegates to the real implementation.
     const realReadFileSync = fs.readFileSync;
-    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    (
+      vi.spyOn(fs, 'readFileSync') as unknown as Mock<
+        (path: fs.PathOrFileDescriptor) => NonSharedBuffer | string
+      >
+    ).mockImplementation((p) => {
       if (p === '/etc/os-release') {
         throw new Error('not found');
       }
@@ -902,7 +928,11 @@ describe('setupSshAgentDockerLinux', () => {
     // Path-conditional stub: only /etc/os-release returns Ubuntu content;
     // every other synchronous read delegates to the real implementation.
     const realReadFileSync = fs.readFileSync;
-    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    (
+      vi.spyOn(fs, 'readFileSync') as unknown as Mock<
+        (path: fs.PathOrFileDescriptor) => NonSharedBuffer | string
+      >
+    ).mockImplementation((p) => {
       if (p === '/etc/os-release') {
         return 'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"';
       }

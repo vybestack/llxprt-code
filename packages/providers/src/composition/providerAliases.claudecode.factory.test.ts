@@ -20,9 +20,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 // AnthropicProvider can exercise the dynamic /models listing path without a
 // network call. We capture the constructor args to prove API-key wiring.
 const mockBetaModelsList = vi.fn();
-const sdkConstructorCalls = vi.hoisted<
-  Array<{ apiKey?: string; authToken?: string }>
->(() => []);
+const sdkConstructorCalls = [] as Array<{
+  apiKey?: string;
+  authToken?: string;
+}>;
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation((opts: Record<string, unknown>) => {

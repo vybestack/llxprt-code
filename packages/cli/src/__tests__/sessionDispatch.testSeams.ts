@@ -13,7 +13,7 @@
  * fired, which branch ran), never merely that a seam was invoked.
  */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 
 /**
  * Sentinel thrown by the safe process.exit seam so the test runner is never
@@ -112,19 +112,22 @@ export function installListenerCapture() {
     Array<(...args: unknown[]) => void>
   >();
 
-  const onSpy = vi
-    .spyOn(process, 'on')
-    .mockImplementation(
-      (event: string | symbol, listener: (...args: unknown[]) => void) => {
-        const list = listeners.get(event);
-        if (list) {
-          list.push(listener);
-        } else {
-          listeners.set(event, [listener]);
-        }
-        return process;
-      },
-    );
+  const onSpy = (
+    vi.spyOn(process, 'on') as unknown as Mock<
+      (
+        event: string | symbol,
+        listener: (...args: unknown[]) => void,
+      ) => NodeJS.Process
+    >
+  ).mockImplementation((event, listener) => {
+    const list = listeners.get(event);
+    if (list) {
+      list.push(listener);
+    } else {
+      listeners.set(event, [listener]);
+    }
+    return process;
+  });
 
   const offSpy = vi
     .spyOn(process, 'off')

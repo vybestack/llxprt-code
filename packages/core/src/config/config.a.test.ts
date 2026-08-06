@@ -6,7 +6,6 @@
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import type { Mock } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
@@ -31,7 +30,7 @@ import {
 } from './configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -39,7 +38,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
 const initializeShellParser = vi.fn(() => Promise.resolve(true));
 

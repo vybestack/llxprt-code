@@ -8,7 +8,7 @@ const realInstallationInfoModule = {
   ...(await import('./../utils/installationInfo.js')),
 };
 
-vi.mock('../ui/commands/profileCommand.js', () => {
+vi.mock('../ui/commands/profileCommand.js', async () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     profileCommand: {
@@ -19,7 +19,7 @@ vi.mock('../ui/commands/profileCommand.js', () => {
   };
 });
 
-vi.mock('../ui/commands/uiprofileCommand.js', () => {
+vi.mock('../ui/commands/uiprofileCommand.js', async () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     uiprofileCommand: {
@@ -30,7 +30,7 @@ vi.mock('../ui/commands/uiprofileCommand.js', () => {
   };
 });
 
-vi.mock('../ui/commands/aboutCommand.js', () => {
+vi.mock('../ui/commands/aboutCommand.js', async () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     aboutCommand: {
@@ -41,7 +41,7 @@ vi.mock('../ui/commands/aboutCommand.js', () => {
   };
 });
 
-vi.mock('../ui/commands/ideCommand.js', () => {
+vi.mock('../ui/commands/ideCommand.js', async () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     ideCommand: vi.fn().mockReturnValue({
@@ -54,7 +54,7 @@ vi.mock('../ui/commands/ideCommand.js', () => {
 vi.mock('../ui/commands/restoreCommand.js', () => ({
   restoreCommand: vi.fn(),
 }));
-vi.mock('../ui/commands/permissionsCommand.js', () => {
+vi.mock('../ui/commands/permissionsCommand.js', async () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     permissionsCommand: {
@@ -89,7 +89,7 @@ vi.mock('../ui/commands/modelCommand.js', () => ({
 }));
 vi.mock('../ui/commands/privacyCommand.js', () => ({ privacyCommand: {} }));
 vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-vi.mock('../ui/commands/quotaCommand.js', () => {
+vi.mock('../ui/commands/quotaCommand.js', async () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     quotaCommand: {

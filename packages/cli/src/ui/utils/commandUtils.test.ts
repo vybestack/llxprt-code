@@ -92,10 +92,10 @@ const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
     off: EventEmitter.prototype.off,
     removeAllListeners: EventEmitter.prototype.removeAllListeners,
   }) as unknown as EventEmitter & {
-    write: Mock<(...args: never[]) => unknown>;
-    end: Mock<(...args: never[]) => unknown>;
+    write: Mock<(data: unknown) => boolean>;
+    end: Mock<() => void>;
     isTTY?: boolean;
-    removeAllListeners: Mock<(...args: never[]) => unknown>;
+    removeAllListeners: Mock<(event: string) => EventEmitter>;
   };
   return stream;
 };
@@ -116,8 +116,8 @@ const resetEnv = () => {
 
 interface MockChildProcess extends EventEmitter {
   stdin: EventEmitter & {
-    write: Mock<(...args: never[]) => unknown>;
-    end: Mock<(...args: never[]) => unknown>;
+    write: Mock<(data: unknown) => boolean>;
+    end: Mock<() => void>;
   };
   stderr: EventEmitter;
 }
@@ -127,7 +127,7 @@ describe('commandUtils', () => {
 
   let mockSpawn: Mock<(...args: never[]) => unknown>;
   let mockChild: MockChildProcess;
-  let mockClipboardyWrite: Mock<(...args: never[]) => unknown>;
+  let mockClipboardyWrite: Mock<(text: string) => Promise<void>>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -156,7 +156,7 @@ describe('commandUtils', () => {
 
     // Setup clipboardy mock
     mockClipboardyWrite = clipboardy.write as Mock<
-      (...args: never[]) => unknown
+      (text: string) => Promise<void>
     >;
 
     // default: /dev/tty creation succeeds and emits 'open'
@@ -477,10 +477,10 @@ describe('commandUtils', () => {
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
       // ensure no accidental writes to stdio either
       const stderrStream = process.stderr as unknown as {
-        write: Mock<(...args: never[]) => unknown>;
+        write: Mock<(data: unknown) => boolean>;
       };
       const stdoutStream = process.stdout as unknown as {
-        write: Mock<(...args: never[]) => unknown>;
+        write: Mock<(data: unknown) => boolean>;
       };
       expect(stderrStream.write).not.toHaveBeenCalled();
       expect(stdoutStream.write).not.toHaveBeenCalled();

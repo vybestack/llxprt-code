@@ -28,6 +28,19 @@ import type { CommandContext, ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
 import { assertTruthy } from '../../test-utils/assertions.js';
 
+/**
+ * Bun's vi.spyOn type signature omits the property-getter overload that
+ * exists at runtime. This alias restores it for getter-based spying.
+ */
+const spyOnGetter = vi.spyOn as unknown as <
+  T extends object,
+  K extends keyof T,
+>(
+  obj: T,
+  key: K,
+  accessType: 'get',
+) => Mock<() => T[K]>;
+
 const realChildProcessModule = { ...(await import('child_process')) };
 
 vi.mock('child_process', () => automock(realChildProcessModule));
@@ -62,7 +75,7 @@ describe('setupGithubCommand', async () => {
   });
 
   it('downloads workflows, updates gitignore, and includes pipefail on non-windows', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const fakeRepoOwner = 'fake';
     const fakeRepoName = 'repo';
     const fakeRepoRoot = scratchDir;
@@ -144,7 +157,7 @@ describe('setupGithubCommand', async () => {
   });
 
   it('downloads workflows, updates gitignore, and does not include pipefail on windows', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('win32');
     const fakeRepoOwner = 'fake';
     const fakeRepoName = 'repo';
     const fakeRepoRoot = scratchDir;

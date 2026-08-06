@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { lspCommand } from './lspCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { CommandKind } from './types.js';
 import type { MessageActionReturn, SlashCommand } from './types.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
@@ -26,7 +27,7 @@ describe('lspCommand (P34)', () => {
   describe('command structure', () => {
     it('should expose the lsp command', () => {
       expect(lspCommand.name).toBe('lsp');
-      expect(lspCommand.kind).toBe('built-in');
+      expect(lspCommand.kind).toBe(CommandKind.BUILT_IN);
       expect(lspCommand.description).toBe(
         'Manage Language Server Protocol (LSP) service',
       );

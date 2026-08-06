@@ -17,9 +17,10 @@ import {
 } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
+import type { HistoryItemWithoutId } from '../types.js';
 
 describe('useUnconfiguredProviderGuidance', () => {
-  let addItem: Mock<(...args: never[]) => unknown>;
+  let addItem: Mock<(item: HistoryItemWithoutId, timestamp?: number) => number>;
 
   beforeEach(() => {
     addItem = vi.fn();

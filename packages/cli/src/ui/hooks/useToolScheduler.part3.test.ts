@@ -44,6 +44,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import type { HistoryItemWithoutId } from '../types.js';
+
+type OnCompleteFn = (
+  schedulerId: symbol,
+  tools: CompletedToolCall[],
+  options: { isPrimary: boolean },
+) => void | Promise<void>;
+type SetPendingHistoryItemFn = React.Dispatch<
+  React.SetStateAction<HistoryItemWithoutId | null>
+>;
 
 const buildRequest = (
   overrides: Partial<ToolCallRequestInfo> = {},
@@ -442,7 +452,9 @@ const mockToolWithLiveOutput = new MockTool({
   canUpdateOutput: true,
   shouldConfirmExecute: vi.fn(),
 });
-let mockOnUserConfirmForToolConfirmation: Mock<(...args: never[]) => unknown>;
+let mockOnUserConfirmForToolConfirmation: Mock<
+  ToolCallConfirmationDetails['onConfirm']
+>;
 const mockToolRequiresConfirmation = new MockTool({
   name: 'mockToolRequiresConfirmation',
   displayName: 'Mock Tool Requires Confirmation',
@@ -454,9 +466,9 @@ const mockToolRequiresConfirmation = new MockTool({
  * Used across multiple test suites to avoid sonarjs/no-identical-functions.
  */
 const renderScheduler = (
-  onComplete: Mock<(...args: never[]) => unknown>,
+  onComplete: Mock<OnCompleteFn>,
   mockConfig: Partial<Config>,
-  setPendingHistoryItem: Mock<(...args: never[]) => unknown>,
+  setPendingHistoryItem: Mock<SetPendingHistoryItemFn>,
 ) =>
   renderHook(() =>
     useReactToolScheduler(
@@ -475,15 +487,15 @@ describe('useReactToolScheduler (split)', () => {
   // live output updates, and cancellations, which are challenging to assert
   // correctly with the current testing setup. Further investigation is needed
   // to find a robust way to test these scenarios.
-  let onComplete: Mock<(...args: never[]) => unknown>;
-  let setPendingHistoryItem: Mock<(...args: never[]) => unknown>;
+  let onComplete: Mock<OnCompleteFn>;
+  let setPendingHistoryItem: Mock<SetPendingHistoryItemFn>;
 
   beforeEach(() => {
     onComplete = vi.fn();
     // Reset to DEFAULT approval mode (not YOLO from previous test suite)
-    (
-      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
-    ).mockReturnValue(ApprovalMode.DEFAULT);
+    (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
+      ApprovalMode.DEFAULT,
+    );
     setPendingHistoryItem = vi.fn();
 
     mockToolRegistry.getTool.mockClear();
@@ -504,10 +516,13 @@ describe('useReactToolScheduler (split)', () => {
     };
     (
       mockToolRequiresConfirmation.shouldConfirmExecute as unknown as Mock<
-        (...args: never[]) => unknown
+        (
+          params: Record<string, unknown>,
+          signal: AbortSignal,
+        ) => Promise<ToolCallConfirmationDetails | false>
       >
     ).mockImplementation(
-      async (): Promise<ToolCallConfirmationDetails | null> =>
+      async (): Promise<ToolCallConfirmationDetails | false> =>
         confirmationDetails,
     );
 
@@ -530,7 +545,10 @@ describe('useReactToolScheduler (split)', () => {
     const confirmError = new Error('Confirmation check failed');
     (
       mockTool.shouldConfirmExecute as unknown as Mock<
-        (...args: never[]) => unknown
+        (
+          params: Record<string, unknown>,
+          signal: AbortSignal,
+        ) => Promise<ToolCallConfirmationDetails | false>
       >
     ).mockRejectedValue(confirmError);
 
@@ -574,7 +592,10 @@ describe('useReactToolScheduler (split)', () => {
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     (
       mockTool.shouldConfirmExecute as unknown as Mock<
-        (...args: never[]) => unknown
+        (
+          params: Record<string, unknown>,
+          signal: AbortSignal,
+        ) => Promise<ToolCallConfirmationDetails | false>
       >
     ).mockResolvedValue(false);
     const execError = new Error('Execution failed');

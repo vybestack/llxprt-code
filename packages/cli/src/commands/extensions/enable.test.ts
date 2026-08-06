@@ -17,14 +17,14 @@ import { handleEnable, enableCommand } from './enable.js';
 import yargs from 'yargs';
 import { FatalConfigError } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
-import type * as extensionModule from '../../config/extension.js';
 
 vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-const mockEnableExtension: Mock<typeof extensionModule.enableExtension> =
-  vi.fn();
+const mockEnableExtension: Mock<
+  (name: string, scope: SettingScope, cwd?: string) => Promise<void>
+> = vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
 vi.mock('../../config/extension.js', () => {

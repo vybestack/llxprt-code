@@ -5,7 +5,7 @@
  */
 
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { computeTerminalTitle } from './windowTitle.js';
 import { StreamingState } from '../ui/types.js';
 

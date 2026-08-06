@@ -38,7 +38,7 @@ import {
 // directories/symlinks. Only the non-fs dependencies are mocked, using the same
 // shared harness bodies as the other config test files.
 
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -46,7 +46,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
 const __actual = { ...(await import('@vybestack/llxprt-code-tools')) };
 vi.mock('@vybestack/llxprt-code-tools', () => buildToolsMockBody(__actual));

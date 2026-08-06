@@ -39,7 +39,7 @@ describe('isGitHubRepository', async () => {
 
   it('returns false if the git command fails', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockImplementation((): string => {
       throw new Error('oops');
     });
@@ -48,13 +48,13 @@ describe('isGitHubRepository', async () => {
 
   it('returns false if the remote is not github.com', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('https://gitlab.com');
     expect(isGitHubRepository()).toBe(false);
   });
 
   it('returns true if the remote is github.com', async () => {
-    (child_process.execSync as Mock<typeof child_process.execSync>)
+    (child_process.execSync as unknown as Mock<(command: string) => string>)
       .mockReturnValueOnce(`
       origin  https://github.com/acoliver/llxprt-code (fetch)
       origin  https://github.com/acoliver/llxprt-code (push)
@@ -74,7 +74,7 @@ describe('getGitHubRepoInfo', async () => {
 
   it('throws an error if github repo info cannot be determined', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockImplementation((): string => {
       throw new Error('oops');
     });
@@ -85,7 +85,7 @@ describe('getGitHubRepoInfo', async () => {
 
   it('throws an error if owner/repo could not be determined', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('');
     expect(() => {
       getGitHubRepoInfo();
@@ -94,7 +94,7 @@ describe('getGitHubRepoInfo', async () => {
 
   it('returns the owner and repo', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('https://github.com/owner/repo.git ');
     expect(getGitHubRepoInfo()).toStrictEqual({ owner: 'owner', repo: 'repo' });
   });
@@ -111,7 +111,7 @@ describe('getGitRepoRoot', async () => {
 
   it('throws an error if git root cannot be determined', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockImplementation((): string => {
       throw new Error('oops');
     });
@@ -122,7 +122,7 @@ describe('getGitRepoRoot', async () => {
 
   it('throws an error if git root is empty', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('');
     expect(() => {
       getGitRepoRoot();
@@ -131,7 +131,7 @@ describe('getGitRepoRoot', async () => {
 
   it('returns the root', async () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('/path/to/git/repo');
     expect(getGitRepoRoot()).toBe('/path/to/git/repo');
   });
@@ -187,7 +187,7 @@ describe('getWorkspaceIdentity', () => {
 
   it('should return git repo root when inside a git repository', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce('/Users/test/projects/my-repo');
 
     const result = getWorkspaceIdentity();
@@ -201,7 +201,7 @@ describe('getWorkspaceIdentity', () => {
 
   it('should return cwd when NOT inside a git repository', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockImplementation(() => {
       throw new Error('not a git repository');
     });
@@ -214,7 +214,7 @@ describe('getWorkspaceIdentity', () => {
 
   it('should handle git command failure gracefully and fall back to cwd', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockImplementation(() => {
       throw new Error('fatal: git command failed');
     });
@@ -228,7 +228,7 @@ describe('getWorkspaceIdentity', () => {
     const repoRoot = '/Users/test/projects/my-repo';
     const expectedRepoRoot = path.resolve(repoRoot);
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValue(repoRoot);
 
     // Simulate multiple calls (as if from different subdirs)
@@ -242,7 +242,7 @@ describe('getWorkspaceIdentity', () => {
 
   it('should handle bare repo gracefully', () => {
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockImplementation(() => {
       throw new Error('fatal: this operation must be run in a work tree');
     });
@@ -257,7 +257,7 @@ describe('getWorkspaceIdentity', () => {
     // Mock git returning a path with trailing newline/whitespace
     const pathWithWhitespace = '  /Users/test/projects/my-repo  \n';
     (
-      child_process.execSync as Mock<typeof child_process.execSync>
+      child_process.execSync as unknown as Mock<(command: string) => string>
     ).mockReturnValueOnce(pathWithWhitespace);
 
     const result = getWorkspaceIdentity();

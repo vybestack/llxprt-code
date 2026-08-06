@@ -42,7 +42,7 @@ import {
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -50,7 +50,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
 const __actual = { ...(await import('fs')) };
 vi.mock('fs', () => buildFsMockBody(__actual));

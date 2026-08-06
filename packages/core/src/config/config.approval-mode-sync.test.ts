@@ -53,7 +53,7 @@ import {
 } from '../confirmation-bus/types.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -61,7 +61,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
 const __actual = { ...(await import('fs')) };
 vi.mock('fs', () => buildFsMockBody(__actual));

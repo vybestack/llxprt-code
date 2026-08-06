@@ -75,7 +75,7 @@ describe('AcpFileSystemService', () => {
       },
     ])('should use $desc', async ({ capability, setup, verify }) => {
       service = new AcpFileSystemService(
-        mockConnection,
+        mockConnection as unknown as acp.AgentSideConnection,
         'session-1',
         { readTextFile: capability, writeTextFile: true },
         mockFallback,
@@ -116,7 +116,7 @@ describe('AcpFileSystemService', () => {
       },
     ])('should use $desc', async ({ capability, verify }) => {
       service = new AcpFileSystemService(
-        mockConnection,
+        mockConnection as unknown as acp.AgentSideConnection,
         'session-1',
         { writeTextFile: capability, readTextFile: true },
         mockFallback,

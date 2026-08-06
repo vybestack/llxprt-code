@@ -34,7 +34,7 @@ const mockedGetValue = vi.fn();
 const mockedSnapshotValue = vi.fn();
 const mockedRestoreSnapshot = vi.fn();
 const mockedResolvePathTrust = vi.fn();
-const mockedTrustedConfig = vi.hoisted<Record<string, TrustLevel>>(() => ({}));
+const mockedTrustedConfig = {} as Record<string, TrustLevel>;
 
 vi.mock('node:process', () => {
   const actual = realNodeProcessModule;
@@ -414,7 +414,9 @@ describe('PermissionsModifyTrustDialog', () => {
     stdin.write('\r');
     stdin.write('\r');
     stdin.write('\u001B');
-    await waitFor(() => expect(mockedSetValue).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(mockedSetValue).toHaveBeenCalledOnce();
+    });
     expect(onExit).not.toHaveBeenCalled();
 
     transition.resolve();
@@ -440,7 +442,9 @@ describe('PermissionsModifyTrustDialog', () => {
     );
 
     stdin.write('\r');
-    await waitFor(() => expect(mockedSetValue).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(mockedSetValue).toHaveBeenCalledOnce();
+    });
     unmount();
 
     await act(async () => {

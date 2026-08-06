@@ -27,7 +27,6 @@ import type { CustomTheme } from './theme.js';
 import type { SemanticColors } from './semantic-tokens.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import type * as osActual from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 vi.mock('node:fs', () => automock(realNodeFsModule));
@@ -231,7 +230,11 @@ describe('ThemeManager', () => {
 
     beforeEach(() => {
       (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/home/user');
-      vi.spyOn(fs, 'realpathSync').mockImplementation((p) => p as string);
+      (
+        vi.spyOn(fs, 'realpathSync') as unknown as Mock<
+          (path: fs.PathLike) => string
+        >
+      ).mockImplementation((p) => p as string);
     });
 
     it('should load a theme from a valid file path', () => {

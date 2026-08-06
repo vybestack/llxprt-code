@@ -869,7 +869,9 @@ describe('#3081 current-user container-home agreement', () => {
 
     // LLXPRT_CONFIG_HOME still points at the config bind mount, not the home.
     const configHome = envValue(args, 'LLXPRT_CONFIG_HOME');
-    expect(configHome).toBe(getContainerPath(Storage.getGlobalConfigDir()));
+    expect(configHome).toBe(
+      getContainerPath(Storage.getGlobalConfigDir()) as string,
+    );
     expect(volumeDestinations(args)).toContain(configHome);
 
     // The current-user branch was actually taken (the other branch is covered

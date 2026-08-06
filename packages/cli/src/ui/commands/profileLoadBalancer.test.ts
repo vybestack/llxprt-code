@@ -114,7 +114,9 @@ describe('createLoadBalancerProfileDefinition', () => {
     expect(profile.policy).toBe('roundrobin');
     expect(profile.profiles).toStrictEqual(['a', 'b']);
     expect(profile.contextLimit).toBe(2048);
-    expect(profile.ephemeralSettings).toStrictEqual({ temperature: 0.5 });
+    expect(profile.ephemeralSettings).toStrictEqual({
+      temperature: 0.5,
+    });
   });
 
   it('omits contextLimit when undefined', () => {

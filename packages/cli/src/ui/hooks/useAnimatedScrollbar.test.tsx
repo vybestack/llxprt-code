@@ -100,10 +100,8 @@ describe('useAnimatedScrollbar', () => {
   });
 
   it('should not crash if Date.now() goes backwards (regression test)', async () => {
-    // Only fake timers, keep Date real so we can mock it manually
-    vi.useFakeTimers({
-      toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
-    });
+    // Fake timers; Date.now() is mocked manually below
+    vi.useFakeTimers();
     const dateSpy = vi.spyOn(Date, 'now');
     let currentTime = 1000;
     dateSpy.mockImplementation(() => currentTime);

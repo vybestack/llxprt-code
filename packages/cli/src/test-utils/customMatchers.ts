@@ -47,13 +47,13 @@ function toHaveOnlyValidCharacters(
 }
 
 expect.extend({
-  toHaveOnlyValidCharacters,
+  toHaveOnlyValidCharacters: toHaveOnlyValidCharacters,
 });
 
 // Declare the matcher on Bun's expect. Matchers and AsymmetricMatchers are
 // interfaces, so they accept declaration merging.
 declare module 'bun:test' {
-  interface Matchers<T> {
+  interface Matchers<T = unknown> {
     toHaveOnlyValidCharacters(): T;
   }
   interface AsymmetricMatchers {

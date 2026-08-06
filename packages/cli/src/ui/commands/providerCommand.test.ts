@@ -34,7 +34,7 @@ const realProviderAliasesModule = {
 };
 
 interface AgentDouble {
-  setProvider: Mock<(...args: never[]) => unknown>;
+  setProvider: Mock<(provider: string) => Promise<unknown>>;
 }
 
 const mocks = (() => {

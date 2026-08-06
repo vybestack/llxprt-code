@@ -185,7 +185,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.NOT_UPDATABLE,
+      );
     });
 
     it('should return ERROR if no remotes found', async () => {
@@ -206,7 +208,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.ERROR);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.ERROR,
+      );
     });
 
     it('should return UPDATE_AVAILABLE when remote hash is different', async () => {
@@ -232,7 +236,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.UPDATE_AVAILABLE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.UPDATE_AVAILABLE,
+      );
     });
 
     it('should return UP_TO_DATE when remote and local hashes are the same', async () => {
@@ -258,7 +264,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.UP_TO_DATE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.UP_TO_DATE,
+      );
     });
 
     it('should return ERROR on git error', async () => {
@@ -280,7 +288,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.ERROR);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.ERROR,
+      );
     });
 
     it('should return NOT_UPDATABLE and use globalThis.console.warn when loadExtension returns null for local extension', async () => {
@@ -314,7 +324,9 @@ describe('git extension helpers', () => {
       );
 
       // Assert: Should use NOT_UPDATABLE (not ERROR)
-      expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.NOT_UPDATABLE,
+      );
 
       // Assert: Should use debugLogger.warn (not debugLogger.error)
       expect(debugWarnSpy).toHaveBeenCalledWith(

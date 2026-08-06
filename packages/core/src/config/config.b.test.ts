@@ -38,7 +38,7 @@ const { USER_MEMORY, TARGET_DIR, TELEMETRY_SETTINGS } =
   sharedConfigTestConstants;
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -46,7 +46,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
 const __actual = { ...(await import('fs')) };
 vi.mock('fs', () => buildFsMockBody(__actual));

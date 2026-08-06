@@ -61,7 +61,7 @@ describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () =>
     inputHistory = ['old prompt', 'new prompt'];
 
     // Verify the bug: restored the wrong (old) prompt
-    expect(restoredPrompt).toBe('old prompt'); // WRONG!
+    expect(restoredPrompt as string | null).toBe('old prompt'); // WRONG!
     // Expected: 'new prompt'
   });
 
@@ -111,7 +111,7 @@ describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () =>
     checkAndRestore();
 
     // Verify the fix: restored the correct (new) prompt
-    expect(restoredPrompt).toBe('new prompt'); // CORRECT!
+    expect(restoredPrompt as string | null).toBe('new prompt'); // CORRECT!
     expect(pendingRestorePrompt).toBe(false);
   });
 

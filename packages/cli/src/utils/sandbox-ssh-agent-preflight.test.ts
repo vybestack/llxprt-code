@@ -61,7 +61,9 @@ function mockSshAdd(outcome: SshAddOutcome): void {
   Object.assign(child, { stdout, stderr });
 
   (
-    child_process.spawn as unknown as Mock<typeof child_process.spawn>
+    child_process.spawn as unknown as Mock<
+      (...args: never[]) => child_process.ChildProcess
+    >
   ).mockImplementation(() => {
     setImmediate(() => {
       if (outcome.spawnError) {

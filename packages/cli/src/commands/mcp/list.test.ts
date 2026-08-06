@@ -62,22 +62,24 @@ const mockedLoadExtensions = loadExtensions as unknown as Mock<
   (...args: never[]) => unknown
 >;
 const mockedCreateTransport = createTransport as unknown as Mock<
-  (...args: never[]) => unknown
+  (...args: never[]) => Promise<MockTransport>
 >;
-const MockedClient = Client as unknown as Mock<(...args: never[]) => unknown>;
+const MockedClient = Client as unknown as Mock<
+  (...args: never[]) => MockClient
+>;
 
 interface MockClient {
-  connect: Mock<(...args: never[]) => unknown>;
-  ping: Mock<(...args: never[]) => unknown>;
-  close: Mock<(...args: never[]) => unknown>;
+  connect: Mock<(transport: unknown) => Promise<void>>;
+  ping: Mock<() => Promise<unknown>>;
+  close: Mock<() => Promise<void>>;
 }
 
 interface MockTransport {
-  close: Mock<(...args: never[]) => unknown>;
+  close: Mock<() => Promise<void>>;
 }
 
 describe('mcp list command', () => {
-  let consoleSpy: Mock<(...args: never[]) => unknown>;
+  let consoleSpy: Mock<DebugLogger['log']>;
   let mockClient: MockClient;
   let mockTransport: MockTransport;
 

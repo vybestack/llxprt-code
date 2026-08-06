@@ -44,6 +44,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import type { HistoryItemWithoutId } from '../types.js';
+
+type OnCompleteFn = (
+  schedulerId: symbol,
+  tools: CompletedToolCall[],
+  options: { isPrimary: boolean },
+) => void | Promise<void>;
+type SetPendingHistoryItemFn = React.Dispatch<
+  React.SetStateAction<HistoryItemWithoutId | null>
+>;
 
 const buildRequest = (
   overrides: Partial<ToolCallRequestInfo> = {},
@@ -444,9 +454,9 @@ const mockToolRequiresConfirmation = new MockTool({
  * Used across multiple test suites to avoid sonarjs/no-identical-functions.
  */
 const renderScheduler = (
-  onComplete: Mock<(...args: never[]) => unknown>,
+  onComplete: Mock<OnCompleteFn>,
   mockConfig: Partial<Config>,
-  setPendingHistoryItem: Mock<(...args: never[]) => unknown>,
+  setPendingHistoryItem: Mock<SetPendingHistoryItemFn>,
 ) =>
   renderHook(() =>
     useReactToolScheduler(
@@ -459,8 +469,8 @@ const renderScheduler = (
   );
 
 describe('useReactToolScheduler in YOLO Mode', () => {
-  let onComplete: Mock<(...args: never[]) => unknown>;
-  let setPendingHistoryItem: Mock<(...args: never[]) => unknown>;
+  let onComplete: Mock<OnCompleteFn>;
+  let setPendingHistoryItem: Mock<SetPendingHistoryItemFn>;
 
   beforeEach(() => {
     onComplete = vi.fn();
@@ -469,9 +479,9 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     mockToolRequiresConfirmation.executeFn.mockClear();
 
     // IMPORTANT: Enable YOLO mode for this test suite
-    (
-      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
-    ).mockReturnValue(ApprovalMode.YOLO);
+    (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
+      ApprovalMode.YOLO,
+    );
 
     vi.useFakeTimers();
   });

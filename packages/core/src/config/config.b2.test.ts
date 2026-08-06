@@ -30,7 +30,7 @@ import {
 } from './configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -38,7 +38,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 // Exposed for assertions in the Proxy Configuration tests below.
 const mockCoreEvents = hoistedConfigMocks.coreEvents;
 const mockSetGlobalProxy = hoistedConfigMocks.setGlobalProxy;

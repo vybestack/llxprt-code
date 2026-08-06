@@ -224,16 +224,19 @@ describe('startInteractiveUI', () => {
     );
     const { disableMouseEvents } = await import('./ui/utils/mouse.js');
     const exitHandlers: Array<() => void> = [];
-    const processOnSpy = vi
-      .spyOn(process, 'on')
-      .mockImplementation(
-        (event: string | symbol, handler: (...args: unknown[]) => void) => {
-          if (event === 'exit') {
-            exitHandlers.push(handler as () => void);
-          }
-          return process;
-        },
-      );
+    const processOnSpy = (
+      vi.spyOn(process, 'on') as unknown as Mock<
+        (
+          event: string | symbol,
+          handler: (...args: unknown[]) => void,
+        ) => NodeJS.Process
+      >
+    ).mockImplementation((event, handler) => {
+      if (event === 'exit') {
+        exitHandlers.push(handler as () => void);
+      }
+      return process;
+    });
 
     const mouseEnabledConfig = {
       ...mockConfig,
@@ -322,16 +325,19 @@ describe('startInteractiveUI', () => {
       './ui/utils/mouse.js'
     );
     const exitHandlers: Array<() => void> = [];
-    const processOnSpy = vi
-      .spyOn(process, 'on')
-      .mockImplementation(
-        (event: string | symbol, handler: (...args: unknown[]) => void) => {
-          if (event === 'exit') {
-            exitHandlers.push(handler as () => void);
-          }
-          return process;
-        },
-      );
+    const processOnSpy = (
+      vi.spyOn(process, 'on') as unknown as Mock<
+        (
+          event: string | symbol,
+          handler: (...args: unknown[]) => void,
+        ) => NodeJS.Process
+      >
+    ).mockImplementation((event, handler) => {
+      if (event === 'exit') {
+        exitHandlers.push(handler as () => void);
+      }
+      return process;
+    });
 
     const originalIsTTY = process.stdout.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', {

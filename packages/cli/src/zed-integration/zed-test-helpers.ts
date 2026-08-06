@@ -344,8 +344,8 @@ export class RecordingConnection {
     };
   }
 
-  sessionUpdate: Mock<(...args: never[]) => unknown> = vi.fn(
-    async (params: acp.SessionNotification): Promise<void> => {
+  sessionUpdate: Mock<(params: acp.SessionNotification) => Promise<void>> =
+    vi.fn(async (params: acp.SessionNotification): Promise<void> => {
       const shouldFail =
         this.sessionUpdateFailAfter !== null &&
         this.sessionUpdateCalls >= this.sessionUpdateFailAfter;
@@ -364,10 +364,13 @@ export class RecordingConnection {
           resolve();
         }
       }
-    },
-  );
+    });
 
-  requestPermission: Mock<(...args: never[]) => unknown> = vi.fn(
+  requestPermission: Mock<
+    (
+      params: acp.RequestPermissionRequest,
+    ) => Promise<acp.RequestPermissionResponse>
+  > = vi.fn(
     async (
       params: acp.RequestPermissionRequest,
     ): Promise<acp.RequestPermissionResponse> => {
@@ -399,7 +402,9 @@ export class RecordingConnection {
     },
   );
 
-  createTerminal: Mock<(...args: never[]) => unknown> = vi.fn(
+  createTerminal: Mock<
+    (params: acp.CreateTerminalRequest) => Promise<FakeTerminalHandle>
+  > = vi.fn(
     async (params: acp.CreateTerminalRequest): Promise<FakeTerminalHandle> => {
       const call = {
         command: params.command,

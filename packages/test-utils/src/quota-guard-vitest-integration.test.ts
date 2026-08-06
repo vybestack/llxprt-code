@@ -139,8 +139,6 @@ beforeEach((ctx) => {
  */
 function fixtureTestSource(): string {
   return `import { describe, it, expect } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tripQuotaGuard } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};
 
 describe('quota guard acceptance fixture', () => {
@@ -229,8 +227,6 @@ function createFixture(): { root: string; stateDir: string } {
 function raceWorkerSource(index: number): string {
   const reason = `${RACE_REASON_PREFIX}${index}"`;
   return `import { it, expect } from 'bun:test';
-import { readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tripQuotaGuard } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};
 
 // Local blocking sleep while filesystem ready files implement the barrier.

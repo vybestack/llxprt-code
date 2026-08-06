@@ -226,7 +226,6 @@ describe('agents-neutral-test-gate — unrelated fixture in exempt boundary file
     // extractSystemInstructionText), but the `unrelated` fixture is NOT
     // passed to any converter — it must still FAIL.
     const source = `
-import { extractSystemInstructionText } from './helper.js';
 it('test', () => {
   const content = { role: 'system', parts: [{ text: 'hello' }] };
   expect(extractSystemInstructionText(content as unknown)).toBe('hello');

@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { toolkeyCommand } from './toolkeyCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { CommandKind } from './types.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
@@ -59,7 +60,7 @@ describe('toolkeyCommand', () => {
       expect(toolkeyCommand.description).toBe(
         'set, show, or clear API key for a built-in tool',
       );
-      expect(toolkeyCommand.kind).toBe('built-in');
+      expect(toolkeyCommand.kind).toBe(CommandKind.BUILT_IN);
     });
 
     it('defines schema for autocomplete and argument hints', () => {

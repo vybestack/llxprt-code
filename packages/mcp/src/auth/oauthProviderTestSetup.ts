@@ -13,7 +13,6 @@ import {
   restoreGlobals,
 } from '../../../test-utils/src/global-test-helpers.js';
 import { vi, type Mock, afterEach } from 'bun:test';
-import type { Mock } from 'bun:test';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';

@@ -203,8 +203,9 @@ describe('<HistoryItemDisplay />', () => {
     const passedProps = (
       ToolGroupMessage as unknown as Mock<(...args: never[]) => unknown>
     ).mock.calls[0][0];
-    const confirmationDetails = passedProps.toolCalls[0]
-      .confirmationDetails as ToolExecuteConfirmationDetails;
+    const confirmationDetails = (
+      passedProps as { toolCalls: Array<{ confirmationDetails: unknown }> }
+    ).toolCalls[0].confirmationDetails as ToolExecuteConfirmationDetails;
 
     expect(confirmationDetails.command).toBe(
       'echo "\\u001b[31mhello\\u001b[0m"',

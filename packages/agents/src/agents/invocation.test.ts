@@ -6,7 +6,6 @@
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
-import type { Mock } from '../testApi.js';
 import { SubagentInvocation } from './invocation.js';
 import { AgentExecutor } from './executor.js';
 import type {

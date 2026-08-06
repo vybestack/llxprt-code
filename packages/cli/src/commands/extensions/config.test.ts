@@ -39,7 +39,7 @@ const mockLoadExtensionConfig: Mock<
 > = vi.fn();
 const mockPromptForSetting: Mock<typeof settingsModule.promptForSetting> =
   vi.fn();
-const mockConfirmOverwrite: Mock<(...args: never[]) => unknown> = vi.fn();
+const mockConfirmOverwrite: Mock<(promptType: unknown) => boolean> = vi.fn();
 const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
 // Mock readline module to control confirmOverwrite
@@ -153,7 +153,7 @@ describe('extensions config command', () => {
     mockGetScopedEnvContents.mockResolvedValue({});
     mockLoadExtensionSettingsFromManifest.mockReturnValue([]);
     mockPromptForSetting.mockResolvedValue('test-value');
-    mockConfirmOverwrite.mockResolvedValue(true);
+    mockConfirmOverwrite.mockReturnValue(true);
     mockLoadUserExtensions.mockReturnValue([]);
     mockLoadExtensionConfig.mockResolvedValue({
       name: 'test-ext',
@@ -293,7 +293,7 @@ describe('extensions config command', () => {
       mockGetScopedEnvContents.mockResolvedValue({
         API_KEY: 'existing-value',
       });
-      mockConfirmOverwrite.mockResolvedValue(true);
+      mockConfirmOverwrite.mockReturnValue(true);
 
       const parser = yargs([]).command(configCommand).fail(false);
       await parser.parseAsync('config test-ext');

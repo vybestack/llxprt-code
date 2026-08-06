@@ -14,7 +14,7 @@ import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
 import { useResponsive } from '../ui/hooks/useResponsive.js';
 
 const realUseTerminalSizeModule = {
-  ...(await import('../ui/hooks/useTerminalSize')),
+  ...(await import('../ui/hooks/useTerminalSize.js')),
 };
 
 type RenderResult = ReturnType<typeof render>;

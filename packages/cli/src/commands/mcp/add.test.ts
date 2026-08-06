@@ -72,7 +72,9 @@ const mockedLoadSettings = loadSettings as unknown as Mock<
 
 describe('mcp add command', () => {
   let parser: Argv;
-  let mockSetValue: Mock<(...args: never[]) => unknown>;
+  let mockSetValue: Mock<
+    (scope: SettingScope, key: string, value: Record<string, unknown>) => void
+  >;
   let mockConsoleError: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
@@ -216,10 +218,13 @@ describe('mcp add command', () => {
     );
 
     const callArgs = mockSetValue.mock.calls[0];
-    const serverConfig = callArgs[2]['streamable-server'];
-    expect(serverConfig.type).toBe('streamable-http');
-    expect(serverConfig.transport).toBeUndefined();
-    expect(serverConfig.url).toBe('https://example.com/mcp');
+    const serverConfig = callArgs[2]['streamable-server'] as Record<
+      string,
+      unknown
+    >;
+    expect(serverConfig['type']).toBe('streamable-http');
+    expect(serverConfig['transport']).toBeUndefined();
+    expect(serverConfig['url']).toBe('https://example.com/mcp');
   });
 
   it('should handle MCP server args with -- separator', async () => {

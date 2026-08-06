@@ -10,7 +10,7 @@ import { renderHook } from '../../test-utils/render.js';
 import { useResponsive } from './useResponsive.js';
 import { useTerminalSize } from './useTerminalSize.js';
 
-const realUseTerminalSizeModule = { ...(await import('./useTerminalSize')) };
+const realUseTerminalSizeModule = { ...(await import('./useTerminalSize.js')) };
 
 vi.mock('./useTerminalSize', () => automock(realUseTerminalSizeModule));
 

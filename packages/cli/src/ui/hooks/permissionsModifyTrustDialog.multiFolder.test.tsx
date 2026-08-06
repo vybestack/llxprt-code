@@ -25,9 +25,9 @@ const mockedDeleteRuleByKey = vi.fn();
 const mockedSnapshotValue = vi.fn();
 const mockedRestoreSnapshot = vi.fn();
 const mockedResolvePathTrust = vi.fn();
-const mockedTrustedConfig = vi.hoisted<{
-  value: Record<string, TrustLevel>;
-}>(() => ({ value: {} }));
+const mockedTrustedConfig: { value: Record<string, TrustLevel> } = {
+  value: {},
+};
 
 vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;

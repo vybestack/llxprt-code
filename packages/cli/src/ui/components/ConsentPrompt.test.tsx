@@ -79,7 +79,11 @@ describe('ConsentPrompt', () => {
       />,
     );
 
-    const onSelect = MockedRadioButtonSelect.mock.calls[0][0].onSelect;
+    const onSelect = (
+      MockedRadioButtonSelect.mock.calls[0][0] as {
+        onSelect: (value: boolean) => void;
+      }
+    ).onSelect;
     onSelect(true);
 
     expect(onConfirm).toHaveBeenCalledWith(true);
@@ -95,7 +99,11 @@ describe('ConsentPrompt', () => {
       />,
     );
 
-    const onSelect = MockedRadioButtonSelect.mock.calls[0][0].onSelect;
+    const onSelect = (
+      MockedRadioButtonSelect.mock.calls[0][0] as {
+        onSelect: (value: boolean) => void;
+      }
+    ).onSelect;
     onSelect(false);
 
     expect(onConfirm).toHaveBeenCalledWith(false);

@@ -124,7 +124,9 @@ describe('profileCommand - load balancer save with protected settings', () => {
         'currentProfile',
       );
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('tools');
-      expect(savedProfile.ephemeralSettings).toStrictEqual({
+      expect(
+        savedProfile.ephemeralSettings as Record<string, unknown>,
+      ).toStrictEqual({
         streaming: true,
       });
     });
@@ -179,7 +181,9 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
-      expect(savedProfile.ephemeralSettings).toStrictEqual({});
+      expect(
+        savedProfile.ephemeralSettings as Record<string, unknown>,
+      ).toStrictEqual({});
     });
 
     it('handles ephemeral settings with only protected values', async () => {
@@ -198,7 +202,9 @@ describe('profileCommand - load balancer save with protected settings', () => {
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
       // All settings were protected, so ephemeralSettings should be empty
-      expect(savedProfile.ephemeralSettings).toStrictEqual({});
+      expect(
+        savedProfile.ephemeralSettings as Record<string, unknown>,
+      ).toStrictEqual({});
     });
 
     it('preserves multiple profile names correctly', async () => {
@@ -247,7 +253,9 @@ describe('profileCommand - load balancer save with protected settings', () => {
         .calls[0][1] as LoadBalancerProfile;
 
       // Only streaming should remain (provider should be stripped)
-      expect(savedProfile.ephemeralSettings).toStrictEqual({
+      expect(
+        savedProfile.ephemeralSettings as Record<string, unknown>,
+      ).toStrictEqual({
         streaming: false,
       });
     });
@@ -269,7 +277,9 @@ describe('profileCommand - load balancer save with protected settings', () => {
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
       expect(savedProfile.contextLimit).toBe(150000);
-      expect(savedProfile.ephemeralSettings).toStrictEqual({
+      expect(
+        savedProfile.ephemeralSettings as Record<string, unknown>,
+      ).toStrictEqual({
         streaming: true,
       });
     });

@@ -18,7 +18,15 @@
  */
 
 import * as path from 'path';
-import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
+import {
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   AuthPrecedenceResolver,
   type OAuthManager as CoreOAuthManager,
@@ -86,7 +94,11 @@ function createMockOAuthManager(tokenStore: KeyringTokenStore) {
     // provider and returns null before touching getToken when it is not. These
     // tests run against an isolated config where nothing is enabled, so the
     // enablement check has to report the state the test is describing.
-    isOAuthEnabled: vi.spyOn(manager, 'isOAuthEnabled').mockResolvedValue(true),
+    isOAuthEnabled: (
+      vi.spyOn(manager, 'isOAuthEnabled') as unknown as Mock<
+        () => Promise<boolean>
+      >
+    ).mockResolvedValue(true),
   };
 
   return { manager, spies };

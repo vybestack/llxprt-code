@@ -120,78 +120,70 @@ describe('startInteractiveUI ink render options', () => {
     }
   });
 
-  it(
-    'passes computed Ink render options to ink.render()',
-    { timeout: 120_000 },
-    async () => {
-      const { startInteractiveUI } = await import('./cli.js');
-      const config = new Config({
-        sessionId: 'test-session',
-        targetDir: tempDir,
-        cwd: tempDir,
-        debugMode: false,
-        model: 'gemini-2.5-flash-lite',
-        accessibility: { screenReader: false },
-      });
+  it('passes computed Ink render options to ink.render()', async () => {
+    const { startInteractiveUI } = await import('./cli.js');
+    const config = new Config({
+      sessionId: 'test-session',
+      targetDir: tempDir,
+      cwd: tempDir,
+      debugMode: false,
+      model: 'gemini-2.5-flash-lite',
+      accessibility: { screenReader: false },
+    });
 
-      const settings = createLoadedSettings();
+    const settings = createLoadedSettings();
 
-      await startInteractiveUI(
-        config,
-        createFakeAgent(config),
-        settings,
-        [],
-        tempDir,
-      );
+    await startInteractiveUI(
+      config,
+      createFakeAgent(config),
+      settings,
+      [],
+      tempDir,
+    );
 
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-      const [_reactElement, options] = renderSpy.mock.calls[0];
-      const expectedRenderOptions = inkRenderOptions(config, settings);
-      expect(options).toStrictEqual(
-        expect.objectContaining({
-          exitOnCtrlC: false,
-          patchConsole: false,
-          isScreenReaderEnabled: false,
-          alternateBuffer: expectedRenderOptions.alternateBuffer,
-          incrementalRendering: expectedRenderOptions.incrementalRendering,
-        }),
-      );
-    },
-  );
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    const [_reactElement, options] = renderSpy.mock.calls[0];
+    const expectedRenderOptions = inkRenderOptions(config, settings);
+    expect(options).toStrictEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: false,
+        alternateBuffer: expectedRenderOptions.alternateBuffer,
+        incrementalRendering: expectedRenderOptions.incrementalRendering,
+      }),
+    );
+  }, 120_000);
 
-  it(
-    'forces alternate buffer off when screen reader mode is enabled',
-    { timeout: 120_000 },
-    async () => {
-      const { startInteractiveUI } = await import('./cli.js');
-      const config = new Config({
-        sessionId: 'test-session',
-        targetDir: tempDir,
-        cwd: tempDir,
-        debugMode: false,
-        model: 'gemini-2.5-flash-lite',
-        accessibility: { screenReader: true },
-      });
+  it('forces alternate buffer off when screen reader mode is enabled', async () => {
+    const { startInteractiveUI } = await import('./cli.js');
+    const config = new Config({
+      sessionId: 'test-session',
+      targetDir: tempDir,
+      cwd: tempDir,
+      debugMode: false,
+      model: 'gemini-2.5-flash-lite',
+      accessibility: { screenReader: true },
+    });
 
-      await startInteractiveUI(
-        config,
-        createFakeAgent(config),
-        createLoadedSettings(),
-        [],
-        tempDir,
-      );
+    await startInteractiveUI(
+      config,
+      createFakeAgent(config),
+      createLoadedSettings(),
+      [],
+      tempDir,
+    );
 
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-      const [_reactElement, options] = renderSpy.mock.calls[0];
-      expect(options).toStrictEqual(
-        expect.objectContaining({
-          exitOnCtrlC: false,
-          patchConsole: false,
-          isScreenReaderEnabled: true,
-          alternateBuffer: false,
-          incrementalRendering: false,
-        }),
-      );
-    },
-  );
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    const [_reactElement, options] = renderSpy.mock.calls[0];
+    expect(options).toStrictEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: true,
+        alternateBuffer: false,
+        incrementalRendering: false,
+      }),
+    );
+  }, 120_000);
 });

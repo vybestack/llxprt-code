@@ -49,6 +49,19 @@ import type { Settings } from './settings.js';
 
 const CANONICAL_NEW_PATH = path.resolve('/new/path');
 
+/**
+ * Bun's vi.spyOn type signature omits the property-getter overload that
+ * exists at runtime. This alias restores it for getter-based spying.
+ */
+const spyOnGetter = vi.spyOn as unknown as <
+  T extends object,
+  K extends keyof T,
+>(
+  obj: T,
+  key: K,
+  accessType: 'get',
+) => Mock<() => T[K]>;
+
 function createErrorWithCode(message: string, code: string): Error {
   return Object.assign(new Error(message), { code });
 }
@@ -110,7 +123,7 @@ describe('Trusted Folders Loading', () => {
       fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue('{}');
     (
-      fs.realpathSync as unknown as Mock<typeof fs.realpathSync>
+      fs.realpathSync as unknown as Mock<(location: fs.PathLike) => string>
     ).mockImplementation((location) =>
       typeof location === 'string' ? location : location.toString(),
     );
@@ -207,7 +220,7 @@ describe('Trusted Folders Loading', () => {
         config: { '/secret': TrustLevel.DO_NOT_TRUST },
       });
       (
-        fs.realpathSync as unknown as Mock<typeof fs.realpathSync>
+        fs.realpathSync as unknown as Mock<(location: fs.PathLike) => string>
       ).mockImplementation((location) => {
         const resolved = location.toString();
         if (resolved === '/secret') {
@@ -293,7 +306,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('setValue should update the user config and save it', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
@@ -337,7 +350,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('deleteValue should remove an existing rule and save it', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.user.config['/existing/path'] = TrustLevel.TRUST_FOLDER;
 
@@ -353,7 +366,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('deleteValue restores the in-memory rule when saving fails', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
     mockFsRenameSync.mockImplementationOnce(() => {
@@ -370,7 +383,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('keeps the destination and in-memory rule unchanged when temp chmod fails', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
     mockFsChmodSync.mockImplementationOnce(() => {
@@ -388,7 +401,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('commits the file when chmod reports that POSIX modes are unsupported', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     const unsupportedError = createErrorWithCode(
       'chmod unsupported',
@@ -412,7 +425,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('commits the file when stat reports that POSIX modes are unsupported', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     const unsupportedError = createErrorWithCode('stat unsupported', 'ENOSYS');
     const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
@@ -433,7 +446,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('preserves in-memory state when writing the temporary file fails', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     mockFsWriteFileSync.mockImplementationOnce(() => {
       throw new Error('disk full');
@@ -448,7 +461,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('removes the temporary file when the atomic rename fails', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     mockFsRenameSync.mockImplementationOnce(() => {
       throw new Error('rename denied');
@@ -465,7 +478,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('warns when a failed atomic rename cannot remove its temporary file', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const cleanupError = new Error('unlink denied');
     const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     const loadedFolders = loadTrustedFolders();
@@ -489,7 +502,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('atomically saves on Windows without POSIX mode operations', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('win32');
     const loadedFolders = loadTrustedFolders();
 
     loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
@@ -505,7 +518,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('performs no fallible cleanup after the atomic rename commit point', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
 
     loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
@@ -538,7 +551,11 @@ describe('isWorkspaceTrusted', () => {
   beforeEach(() => {
     resetTrustedFoldersForTesting();
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
-    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    (
+      vi.spyOn(fs, 'readFileSync') as unknown as Mock<
+        (p: fs.PathOrFileDescriptor) => string
+      >
+    ).mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {
         return JSON.stringify(mockRules);
       }
@@ -558,7 +575,11 @@ describe('isWorkspaceTrusted', () => {
   it('should throw a fatal error if the config is malformed', () => {
     mockCwd = '/home/user/projectA';
     // This mock needs to be specific to this test to override the one in beforeEach
-    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    (
+      vi.spyOn(fs, 'readFileSync') as unknown as Mock<
+        (p: fs.PathOrFileDescriptor) => string
+      >
+    ).mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {
         return '{"foo": "bar",}'; // Malformed JSON with trailing comma
       }
@@ -572,7 +593,11 @@ describe('isWorkspaceTrusted', () => {
 
   it('should throw a fatal error if the config is not a JSON object', () => {
     mockCwd = '/home/user/projectA';
-    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    (
+      vi.spyOn(fs, 'readFileSync') as unknown as Mock<
+        (p: fs.PathOrFileDescriptor) => string
+      >
+    ).mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {
         return 'null';
       }
@@ -725,7 +750,11 @@ describe('invalid trust levels', () => {
     // configures getIdeTrust, and that mock is shared across the whole file.
     (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(undefined);
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
-    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    (
+      vi.spyOn(fs, 'readFileSync') as unknown as Mock<
+        (p: fs.PathOrFileDescriptor) => string
+      >
+    ).mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {
         return JSON.stringify(mockRules);
       }

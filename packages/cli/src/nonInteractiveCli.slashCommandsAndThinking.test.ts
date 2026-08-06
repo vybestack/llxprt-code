@@ -29,7 +29,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Mock } from 'bun:test';
 import type { LoadedSettings } from './config/settings.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
@@ -134,16 +133,19 @@ function buildFakeAgent(): Agent {
 describe('runNonInteractive - slash commands and thinking output', () => {
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockShutdownTelemetry: Mock<(...args: never[]) => unknown>;
-  let mockIsTelemetrySdkInitialized: Mock<(...args: never[]) => unknown>;
-  let processStdoutSpy: Mock<(...args: never[]) => unknown>;
+  let mockShutdownTelemetry: Mock<(...args: never[]) => Promise<void>>;
+  let mockIsTelemetrySdkInitialized: Mock<(...args: never[]) => boolean>;
+  let processStdoutSpy: Mock<(...args: never[]) => boolean>;
 
   beforeEach(async () => {
-    mockShutdownTelemetry = shutdownTelemetry as Mock<typeof shutdownTelemetry>;
-    mockShutdownTelemetry.mockResolvedValue(undefined);
-    mockIsTelemetrySdkInitialized = isTelemetrySdkInitialized as Mock<
-      typeof isTelemetrySdkInitialized
+    mockShutdownTelemetry = shutdownTelemetry as unknown as Mock<
+      (...args: never[]) => Promise<void>
     >;
+    mockShutdownTelemetry.mockResolvedValue(undefined);
+    mockIsTelemetrySdkInitialized =
+      isTelemetrySdkInitialized as unknown as Mock<
+        (...args: never[]) => boolean
+      >;
     mockIsTelemetrySdkInitialized.mockReturnValue(true);
 
     mockCommandServiceCreate.mockResolvedValue({
@@ -154,7 +156,9 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
-      .mockImplementation(() => true);
+      .mockImplementation(() => true) as unknown as Mock<
+      (...args: never[]) => boolean
+    >;
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
@@ -613,7 +617,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // Both thought events should be buffered and flushed as a single <think> block
     expect(thinkingOutputs).toHaveLength(1);
-    const thinkingText = thinkingOutputs[0][0];
+    const thinkingText = thinkingOutputs[0][0] as string;
     // Code formats thoughts as "subject: description" when both present
     expect(thinkingText).toContain('First: thought');
     expect(thinkingText).toContain('Second: thought');
@@ -640,7 +644,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // All thoughts should be buffered into one <think> block (no pyramid repetition)
     expect(thinkingOutputs).toHaveLength(1);
-    const thinkingText = thinkingOutputs[0][0];
+    const thinkingText = thinkingOutputs[0][0] as string;
     // "Analyzing" should appear exactly once — not repeated for each subsequent thought
     const thoughtCount = (thinkingText.match(/Analyzing/g) ?? []).length;
     expect(thoughtCount).toBe(1);
@@ -681,7 +685,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       (value[0] as string).includes('<think>'),
     );
     expect(thinkOutput).toBeDefined();
-    const thinkText = thinkOutput?.[0] as string;
+    const thinkText = thinkOutput?.[0] as unknown as string;
     expect(thinkText).not.toContain('\u{1F914}');
     expect(thinkText).not.toContain('\u{1F4AD}');
     expect(thinkText).toContain('Planning');
@@ -762,7 +766,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       (value[0] as string).includes('<think>'),
     );
     expect(thinkOutput).toBeDefined();
-    const thinkText = thinkOutput?.[0] as string;
+    const thinkText = thinkOutput?.[0] as unknown as string;
     expect(thinkText).toContain('\u{1F914}');
     expect(thinkText).toContain('\u{1F4AD}');
   });

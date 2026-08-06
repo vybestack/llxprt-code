@@ -21,22 +21,20 @@ const realTrustedFoldersModule = {
 
 const mockedSetValue = vi.fn();
 const mockedDeleteValue = vi.fn();
-const mockedUserConfig = vi.hoisted<{
-  value: Record<string, TrustLevel>;
-}>(() => ({ value: {} }));
-const mockedResolvePathTrust = vi.hoisted<
-  ReturnType<
-    typeof vi.fn<(folderPath: string) => ResolvedTrustRule | undefined>
-  >
->(() => vi.fn(() => undefined));
+const mockedUserConfig: { value: Record<string, TrustLevel> } = {
+  value: {},
+};
+const mockedResolvePathTrust = vi.fn<
+  (folderPath: string) => ResolvedTrustRule | undefined
+>(() => undefined);
 const mockedGetValue = vi.fn(
   (folderPath: string) => mockedUserConfig.value[folderPath],
 );
 const mockedSnapshotValue = vi.fn();
 const mockedRestoreSnapshot = vi.fn();
-const mockedIdeTrust = vi.hoisted<{ value: boolean | undefined }>(() => ({
+const mockedIdeTrust: { value: boolean | undefined } = {
   value: undefined,
-}));
+};
 
 vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;

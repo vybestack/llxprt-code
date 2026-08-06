@@ -19,7 +19,18 @@ vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-const mockedFs = fsPromises as unknown as Mock<typeof fsPromises>;
+/**
+ * Bun ships no deep-mock type, so the members each suite actually drives are
+ * named explicitly and given Bun's Mock signature.
+ */
+type MockedMembers<T, K extends keyof T> = {
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+};
+
+const mockedFs = fsPromises as unknown as MockedMembers<
+  typeof fsPromises,
+  'readdir' | 'access' | 'mkdir' | 'cp'
+>;
 
 describe('extensions new command', () => {
   beforeEach(() => {
