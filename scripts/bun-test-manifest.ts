@@ -236,6 +236,16 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    // Issue #3052: TodoProvider must publish slash-command mutations on the
+    // todoEvents observation channel. Uses the real provider + real
+    // createTodoObservationSubscription seam (no mocks on that seam). Drives
+    // the REAL TodoStore against disk, so it isolates storage roots via the
+    // shared preload in addition to the React/Ink setup.
+    workspace: 'cli',
+    preload: ['test-setup-storage-isolation.ts', 'bun-test-setup.ts'],
+    files: ['src/ui/contexts/__tests__/todoProvider.observation.bun.tsx'],
+  },
+  {
     workspace: 'core',
     files: [
       'src/utils/errors.test.ts',
