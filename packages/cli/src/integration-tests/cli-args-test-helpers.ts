@@ -6,6 +6,20 @@
 
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * The CLI's real entry point. Nothing compiles this workspace before tests run
+ * (issue #2983), so spawning `node dist/index.js` had no target; `index.ts` is
+ * what the installed launcher and `npm run start` execute anyway.
+ */
+const CLI_ENTRY = path.resolve(
+  fileURLToPath(import.meta.url),
+  '..',
+  '..',
+  '..',
+  'index.ts',
+);
 
 export type CliRunResult = {
   stdout: string;
@@ -47,10 +61,10 @@ export async function runCli(
     env.LLXPRT_CONFIG_HOME ?? process.env.LLXPRT_CONFIG_HOME ?? '';
 
   return new Promise((resolve) => {
-    // Use the compiled CLI entry point
-    const cliPath = path.join(process.cwd(), 'dist', 'index.js');
-
-    const child = spawn('node', [cliPath, ...args], {
+    // `process.execPath` is the Bun binary running this suite — the CLI
+    // workspace executes Bun-native (issue #2843) — which is exactly the
+    // runtime the shipped launcher execs `index.ts` with.
+    const child = spawn(process.execPath, [CLI_ENTRY, ...args], {
       env: {
         ...process.env,
         // The CI test step injects real provider credentials. These cases

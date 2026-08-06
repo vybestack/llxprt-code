@@ -18,13 +18,68 @@
 // limitations under the License.
 
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { messageOf } from './utils/error-guards.ts';
+import { isDeclarationsOnly } from './build_package.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
+
+/**
+ * Workspaces whose `build` bundles instead of emitting declarations.
+ *
+ * The VS Code companion's build ends in esbuild, which resolves its workspace
+ * dependencies at `dist/*.js` — exactly what the declaration-only build
+ * (issue #2983) deliberately does not emit. It publishes no declarations that
+ * any tsconfig maps, and both CI and the release workflow build it on their
+ * own track through `npm run build:vscode`, so the declaration build skips it.
+ */
+const BUNDLE_ONLY_WORKSPACES = new Set(['llxprt-code-vscode-ide-companion']);
+
+/**
+ * npm's package-name grammar. Names reach a shell command line below, so a
+ * name outside this grammar is rejected rather than interpolated.
+ */
+const PACKAGE_NAME_PATTERN =
+  /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+
+/**
+ * Package names of the root `workspaces` entries, in declaration order. The
+ * array holds concrete directory paths (enforced by
+ * scripts/verify-bun-workspace-links.ts), so no glob expansion is needed.
+ */
+function readWorkspacePackageNames(): string[] {
+  const rootPkg = JSON.parse(
+    readFileSync(join(root, 'package.json'), 'utf-8'),
+  ) as { workspaces?: string[] };
+  const workspaces = rootPkg.workspaces;
+  if (!Array.isArray(workspaces) || workspaces.length === 0) {
+    throw new Error('Root package.json must declare a non-empty `workspaces`.');
+  }
+  return workspaces.map((relativeDir) => {
+    const pkg = JSON.parse(
+      readFileSync(join(root, relativeDir, 'package.json'), 'utf-8'),
+    ) as { name?: string };
+    if (!pkg.name || !PACKAGE_NAME_PATTERN.test(pkg.name)) {
+      throw new Error(
+        `Workspace ${relativeDir} has no usable package name: ${String(pkg.name)}`,
+      );
+    }
+    return pkg.name;
+  });
+}
+
+function workspaceBuildSelector(): string {
+  if (!isDeclarationsOnly()) {
+    return '--workspaces';
+  }
+  return readWorkspacePackageNames()
+    .filter((name) => !BUNDLE_ONLY_WORKSPACES.has(name))
+    .map((name) => `--workspace=${name}`)
+    .join(' ');
+}
 
 // npm install if node_modules was removed (e.g. via npm run clean or scripts/clean.ts)
 if (!existsSync(join(root, 'node_modules'))) {
@@ -33,7 +88,10 @@ if (!existsSync(join(root, 'node_modules'))) {
 
 // build all workspaces/packages
 execSync('npm run generate', { stdio: 'inherit', cwd: root });
-execSync('npm run build --workspaces', { stdio: 'inherit', cwd: root });
+execSync(`npm run build ${workspaceBuildSelector()}`, {
+  stdio: 'inherit',
+  cwd: root,
+});
 
 // also build container image if sandboxing is enabled
 // skip (-s) npm install + build since we did that above
