@@ -22,8 +22,13 @@ import { join } from 'node:path';
 // Public types
 // ---------------------------------------------------------------------------
 
-/** Per-file timeout override keyed by a filename pattern. */
+/** Per-file timeout override keyed by a path pattern. */
 export interface BunTestTimeoutOverride {
+  /**
+   * Matched against the resolved ABSOLUTE path of a discovered file, not its
+   * basename, so a pattern may scope itself to a directory. Anchor the end
+   * (`/name\.test\.ts$/`) rather than the start when targeting one file.
+   */
   readonly pattern: RegExp;
   readonly timeout: number;
 }
@@ -50,8 +55,9 @@ export interface BunTestRoot {
   /** Marks a root that needs real credentials; excluded from unfiltered runs. */
   readonly credentialed?: boolean;
   /**
-   * Per-file timeout overrides keyed by a filename pattern. An override changes
-   * only the budget for the matching file, never whether it is executed.
+   * Per-file timeout overrides keyed by an absolute-path pattern. An override
+   * changes only the budget for the matching file, never whether it is
+   * executed. The first matching entry wins.
    */
   readonly timeoutOverrides?: readonly BunTestTimeoutOverride[];
 }

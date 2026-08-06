@@ -676,18 +676,18 @@ The default test-file pattern is `/\.(test|spec|bun)\.(ts|tsx|js)$/` (excluding
 
 A root may also declare:
 
-| Field              | Purpose                                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `cwd`              | Working directory override; defaults to `packages/<root>`                                 |
-| `directories`      | Subdirectories of `cwd` to scan; defaults to `cwd` itself                                 |
-| `pattern`          | Custom test-file pattern, e.g. `\.eval\.ts$`                                              |
-| `preload`          | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)               |
-| `tsconfig`         | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`              |
-| `timeout`          | Per-test timeout, mirroring Vitest `testTimeout`                                          |
-| `retries`          | Per-file retry budget, mirroring Vitest `retry`                                           |
-| `globalSetup`      | `setup()` / `teardown()` run once in the runner process around the whole root             |
-| `credentialed`     | Marks a root that calls a real provider; excluded unless requested by `--root`            |
-| `timeoutOverrides` | Per-file timeout budgets keyed by filename pattern; changes budget only, never membership |
+| Field              | Purpose                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| `cwd`              | Working directory override; defaults to `packages/<root>`                                         |
+| `directories`      | Subdirectories of `cwd` to scan; defaults to `cwd` itself                                         |
+| `pattern`          | Custom test-file pattern, e.g. `\.eval\.ts$`                                                      |
+| `preload`          | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)                       |
+| `tsconfig`         | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`                      |
+| `timeout`          | Per-test timeout, mirroring Vitest `testTimeout`                                                  |
+| `retries`          | Per-file retry budget, mirroring Vitest `retry`                                                   |
+| `globalSetup`      | `setup()` / `teardown()` run once in the runner process around the whole root                     |
+| `credentialed`     | Marks a root that calls a real provider; excluded unless requested by `--root`                    |
+| `timeoutOverrides` | Per-file timeout budgets keyed by an absolute-path pattern; changes budget only, never membership |
 
 `--root <name>` is an alias of `--workspace <name>`.
 
