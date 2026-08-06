@@ -20,7 +20,7 @@ import {
   type ToolCallRequest as FunctionCall,
   type ContentPart as Part,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { TrustedFolderSource } from './trustedFolderSource.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { firstTruthyString } from '../utils/string-fallback.js';
 
@@ -74,7 +74,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     readonly trust: boolean | undefined,
     params: ToolParams = {},
     messageBus: MessageBus,
-    private readonly cliConfig?: Config,
+    private readonly cliConfig?: TrustedFolderSource,
   ) {
     // Use composite format for policy checks: serverName__toolName
     // This enables server wildcards (e.g., "google-workspace__*")
@@ -249,7 +249,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     override readonly parameterSchema: unknown,
     readonly trust?: boolean,
     nameOverride?: string,
-    private readonly cliConfig?: Config,
+    private readonly cliConfig?: TrustedFolderSource,
   ) {
     super(
       nameOverride ?? generateMcpToolName(serverName, serverToolName),

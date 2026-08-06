@@ -16,7 +16,7 @@ import {
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { TrustedFolderSource } from './trustedFolderSource.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -108,7 +108,7 @@ export class McpClient {
     private readonly promptRegistry: PromptRegistry,
     private readonly resourceRegistry: ResourceRegistry,
     private readonly workspaceContext: WorkspaceContext,
-    private readonly cliConfig: Config,
+    private readonly cliConfig: TrustedFolderSource,
     private readonly debugMode: boolean,
     private readonly clientVersion: string,
     private readonly onToolsUpdated?: (signal?: AbortSignal) => Promise<void>,
@@ -249,7 +249,7 @@ export class McpClient {
   }
 
   async discover(
-    cliConfig: Config,
+    cliConfig: TrustedFolderSource,
     mayPublish: () => boolean = () => true,
   ): Promise<void> {
     this.assertConnected();
@@ -483,7 +483,7 @@ export class McpClient {
   }
 
   private async discoverTools(
-    cliConfig: Config,
+    cliConfig: TrustedFolderSource,
     options?: { timeout?: number; signal?: AbortSignal },
   ): Promise<DiscoveredMCPTool[]> {
     const client = this.getConnectedClient();

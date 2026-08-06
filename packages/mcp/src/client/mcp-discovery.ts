@@ -14,7 +14,7 @@ import {
   ListResourcesResultSchema,
   type Tool as McpTool,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { TrustedFolderSource } from './trustedFolderSource.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -75,7 +75,7 @@ export async function discoverTools(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
-  cliConfig: Config,
+  cliConfig: TrustedFolderSource,
   messageBus: MessageBus | undefined,
   options: {
     timeout?: number;
@@ -145,7 +145,7 @@ function processToolDefinition(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
-  cliConfig: Config,
+  cliConfig: TrustedFolderSource,
   debug: DebugLogger,
   isAuthorized: () => boolean,
 ): DiscoveredMCPTool | undefined {
