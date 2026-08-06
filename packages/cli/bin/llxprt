@@ -267,7 +267,14 @@ fi
 # launcher package root.
 if [ ! -f "$_llxprt_entry" ]; then
   _llxprt_walk=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || _llxprt_walk=""
-  while [ -n "$_llxprt_walk" ]; do
+  # The walk MUST be bounded. POSIX permits pwd to report a leading "//" as a
+  # distinct pathname, so `cd ..` from the root can alternate "/" -> "//" -> "/"
+  # forever; comparing the parent against the current directory alone does not
+  # terminate. Normalise a leading "//", stop explicitly at the root, and cap
+  # the depth so a pathological filesystem can never hang the launcher.
+  _llxprt_depth=0
+  while [ -n "$_llxprt_walk" ] && [ "$_llxprt_depth" -lt 64 ]; do
+    _llxprt_depth=$((_llxprt_depth + 1))
     _llxprt_main="$_llxprt_walk/node_modules/@vybestack/llxprt-code"
     # Honour the same entry precedence as above: a published install ships BOTH
     # bundle/llxprt.js and index.ts, so probing index.ts first would silently
@@ -281,7 +288,16 @@ if [ ! -f "$_llxprt_entry" ]; then
       _llxprt_entry="$_llxprt_main/index.ts"
       break
     fi
+    if [ "$_llxprt_walk" = "/" ]; then
+      break
+    fi
     _llxprt_parent=$(cd -- "$_llxprt_walk/.." 2>/dev/null && pwd) || _llxprt_parent=""
+    while :; do
+      case "$_llxprt_parent" in
+        //*) _llxprt_parent="/${_llxprt_parent#//}" ;;
+        *) break ;;
+      esac
+    done
     if [ -z "$_llxprt_parent" ] || [ "$_llxprt_parent" = "$_llxprt_walk" ]; then
       break
     fi
