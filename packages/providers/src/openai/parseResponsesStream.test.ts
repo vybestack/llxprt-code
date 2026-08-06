@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   parseResponsesStream,
@@ -333,6 +333,96 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
         }
       })(),
     ).rejects.toThrow('rate limit exceeded');
+  });
+
+  /**
+   * Real OpenAI ResponseErrorEvent carries message/code/param at the top level
+   * of the event, not nested under error (issue #3034 review finding 3).
+   */
+  it('throws on real top-level error event shape with message and code', async () => {
+    const chunks = [
+      'data: {"type":"error","code":"overloaded","message":"server overloaded","param":null,"sequence_number":7}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let caught: Error | undefined;
+    try {
+      for await (const _message of parseResponsesStream(stream)) {
+        void _message;
+      }
+    } catch (error) {
+      if (error instanceof Error) caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toBe('server overloaded');
+    expect(caught).toMatchObject({
+      details: {
+        providerError: {
+          message: 'server overloaded',
+          code: 'overloaded',
+          param: null,
+        },
+      },
+    });
+  });
+
+  /**
+   * When both top-level and nested error fields are present, the top-level
+   * (documented protocol) shape wins.
+   */
+  it('prefers top-level message over nested error when both are present', async () => {
+    const chunks = [
+      'data: {"type":"error","message":"top-level wins","code":"err_code","error":{"message":"nested loses"}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const iterator = parseResponsesStream(stream);
+
+    await expect(
+      (async () => {
+        for await (const _message of iterator) {
+          // drain
+        }
+      })(),
+    ).rejects.toThrow('top-level wins');
+  });
+
+  /**
+   * Top-level and nested error fields must both reach diagnostics: the
+   * documented top-level message/code/param win (including an explicit null
+   * param) while the nested type survives (issue #3034 review).
+   */
+  it('preserves nested error.type alongside winning top-level message/code', async () => {
+    const chunks = [
+      'data: {"type":"error","message":"top message","code":"err_code","param":null,"error":{"message":"nested message","type":"rate_limit_error","code":"nested_code","param":"nested_param"}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let caught: Error | undefined;
+    try {
+      for await (const _message of parseResponsesStream(stream)) {
+        void _message;
+      }
+    } catch (error) {
+      if (error instanceof Error) caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toBe('top message');
+    expect(caught).toMatchObject({
+      details: {
+        providerError: {
+          message: 'top message',
+          code: 'err_code',
+          param: null,
+          type: 'rate_limit_error',
+        },
+      },
+    });
   });
 
   /**

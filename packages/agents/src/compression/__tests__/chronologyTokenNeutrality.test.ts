@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '../../testApi.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { HistoryService as RealHistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

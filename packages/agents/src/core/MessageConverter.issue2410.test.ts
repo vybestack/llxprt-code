@@ -20,7 +20,7 @@
  * contamination.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../testApi.js';
 import {
   normalizeToolInteractionInput,
   createUserContentWithFunctionResponseFix,

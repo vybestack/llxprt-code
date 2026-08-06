@@ -29,7 +29,9 @@ export class ASTQueryExtractor {
     ).toLowerCase();
     const lang = LANGUAGE_MAP[extension];
     if (!lang) {
-      return this.fallbackExtraction(content, 'unknown');
+      // Unsupported/prose files (Markdown, YAML, text, ...) must not produce
+      // guessed declarations from the regex fallback.
+      return [];
     }
 
     try {

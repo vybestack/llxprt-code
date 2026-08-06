@@ -31,6 +31,11 @@ import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import {
+  splitFileLines,
+  joinFileLines,
+  type SplitFileLines,
+} from '../utils/lineEditing.js';
 
 /**
  * Parameters for the DeleteLineRange tool
@@ -106,17 +111,11 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
       return false;
     }
 
-    const lines = originalContent.split('\n');
-    const totalLines = lines.length;
-    if (this.params.start_line > totalLines) {
+    const deletion = this.applyDeletion(splitFileLines(originalContent));
+    if (deletion === null) {
       return false;
     }
-
-    const startIndex = this.params.start_line - 1;
-    const count = this.params.end_line - this.params.start_line + 1;
-    const newLines = [...lines];
-    newLines.splice(startIndex, count);
-    const newContent = newLines.join('\n');
+    const newContent = deletion.newContent;
 
     const relativePath = makeRelative(filePath, this.host.getTargetDir());
     const fileName = path.basename(filePath);
@@ -170,29 +169,23 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
       };
     }
 
-    const lines = content.split('\n');
+    const split = splitFileLines(content);
+    const totalLines = split.lines.length;
 
-    const totalLines = lines.length;
-    if (this.params.start_line > totalLines) {
+    const deletion = this.applyDeletion(split);
+    if (deletion === null) {
+      const message = `start_line ${this.params.start_line} exceeds file length (${totalLines})`;
       return {
         llmContent: `Cannot delete lines: start_line ${this.params.start_line} is beyond the total number of lines (${totalLines})`,
         returnDisplay: `Cannot delete lines: start_line ${this.params.start_line} is beyond the total number of lines (${totalLines})`,
         error: {
-          message: `start_line ${this.params.start_line} exceeds file length (${totalLines})`,
+          message,
           type: ToolErrorType.INVALID_TOOL_PARAMS,
         },
       };
     }
 
-    const startIndex = this.params.start_line - 1;
-    const count = this.params.end_line - this.params.start_line + 1;
-
-    const deletedContent = lines
-      .slice(startIndex, startIndex + count)
-      .join('\n');
-    lines.splice(startIndex, count);
-
-    const newContent = lines.join('\n');
+    const { newContent, deletedContent, effectiveEnd, count } = deletion;
 
     try {
       await fs.writeFile(filePath, newContent, 'utf8');
@@ -200,7 +193,7 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
       this.recordMetrics(filePath, count);
 
       const llmSuccessMessageParts: string[] = [
-        `Successfully deleted lines ${this.params.start_line}-${this.params.end_line} from ${filePath}`,
+        `Successfully deleted lines ${this.params.start_line}-${effectiveEnd} from ${filePath}`,
         deletedContent,
       ];
 
@@ -222,7 +215,7 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
 
       return {
         llmContent: llmSuccessMessageParts.join('\n\n'),
-        returnDisplay: `Deleted ${count} lines (${this.params.start_line}-${this.params.end_line})`,
+        returnDisplay: `Deleted ${count} lines (${this.params.start_line}-${effectiveEnd})`,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -235,6 +228,31 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
         },
       };
     }
+  }
+
+  private applyDeletion(split: SplitFileLines): {
+    readonly newContent: string;
+    readonly deletedContent: string;
+    readonly effectiveEnd: number;
+    readonly count: number;
+  } | null {
+    const { lines, hadTrailingNewline } = split;
+    const totalLines = lines.length;
+    if (this.params.start_line > totalLines) {
+      return null;
+    }
+    const startIndex = this.params.start_line - 1;
+    const effectiveEnd = Math.min(this.params.end_line, totalLines);
+    const count = effectiveEnd - this.params.start_line + 1;
+    const deletedContent = lines
+      .slice(startIndex, startIndex + count)
+      .join('\n');
+    const remaining = [
+      ...lines.slice(0, startIndex),
+      ...lines.slice(startIndex + count),
+    ];
+    const newContent = joinFileLines(remaining, hadTrailingNewline);
+    return { newContent, deletedContent, effectiveEnd, count };
   }
 
   private recordMetrics(filePath: string, linesDeleted: number): void {

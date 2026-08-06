@@ -6,6 +6,7 @@
 
 import { it } from 'vitest';
 import fs from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
 import {
   TestRig,
@@ -225,7 +226,11 @@ export function assertFavoriteColorBlueOutput(output: string): void {
 }
 
 async function logToFile(name: string, content: string): Promise<void> {
-  const logDir = 'evals/logs';
+  // Resolved from this module rather than the process cwd: the eval runner
+  // executes each file with `evals/` as its working directory, so a
+  // cwd-relative 'evals/logs' would land in evals/evals/logs and escape the
+  // uploaded artifact directory (issue #2605).
+  const logDir = join(import.meta.dirname, 'logs');
   await fs.promises.mkdir(logDir, { recursive: true });
   const sanitizedName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const logFile = `${logDir}/${sanitizedName}.log`;

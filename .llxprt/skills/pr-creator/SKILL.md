@@ -14,7 +14,7 @@ Follow these steps to create a Pull Request:
 1.  **Locate Template**: Search for a pull request template in the repository.
     - Check `.github/pull_request_template.md`
     - Check `.github/PULL_REQUEST_TEMPLATE.md`
-    - If multiple templates exist (e.g., in `.github/PULL_REQUEST_TEMPLATE/`), ask the user which one to use or select the most appropriate one based on the context (e.g., `bug_fix.md` vs `feature.md`).
+    - If multiple templates exist (e.g., in `.github/PULL_REQUEST_TEMPLATE/`), select the most appropriate one based on the context (e.g., `bug_fix.md` vs `feature.md`).
 
 2.  **Read Template**: Read the content of the identified template file.
 
@@ -29,6 +29,8 @@ Follow these steps to create a Pull Request:
     gh pr create --title "type(scope): succinct description" --body "..."
     ```
     - **Title**: Ensure the title follows the [Conventional Commits](https://www.conventionalcommits.org/) format if the repository uses it (e.g., `feat(ui): add new button`, `fix(core): resolve crash`).
+
+5. ** DO NOT CHANGE THE PR DESCRIPTION TO THE LAST THING YOU DID WHEN YOU MAKE CHANGES ** You can amend the PR if the changes you make materially change its behavior but do not change the whole description to just match your last commit. the PR description should be holistic. This is an LLM bad habit that makes it hard to review PRs.
 
 ## Principles
 

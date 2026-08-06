@@ -231,8 +231,22 @@ export class AgentClient implements AgentClientContract {
         this.currentSequenceModel = null;
       },
       updateTelemetryTokenCount: () => this.updateTelemetryTokenCount(),
-      sendMessageStream: (req, sig, pid, trns, isRetry, is413) =>
-        this.sendMessageStream(req, sig, pid, trns, isRetry, is413),
+      sendMessageStream: (
+        req,
+        sig,
+        pid,
+        trns,
+        isInvalidStreamRetry,
+        isPayloadRecoveryRetry,
+      ) =>
+        this.sendMessageStream(
+          req,
+          sig,
+          pid,
+          trns,
+          isInvalidStreamRetry,
+          isPayloadRecoveryRetry,
+        ),
       createTurn,
     };
   }
@@ -739,7 +753,7 @@ export class AgentClient implements AgentClientContract {
     prompt_id: string,
     turns: number = this.MAX_TURNS,
     isInvalidStreamRetry: boolean = false,
-    is413Retry: boolean = false,
+    isPayloadRecoveryRetry: boolean = false,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     this.activeStreamCount++;
     try {
@@ -749,7 +763,7 @@ export class AgentClient implements AgentClientContract {
         prompt_id,
         turns,
         isInvalidStreamRetry,
-        is413Retry,
+        isPayloadRecoveryRetry,
       );
     } finally {
       this.activeStreamCount--;

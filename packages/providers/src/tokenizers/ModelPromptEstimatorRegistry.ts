@@ -22,6 +22,17 @@ export interface ModelPromptEstimatorRegistration {
   readonly matches: (model: string) => boolean;
   readonly protocols: ReadonlySet<PromptEnvelopeProtocol>;
   readonly identityErrorHint: string;
+  /**
+   * Optional active-provider restriction.
+   *
+   * Exact-codec families are properties of the model and apply wherever the
+   * model is served, so they omit this. A *calibrated* family is fitted
+   * against one provider's request framing and is only valid there, so it
+   * declares the providers it was measured on. A request from any other
+   * provider is left unclaimed and keeps its existing estimation path rather
+   * than receiving another endpoint's coefficients.
+   */
+  readonly appliesToProvider?: (activeProvider: string) => boolean;
   readonly estimate: (
     request: RuntimePromptEstimateRequest,
   ) => Promise<RuntimePromptEstimateResult>;
@@ -52,6 +63,13 @@ function findClaim(
   return registrations.find((registration) =>
     registration.claim.test(canonicalModel),
   );
+}
+
+function appliesToRequest(
+  registration: ModelPromptEstimatorRegistration,
+  request: RuntimePromptEstimateRequest,
+): boolean {
+  return registration.appliesToProvider?.(request.activeProvider) ?? true;
 }
 
 function createIdentityError(
@@ -91,6 +109,13 @@ export class ModelPromptEstimatorRegistry {
     private readonly registrations: readonly ModelPromptEstimatorRegistration[] = DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
   ) {}
 
+  /**
+   * Whether any registered family covers this model.
+   *
+   * Deliberately model-scoped: callers use it to label an estimator family in
+   * diagnostics, where the model is the meaningful identity. Provider
+   * applicability is enforced where it matters, at estimation time.
+   */
   claimsModel(canonicalModel: string): boolean {
     return this.getEstimatorFamily(canonicalModel) !== undefined;
   }
@@ -102,7 +127,11 @@ export class ModelPromptEstimatorRegistry {
   async estimatePrompt(
     request: RuntimePromptEstimateRequest,
   ): Promise<RuntimePromptEstimateResult> {
-    const registration = findClaim(request.canonicalModel, this.registrations);
+    const claimed = findClaim(request.canonicalModel, this.registrations);
+    const registration =
+      claimed !== undefined && appliesToRequest(claimed, request)
+        ? claimed
+        : undefined;
     if (registration === undefined) {
       return {
         count: await request.legacyEstimate(),

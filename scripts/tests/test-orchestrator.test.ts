@@ -495,10 +495,6 @@ describe('orchestrateTests', () => {
 
     mkdirSync(join(root, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
-      join(root, 'scripts', 'tests', 'vitest.config.ts'),
-      'export default {};',
-    );
-    writeFileSync(
       join(root, 'scripts', 'tests', 'dummy.test.ts'),
       `import { describe, it, expect } from 'vitest';
 describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
@@ -506,7 +502,9 @@ describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
 
     orchestrateTests(root, parseArgs([]), runner);
     const scriptTest = commands.find(
-      (c) => c.command.includes('vitest') && c.command.includes('scripts'),
+      (c) =>
+        c.command.includes('run_bun_tests.ts') &&
+        c.command.includes('scripts-tests'),
     );
     expect(scriptTest).toBeDefined();
   });

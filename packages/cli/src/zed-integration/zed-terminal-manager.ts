@@ -338,16 +338,111 @@ function resolveCallCwd(call: AgentToolCall, targetDir: string): string {
   return resolved;
 }
 
+const TRAP_LINE_PREFIX = 'trap ';
+const TRAP_LINE_SUFFIX = ' EXIT';
+const TRAP_ACTION_PREFIX = '__code=$?; pgrep -g 0 >';
+const TRAP_ACTION_SUFFIX = ' 2>&1; exit $__code';
+
 function commandsMatch(preparedCommand: string, rawCommand: string): boolean {
-  // ShellExecutionService wraps commands to capture their exit code. Match only
-  // that exact prefix so terminal updates attach to the originating raw command.
+  // ShellExecutionService wraps commands in an EXIT trap whose body is the
+  // trimmed raw command verbatim. Correlate by exact equality: either the
+  // prepared command is already the unwrapped raw command, or it is a
+  // canonically generated wrapper whose extracted body equals rawCommand.trim().
   const trimmed = rawCommand.trim();
   if (preparedCommand === trimmed) {
     return true;
   }
-  const terminated =
-    trimmed.endsWith('&') || trimmed.endsWith(';') ? trimmed : `${trimmed};`;
-  return preparedCommand.startsWith(`{ ${terminated} }; __code=$?;`);
+  return extractGeneratedWrapperBody(preparedCommand) === trimmed;
+}
+
+/**
+ * Recognizes a canonical singleQuoteForShell token at the start of `input` and
+ * returns its decoded value plus the unconsumed remainder. Decoding mirrors the
+ * escaped-quote sequence the wrapper emits, then requires re-encoding equality
+ * (via the shared singleQuoteForShell) so only a canonically generated token is
+ * accepted.
+ */
+function matchCanonicalSingleQuoted(
+  input: string,
+): { decoded: string; rest: string } | null {
+  if (!input.startsWith("'")) {
+    return null;
+  }
+  let i = 1;
+  let decoded = '';
+  let closed = false;
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === "'") {
+      if (input.slice(i, i + 4) === "'\\''") {
+        decoded += "'";
+        i += 4;
+      } else {
+        closed = true;
+        break;
+      }
+    } else {
+      decoded += ch;
+      i += 1;
+    }
+  }
+  if (!closed) {
+    return null;
+  }
+  const token = input.slice(0, i + 1);
+  const reencoded = `'${decoded.split("'").join("'\\''")}'`;
+  return reencoded === token ? { decoded, rest: input.slice(i + 1) } : null;
+}
+
+/**
+ * Confirms a decoded trap action is exactly the generated form:
+ * TRAP_ACTION_PREFIX + one canonical singleQuoteForShell path token +
+ * TRAP_ACTION_SUFFIX.
+ */
+function isCanonicalTrapAction(action: string): boolean {
+  if (
+    !action.startsWith(TRAP_ACTION_PREFIX) ||
+    !action.endsWith(TRAP_ACTION_SUFFIX)
+  ) {
+    return false;
+  }
+  const pathToken = action.slice(
+    TRAP_ACTION_PREFIX.length,
+    action.length - TRAP_ACTION_SUFFIX.length,
+  );
+  const matched = matchCanonicalSingleQuoted(pathToken);
+  // The path slot must be EXACTLY one canonical token: no trailing content may
+  // remain after it, so a same-prefix/suffix trap with extra action content is
+  // treated as non-canonical and left unmatched.
+  return matched !== null && matched.rest === '';
+}
+
+/**
+ * Extracts the body of a canonically generated wrapper, or null if the prepared
+ * command is not the generated wrapper form. The wrapper is
+ * `trap '<quotedAction>' EXIT` followed by a newline and the trimmed body. The
+ * action token may contain a literal newline (e.g. a temp path with a line
+ * break), so it is decoded from the entire suffix after `trap ` rather than
+ * truncated at the first newline; the remainder must then begin exactly with
+ * TRAP_LINE_SUFFIX plus a newline.
+ */
+function extractGeneratedWrapperBody(preparedCommand: string): string | null {
+  if (!preparedCommand.startsWith(TRAP_LINE_PREFIX)) {
+    return null;
+  }
+  const afterPrefix = preparedCommand.slice(TRAP_LINE_PREFIX.length);
+  const actionToken = matchCanonicalSingleQuoted(afterPrefix);
+  if (actionToken === null) {
+    return null;
+  }
+  const bodyDelimiter = TRAP_LINE_SUFFIX + String.fromCharCode(10);
+  if (!actionToken.rest.startsWith(bodyDelimiter)) {
+    return null;
+  }
+  if (!isCanonicalTrapAction(actionToken.decoded)) {
+    return null;
+  }
+  return actionToken.rest.slice(bodyDelimiter.length);
 }
 
 function abortedResult(): ShellExecutionResult {

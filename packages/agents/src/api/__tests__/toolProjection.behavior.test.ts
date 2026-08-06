@@ -21,7 +21,7 @@
  *  - mcp details() resources include description.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';

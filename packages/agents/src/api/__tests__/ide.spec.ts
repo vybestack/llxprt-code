@@ -17,7 +17,7 @@
  * - T15 ide.* current/detected IDE + trust; editor open/close fire (fake IDE).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import { buildAgent } from './helpers/agentHarness.js';
 import {
   createFakeIdeEnvironment,

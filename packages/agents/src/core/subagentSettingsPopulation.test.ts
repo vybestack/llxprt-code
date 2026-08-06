@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from '../testApi.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';

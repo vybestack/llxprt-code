@@ -8,10 +8,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
-import { ShellJobManager } from './shellJobManager.js';
+import {
+  ShellJobManager,
+  ShellJobDisposalError,
+  survivorNeedsReap,
+  type SurvivorEntry,
+} from './shellJobManager.js';
 import type { ShellJob } from './shellJobManager.js';
+import type { TaskkillResult } from './shellProcessKill.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Real-process behavioral tests for ShellJobManager. Every test uses actual
@@ -493,5 +500,444 @@ describe.skipIf(os.platform() === 'win32')('ShellJobManager', () => {
       expect(result.job).toBeDefined();
       expect(result.job?.id).toBe(job.id);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Windows-only suite
+// ---------------------------------------------------------------------------
+function isPidAliveWindows(pid: number): boolean {
+  const result = spawnSync(
+    'tasklist',
+    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
+    { encoding: 'utf8', timeout: 5000 },
+  );
+  return result.stdout.includes(String(pid));
+}
+
+/**
+ * Poll until a PID is confirmed gone on Windows. Immediate checks after
+ * taskkill /F /T can race with handle release, so callers must poll.
+ */
+async function waitForPidGoneWindows(
+  pid: number,
+  timeoutMs = 10000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isPidAliveWindows(pid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`PID ${pid} did not exit within ${timeoutMs}ms`);
+}
+
+async function waitForPidFile(
+  filePath: string,
+  timeoutMs: number,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8').trim();
+      const pid = parseInt(content, 10);
+      if (!Number.isNaN(pid) && pid > 0) {
+        return pid;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`PID file ${filePath} did not appear within ${timeoutMs}ms`);
+}
+
+describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
+  let manager: ShellJobManager;
+
+  beforeEach(() => {
+    manager = makeManager().manager;
+  });
+
+  afterEach(async () => {
+    // dispose() owns its temp dir (ShellJobLogStore.destroy() removes it with
+    // a bounded retry). An explicit rmSync here is redundant and, on Windows,
+    // races with redirected-log handle release right after taskkill /F /T.
+    // dispose() rejects by design when survivors are retained — catch so
+    // teardown does not mask real test results or leak processes.
+    try {
+      await manager.dispose();
+    } catch (err) {
+      debugLogger.warn(
+        '[shellJobManager.test] dispose() rejected during Windows teardown:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  });
+
+  it('completes a fast-success PowerShell command with exit code 0', async () => {
+    const job = manager.launch({
+      command: "Write-Output 'hello-windows'",
+      cwd: os.tmpdir(),
+    });
+    const terminal = await waitForTerminal(manager, job.id);
+
+    expect(terminal).toBeDefined();
+    expect(terminal?.state).toBe('completed');
+    expect(terminal?.exitCode).toBe(0);
+
+    const tail = manager.tailOutput(job.id);
+    expect(tail.output).toContain('hello-windows');
+  });
+
+  it('reports a fast-failing command with the real non-zero exit code', async () => {
+    const job = manager.launch({
+      command: 'exit 3',
+      cwd: os.tmpdir(),
+    });
+    const terminal = await waitForTerminal(manager, job.id);
+
+    expect(terminal).toBeDefined();
+    expect(terminal?.state).toBe('failed');
+    expect(terminal?.exitCode).toBe(3);
+  });
+
+  it('reports exit 1 for a thrown exception', async () => {
+    const job = manager.launch({
+      command: "throw 'kaboom'",
+      cwd: os.tmpdir(),
+    });
+    const terminal = await waitForTerminal(manager, job.id);
+
+    expect(terminal).toBeDefined();
+    expect(terminal?.state).toBe('failed');
+    expect(terminal?.exitCode).toBe(1);
+  });
+
+  it('reaches the running state with a live pid for a long-running job', () => {
+    const job = manager.launch({
+      command: 'Start-Sleep -Seconds 30',
+      cwd: os.tmpdir(),
+    });
+
+    expect(job.state).toBe('running');
+    expect(job.pid).toBeGreaterThan(0);
+    expect(isPidAliveWindows(job.pid)).toBe(true);
+  });
+
+  it('cancels a running job and reaps the process tree', async () => {
+    const job = manager.launch({
+      command: 'Start-Sleep -Seconds 30',
+      cwd: os.tmpdir(),
+    });
+    expect(job.pid).toBeGreaterThan(0);
+
+    const cancelled = await manager.cancel(job.id);
+    expect(cancelled).toBe(true);
+
+    const terminal = manager.get(job.id);
+    expect(terminal?.state).toBe('cancelled');
+
+    await waitForPidGoneWindows(job.pid);
+  });
+
+  it('reaps a grandchild spawned by the inner command (taskkill /T)', async () => {
+    const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-gc-'));
+    const grandchildMarker = path.join(markerDir, 'gc.pid');
+    try {
+      const escapedMarker = grandchildMarker.replace(/'/g, "''");
+      const command =
+        'Start-Process -FilePath powershell.exe ' +
+        `-ArgumentList @('-NoProfile','-Command','$PID | Out-File -FilePath ''${escapedMarker}'' -Encoding ASCII; Start-Sleep -Seconds 60') ` +
+        '-WindowStyle Hidden -PassThru | Out-Null; ' +
+        'Start-Sleep -Seconds 60';
+
+      const job = manager.launch({ command, cwd: os.tmpdir() });
+      expect(job.pid).toBeGreaterThan(0);
+
+      // Read the grandchild PID from the marker file. waitForPidFile polls up
+      // to its 10000ms timeout, so no fixed pre-delay is needed.
+      const grandchildPid = await waitForPidFile(grandchildMarker, 10000);
+      expect(grandchildPid).toBeGreaterThan(0);
+      expect(isPidAliveWindows(grandchildPid)).toBe(true);
+
+      const cancelled = await manager.cancel(job.id);
+      expect(cancelled).toBe(true);
+
+      // Both the outer pid AND the grandchild must be gone (taskkill /T).
+      await waitForPidGoneWindows(job.pid);
+      await waitForPidGoneWindows(grandchildPid);
+    } finally {
+      fs.rmSync(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails a job whose log exceeds the cap', async () => {
+    const capDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cap-'));
+    const capManager = new ShellJobManager({
+      baseDir: capDir,
+      logMaxBytes: 512,
+    });
+    try {
+      const job = capManager.launch({
+        command:
+          "1..10000 | ForEach-Object { Write-Output ('x' * 80) }; Start-Sleep -Seconds 8",
+        cwd: os.tmpdir(),
+      });
+      const terminal = await waitForTerminal(capManager, job.id, 15000);
+
+      expect(terminal).toBeDefined();
+      expect(terminal?.state).toBe('failed');
+      expect(terminal?.failureReason).toContain('exceeded cap');
+    } finally {
+      await capManager.dispose();
+    }
+  });
+
+  it('disposes all running jobs without survivors', async () => {
+    const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-dispose-'));
+    const grandchildMarker = path.join(markerDir, 'gc.pid');
+    try {
+      const escapedMarker = grandchildMarker.replace(/'/g, "''");
+      const command =
+        'Start-Process -FilePath powershell.exe ' +
+        `-ArgumentList @('-NoProfile','-Command','$PID | Out-File -FilePath ''${escapedMarker}'' -Encoding ASCII; Start-Sleep -Seconds 60') ` +
+        '-WindowStyle Hidden -PassThru | Out-Null; ' +
+        'Start-Sleep -Seconds 60';
+
+      const job = manager.launch({ command, cwd: os.tmpdir() });
+      expect(isPidAliveWindows(job.pid)).toBe(true);
+
+      // No fixed sleep here: waitForPidFile polls every 200ms and only returns
+      // once the marker parses as a positive PID, so a created-but-unwritten
+      // file keeps polling. Its 10s deadline gives more headroom than a fixed
+      // wait while keeping the fast path fast.
+      const grandchildPid = await waitForPidFile(grandchildMarker, 10000);
+      expect(isPidAliveWindows(grandchildPid)).toBe(true);
+
+      await manager.dispose();
+
+      await waitForPidGoneWindows(job.pid);
+      await waitForPidGoneWindows(grandchildPid);
+    } finally {
+      fs.rmSync(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('cancel does not hang when taskkill fails (bounded cancel)', async () => {
+    const failDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-bounded-'));
+    let survivorPid = 0;
+    const failManager = new ShellJobManager({
+      baseDir: failDir,
+      taskkillImpl: async () => ({
+        ok: false,
+        error: new Error('Injected taskkill failure'),
+      }),
+    });
+    try {
+      const job = failManager.launch({
+        command: 'Start-Sleep -Seconds 300',
+        cwd: os.tmpdir(),
+      });
+      survivorPid = job.pid;
+      expect(survivorPid).toBeGreaterThan(0);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const start = Date.now();
+      const result = await failManager.cancel(job.id);
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(10000);
+      expect(result).toBe(true);
+
+      const terminal = failManager.get(job.id);
+      expect(terminal?.state).toBe('cancelled');
+    } finally {
+      if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
+        spawnSync('taskkill', ['/pid', survivorPid.toString(), '/f', '/t'], {
+          timeout: 5000,
+        });
+      }
+      // dispose() rejects with ShellJobDisposalError by design when live
+      // survivors remain. Guarantee the temp dir is removed regardless, and
+      // surface the rejection via debugLogger instead of swallowing it.
+      try {
+        await failManager.dispose();
+      } catch (err) {
+        debugLogger.warn(
+          '[shellJobManager.test] failManager.dispose() rejected during teardown:',
+          err instanceof Error ? err.message : String(err),
+        );
+      } finally {
+        fs.rmSync(failDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  // --- G1/H4: dispose must not kill unrelated processes via PID reuse ---
+  // Re-expressed against the PURE reap-eligibility helper (no production
+  // mutator of kill-critical state). dispose only reaps survivors whose
+  // ORIGINAL child handle is still running, so a numeric pid that was reused
+  // by an unrelated process is never targeted.
+
+  it('never reaps a survivor whose original child has exited (PID-reuse safe)', async () => {
+    // A short-lived child that has already exited.
+    const exited = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-Command', 'exit 0'],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+    await new Promise<void>((resolve) => {
+      exited.on('exit', () => resolve());
+    });
+    const exitedEntry: SurvivorEntry = {
+      child: exited,
+      pid: exited.pid ?? 0,
+    };
+    expect(survivorNeedsReap(exitedEntry)).toBe(false);
+
+    // A long-lived child that is still running.
+    const live = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-Command', 'Start-Sleep -Seconds 120'],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+    live.unref();
+    try {
+      expect(live.pid).toBeGreaterThan(0);
+      const liveEntry: SurvivorEntry = { child: live, pid: live.pid ?? 0 };
+      expect(survivorNeedsReap(liveEntry)).toBe(true);
+    } finally {
+      spawnSync('taskkill', ['/pid', String(live.pid), '/f', '/t'], {
+        timeout: 5000,
+      });
+    }
+  });
+  // --- G2: bounded taskkill and cap poll safety ---
+
+  it('dispose does not hang when taskkill never settles (G2)', async () => {
+    const hangDir = fs.mkdtempSync(path.join(os.tmpdir(), 'g2-hang-'));
+    const hangManager = new ShellJobManager({
+      baseDir: hangDir,
+      taskkillImpl: (): Promise<TaskkillResult> => new Promise(() => {}),
+    });
+    let pid = 0;
+    try {
+      const job = hangManager.launch({
+        command: 'Start-Sleep -Seconds 300',
+        cwd: os.tmpdir(),
+      });
+      pid = job.pid;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const start = Date.now();
+      // With a never-settling taskkill, the survivor remains alive and
+      // dispose() correctly rejects with ShellJobDisposalError. The timing
+      // bound must still hold (bounded kill timeout + verification rounds).
+      await expect(hangManager.dispose()).rejects.toBeInstanceOf(
+        ShellJobDisposalError,
+      );
+      const elapsed = Date.now() - start;
+
+      // Must complete in bounded time, not hang forever.
+      expect(elapsed).toBeLessThan(20000);
+    } finally {
+      if (pid > 0 && isPidAliveWindows(pid)) {
+        spawnSync('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
+          timeout: 5000,
+        });
+      }
+      // Brief delay so the OS releases file handles held by the killed tree.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      fs.rmSync(hangDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 200,
+      });
+    }
+  }, 30000);
+
+  it('does not start overlapping cap polls when taskkill is slow (G2)', async () => {
+    let killCallCount = 0;
+    const slowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'g2-slow-'));
+    const slowManager = new ShellJobManager({
+      baseDir: slowDir,
+      logMaxBytes: 256,
+      taskkillImpl: (): Promise<TaskkillResult> => {
+        killCallCount++;
+        return new Promise((resolve) => {
+          const timer = setTimeout(() => resolve({ ok: true }), 3000);
+          timer.unref();
+        });
+      },
+    });
+    let pid = 0;
+    try {
+      const job = slowManager.launch({
+        command:
+          "1..10000 | ForEach-Object { Write-Output ('x' * 80) }; Start-Sleep -Seconds 15",
+        cwd: os.tmpdir(),
+      });
+      pid = job.pid;
+
+      // Wait for the cap to be exceeded and at least one poll to fire.
+      await waitForTerminal(slowManager, job.id, 20000);
+      // Allow time for potential overlapping polls.
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // taskkill must be called exactly once — serialized polls prevent overlap.
+      expect(killCallCount).toBe(1);
+    } finally {
+      if (pid > 0 && isPidAliveWindows(pid)) {
+        spawnSync('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
+          timeout: 5000,
+        });
+      }
+      await slowManager.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      fs.rmSync(slowDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 200,
+      });
+    }
+  }, 45000);
+
+  it('reclaims the budget slot when spawnWindowsBackground throws synchronously (A1)', async () => {
+    // A manager with capacity 1: a leaked slot would make the second launch fail.
+    const reclaimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-reclaim-'));
+    const reclaimManager = new ShellJobManager({
+      baseDir: reclaimDir,
+      maxBackgroundJobs: 1,
+    });
+    // A NUL byte in cwd makes child_process.spawn throw synchronously with
+    // ERR_INVALID_ARG_VALUE (validated before the process is created). A
+    // merely nonexistent directory does NOT throw synchronously - it surfaces
+    // asynchronously as an 'error' event - so it cannot exercise this guard.
+    const invalidCwd = reclaimDir + '\u0000invalid';
+    try {
+      // The reservation is taken in launch() before spawnWindowsBackground is
+      // called, so the synchronous throw must be caught and the slot released.
+      expect(() =>
+        reclaimManager.launch({
+          command: 'Write-Output nope',
+          cwd: invalidCwd,
+        }),
+      ).toThrow(/null bytes/);
+
+      // The budget was reclaimed, so a subsequent launch with a valid cwd
+      // succeeds — proving the slot was not permanently consumed.
+      const job = reclaimManager.launch({
+        command: "Write-Output 'reclaimed'",
+        cwd: os.tmpdir(),
+      });
+      expect(job.state).toBe('running');
+
+      const terminal = await waitForTerminal(reclaimManager, job.id);
+      expect(terminal?.state).toBe('completed');
+      expect(terminal?.exitCode).toBe(0);
+    } finally {
+      await reclaimManager.dispose();
+      fs.rmSync(reclaimDir, { recursive: true, force: true });
+    }
   });
 });

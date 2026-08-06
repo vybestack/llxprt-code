@@ -446,6 +446,11 @@ export class ToolKeyStorage {
 
   async deleteKey(toolName: string): Promise<void> {
     this.assertValidToolName(toolName);
+    // A non-UNAVAILABLE keyring failure must still surface, but ToolKeyStorage
+    // owns this encrypted .key file separately from SecureStore's fallback
+    // store — its cleanup is independent and must run regardless of the
+    // keyring outcome, otherwise the key material survives on disk.
+    let keyringError: unknown = null;
     try {
       await this.secureStore.delete(toolName);
     } catch (error) {
@@ -455,10 +460,13 @@ export class ToolKeyStorage {
       if (error instanceof SecureStoreError && error.code === 'UNAVAILABLE') {
         // Keyring unavailable — continue to delete file
       } else {
-        throw error;
+        keyringError = error;
       }
     }
     await this.deleteFile(toolName);
+    if (keyringError !== null) {
+      throw keyringError;
+    }
   }
 
   async hasKey(toolName: string): Promise<boolean> {

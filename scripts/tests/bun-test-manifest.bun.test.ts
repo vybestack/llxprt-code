@@ -12,11 +12,21 @@ import {
   BUN_NATIVE_TEST_MANIFEST,
   BunManifestStatError,
   resolveBunNativeTestFiles,
+  resolveEntryFileNames,
   resolveWorkspaceCwd,
+  selectsEntry,
 } from '../bun-test-manifest.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const temporaryRoots: string[] = [];
+
+/** Stat/glob stubs for tests that must never touch the real filesystem. */
+const throwingStat = (error: unknown) => ({
+  stat: (): never => {
+    throw error;
+  },
+  glob: (): readonly string[] => [],
+});
 
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
@@ -72,18 +82,40 @@ describe('Bun native test manifest', () => {
 
   it('contains only nonempty workspace entries and existing files', () => {
     for (const entry of BUN_NATIVE_TEST_MANIFEST) {
-      expect(entry.files.length, entry.workspace).toBeGreaterThan(0);
+      expect(
+        resolveBunNativeTestFiles(repoRoot, entry.workspace).length,
+        entry.workspace,
+      ).toBeGreaterThan(0);
     }
 
+    // A workspace may be declared by more than one entry, and an entry may
+    // derive its files from globs rather than a curated list. Only the
+    // curated entries have a count that can be predicted here.
     for (const workspace of new Set(
       BUN_NATIVE_TEST_MANIFEST.map(({ workspace }) => workspace),
     )) {
-      const expectedFileCount = BUN_NATIVE_TEST_MANIFEST.filter(
+      const entries = BUN_NATIVE_TEST_MANIFEST.filter(
         (entry) => entry.workspace === workspace,
-      ).reduce((total, entry) => total + entry.files.length, 0);
+      );
+      if (entries.some((entry) => entry.files === undefined)) {
+        continue;
+      }
+      const expectedFileCount = entries.reduce(
+        (total, entry) => total + (entry.files?.length ?? 0),
+        0,
+      );
       expect(resolveBunNativeTestFiles(repoRoot, workspace)).toHaveLength(
         expectedFileCount,
       );
+    }
+  });
+
+  it('declares exactly one of files or include for every entry', () => {
+    for (const entry of BUN_NATIVE_TEST_MANIFEST) {
+      expect(
+        (entry.files === undefined) !== (entry.include === undefined),
+        entry.workspace,
+      ).toBe(true);
     }
   });
 
@@ -106,11 +138,7 @@ describe('Bun native test manifest', () => {
     });
 
     expect(() =>
-      resolveBunNativeTestFiles('/fixture', 'core', {
-        stat: () => {
-          throw cause;
-        },
-      }),
+      resolveBunNativeTestFiles('/fixture', 'core', throwingStat(cause)),
     ).toThrow('Bun native test manifest contains missing files');
   });
 
@@ -122,11 +150,7 @@ describe('Bun native test manifest', () => {
     let thrown: unknown;
 
     try {
-      resolveBunNativeTestFiles('/fixture', 'core', {
-        stat: () => {
-          throw cause;
-        },
-      });
+      resolveBunNativeTestFiles('/fixture', 'core', throwingStat(cause));
     } catch (error: unknown) {
       thrown = error;
     }
@@ -135,7 +159,12 @@ describe('Bun native test manifest', () => {
     if (!(thrown instanceof BunManifestStatError)) {
       throw new Error('Expected BunManifestStatError');
     }
-    expect(thrown.path).toBe('/fixture/packages/core/src/utils/errors.test.ts');
+    // Built with `join` so the expectation uses native separators; the
+    // resolver joins the same way, so a literal POSIX path only matches
+    // on POSIX platforms.
+    expect(thrown.path).toBe(
+      join('/fixture', 'packages/core/src/utils/errors.test.ts'),
+    );
     expect(thrown.code).toBe('EACCES');
     expect(thrown.cause).toBe(cause);
   });
@@ -146,13 +175,138 @@ describe('Bun native test manifest', () => {
       `bun-test-manifest-directory-${process.pid}-${Date.now()}`,
     );
     temporaryRoots.push(fixtureRoot);
-    mkdirSync(join(fixtureRoot, 'packages/core/src/utils/errors.test.ts'), {
-      recursive: true,
-    });
+    // Every declared 'core' path must exist as a directory, otherwise the
+    // missing-file check fires before the non-file check under assertion.
+    for (const entry of BUN_NATIVE_TEST_MANIFEST.filter(
+      (candidate) => candidate.workspace === 'core',
+    )) {
+      // Glob roots declare `include` instead of `files`; `core` is curated, so
+      // this is defensive against the shared type rather than a live case.
+      for (const file of entry.files ?? []) {
+        mkdirSync(join(fixtureRoot, 'packages/core', file), {
+          recursive: true,
+        });
+      }
+    }
 
     expect(() => resolveBunNativeTestFiles(fixtureRoot, 'core')).toThrow(
       'Bun native test manifest contains non-files',
     );
+  });
+});
+
+describe('selectsEntry', () => {
+  it('includes an ordinary root in an unfiltered run', () => {
+    expect(
+      selectsEntry({ workspace: 'core', files: ['a.test.ts'] }, undefined),
+    ).toBe(true);
+  });
+
+  it('excludes a credentialed root from an unfiltered run', () => {
+    expect(
+      selectsEntry(
+        { workspace: 'evals', files: ['a.eval.ts'], credentialed: true },
+        undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it('includes a credentialed root when it is requested by name', () => {
+    expect(
+      selectsEntry(
+        { workspace: 'evals', files: ['a.eval.ts'], credentialed: true },
+        'evals',
+      ),
+    ).toBe(true);
+  });
+
+  it('excludes any root that is not the named one', () => {
+    expect(
+      selectsEntry({ workspace: 'core', files: ['a.test.ts'] }, 'cli'),
+    ).toBe(false);
+  });
+});
+
+describe('resolveEntryFileNames', () => {
+  const globDependencies = (matches: Record<string, readonly string[]>) => ({
+    stat: () => ({ isFile: () => true }),
+    glob: (pattern: string): readonly string[] => matches[pattern] ?? [],
+  });
+
+  it('returns a curated file list verbatim', () => {
+    expect(
+      resolveEntryFileNames(
+        { workspace: 'w', files: ['b.test.ts', 'a.test.ts'] },
+        '/root',
+        globDependencies({}),
+      ),
+    ).toEqual(['b.test.ts', 'a.test.ts']);
+  });
+
+  it('expands include globs and sorts the result', () => {
+    expect(
+      resolveEntryFileNames(
+        { workspace: 'w', include: ['**/*.test.ts'] },
+        '/root',
+        globDependencies({ '**/*.test.ts': ['b.test.ts', 'a.test.ts'] }),
+      ),
+    ).toEqual(['a.test.ts', 'b.test.ts']);
+  });
+
+  it('removes exclude matches from the include result', () => {
+    expect(
+      resolveEntryFileNames(
+        {
+          workspace: 'w',
+          include: ['**/*.test.ts'],
+          exclude: ['**/*.bun.test.ts'],
+        },
+        '/root',
+        globDependencies({
+          '**/*.test.ts': ['a.test.ts', 'b.bun.test.ts'],
+          '**/*.bun.test.ts': ['b.bun.test.ts'],
+        }),
+      ),
+    ).toEqual(['a.test.ts']);
+  });
+
+  it('deduplicates files matched by more than one include pattern', () => {
+    expect(
+      resolveEntryFileNames(
+        { workspace: 'w', include: ['a*.ts', '*.test.ts'] },
+        '/root',
+        globDependencies({
+          'a*.ts': ['a.test.ts'],
+          '*.test.ts': ['a.test.ts', 'b.test.ts'],
+        }),
+      ),
+    ).toEqual(['a.test.ts', 'b.test.ts']);
+  });
+
+  it('rejects an entry declaring both files and include', () => {
+    expect(() =>
+      resolveEntryFileNames(
+        { workspace: 'w', files: ['a.test.ts'], include: ['*.test.ts'] },
+        '/root',
+        globDependencies({}),
+      ),
+    ).toThrow('declares both "files" and "include"');
+  });
+
+  it('rejects an entry declaring neither files nor include', () => {
+    expect(() =>
+      resolveEntryFileNames({ workspace: 'w' }, '/root', globDependencies({})),
+    ).toThrow('declares neither "files" nor "include"');
+  });
+
+  it('fails loudly when include globs match nothing', () => {
+    expect(() =>
+      resolveEntryFileNames(
+        { workspace: 'w', include: ['**/*.test.ts'] },
+        '/root',
+        globDependencies({}),
+      ),
+    ).toThrow('matched no test files');
   });
 });
 

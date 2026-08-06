@@ -37,7 +37,7 @@ Tools are functions the model can call to interact with your system — reading 
 | ------------------- | ----------------------- |
 | `run_shell_command` | Execute a shell command |
 
-The shell tool is the only tool that can reach **outside your workspace**. All file system tools are constrained to the workspace directory. This is why [sandboxing](../sandbox.md) matters — the shell tool can install packages, modify system files, or do anything your user account can do.
+The shell tool is the only tool that can reach **outside your workspace**. All file system tools are constrained to the workspace directory. This is why [sandboxing](../sandbox.md) matters — the shell tool can install packages, modify system files, or do anything your user account can do. The `is_background` parameter launches managed background jobs — see the [shell tool reference](./shell.md) for platform-specific details.
 
 ### Web
 

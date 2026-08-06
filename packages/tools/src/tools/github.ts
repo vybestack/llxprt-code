@@ -32,6 +32,14 @@ import {
   type LiveOutputUpdate,
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
+import {
+  GITHUB_OP_SPECS,
+  GITHUB_SUPPORTED_OPS,
+  GITHUB_MUTATING_OPS,
+  describeGithubOp,
+  validateGithubOpParams,
+} from './github-ops.js';
+import { renderGithubResult } from './github-display.js';
 
 /**
  * Transport for GitHub operations. Implemented outside this package and
@@ -52,108 +60,29 @@ export interface GitHubBrokerClient {
   ): Promise<Record<string, unknown>>;
 }
 
-/** Operations that change state and therefore require confirmation. */
-export const MUTATING_OPS: ReadonlySet<string> = new Set([
-  'issue.create',
-  'issue.comment',
-  'issue.edit',
-  'issue.close',
-  'pr.create',
-  'pr.comment',
-  'pr.edit',
-  'pr.ready',
-  'pr.resolve-thread',
-  'label.create',
-]);
+/**
+ * Operations that change state and therefore require confirmation. Derived
+ * from the catalog so it cannot drift from the broker's notion of a write.
+ */
+export const MUTATING_OPS: ReadonlySet<string> = GITHUB_MUTATING_OPS;
 
-/** Every operation the tool accepts. */
-export const SUPPORTED_OPS: readonly string[] = [
-  'issue.view',
-  'issue.list',
-  'issue.create',
-  'issue.comment',
-  'issue.edit',
-  'issue.close',
-  'pr.view',
-  'pr.list',
-  'pr.diff',
-  'pr.checks',
-  'pr.reviews',
-  'pr.create',
-  'pr.comment',
-  'pr.edit',
-  'pr.ready',
-  'pr.resolve-thread',
-  'search.issues',
-  'search.prs',
-  'run.list',
-  'label.list',
-  'label.create',
-];
+/** Every operation the tool accepts, in canonical order. */
+export const SUPPORTED_OPS: readonly string[] = GITHUB_SUPPORTED_OPS;
+
+/** Re-export so existing importers and tests keep working after the move. */
+export { renderChecks } from './github-display.js';
 
 /** How often to report elapsed time while a watch blocks. */
 const PROGRESS_INTERVAL_MS = 15_000;
-
-/** Marks a check's bucket for display. */
-function bucketMark(bucket: string): string {
-  if (bucket === 'pass') return 'pass';
-  if (bucket === 'fail') return 'FAIL';
-  if (bucket === 'skipping') return 'skip';
-  return bucket || '?';
-}
-
-/**
- * Renders a completed watch as a readable check list rather than raw JSON.
- *
- * Failures are listed first: after waiting minutes for CI, what you need is
- * the thing that broke, not an alphabetical roster.
- *
- * @plan PLAN-20260731-GHBROKER.P14
- * @requirement REQ-011
- */
-export function renderChecks(data: Record<string, unknown>): string {
-  const checks = Array.isArray(data.checks)
-    ? (data.checks as Array<Record<string, unknown>>)
-    : [];
-  if (checks.length === 0) return 'No checks reported.';
-
-  const summary = (data.summary ?? {}) as Record<string, number>;
-  const rank = (c: Record<string, unknown>): number => {
-    if (c.bucket === 'fail') return 0;
-    if (c.bucket === 'pending') return 1;
-    return 2;
-  };
-  const ordered = [...checks].sort((a, b) => rank(a) - rank(b));
-
-  const lines = ordered.map((c) => {
-    const name = typeof c.name === 'string' ? c.name : '';
-    return `  ${bucketMark(String(c.bucket ?? ''))}  ${name}`;
-  });
-
-  const counts = ['pass', 'fail', 'pending', 'skipping']
-    .filter((k) => (summary[k] ?? 0) > 0)
-    .map((k) => `${summary[k]} ${k}`)
-    .join(', ');
-  let status = 'timed out';
-  if (data.cancelled === true) status = 'cancelled';
-  else if (data.concluded === true) status = 'complete';
-
-  const header = `Checks ${status}${counts ? ` — ${counts}` : ''}`;
-  return [header, ...lines].join('\n');
-}
-
-/** Parameters accepted by the tool. */
-export interface GithubToolParams {
-  op: string;
-  repo?: string;
-  number?: number;
-  [key: string]: unknown;
-}
 
 /**
  * Worked examples matter more than prose here: models do not one-shot
  * unfamiliar tool schemas, and the closer this reads to `gh`, the more of
  * their existing knowledge transfers.
+ *
+ * The per-operation reference block (one line per op naming its required and
+ * optional parameters) is generated from the catalog, so a model reading the
+ * declaration can tell what a given op needs without a failed round trip.
  */
 const DESCRIPTION = `Interact with GitHub issues, pull requests, checks and labels.
 
@@ -174,6 +103,9 @@ Examples:
   { "op": "pr.checks", "number": 2317, "watch": true }
 
 Notes:
+- Parameters are per-operation: an operation rejects any parameter it does
+  not accept and names the accepted ones in the error. pr.resolve-thread
+  identifies its target by threadId alone (no number).
 - pr.reviews with actionable:true omits resolved and outdated threads, leaving
   only review comments that still need action. The returned thread id is what
   pr.resolve-thread takes, so the two compose.
@@ -182,7 +114,184 @@ Notes:
 - issue.edit sets issue type, labels, assignees, projects and milestone in one
   call, including fields the gh CLI cannot set directly.
 
-Operations: ${SUPPORTED_OPS.join(', ')}.`;
+Operations:
+${buildOpReferenceBlock()}`;
+
+/**
+ * Builds the per-operation reference block for the description, one line per
+ * op. Kept as a function so the block is visibly generated from the catalog
+ * rather than a second hand-maintained list.
+ */
+function buildOpReferenceBlock(): string {
+  return GITHUB_SUPPORTED_OPS.map((op) => describeGithubOp(op)).join('\n');
+}
+
+/**
+ * Array-of-strings parameters (labels, assignees).
+ *
+ * The tool schema declares these as `{ type: 'array', items: { type: 'string' } }`
+ * rather than a `type: ['string', 'array']` union. A union type is
+ * unprojectable: every provider's `normalizeType` collapses a non-string,
+ * non-enum `type` to `'string'`, so a union would silently tell the model
+ * that arrays are invalid. The stricter array-only contract is the general
+ * form the model should use. The broker validation deliberately still
+ * accepts a bare string OR an array for these kinds, because the sandbox
+ * socket path and existing callers rely on it — the tool schema is the
+ * stricter, unambiguous published contract, not a mirror of the broker's
+ * permissive input.
+ */
+const ARRAY_PARAMS: Readonly<Record<string, string>> = {
+  label:
+    'Label names, as an array (use a single-element array for one label). Accepted by issue.list, issue.create.',
+  addLabel:
+    'Label names to add, as an array (use a single-element array for one label). Accepted by issue.edit, pr.edit.',
+  removeLabel:
+    'Label names to remove, as an array (use a single-element array for one label). Accepted by issue.edit, pr.edit.',
+  assignee:
+    'Logins, as an array (use a single-element array for one assignee). Accepted by issue.create.',
+  addAssignee:
+    'Logins to add as assignee, as an array (use a single-element array for one). Accepted by issue.edit, pr.edit.',
+  removeAssignee:
+    'Logins to remove as assignee, as an array (use a single-element array for one). Accepted by issue.edit.',
+};
+
+/** Schema for boolean-kind parameters (no additional constraints). */
+const BOOLEAN_PARAMS: Readonly<Record<string, string>> = {
+  comments:
+    'Include comment threads in the response. Accepted by issue.view and pr.view.',
+  actionable:
+    'Omit resolved and outdated review threads. Accepted by pr.reviews.',
+  watch:
+    'Block until CI finishes instead of returning immediately. Accepted by pr.checks.',
+  draft: 'Create the pull request as a draft. Accepted by pr.create.',
+  force:
+    'Overwrite an existing label of the same name. Accepted by label.create.',
+};
+
+/**
+ * Schema for bounded integer parameters (number, limit). Declared as
+ * 'integer' rather than 'number' so every provider's `normalizeType` maps
+ * the field correctly; a 'number' would let a model pass 1.5 through the
+ * schema check only to be rejected by value validation.
+ */
+const BOUNDED_PARAMS: Readonly<
+  Record<string, { minimum: number; maximum?: number; description: string }>
+> = {
+  number: {
+    minimum: 1,
+    description:
+      'Issue or pull request number (positive integer). Required by issue.view, issue.comment, issue.edit, issue.close, pr.view, pr.diff, pr.checks, pr.reviews, pr.comment, pr.edit, pr.ready. pr.resolve-thread does NOT take a number — it identifies its target by threadId — and any operation that does not accept number rejects it.',
+  },
+  limit: {
+    minimum: 1,
+    maximum: 100,
+    description:
+      'Maximum number of items to return (integer 1–100). Accepted by issue.list, pr.list, search.issues, search.prs, run.list, label.list.',
+  },
+};
+
+/** Schema for enum-valued parameters. */
+const ENUM_PARAMS: Readonly<
+  Record<string, { enum: readonly string[]; description: string }>
+> = {
+  // The schema enum is deliberately the UNION of values across operations:
+  // pr.list accepts 'merged', issue.list does not. A single JSON schema is
+  // shared by every operation (it cannot vary an enum by `op`), so the
+  // superset is published here for discoverability and validateGithubOpParams
+  // narrows it per operation (via the per-kind `state` vs `stateIssue`
+  // validators) before the call is made. issue.list uses the `stateIssue`
+  // kind, which rejects 'merged' at the tool boundary.
+  state: {
+    enum: ['open', 'closed', 'merged', 'all'],
+    description:
+      'Filter by state. Accepted by issue.list (open, closed, all) and pr.list (open, closed, merged, all); "merged" is rejected for issue.list.',
+  },
+  reason: {
+    enum: ['completed', 'not planned'],
+    description: 'Close reason. Accepted by issue.close.',
+  },
+};
+
+/**
+ * Builds the JSON-schema property descriptor for a parameter name. Numeric
+ * bounds, enums and array kinds are table-driven; the body and default cases
+ * are inline because their descriptions are unique.
+ */
+function paramSchemaFor(name: string): Record<string, unknown> {
+  if (name in BOOLEAN_PARAMS) {
+    return { type: 'boolean', description: BOOLEAN_PARAMS[name] };
+  }
+  if (name in BOUNDED_PARAMS) {
+    return { type: 'integer', ...BOUNDED_PARAMS[name] };
+  }
+  if (name in ENUM_PARAMS) {
+    return { type: 'string', ...ENUM_PARAMS[name] };
+  }
+  if (name in ARRAY_PARAMS) {
+    return {
+      type: 'array',
+      items: { type: 'string' },
+      description: ARRAY_PARAMS[name],
+    };
+  }
+  if (name === 'body') {
+    return {
+      type: 'string',
+      description:
+        'Comment or issue/PR body (markdown). Required by issue.comment and pr.comment; optional for issue.create, issue.edit, pr.create, pr.edit.',
+    };
+  }
+  return { type: 'string', description: textHintFor(name) };
+}
+
+/** Short text hint for the remaining string-kind parameters. */
+function textHintFor(name: string): string {
+  const hints: Readonly<Record<string, string>> = {
+    repo: 'Repository as "owner/name". Omit to use the current repository.',
+    title:
+      'Issue or pull request title. Required by issue.create and pr.create; optional for issue.edit, pr.edit.',
+    search: 'Free-text search query. Accepted by issue.list.',
+    milestone:
+      'Milestone name or number. Accepted by issue.create, issue.edit.',
+    project: 'Project name. Accepted by issue.create.',
+    addProject: 'Project to add the item to. Accepted by issue.edit.',
+    removeProject: 'Project to remove the item from. Accepted by issue.edit.',
+    type: 'Issue type (e.g. Bug, Feature). Accepted by issue.edit.',
+    base: 'Base branch for the pull request. Accepted by pr.create.',
+    head: 'Head branch for the pull request. Accepted by pr.create.',
+    threadId:
+      'Review-thread node id returned by pr.reviews. Required by pr.resolve-thread, which identifies its target with this rather than a pull request number.',
+    query: 'GitHub search query. Required by search.issues and search.prs.',
+    branch: 'Branch name to filter runs by. Accepted by run.list.',
+    name: 'Label name. Required by label.create.',
+    color:
+      'Label color as a hex string like #RRGGBB. Accepted by label.create.',
+    description: 'Label description. Accepted by label.create.',
+  };
+  return hints[name] ?? '';
+}
+
+/**
+ * The union of every parameter name any operation accepts. Generated from
+ * the catalog so adding a parameter to an op makes it visible here without a
+ * second edit.
+ */
+const ALL_PARAM_NAMES: readonly string[] = collectParamNames();
+
+/** Collects the unique parameter names across all op specs, catalog order. */
+function collectParamNames(): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const op of GITHUB_SUPPORTED_OPS) {
+    for (const name of Object.keys(GITHUB_OP_SPECS[op].params)) {
+      if (!seen.has(name)) {
+        seen.add(name);
+        ordered.push(name);
+      }
+    }
+  }
+  return ordered;
+}
 
 const PARAMETER_SCHEMA = {
   type: 'object',
@@ -192,20 +301,29 @@ const PARAMETER_SCHEMA = {
       enum: SUPPORTED_OPS,
       description: 'The operation to perform, e.g. "issue.view".',
     },
-    repo: {
-      type: 'string',
-      description:
-        'Target repository as "owner/name". Omit to use the current repository.',
-    },
-    number: {
-      type: 'number',
-      description:
-        'Issue or pull request number, for operations that take one.',
-    },
+    ...buildParameterProperties(),
   },
   required: ['op'],
-  additionalProperties: true,
+  additionalProperties: false,
 } as const;
+
+/** Builds the per-parameter schema properties from the catalog union. */
+function buildParameterProperties(): Record<string, Record<string, unknown>> {
+  const props: Record<string, Record<string, unknown>> = {};
+  for (const name of ALL_PARAM_NAMES) {
+    props[name] = paramSchemaFor(name);
+  }
+  return props;
+}
+
+/** Parameters accepted by the tool. */
+export interface GithubToolParams {
+  op: string;
+  repo?: string;
+  number?: number;
+  threadId?: string;
+  [key: string]: unknown;
+}
 
 /**
  * A single `github` tool invocation.
@@ -311,20 +429,36 @@ export class GithubToolInvocation extends BaseToolInvocation<
       const json = JSON.stringify(data, null, 2);
       return {
         llmContent: json,
-        returnDisplay: this.isWatching()
-          ? renderChecks(data)
-          : `${this.getDescription()}\n\n\`\`\`json\n${json}\n\`\`\``,
+        returnDisplay: this.render(data),
       };
     } catch (err) {
+      // Every other tool in this package prefixes its error so the model can
+      // tell where a bare message like "404 Not Found" came from.
+      // `validateBuildAndExecute` only re-wraps exceptions that escape
+      // `execute()`, so a returned result must carry its own prefix. Guard the
+      // empty-message case so the display is never blanked entirely.
       const message = err instanceof Error ? err.message : String(err);
+      const detail = message === '' ? 'Unknown error' : message;
+      const prefixed = `GitHub operation failed: ${detail}`;
       return {
-        llmContent: `GitHub operation failed: ${message}`,
-        returnDisplay: `GitHub operation failed: ${message}`,
-        error: { message },
+        llmContent: prefixed,
+        returnDisplay: prefixed,
+        error: { message: prefixed },
       };
     } finally {
       stopProgress?.();
     }
+  }
+
+  /**
+   * Produces the human-readable transcript summary. Every op — including a
+   * watched `pr.checks` — renders through the per-op display table, which
+   * appends the `repo` suffix and (for pr.checks) reads `watch` from the
+   * params to choose the right header. The full shaped JSON stays in
+   * `llmContent`.
+   */
+  private render(data: Record<string, unknown>): string {
+    return renderGithubResult(this.params.op, this.params, data);
   }
 }
 
@@ -354,6 +488,22 @@ export class GithubTool extends BaseDeclarativeTool<
       false,
       messageBus,
     );
+  }
+
+  /**
+   * Op-specific structural validation: an unknown parameter or a missing
+   * required one is rejected before any broker call, with a message that
+   * names the op and lists what it accepts. Runs after the JSON-schema
+   * check in `BaseDeclarativeTool.validateToolParams`.
+   *
+   * @plan PLAN-20260731-GHBROKER.P15
+   * @requirement REQ-008
+   */
+  protected override validateToolParamValues(
+    params: GithubToolParams,
+  ): string | null {
+    const { op, ...rest } = params;
+    return validateGithubOpParams(op, rest);
   }
 
   protected createInvocation(

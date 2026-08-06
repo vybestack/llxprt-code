@@ -10,7 +10,7 @@
  * max-lines disable is needed.
  */
 
-import { vi } from 'vitest';
+import { vi } from '../testApi.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -63,18 +63,28 @@ export function createTokenSyncTestFixture(): TokenSyncTestFixture {
     getActiveProvider: vi.fn(() => mockProvider),
   } as never;
 
+  // Bun's Mock<T> and vitest's Mock<T> are structurally incompatible
+  // (vitest's MockContext requires `settledResults`, which Bun's
+  // MockFunctionState does not provide). The configOverrides parameter in
+  // createChatSessionRuntime is typed via vitest's Mock (see
+  // packages/core/src/test-utils/runtime.ts). At runtime Bun mocks are
+  // functionally equivalent, so we bridge the type gap explicitly.
+  const configOverrides = {
+    getModel: vi.fn().mockReturnValue('gemini-pro'),
+    setModel: vi.fn(),
+    getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
+    setQuotaErrorOccurred: vi.fn(),
+    getEphemeralSettings: vi.fn().mockReturnValue({}),
+    getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+    getProviderManager: vi.fn().mockReturnValue(providerManager),
+  };
+
   const runtimeSetup = createChatSessionRuntime({
     provider: mockProvider,
     providerManager,
-    configOverrides: {
-      getModel: vi.fn().mockReturnValue('gemini-pro'),
-      setModel: vi.fn(),
-      getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
-      setQuotaErrorOccurred: vi.fn(),
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getProviderManager: vi.fn().mockReturnValue(providerManager),
-    },
+    configOverrides: configOverrides as unknown as NonNullable<
+      Parameters<typeof createChatSessionRuntime>[0]
+    >['configOverrides'],
   });
 
   const mockConfig = runtimeSetup.config;

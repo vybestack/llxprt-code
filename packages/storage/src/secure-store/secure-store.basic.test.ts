@@ -538,7 +538,7 @@ describe('SecureStore — CRUD Operations', () => {
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R3.8
    */
-  it('has() throws SecureStoreError on non-NOT_FOUND keyring errors', async () => {
+  it('has() throws SecureStoreError on non-fallbackable keyring errors', async () => {
     const adapter: KeyringAdapter = {
       getPassword: async () => {
         throw new Error('Keyring locked');

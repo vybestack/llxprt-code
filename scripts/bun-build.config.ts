@@ -25,11 +25,27 @@
  * a2a-server build. Top-level execution is guarded by `import.meta.main`.
  */
 
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
+import { stageCliBundleAssets } from './copy_bundle_assets.js';
+
+/**
+ * Re-exported so the issue #3062 guard keeps its import path. The alias
+ * collection itself now lives with the rest of the bundle asset staging in
+ * `copy_bundle_assets.ts` (issue #3068), which subsumed the alias-only copy
+ * that used to live here: staging every bundle-relative asset in one place
+ * keeps a single implementation and a single fail-fast contract.
+ */
+export { collectAliasAssets } from './copy_bundle_assets.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
@@ -74,6 +90,54 @@ export const EXTERNALS = [
   'chokidar',
 ];
 
+/**
+ * Modules whose runtime behaviour depends on their own `__dirname` and so MUST
+ * stay external to the CLI bundle.
+ *
+ * When Bun inlines a CommonJS module it freezes `__dirname` as a build-time
+ * string literal. Any dependency that locates a runtime asset (WASM, locales,
+ * config files) relative to its own `__dirname` then ships the *build
+ * machine's* absolute path baked into the artifact: that path resolves only on
+ * the builder and leaks the release engineer's filesystem layout into user
+ * stack traces. Keeping such modules external lets Bun resolve them from
+ * `node_modules` at launch, so `__dirname` points at the *installed* package —
+ * exactly the resolution the pre-bundle TypeScript launch always used.
+ *
+ * **Ownership rule (invariant):** every entry MUST be a declared direct
+ * dependency of `packages/cli/package.json` (the published package that ships
+ * the bundle). Only a direct dependency guarantees its runtime resolution from
+ * `<pkg>/bundle/llxprt.js`: the package manager installs it in the published
+ * package's own `node_modules` scope, so `require("<name>")` from the bundle
+ * finds the *right* copy. A transitive dependency that merely appears somewhere
+ * in `node_modules` does NOT give this guarantee — it may be hoisted, shadowed
+ * by a consumer's conflicting version, or absent entirely depending on the
+ * consumer's install tree. That was the defect behind issue #3055:
+ * `config-chain` is owned by `@pnpm/npm-conf` (under `update-notifier`'s
+ * transitive graph), so externalizing it moved the resolution owner to the CLI
+ * package, where no package manager guarantees it resolves.
+ *
+ * Enforced by `scripts/tests/issue-3055-cli-externals-ownership.bun.test.ts`.
+ *
+ * This list is deliberately separate from `EXTERNALS`: the a2a-server bundle is
+ * a self-contained artifact that inlines its dependencies and already
+ * neutralises tiktoken via `portableTiktokenPlugin`, so forcing these external
+ * there would break that strategy.
+ */
+export const CLI_DIRNAME_DEPENDENT_EXTERNALS = [
+  // Locates tiktoken_bg.wasm via __dirname; throws "Missing tiktoken_bg.wasm"
+  // at import time when the baked build-machine path is absent (issue #3055).
+  '@dqbd/tiktoken',
+  // Direct dependency of packages/cli. Its transitive graph includes
+  // @pnpm/npm-conf -> config-chain, which walks __dirname to find npm-style
+  // config files. Externalizing update-notifier (not config-chain) keeps the
+  // entire transitive graph resolving from update-notifier's own package
+  // scope, where config-chain is a guaranteed dependency of @pnpm/npm-conf.
+  'update-notifier',
+  // Resolves its locale directory relative to __dirname; a baked path silently
+  // degrades CLI localisation.
+  'yargs',
+] as const;
+
 const tiktokenWasmSource = require.resolve('@dqbd/tiktoken/tiktoken_bg.wasm');
 
 // a2a-server bundle: packages/a2a-server/src/http/server.ts -> dist/a2a-server.mjs
@@ -101,6 +165,13 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
 };
 
 /**
+ * Directory the published CLI bundle is written to. Single source of truth for
+ * both the Bun.build output location and the runtime-asset staging target
+ * (issue #3068), so the JS artifact and its data files can never diverge.
+ */
+export const CLI_BUNDLE_DIR = join(root, 'packages/cli/bundle');
+
+/**
  * CLI bundle (issue #2999): packages/cli/index.ts -> bundle/llxprt.js.
  *
  * `target: 'bun'` keeps the artifact compatible with the Bun runtime that
@@ -112,7 +183,7 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
  */
 export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   target: 'bun',
-  external: EXTERNALS,
+  external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
   loader: { '.node': 'file' },
   minify: false,
   splitting: false,
@@ -124,7 +195,7 @@ export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   // Absolute paths: `prepack` runs this from `packages/cli`, not the repo
   // root, so cwd-relative entrypoints would not resolve.
   entrypoints: [join(root, 'packages/cli/index.ts')],
-  outdir: join(root, 'packages/cli/bundle'),
+  outdir: CLI_BUNDLE_DIR,
   naming: 'llxprt.js',
 };
 
@@ -174,6 +245,23 @@ async function buildA2aServer(): Promise<readonly string[]> {
 }
 
 /**
+ * Removes every entry in the bundle directory except the just-emitted build
+ * outputs, leaving a clean slate for asset staging.
+ *
+ * A no-op when the directory does not exist yet (the first build).
+ */
+function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
+  if (!existsSync(bundleDir)) {
+    return;
+  }
+  for (const entry of readdirSync(bundleDir)) {
+    if (!keep.has(entry)) {
+      rmSync(join(bundleDir, entry), { recursive: true, force: true });
+    }
+  }
+}
+
+/**
  * Builds the prebuilt CLI bundle only (issue #2999).
  *
  * Kept separately invocable so `prepack` can produce the shipped bundle
@@ -200,7 +288,27 @@ export async function buildCliBundle(): Promise<readonly string[]> {
       `cli-bundle build completed with errors: ${detail || '(no details)'}`,
     );
   }
-  return cliResult.outputs.map((o) => `${o.path}=${o.size}`);
+  const outputs = cliResult.outputs.map((o) => `${o.path}=${o.size}`);
+  // Drop stale assets only once the build has succeeded, so a transient build
+  // failure leaves the previous bundle intact instead of deleting it. Bun.build
+  // does not clean its outdir and the stager only writes — never deletes — so
+  // without this an alias, policy, or template removed from source would linger
+  // and ship. The freshly emitted artifacts are preserved by name.
+  pruneStaleBundleEntries(
+    CLI_BUNDLE_DIR,
+    new Set(cliResult.outputs.map((o) => basename(o.path))),
+  );
+  // Stage the runtime data assets the bundled code reads relative to the
+  // bundle directory (issue #3068). Throws on a missing required asset so a
+  // broken bundle can never be silently published; this propagates as a
+  // build failure because prepack runs this entry point. `repoRoot: root`
+  // keeps a single derivation of the repo root rather than letting the stager
+  // re-derive it from its own import.meta.url.
+  const staged = stageCliBundleAssets({
+    bundleDir: CLI_BUNDLE_DIR,
+    repoRoot: root,
+  });
+  return [...outputs, ...staged];
 }
 
 /**

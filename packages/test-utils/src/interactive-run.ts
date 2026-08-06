@@ -6,7 +6,7 @@
 
 import { execSync } from 'node:child_process';
 import { env } from 'node:process';
-import type * as pty from '@lydell/node-pty';
+import type { TestPtyProcess } from './pty-backend.js';
 import stripAnsi from 'strip-ansi';
 import type { DiagnosticsSink } from './diagnostics.js';
 import { getDefaultTimeout, poll } from './util.js';
@@ -38,7 +38,7 @@ export interface InteractiveRunConstructorOptions {
  * Manages a PTY-backed interactive CLI session for e2e/integration tests.
  */
 export class InteractiveRun {
-  readonly ptyProcess: pty.IPty;
+  readonly ptyProcess: TestPtyProcess;
   private readonly _output: string[] = [];
   private _exited = false;
   private _exitCode: number | null = null;
@@ -47,7 +47,7 @@ export class InteractiveRun {
   private readonly _quotaGuardEnabled: boolean;
 
   constructor(
-    ptyProcess: pty.IPty,
+    ptyProcess: TestPtyProcess,
     diagnostics: DiagnosticsSink,
     options: InteractiveRunConstructorOptions = {},
   ) {

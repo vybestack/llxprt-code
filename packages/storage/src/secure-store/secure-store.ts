@@ -32,6 +32,7 @@ import {
   type Envelope,
 } from './envelope.js';
 import { verifyKeyringWrite } from './keyring-write-verification.js';
+import { isKeychainGrantPersistenceBroken as isKeychainGrantPersistenceBrokenState } from './keychain-grant-persistence.js';
 import {
   assertRuntimeNotReplaced,
   RUNTIME_REPLACED_REMEDIATION,
@@ -40,6 +41,10 @@ import {
   createDefaultKeyringAdapter,
   setKeyringLogger,
 } from './default-keyring-adapter.js';
+import {
+  isOsKeyringSessionDisabled,
+  noteKeyringError,
+} from './keyring-session-state.js';
 import { CredentialWriteLock } from './credential-write-lock.js';
 
 export { createDefaultKeyringAdapter } from './default-keyring-adapter.js';
@@ -49,6 +54,10 @@ export {
   forceRuntimeReplacedForTesting,
   resetRuntimeIdentityForTesting,
 } from './runtime-identity.js';
+// Re-export the OS keyring session-state probes so tests can reach them
+// alongside the runtime-replaced probes (PLAN-20260805-ISSUE2928 R2).
+export { resetOsKeyringSessionForTesting } from './keyring-session-state.js';
+export { hasOsKeyringWarningBeenEmitted } from './keyring-session-state.js';
 
 // ─── Error Type (re-exported from dependency-leaf module) ────────────────────
 //
@@ -96,27 +105,11 @@ export interface SecureStoreOptions {
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
-function isErrorWithCode(value: unknown): value is { code: string } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'code' in value &&
-    typeof value.code === 'string'
-  );
-}
-
-function classifyError(error: unknown): SecureStoreErrorCode {
-  const msg =
-    error instanceof Error
-      ? error.message.toLowerCase()
-      : String(error).toLowerCase();
-  if (msg.includes('locked')) return 'LOCKED';
-  if (msg.includes('denied') || msg.includes('permission')) return 'DENIED';
-  if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
-  if (msg.includes('not found')) return 'NOT_FOUND';
-  if (isErrorWithCode(error) && error.code === 'ENOENT') return 'NOT_FOUND';
-  return 'UNAVAILABLE';
-}
+// classifyError lives in classify-error.ts (a dependency leaf) so the adapter
+// boundary (default-keyring-adapter.ts → createGuardedAdapter → noteKeyringError)
+// can classify and latch on keyring errors without importing from this module
+// (which would create a cycle). The shared noteKeyringError in
+// keyring-session-state.ts is imported below.
 
 function getRemediation(code: SecureStoreErrorCode): string {
   switch (code) {
@@ -141,8 +134,13 @@ function getRemediation(code: SecureStoreErrorCode): string {
   }
 }
 
-function isTransientError(error: unknown): boolean {
-  return classifyError(error) === 'TIMEOUT';
+/**
+ * Keyring read classifications that may be safely degraded to the encrypted
+ * fallback file by both `get()` and `has()`. Centralizing this set keeps the
+ * two read paths from diverging on which errors are fallbackable.
+ */
+function isFallbackableKeyringReadError(code: SecureStoreErrorCode): boolean {
+  return code === 'UNAVAILABLE' || code === 'NOT_FOUND' || code === 'TIMEOUT';
 }
 
 // ─── SecureStore Class ───────────────────────────────────────────────────────
@@ -160,6 +158,7 @@ export class SecureStore {
   private readonly fallbackDir: string;
   private readonly logger: StorageLogger;
   private readonly machineSecretLoaderFn: () => Promise<Buffer | null>;
+  private readonly machineSecretLoaderInjected: boolean;
   private readonly machineSecretFilePath: string | undefined;
   private readonly lock: CredentialWriteLock;
 
@@ -189,6 +188,8 @@ export class SecureStore {
     this.logger = options?.logger ?? new NullStorageLoggerImpl();
     this.machineSecretLoaderFn =
       options?.machineSecretLoader ?? this.defaultMachineSecretLoader;
+    this.machineSecretLoaderInjected =
+      options?.machineSecretLoader !== undefined;
     this.machineSecretFilePath = options?.machineSecretPath;
     this.lock = new CredentialWriteLock({
       lockDir: options?.lockDir ?? Storage.getCredentialLocksDir(),
@@ -202,9 +203,88 @@ export class SecureStore {
       filePath: this.machineSecretFilePath,
     });
 
+  /**
+   * Machine-secret resolution for the fallback WRITE path.
+   *
+   * While the OS keyring is disabled (latched or opted out) a keychain-resident
+   * machine secret may exist but be unreachable. Generating a replacement would
+   * silently orphan every existing v:2 envelope sealed under the real one, and
+   * the newly written envelopes would in turn become unreadable on the next
+   * healthy start when the keychain secret comes back. So while disabled we
+   * resolve read-only, and only permit minting a fresh secret when no v:2
+   * envelope exists to orphan.
+   *
+   * @plan PLAN-20260805-ISSUE2928
+   * @requirement R3.4
+   */
+  private async loadMachineSecretForWrite(): Promise<Buffer | null> {
+    if (this.machineSecretLoaderInjected || !isOsKeyringSessionDisabled()) {
+      return this.machineSecretLoaderFn();
+    }
+    const existing = await this.loadMachineSecretForRead();
+    if (existing !== null) {
+      return existing;
+    }
+    if (await this.hasAnyV2FallbackFile()) {
+      throw new SecureStoreError(
+        'Refusing to generate a replacement machine secret while the OS keyring is disabled and v:2 fallback files exist: doing so would permanently orphan them.',
+        'UNAVAILABLE',
+        'Re-enable the OS keyring (unset LLXPRT_DISABLE_OS_KEYRING / security.disableOsKeyring) and re-save this key so the existing machine secret is used, or delete the orphaned .enc files and re-authenticate.',
+      );
+    }
+    return this.machineSecretLoaderFn();
+  }
+
+  /** Whether any v:2 envelope exists in this store's fallback directory. */
+  private async hasAnyV2FallbackFile(): Promise<boolean> {
+    let files: string[];
+    try {
+      files = await fs.readdir(this.fallbackDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+    for (const file of files) {
+      if (!file.endsWith('.enc')) continue;
+      const version = await this.readExistingEnvelopeVersion(
+        path.join(this.fallbackDir, file),
+      );
+      if (version === 2) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Read-only machine-secret resolution for the decrypt path (R3.5). Never
+   * mints a new secret as a side effect of a read: when the default loader is
+   * in use, resolve via getMachineSecret with generateIfMissing:false so a
+   * missing secret fails closed instead of orphaning existing v:2 envelopes.
+   * An injected loader is honored as-is (the injection contract governs it).
+   *
+   * @plan PLAN-20260805-ISSUE2928
+   * @requirement R3.5
+   */
+  private async loadMachineSecretForRead(): Promise<Buffer | null> {
+    if (this.machineSecretLoaderInjected) {
+      return this.machineSecretLoaderFn();
+    }
+    return getMachineSecret({
+      filePath: this.machineSecretFilePath,
+      generateIfMissing: false,
+    });
+  }
+
   // ─── Keyring Loading ──────────────────────────────────────────────────────
 
   private async getKeyring(): Promise<KeyringAdapter | null> {
+    // R2.3: once the OS keyring is latched unusable (or opted out) for this
+    // process, return null IMMEDIATELY — before touching keyringLoadAttempted
+    // and before invoking the loader. This holds even for an instance that
+    // had already cached an adapter, so zero keyring operations occur after
+    // the transition.
+    if (isOsKeyringSessionDisabled()) {
+      return null;
+    }
     if (this.keyringLoadAttempted) return this.keyringInstance ?? null;
     this.keyringLoadAttempted = true;
     try {
@@ -289,6 +369,15 @@ export class SecureStore {
 
   async isKeychainAvailable(): Promise<boolean> {
     assertRuntimeNotReplaced();
+    // FIX 5 (issue #2928): a latched/opted-out session must report unavailable
+    // BEFORE the TTL-cached probe result, so a cached `true` cannot survive the
+    // latch. Without this, a probe taken while the keyring was healthy would
+    // keep returning true for up to PROBE_TTL_MS after the keyring was latched
+    // off.
+    if (isOsKeyringSessionDisabled()) {
+      this.probeCache = null;
+      return false;
+    }
     if (this.probeCache !== null) {
       const elapsed = Date.now() - this.probeCache.timestamp;
       if (elapsed < this.PROBE_TTL_MS) {
@@ -325,15 +414,32 @@ export class SecureStore {
       );
       return probeOk;
     } catch (error) {
+      const code = noteKeyringError(error);
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.debug(() => `[probe] keyring probe failed: ${msg}`);
-      if (isTransientError(error)) {
+      if (code === 'TIMEOUT') {
         this.probeCache = null;
       } else {
         this.probeCache = { available: false, timestamp: Date.now() };
       }
       return false;
     }
+  }
+
+  /**
+   * Reports whether the discarded macOS Keychain "Always Allow" grant has been
+   * detected this process (issue #3020). Terminal: once true, always true.
+   *
+   * This proxies **process-wide** state shared across every SecureStore
+   * instance and every service/account — it is NOT scoped to this store
+   * instance or to this service. The detector correlates by credential, but
+   * the resulting predicate is global: once any credential triggers it, every
+   * store's accessor reports true for the rest of the process.
+   *
+   * @plan PLAN-20260805-ISSUE3020
+   */
+  isKeychainGrantPersistenceBroken(): boolean {
+    return isKeychainGrantPersistenceBrokenState();
   }
 
   private async deleteFallbackFiles(key: string): Promise<boolean> {
@@ -380,12 +486,14 @@ export class SecureStore {
     const adapter = await this.getKeyring();
     let keyringWriteSucceeded = false;
     let keyringWriteError: unknown = null;
+    let keyringWriteCode: SecureStoreErrorCode | null = null;
     if (adapter !== null) {
       try {
         await adapter.setPassword(this.serviceName, key, value);
         keyringWriteSucceeded = true;
       } catch (error) {
         keyringWriteError = error;
+        keyringWriteCode = noteKeyringError(error);
         this.recordKeyringFailure();
         this.logger.debug(
           () =>
@@ -434,8 +542,8 @@ export class SecureStore {
 
     // Keyring unavailable or write failed.
     if (this.fallbackPolicy === 'deny') {
-      if (adapter !== null && keyringWriteError !== null) {
-        const classified = classifyError(keyringWriteError);
+      if (keyringWriteCode !== null) {
+        const classified = keyringWriteCode;
         const msg =
           keyringWriteError instanceof Error
             ? keyringWriteError.message
@@ -470,17 +578,13 @@ export class SecureStore {
         this.logger.debug(() => `[get] key='${key}' → not found in keyring`);
       } catch (error) {
         this.recordKeyringFailure();
-        const classified = classifyError(error);
+        const classified = noteKeyringError(error);
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.debug(
           () =>
             `[get] key='${key}' keyring read failed (${classified}): ${msg}`,
         );
-        if (
-          classified !== 'UNAVAILABLE' &&
-          classified !== 'NOT_FOUND' &&
-          classified !== 'TIMEOUT'
-        ) {
+        if (!isFallbackableKeyringReadError(classified)) {
           throw new SecureStoreError(
             msg,
             classified,
@@ -525,6 +629,8 @@ export class SecureStore {
   private async deleteLocked(key: string): Promise<boolean> {
     let deletedFromKeyring = false;
     let deletedFromFile = false;
+    let keyringFailure: { code: SecureStoreErrorCode; message: string } | null =
+      null;
 
     const adapter = await this.getKeyring();
     if (adapter !== null) {
@@ -533,12 +639,44 @@ export class SecureStore {
           this.serviceName,
           key,
         );
-      } catch {
-        // Keyring delete failed
+        this.recordKeyringSuccess();
+      } catch (error) {
+        keyringFailure = {
+          code: noteKeyringError(error),
+          message: error instanceof Error ? error.message : String(error),
+        };
+        // A thrown NOT_FOUND means the keyring responded correctly but had
+        // nothing to delete — the delete-path analogue of get() returning
+        // null, which records neither success nor failure. Treating it as a
+        // keyring failure would wrongly erode the probe cache for a healthy
+        // keyring.
+        if (keyringFailure.code !== 'NOT_FOUND') {
+          this.recordKeyringFailure();
+        }
+        this.logger.debug(
+          () =>
+            `[delete] key='${key}' keyring delete failed (${keyringFailure!.code}): ${keyringFailure!.message}`,
+        );
       }
     }
 
+    // Always attempt fallback cleanup regardless of the keyring outcome, so a
+    // failed keyring delete does not *additionally* leave the encrypted local
+    // copy behind. This is best-effort: deleteFallbackFiles swallows every
+    // non-ENOENT unlink failure, so a copy can survive an unlink error — it
+    // only guarantees the keyring failure itself does not skip cleanup.
     deletedFromFile = await this.deleteFallbackFiles(key);
+
+    // NOT_FOUND means the keyring simply had nothing to delete, so the result
+    // is driven by the fallback cleanup. Any other failure must surface: the
+    // secret may still be in the keyring and reporting success would mask that.
+    if (keyringFailure !== null && keyringFailure.code !== 'NOT_FOUND') {
+      throw new SecureStoreError(
+        keyringFailure.message,
+        keyringFailure.code,
+        getRemediation(keyringFailure.code),
+      );
+    }
 
     this.logger.debug(
       () =>
@@ -621,13 +759,20 @@ export class SecureStore {
       try {
         const value = await adapter.getPassword(this.serviceName, key);
         if (value !== null) {
+          this.recordKeyringSuccess();
           return true;
         }
       } catch (error) {
-        const classified = classifyError(error);
-        if (classified !== 'NOT_FOUND') {
+        this.recordKeyringFailure();
+        const classified = noteKeyringError(error);
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          () =>
+            `[has] key='${key}' keyring read failed (${classified}): ${msg}`,
+        );
+        if (!isFallbackableKeyringReadError(classified)) {
           throw new SecureStoreError(
-            error instanceof Error ? error.message : String(error),
+            msg,
             classified,
             getRemediation(classified),
           );
@@ -660,7 +805,7 @@ export class SecureStore {
 
     const salt = crypto.randomBytes(SALT_LEN);
 
-    const machineSecret = await this.machineSecretLoaderFn();
+    const machineSecret = await this.loadMachineSecretForWrite();
     const useV2 = machineSecret !== null;
 
     // Never downgrade an existing v:2 file to v:1 when the machine secret is
@@ -812,12 +957,14 @@ export class SecureStore {
     const encryptedData = ciphertext.subarray(44);
     let kdfInput: string;
     if (envelope.v === 2) {
-      const machineSecret = await this.machineSecretLoaderFn();
+      const machineSecret = await this.loadMachineSecretForRead();
       if (machineSecret === null) {
         throw new SecureStoreError(
-          'v:2 fallback file requires a machine secret that is unavailable',
+          'v:2 fallback file cannot be decrypted: no machine secret is available. ' +
+            'The OS keyring may be disabled or unavailable and no machine-secret file exists on disk.',
           'CORRUPT',
-          'Re-save the key or re-authenticate. The machine secret may have changed or been removed.',
+          'Re-enable the OS keyring (security.disableOsKeyring=false) and re-save the key, or ' +
+            'restore the machine-secret file on this machine. See the issue #2928 migration notes.',
         );
       }
       kdfInput = deriveV2KdfInput(this.serviceName, machineSecret);

@@ -73,11 +73,23 @@ export interface ShellExecutionConfig {
   ptyTerminalHeight?: number;
 }
 
-/** Timeout configuration resolved from settings. */
+/**
+ * Timeout configuration resolved from settings.
+ *
+ * Note on the confusing field naming (Issue #3031): `timeoutSeconds` carries
+ * the configured MAXIMUM — the ceiling — NOT a request. It is bound against
+ * `timeout_seconds`/`defaultTimeoutSeconds` by the canonical ceiling resolver
+ * (`resolveTimeout`). `-1` means "no ceiling / unlimited"; an absent ceiling
+ * is not an opt-out, so this field is always a number.
+ */
 export interface ShellTimeoutConfig {
-  /** Resolved timeout in seconds, undefined for no timeout. */
-  timeoutSeconds: number | undefined;
-  /** Default timeout in seconds. */
+  /**
+   * Configured maximum timeout in seconds (the CEILING). `-1` means no
+   * ceiling (operator declined to bound). Despite the name this is NOT the
+   * effective timeout.
+   */
+  timeoutSeconds: number;
+  /** Default timeout in seconds applied when `timeout_seconds` is omitted. */
   defaultTimeoutSeconds: number;
 }
 
@@ -172,7 +184,9 @@ export interface IShellToolHost {
   getShellExecutionConfig(): ShellExecutionConfig;
 
   /**
-   * Get timeout configuration for shell commands.
+   * Get timeout configuration for shell commands. `timeoutSeconds` on the
+   * returned config is the configured MAXIMUM (ceiling), not a request — see
+   * the doc comment on `ShellTimeoutConfig`.
    */
   getTimeoutConfig(): ShellTimeoutConfig;
 

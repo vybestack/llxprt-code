@@ -49,6 +49,14 @@ const CONFIG_ENTRIES = new Set([
   '.env',
   'LLXPRT.md',
   '.LLXPRT_SYSTEM',
+  // Issue #3081: these are read from the CONFIG directory but were missing
+  // from this set, so the migration categorizer routed them to DATA instead.
+  // welcomeConfig.json — getWelcomeConfigPath (USER_SETTINGS_DIR)
+  // trustedFolders.json — getTrustedFoldersPath (USER_SETTINGS_DIR)
+  // skills — Storage.getUserSkillsDir() = <configDir>/skills
+  'welcomeConfig.json',
+  'trustedFolders.json',
+  'skills',
 ]);
 
 const DATA_ENTRIES = new Set([
@@ -78,7 +86,7 @@ const TMP_SKILLS_DIR = 'skills';
 
 const MIGRATION_MARKER_FILE = '.migration-complete.json';
 
-const MIGRATION_MARKER_VERSION = 1;
+export const MIGRATION_MARKER_VERSION = 1;
 
 const REPAIR_MARKER_FILE = '.profile-repair-complete.json';
 
@@ -309,8 +317,20 @@ function copyLegacyEntries(
   visited: Set<string>,
   errors: string[],
 ): number {
+  // Process entries in a deterministic, name-sorted order. Copy semantics are
+  // no-overwrite (COPYFILE_EXCL), so for a same-named collision the FIRST
+  // source to publish wins. Sorting guarantees the top-level `skills/` config
+  // entry is copied before the `tmp/` directory (whose `migrateTmpDir` routes
+  // `tmp/skills/` to the same `<config>/skills` destination), so an explicit
+  // precedence is defined: top-level `skills/` wins over `tmp/skills/`
+  // (#3081). Investigation: historically skills lived ONLY under
+  // `tmp/skills/` (a documented misplacement — skills are user configuration,
+  // not temporary state); no top-level legacy skills directory existed. The
+  // top-level `skills` CONFIG_ENTRIES entry is still correct because the
+  // canonical reader is `Storage.getUserSkillsDir()` = `<config>/skills`.
+  const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
   let filesCopied = 0;
-  for (const entry of entries) {
+  for (const entry of sorted) {
     const category = categorizeEntry(entry.name);
     if (category === 'exclude') {
       continue;

@@ -24,7 +24,7 @@
  * assertions pass with no rewrite.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '../../testApi.js';
 import fc from 'fast-check';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';

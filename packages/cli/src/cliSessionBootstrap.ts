@@ -206,6 +206,11 @@ async function releaseResumedResources(
  */
 function setupObservation(config: Config): void {
   const projectRoot = config.getProjectRoot();
+  // loadBootstrapFromEnv disables observation (one stderr warning, startup
+  // continues) when the bootstrap file cannot be read, but still fails fast
+  // (FatalConfigError, exit 52) on a file that reads but is malformed,
+  // insecure, or version-mismatched. Recording cleanup is registered above,
+  // so the process exits cleanly on either path.
   initializeObservationProducer({
     repository: basename(projectRoot),
     path: projectRoot,

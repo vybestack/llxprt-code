@@ -45,6 +45,7 @@ import {
 import {
   buildToolResponsePayload,
   EMPTY_TOOL_RESULT_PLACEHOLDER,
+  type ToolResponsePayload,
 } from '../utils/toolResponsePayload.js';
 import type { ToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import {
@@ -231,6 +232,23 @@ function convertAiContent(
   }
 }
 
+function buildToolResultOutput(
+  payload: ToolResponsePayload,
+): Extract<ToolResultPart['output'], { type: 'text' | 'error-text' }> {
+  if (payload.status === 'error') {
+    // A failure must never reach the model as the bare empty-result placeholder
+    // with no explanation: fall back to the error text in that case (issue #3076).
+    return {
+      type: 'error-text',
+      value:
+        payload.result === EMPTY_TOOL_RESULT_PLACEHOLDER
+          ? (payload.error ?? payload.result)
+          : payload.result,
+    };
+  }
+  return { type: 'text', value: payload.result };
+}
+
 function convertToolContent(
   messages: CoreMessage[],
   content: IContent,
@@ -254,10 +272,7 @@ function convertToolContent(
       type: 'tool-result' as const,
       toolCallId: resolveToolResponseId(block),
       toolName: firstTruthyString(extBlock.name, extBlock.toolName),
-      output: {
-        type: 'text',
-        value: payload.result,
-      },
+      output: buildToolResultOutput(payload),
     };
   });
 

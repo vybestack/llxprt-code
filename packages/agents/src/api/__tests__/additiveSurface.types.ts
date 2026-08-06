@@ -9,13 +9,13 @@
  * "**\/*.test.ts" and "**\/*.spec.ts" file, so `tsc --noEmit` (npm run
  * typecheck) NEVER compiles them. Compile anchors placed in a ".test.ts" file
  * are therefore VACUOUS — a removed/renamed projected type or a changed
- * sub-controller signature would slip through typecheck silently (and vitest
+ * sub-controller signature would slip through typecheck silently (and the runner
  * strips types at runtime). To make the compile-time half of the fence
  * LOAD-BEARING, the anchors live here with a ".types.ts" suffix (no ".test"/
  * ".spec" infix) so the workspace tsconfig DOES compile them. This file is:
  *   - typecheck-VISIBLE  (tsconfig.json excludes only *.test.ts / *.spec.ts),
  *   - build-EXCLUDED     (tsconfig.build.json excludes src/**\/__tests__/**),
- *   - vitest-IGNORED     (the default matcher targets *.test. / *.spec. files).
+ *   - RUNNER-IGNORED     (discovery targets *.test. / *.spec. files).
  * The sibling publicSurface.nonbreaking.test.ts holds all RUNTIME assertions.
  * This mirrors the established contractPromotion.types.ts precedent.
  *

@@ -673,6 +673,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+- **`security.disableOsKeyring`** (boolean):
+  - **Description:** Disable use of the OS keyring/keychain for credential storage and use the encrypted file fallback. Can also be set with the LLXPRT_DISABLE_OS_KEYRING=1 environment variable.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
 - **`security.enablePermanentToolApproval`** (boolean):
   - **Description:** Enable the "Allow for all future sessions" option in tool confirmation dialogs.
   - **Default:** `false`
@@ -1667,6 +1672,13 @@ The CLI automatically loads environment variables from `.env` files. The loading
 3. `<config>/.env` (user-level — see [Application Directories](../reference/application-directories.md))
 
 String values in `settings.json` can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax.
+
+### Agent observation variables (`LLXPRT_JSP_BOOTSTRAP_FILE`, `LLXPRT_JSP_NO_CONTENT`)
+
+These optional variables enable agent-observation and status reporting to a supervising process (for example, a session manager that surfaces agent state in an external UI). They are normally written by that supervisor — not set by hand — and are inherited by descendant processes.
+
+- **`LLXPRT_JSP_BOOTSTRAP_FILE`**: Absolute path to a JSP bootstrap file describing the observation endpoint. When the file **cannot be read** (it is missing, is a directory, or is unreadable for any reason), observation is disabled and the CLI prints a single warning to **stderr** naming the variable, the path, and the errno code, then continues normally. This keeps `stdout` clean for `-p` piping and lets a stale inherited pointer (which outlives the session that wrote the file) degrade gracefully. When the file **exists but is wrong** — malformed JSON, an endpoint that is not a loopback address, or an unsupported protocol version — startup **aborts with exit code 52 on purpose**, because an operator deliberately wrote that file for this run.
+- **`LLXPRT_JSP_NO_CONTENT`**: Set to `true` or `1` to suppress assistant message text in the published observation documents while preserving status fields and timestamps.
 
 ## Shell History
 

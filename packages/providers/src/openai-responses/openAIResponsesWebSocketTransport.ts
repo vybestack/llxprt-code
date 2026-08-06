@@ -36,6 +36,12 @@ export interface WebSocketTransport {
   close(): void;
 }
 
+export interface SocketCloseInfo {
+  readonly code?: number;
+  readonly reason?: string;
+  readonly wasClean?: boolean;
+}
+
 export interface TransportSocket {
   readonly readyState: number;
   readonly CONNECTING: number;
@@ -44,7 +50,7 @@ export interface TransportSocket {
   close(): void;
   onOpen(listener: () => void): () => void;
   onMessage(listener: (data: unknown) => void): () => void;
-  onClose(listener: () => void): () => void;
+  onClose(listener: (info: SocketCloseInfo) => void): () => void;
   onError(listener: () => void): () => void;
 }
 
@@ -56,15 +62,37 @@ export type OpenTransportSocket = (
 interface WebSocketTransportConfig {
   readonly logger?: TransportLogger;
   readonly openSocket?: OpenTransportSocket;
+  /**
+   * Per-connection handshake (open) timeout. Defaults to
+   * {@link HANDSHAKE_TIMEOUT_MS}. Exposed so tests can exercise the timeout
+   * path without waiting the full production duration.
+   */
+  readonly handshakeTimeoutMs?: number;
 }
 
-const HANDSHAKE_TIMEOUT_MS = 10_000;
-const TERMINAL_EVENT_TYPES = new Set([
+// Matches the Codex client's default WebSocket connect timeout
+// (websocket_connect_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
+const HANDSHAKE_TIMEOUT_MS = 15_000;
+// The parser yields terminal-metadata IContent for these, so a later close
+// must not replace them with a generic interruption error.
+const ACCEPTED_TERMINAL_EVENT_TYPES = new Set([
   'response.completed',
+  'response.done',
   'response.incomplete',
+]);
+// Still queued so the parser raises its own specific provider error.
+const PROTOCOL_FAILURE_TERMINAL_EVENT_TYPES = new Set([
   'response.failed',
   'error',
 ]);
+
+function isTerminalEventType(type: string | undefined): boolean {
+  return (
+    type !== undefined &&
+    (ACCEPTED_TERMINAL_EVENT_TYPES.has(type) ||
+      PROTOCOL_FAILURE_TERMINAL_EVENT_TYPES.has(type))
+  );
+}
 
 function eventType(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
@@ -168,8 +196,17 @@ class UndiciTransportSocket implements TransportSocket {
     return () => this.socket.removeEventListener('message', handler);
   }
 
-  onClose(listener: () => void): () => void {
-    const handler = (): void => listener();
+  onClose(listener: (info: SocketCloseInfo) => void): () => void {
+    const handler = (event: {
+      readonly code: number;
+      readonly reason: string;
+      readonly wasClean: boolean;
+    }): void =>
+      listener({
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
     this.socket.addEventListener('close', handler);
     return () => this.socket.removeEventListener('close', handler);
   }
@@ -208,15 +245,19 @@ class RequestFrameSource {
     | undefined;
   private ended = false;
   private failure: Error | undefined;
-  private completed = false;
+  private receivedTerminal = false;
+  private acceptedTerminal = false;
   private readonly detachListeners: () => void;
   private readonly detachAbort: () => void;
+  private readonly logger: TransportLogger | undefined;
 
   constructor(
     socket: TransportSocket,
     abortSignal: AbortSignal | undefined,
     onResponseEvent: (() => void) | undefined,
+    logger: TransportLogger | undefined,
   ) {
+    this.logger = logger;
     const detachMessage = socket.onMessage((data) => {
       if (this.ended) return;
       if (typeof data !== 'string') {
@@ -240,22 +281,31 @@ class RequestFrameSource {
         );
         return;
       }
-      onResponseEvent?.();
-      this.completed = frame.type === 'response.completed';
       this.queue.push(frame.data);
-      if (frame.type !== undefined && TERMINAL_EVENT_TYPES.has(frame.type)) {
+      if (isTerminalEventType(frame.type)) {
+        this.receivedTerminal = true;
+        if (
+          frame.type !== undefined &&
+          ACCEPTED_TERMINAL_EVENT_TYPES.has(frame.type)
+        ) {
+          this.acceptedTerminal = true;
+        }
         this.ended = true;
       }
       this.drain();
+      this.notifyResponseEvent(onResponseEvent);
     });
-    const detachClose = socket.onClose(() => {
-      if (!this.completed) {
-        this.fail(
-          createStreamInterruptionError(
-            'Codex Responses WebSocket closed before response.completed',
-          ),
-        );
-      }
+    const detachClose = socket.onClose((info) => {
+      this.logger?.debug(
+        () =>
+          `Codex Responses WebSocket closed: code=${info.code ?? 'n/a'}, reason=${info.reason ?? 'n/a'}, wasClean=${info.wasClean ?? 'n/a'}`,
+      );
+      this.fail(
+        createStreamInterruptionError(
+          'Codex Responses WebSocket closed before response.completed',
+          { closeInfo: info },
+        ),
+      );
     });
     const detachError = socket.onError(() => {
       this.fail(
@@ -281,14 +331,37 @@ class RequestFrameSource {
     }
   }
 
-  didComplete(): boolean {
-    return this.completed;
+  didReceiveAcceptedTerminal(): boolean {
+    return this.acceptedTerminal;
+  }
+
+  // Observational only: invoked after the frame is committed and the waiter is
+  // settled, so a throwing or aborting callback cannot corrupt internal state.
+  private notifyResponseEvent(onResponseEvent: (() => void) | undefined): void {
+    if (onResponseEvent === undefined) return;
+    try {
+      onResponseEvent();
+    } catch (error) {
+      this.logger?.debug(
+        () =>
+          `Codex Responses onResponseEvent callback failed: ${String(error)}`,
+      );
+    }
+  }
+
+  // Throws a recorded failure before each yield so a failure observed while
+  // the parser worked cannot cross the output boundary.
+  throwIfFailed(): void {
+    if (this.failure !== undefined) throw this.failure;
   }
 
   next(): Promise<FrameResult> {
+    // Failure takes precedence over queued frames. Failure and terminal are
+    // mutually exclusive: fail() is a no-op once a terminal arrived, and
+    // intake ends on either outcome.
+    if (this.failure !== undefined) return Promise.reject(this.failure);
     const value = this.queue.shift();
     if (value !== undefined) return Promise.resolve({ done: false, value });
-    if (this.failure !== undefined) return Promise.reject(this.failure);
     if (this.ended) return Promise.resolve({ done: true, value: '' });
     return new Promise<FrameResult>((resolve, reject) => {
       this.waiting = { resolve, reject };
@@ -303,7 +376,9 @@ class RequestFrameSource {
   }
 
   private fail(error: Error): void {
-    if (this.ended && this.completed) return;
+    // First outcome wins: a terminal frame or recorded failure cannot be
+    // replaced by a later close/error/abort.
+    if (this.receivedTerminal || this.failure !== undefined) return;
     this.failure = error;
     this.ended = true;
     this.drain();
@@ -311,11 +386,17 @@ class RequestFrameSource {
 
   private drain(): void {
     if (this.waiting === undefined) return;
+    if (this.failure === undefined && this.queue.length === 0 && !this.ended) {
+      return;
+    }
     const waiting = this.waiting;
     this.waiting = undefined;
+    if (this.failure !== undefined) {
+      waiting.reject(this.failure);
+      return;
+    }
     const value = this.queue.shift();
     if (value !== undefined) waiting.resolve({ done: false, value });
-    else if (this.failure !== undefined) waiting.reject(this.failure);
     else waiting.resolve({ done: true, value: '' });
   }
 }
@@ -343,27 +424,16 @@ function createResponseByteStream(
   });
 }
 
-function createResponseEventTracker(): {
-  readonly observe: () => void;
-  readonly wasObserved: () => boolean;
-} {
-  let observed = false;
-  return {
-    observe: () => {
-      observed = true;
-    },
-    wasObserved: () => observed,
-  };
-}
-
 class CodexResponsesWebSocketTransport implements WebSocketTransport {
   private active: LiveConnection | undefined;
   private requestQueue: Promise<void> = Promise.resolve();
 
   private readonly openSocket: OpenTransportSocket;
+  private readonly handshakeTimeoutMs: number;
 
   constructor(private readonly config: WebSocketTransportConfig) {
     this.openSocket = config.openSocket ?? openUndiciSocket;
+    this.handshakeTimeoutMs = config.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
   }
 
   async *streamResponse(
@@ -381,9 +451,18 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         socket,
         options.abortSignal,
         options.onResponseEvent,
+        this.config.logger,
       );
       try {
         throwIfAborted(options.abortSignal);
+        // A close in the gap between handshake listener removal and source
+        // attachment is unobserved; undici send silently no-ops on
+        // CLOSING/CLOSED, so require OPEN to avoid a hang.
+        if (socket.readyState !== socket.OPEN) {
+          throw createStreamInterruptionError(
+            'Codex Responses WebSocket closed before the request was sent',
+          );
+        }
         socket.send(JSON.stringify({ ...request, type: 'response.create' }));
         for await (const message of parseResponsesStream(
           createResponseByteStream(source),
@@ -393,11 +472,12 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
             onStreamLiveness: options.onStreamLiveness,
           },
         )) {
+          source.throwIfFailed();
           yield message;
         }
-        if (!source.didComplete()) {
+        if (!source.didReceiveAcceptedTerminal()) {
           throw createStreamInterruptionError(
-            'Codex Responses WebSocket ended before response.completed',
+            'Codex Responses WebSocket ended before a terminal response event',
           );
         }
         completed = true;
@@ -478,8 +558,9 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         else reject(result.error);
       };
       const fail = (error: Error): void => {
-        this.closeSocket(socket);
+        // Settle before closing so a synchronous close dispatch cannot win.
         finish({ error });
+        this.closeSocket(socket);
       };
       const timeout = setTimeout(
         () =>
@@ -488,17 +569,17 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
               'Codex Responses WebSocket handshake timed out',
             ),
           ),
-        HANDSHAKE_TIMEOUT_MS,
+        this.handshakeTimeoutMs,
       );
       const onAbort = (): void => fail(createAbortError(abortSignal?.reason));
       removers.push(socket.onOpen(() => finish({ socket })));
       removers.push(
         socket.onError(() =>
-          finish({
-            error: createStreamInterruptionError(
+          fail(
+            createStreamInterruptionError(
               'Codex Responses WebSocket handshake failed',
             ),
-          }),
+          ),
         ),
       );
       removers.push(
@@ -510,7 +591,14 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
           }),
         ),
       );
-      abortSignal?.addEventListener('abort', onAbort, { once: true });
+      if (abortSignal !== undefined) {
+        abortSignal.addEventListener('abort', onAbort, { once: true });
+        // Per the DOM spec, a listener added to an ALREADY-aborted signal is
+        // never invoked, so this is not a double-invocation. The re-check
+        // covers an abort that lands between the early `aborted` check at the
+        // top of open() and listener registration above.
+        if (abortSignal.aborted) onAbort();
+      }
     });
   }
 
@@ -549,18 +637,30 @@ export async function* streamOverWebSocketOrFallback(
   fallbackStream: () => AsyncIterableIterator<IContent>,
   onFallback: (() => void) | undefined,
   logger: TransportLogger | undefined,
+  onSuccess: (() => void) | undefined = undefined,
 ): AsyncIterableIterator<IContent> {
-  const responseEvents = createResponseEventTracker();
+  // The only safe recovery boundary is the point at which an IContent is
+  // yielded downstream.
+  let contentYielded = false;
   try {
-    yield* transport.streamResponse(request, {
-      ...streamOptions,
-      onResponseEvent: responseEvents.observe,
-    });
+    for await (const message of transport.streamResponse(
+      request,
+      streamOptions,
+    )) {
+      contentYielded = true;
+      yield message;
+    }
+    // A clean completion means the WebSocket served the whole response, so the
+    // provider can reset its consecutive-failure counter (mirrors the Codex
+    // client treating a successful stream as proof the transport is healthy).
+    onSuccess?.();
   } catch (error) {
-    if (
-      responseEvents.wasObserved() ||
-      (error instanceof Error && error.name === 'AbortError')
-    ) {
+    // Abort always wins and never falls back, regardless of yielded content.
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+    // Never replay after any IContent has reached the consumer.
+    if (contentYielded) {
       throw error;
     }
     onFallback?.();

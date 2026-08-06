@@ -53,6 +53,13 @@ on:
           false
           # Remove API provider inputs - these will come from repository secrets/variables
 
+# All releases serialize globally regardless of the dispatched ref because a
+# release mutates global npm, registry, and release state. Cancellation stays
+# disabled so an in-flight publish is never killed part-way.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest

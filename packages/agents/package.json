@@ -37,9 +37,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "pretest": "bun ../../scripts/check-agents-api-surface.ts",
-    "test": "vitest run",
-    "test:ci": "vitest run",
-    "test:mutation:api": "stryker run stryker.conf.json",
+    "test": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
+    "test:ci": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
     "typecheck": "tsc --noEmit"
   },
   "files": [
@@ -68,13 +67,10 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
-    "@stryker-mutator/core": "^9.6.1",
-    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^24.2.1",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
     "fast-check": "^4.2.0",
-    "typescript": "^5.3.3",
-    "vitest": "^3.2.6"
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=24"

@@ -18,7 +18,7 @@ export interface HttpError extends Error {
   status?: number;
 }
 
-const RETRYABLE_STATUS_CODES = new Set([401, 403, 429]);
+const RETRYABLE_STATUS_CODES = new Set([401, 429]);
 
 function isRetryableStatus(status: number): boolean {
   return RETRYABLE_STATUS_CODES.has(status) || (status >= 500 && status < 600);
@@ -238,7 +238,9 @@ export function isNetworkTransientError(error: unknown): boolean {
  *    (centralized in isNetworkTransientError)
  * 2. RetryableQuotaError → retry
  * 3. Anthropic body-level errors (overloaded_error, rate_limit_error, api_error, no HTTP status) → retry
- * 4. Generic status 401/403/429 or 5xx → retry; 400 → NEVER retry
+ * 4. Generic status 401/429 or 5xx → retry; 403 → NEVER retry by status (a
+ *    403 "forbidden" is a terminal auth/config problem, not a throttle, so
+ *    blind status-based retry only stalls; issue #2917). 400 → NEVER retry
  * 5. All others → do not retry
  *
  * @param error The error object.
@@ -347,7 +349,7 @@ function updateErrorCounters(
   is429: boolean,
   isAuthError: boolean,
   is500: boolean,
-  canAttemptFailover: boolean,
+  canRecoverFromAuthError: boolean,
   failoverThreshold: number,
   state: RetryLoopState,
   logger: DebugLogger,
@@ -370,7 +372,7 @@ function updateErrorCounters(
     is500 && !is429 && !isAuthError ? state.consecutiveServerErrors + 1 : 0;
 
   const shouldAttemptRefreshRetry =
-    isAuthError && canAttemptFailover && state.consecutiveAuthErrors === 1;
+    isAuthError && canRecoverFromAuthError && state.consecutiveAuthErrors === 1;
   return { shouldAttemptRefreshRetry };
 }
 
@@ -696,7 +698,14 @@ async function handleRetryFailure(
     classified.is429,
     classified.isAuthError,
     classified.is500,
-    context.options?.onPersistent429 !== undefined,
+    // The onPersistent429-driven allowance is left unconditional (issue #1123:
+    // a 403 must still get one refresh retry before bucket failover). The
+    // onAuthError-driven allowance is budget-guarded to match
+    // invokeAuthErrorCallback, which skips when attempt >= maxAttempts: granting
+    // a refresh retry with no attempt left only burns a backoff cycle (issue #2917).
+    context.options?.onPersistent429 !== undefined ||
+      (context.options?.onAuthError !== undefined &&
+        state.attempt < context.maxAttempts),
     context.failoverThreshold,
     state,
     context.logger,

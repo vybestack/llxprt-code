@@ -187,21 +187,29 @@ Type checking uses `tsc --noEmit`:
 bun run typecheck
 ```
 
-#### Bun-backed Test Orchestration
+#### The canonical test command
 
-The project also provides a Bun-backed root test entry point that preserves
-the same coverage and setup guarantees as `npm run test` (issue #2463):
+One command runs the complete suite:
 
 ```bash
 bun run test:bun
 ```
 
 This script (`scripts/test.ts`) orchestrates testing across all workspace
-packages using Bun as the runtime. Each workspace's tests still run under
-Vitest — not Bun's native test runner — so all Vitest-specific APIs
-(`vi.stubEnv`, `vi.unstubAllEnvs`, `vi.mocked`, `vi.setSystemTime`,
-`it.runIf`, etc.) and per-package `vitest.config.ts` configuration remain
-fully available.
+packages using Bun as the runtime, then runs the script harness. Migrated
+workspaces execute under **Bun's native test runner** via
+`scripts/run_bun_tests.ts` (one isolated process per test file); the
+workspaces still finishing their migration run under Vitest, with the
+Vitest-compatibility shim (`test-setup/augment-bun-vi.ts`) supplying the
+`vi.*` and `it.*` helpers Bun lacks.
+
+Two roots are excluded from that run because they call a real provider and
+consume quota — run them explicitly when you have credentials:
+
+```bash
+npm run test:integration:sandbox:none
+npm run test:all_evals
+```
 
 The script explicitly runs each workspace's `pretest` lifecycle hook before
 its test phase (npm does this automatically; Bun does not), so the agents
