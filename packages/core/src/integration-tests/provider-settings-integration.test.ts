@@ -2,7 +2,7 @@
  * Integration tests for Phase 12: Provider Settings Integration
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
@@ -61,7 +61,7 @@ describe('Provider Settings Integration', () => {
         {
           settingsService,
           runtimeId: `provider.settings.integration.${name}`,
-          metadata: { source: 'provider-settings-integration.spec.ts' },
+          metadata: { source: 'provider-settings-integration.test.ts' },
         },
       ).provider;
 
@@ -154,16 +154,9 @@ describe('Provider Settings Integration', () => {
     // Provider methods should work properly with SettingsService
     const provider = instantiateProvider('test-compat');
 
-    // These should work with SettingsService integration
-    let error: unknown;
-    try {
-      await provider.getModelFromSettings();
-      await provider.getApiKeyFromSettings();
-      await provider.getBaseUrlFromSettings();
-      await provider.getModelParamsFromSettings();
-    } catch (caught) {
-      error = caught;
-    }
-    expect(error).toBeUndefined();
+    await provider.getModelFromSettings();
+    await provider.getApiKeyFromSettings();
+    await provider.getBaseUrlFromSettings();
+    await provider.getModelParamsFromSettings();
   });
 });

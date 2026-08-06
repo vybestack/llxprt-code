@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import {
   OAuthError,
   OAuthErrorFactory,
@@ -12,8 +12,16 @@ import {
   OAuthErrorCategory,
   RetryHandler,
   GracefulErrorHandler,
-  DEFAULT_RETRY_CONFIG,
 } from '../oauth-errors.js';
+import type { OAuthLogger } from '../oauth-errors.js';
+
+function serviceUnavailable(): OAuthError {
+  return new OAuthError(
+    OAuthErrorType.SERVICE_UNAVAILABLE,
+    'test-provider',
+    'temporarily unavailable',
+  );
+}
 
 describe('OAuthError', () => {
   it('should create error with proper classification', () => {
@@ -308,16 +316,24 @@ describe('OAuthErrorFactory', () => {
 });
 
 describe('RetryHandler', () => {
+  const silentLogger: OAuthLogger = {
+    debug() {},
+    error() {},
+  };
+
   let retryHandler: RetryHandler;
 
   beforeEach(() => {
-    retryHandler = new RetryHandler({
-      maxAttempts: 3,
-      baseDelayMs: 0,
-      backoffMultiplier: 1,
-      maxDelayMs: 0,
-      jitter: false, // Disable jitter for predictable tests
-    });
+    retryHandler = new RetryHandler(
+      {
+        maxAttempts: 5,
+        baseDelayMs: 1000,
+        backoffMultiplier: 2,
+        maxDelayMs: 5000,
+        jitter: false,
+      },
+      silentLogger,
+    );
   });
 
   it('should succeed on first attempt', async () => {
@@ -332,32 +348,150 @@ describe('RetryHandler', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
-  it('should retry transient errors with exponential backoff', async () => {
-    // Use a retry handler with no delay to avoid timing issues
-    const testRetryHandler = new RetryHandler({
-      maxAttempts: 3,
-      baseDelayMs: 0,
-      backoffMultiplier: 1,
-      maxDelayMs: 0,
-      jitter: false,
-    });
+  it('retries transient errors at exact exponential-backoff boundaries', async () => {
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(serviceUnavailable())
+      .mockRejectedValueOnce(serviceUnavailable())
+      .mockResolvedValueOnce('success');
 
-    let attempts = 0;
-    const operation = vi.fn().mockImplementation(async () => {
-      attempts++;
-      if (attempts < 3) {
-        throw OAuthErrorFactory.networkError('test-provider');
-      }
-      return 'success';
-    });
+    vi.useFakeTimers();
+    try {
+      const result = retryHandler.executeWithRetry(operation, 'test-provider');
+      result.catch(() => {});
 
-    const result = await testRetryHandler.executeWithRetry(
-      operation,
-      'test-provider',
+      await vi.advanceTimersByTimeAsync(0);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(operation).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(3);
+
+      await expect(result).resolves.toBe('success');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('caps later retry delays at maxDelayMs and proves every exact delay boundary', async () => {
+    const operation = vi.fn().mockRejectedValue(serviceUnavailable());
+
+    vi.useFakeTimers();
+    try {
+      const result = retryHandler.executeWithRetry(operation, 'test-provider');
+      result.catch(() => {});
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(operation).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(operation).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(operation).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(4);
+
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(operation).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(5);
+
+      await expect(result).rejects.toBeInstanceOf(OAuthError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries at the explicit retryAfterMs boundary', async () => {
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(OAuthErrorFactory.rateLimited('test-provider', 2))
+      .mockResolvedValueOnce('success');
+
+    vi.useFakeTimers();
+    try {
+      const result = retryHandler.executeWithRetry(operation, 'test-provider');
+      result.catch(() => {});
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(2);
+
+      await expect(result).resolves.toBe('success');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('applies jitter across the documented 50%-100% delay range', async () => {
+    const jitterRetryHandler = new RetryHandler(
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1000,
+        backoffMultiplier: 1,
+        maxDelayMs: 5000,
+        jitter: true,
+      },
+      silentLogger,
     );
+    const operation = vi
+      .fn()
+      .mockRejectedValueOnce(serviceUnavailable())
+      .mockRejectedValueOnce(serviceUnavailable())
+      .mockResolvedValueOnce('success');
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0);
+    randomSpy.mockReturnValueOnce(0.99);
 
-    expect(result).toBe('success');
-    expect(operation).toHaveBeenCalledTimes(3);
+    vi.useFakeTimers();
+    try {
+      const result = jitterRetryHandler.executeWithRetry(
+        operation,
+        'test-provider',
+      );
+      result.catch(() => {});
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(499);
+      expect(operation).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(994);
+      expect(operation).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(operation).toHaveBeenCalledTimes(3);
+
+      await expect(result).resolves.toBe('success');
+    } finally {
+      vi.useRealTimers();
+      randomSpy.mockRestore();
+    }
   });
 
   it('should not retry non-transient errors', async () => {
@@ -373,45 +507,22 @@ describe('RetryHandler', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
-  it('should respect specific retry delays from errors', async () => {
-    let attempts = 0;
-    const operation = vi.fn().mockImplementation(async () => {
-      attempts++;
-      if (attempts === 1) {
-        throw OAuthErrorFactory.rateLimited('test-provider', 2); // 2 second delay
-      }
-      return 'success';
-    });
+  it('fails after exhausting the maximum number of attempts', async () => {
+    const operation = vi.fn().mockRejectedValue(serviceUnavailable());
 
-    // retryAfterMs from the error is capped by maxDelayMs: 0, so this completes
-    // without real delay.
-    const result = await retryHandler.executeWithRetry(
-      operation,
-      'test-provider',
-    );
+    vi.useFakeTimers();
+    try {
+      const result = retryHandler.executeWithRetry(operation, 'test-provider');
+      result.catch(() => {});
 
-    expect(result).toBe('success');
-    expect(operation).toHaveBeenCalledTimes(2);
-  });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(100000);
 
-  it('should fail after max attempts', async () => {
-    // Use a retry handler with no delay to avoid timing issues
-    const testRetryHandler = new RetryHandler({
-      maxAttempts: 3,
-      baseDelayMs: 0,
-      backoffMultiplier: 1,
-      maxDelayMs: 0,
-      jitter: false,
-    });
-
-    const operation = vi
-      .fn()
-      .mockRejectedValue(OAuthErrorFactory.networkError('test-provider'));
-
-    await expect(
-      testRetryHandler.executeWithRetry(operation, 'test-provider'),
-    ).rejects.toThrow('Network error');
-    expect(operation).toHaveBeenCalledTimes(3); // Initial + 2 retries
+      expect(operation).toHaveBeenCalledTimes(5);
+      await expect(result).rejects.toBeInstanceOf(OAuthError);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should convert non-OAuth errors to OAuth errors', async () => {
@@ -419,25 +530,6 @@ describe('RetryHandler', () => {
 
     await expect(
       retryHandler.executeWithRetry(operation, 'test-provider'),
-    ).rejects.toBeInstanceOf(OAuthError);
-  });
-
-  it('should apply jitter when enabled', async () => {
-    const retryHandlerWithJitter = new RetryHandler({
-      ...DEFAULT_RETRY_CONFIG,
-      baseDelayMs: 0,
-      maxDelayMs: 0,
-      jitter: true,
-    });
-
-    const operation = vi
-      .fn()
-      .mockRejectedValue(OAuthErrorFactory.networkError('test-provider'));
-
-    // We can't easily test the exact jitter values, but we can verify it
-    // eventually rejects after retries without crashing.
-    await expect(
-      retryHandlerWithJitter.executeWithRetry(operation, 'test-provider'),
     ).rejects.toBeInstanceOf(OAuthError);
   });
 });
