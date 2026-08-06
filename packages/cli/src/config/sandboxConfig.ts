@@ -376,6 +376,21 @@ function validateExplicitSandboxCommand(
   );
 }
 
+function sandboxEngineGuidance(source: SandboxSource): string {
+  switch (source) {
+    case '--sandbox':
+      return 'specify the engine with --sandbox-engine';
+    case 'LLXPRT_SANDBOX':
+      return 'set LLXPRT_SANDBOX to docker, podman, or sandbox-exec';
+    case 'settings.sandbox':
+      return 'set settings.sandbox to docker, podman, or sandbox-exec';
+    default: {
+      const exhaustiveSource: never = source;
+      throw new Error(`Unsupported sandbox source: ${exhaustiveSource}`);
+    }
+  }
+}
+
 function pickRequestedSandboxCommand(
   source: SandboxSource,
 ): SandboxConfig['command'] | '' {
@@ -390,7 +405,7 @@ function pickRequestedSandboxCommand(
   }
   throw new FatalSandboxError(
     `${source} is true but failed to determine command for sandbox; ` +
-      'install docker or podman or specify the engine with --sandbox-engine',
+      `install docker or podman, or ${sandboxEngineGuidance(source)}`,
   );
 }
 

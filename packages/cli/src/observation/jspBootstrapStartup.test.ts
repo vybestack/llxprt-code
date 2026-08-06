@@ -60,7 +60,7 @@ async function writeTempFile(name: string, content: string): Promise<string> {
 
 async function cleanupTempDirs(): Promise<void> {
   const dirs = tempDirs.splice(0);
-  await Promise.allSettled(
+  await Promise.all(
     dirs.map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 }
@@ -451,6 +451,9 @@ describe('startup ordering — capture at first line of main()', () => {
     'utf8',
   );
   const mainStart = cliSource.indexOf('export async function main()');
+  if (mainStart === -1) {
+    throw new Error('cli.tsx does not export main()');
+  }
   const mainBody = cliSource.slice(mainStart);
 
   it('cli.tsx calls captureBootstrapEnvPath', () => {
@@ -493,20 +496,23 @@ describe('setupObservation seam — cliSessionBootstrap → observation wiring (
   let losingTimeout: ReturnType<typeof setTimeout> | null = null;
 
   afterEach(async () => {
-    await stopObservationProducer();
-    if (losingTimeout !== null) {
-      clearTimeout(losingTimeout);
-      losingTimeout = null;
-    }
-    await new Promise<void>((resolve) => {
-      if (captureServer === null) {
-        resolve();
-        return;
+    try {
+      await stopObservationProducer();
+    } finally {
+      if (losingTimeout !== null) {
+        clearTimeout(losingTimeout);
+        losingTimeout = null;
       }
-      captureServer.close(() => resolve());
-      captureServer = null;
-    });
-    await cleanupTempDirs();
+      await new Promise<void>((resolve) => {
+        if (captureServer === null) {
+          resolve();
+          return;
+        }
+        captureServer.close(() => resolve());
+        captureServer = null;
+      });
+      await cleanupTempDirs();
+    }
   });
 
   it('drives setupObservation → initializeObservationProducer with a real producer (real HTTP)', async () => {
@@ -520,8 +526,12 @@ describe('setupObservation seam — cliSessionBootstrap → observation wiring (
       resolveRequest(req);
     });
     captureServer = server;
-    await new Promise<void>((resolve) => {
-      server.listen(0, '127.0.0.1', () => resolve());
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.removeListener('error', reject);
+        resolve();
+      });
     });
     const address = server.address();
     const port =

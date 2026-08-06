@@ -177,18 +177,31 @@ describe('sandbox precedence (issue #3083)', () => {
     expect(error.message).toContain('(from settings.sandbox)');
   });
 
-  it('AC8: auto-detect failure names --sandbox when the flag enabled it', async () => {
+  it('AC8: auto-detect failure names --sandbox and its engine flag', async () => {
     enginesAvailable();
     const error = await expectFatalSandbox(makeSettings(undefined), {
       sandbox: true,
     });
     expect(error.message).toContain('--sandbox');
+    expect(error.message).toContain('--sandbox-engine');
   });
 
-  it('AC8: auto-detect failure names LLXPRT_SANDBOX when env enabled it', async () => {
+  it('AC8: auto-detect failure names LLXPRT_SANDBOX and env guidance', async () => {
     enginesAvailable();
     process.env.LLXPRT_SANDBOX = 'true';
     const error = await expectFatalSandbox(makeSettings(undefined), {});
     expect(error.message).toContain('LLXPRT_SANDBOX');
+    expect(error.message).toContain(
+      'set LLXPRT_SANDBOX to docker, podman, or sandbox-exec',
+    );
+  });
+
+  it('AC8: auto-detect failure names settings.sandbox and settings guidance', async () => {
+    enginesAvailable();
+    const error = await expectFatalSandbox(makeSettings(true), {});
+    expect(error.message).toContain('settings.sandbox');
+    expect(error.message).toContain(
+      'set settings.sandbox to docker, podman, or sandbox-exec',
+    );
   });
 });
