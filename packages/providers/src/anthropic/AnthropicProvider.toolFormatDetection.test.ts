@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { AnthropicProvider } from './AnthropicProvider.js';
 

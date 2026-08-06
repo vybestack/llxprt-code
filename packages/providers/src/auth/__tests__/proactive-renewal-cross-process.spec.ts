@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
 import { executeTokenRefresh } from '../token-refresh-helper.js';
 import type { OAuthToken, OAuthProvider, TokenStore } from '../types.js';

@@ -9,7 +9,7 @@ import { render } from '../../test-utils/render.js';
 import { useAnimatedScrollbar } from './useAnimatedScrollbar.js';
 import { debugState } from '../debug.js';
 import { theme } from '../semantic-colors.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 
 const TestComponent = ({ isFocused = false }: { isFocused?: boolean }) => {
   useAnimatedScrollbar(isFocused, () => {});

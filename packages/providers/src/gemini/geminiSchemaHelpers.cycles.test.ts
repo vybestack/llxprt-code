@@ -12,7 +12,7 @@
  * @pseudocode lines 80-88
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { cleanGeminiSchema } from './geminiSchemaHelpers.js';
 import { sortedJson } from './__tests__/sortedJson.js';

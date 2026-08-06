@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { TemplateEngine } from './TemplateEngine.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {

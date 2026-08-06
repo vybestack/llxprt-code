@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildUIState, type UIStateParams } from './buildUIState.js';
 import { StreamingState } from '../../../types.js';
 import type { CommandContext } from '../../../commands/types.js';

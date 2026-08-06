@@ -16,7 +16,7 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   GithubTool,
   MUTATING_OPS,

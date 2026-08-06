@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { escapeRegex, buildArgsPatterns } from './utils.js';
 
 // Static regex literal for matching JSON-serialized dir_path values containing

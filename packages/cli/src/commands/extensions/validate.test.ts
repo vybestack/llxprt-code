@@ -13,7 +13,7 @@ import {
   beforeEach,
   afterEach,
   type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import { handleValidate, validateCommand } from './validate.js';
 import yargs from 'yargs';
 import { createExtension } from '../../test-utils/createExtension.js';

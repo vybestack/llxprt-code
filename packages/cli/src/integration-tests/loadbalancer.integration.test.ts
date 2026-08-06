@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';

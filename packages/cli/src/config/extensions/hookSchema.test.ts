@@ -13,7 +13,7 @@
  * string). Invalid event names and malformed definitions are rejected.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { validateHooks, HOOKS_SCHEMA } from './hookSchema.js';
 import type { Hooks } from './hookSchema.js';
 

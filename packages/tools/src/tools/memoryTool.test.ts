@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   MemoryTool,
   setLlxprtMdFilename,

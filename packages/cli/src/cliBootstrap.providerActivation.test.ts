@@ -15,7 +15,7 @@
  * directly (#2378).
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
 import type { CliProviderManager } from './cliProviderInit.js';

@@ -19,7 +19,7 @@
  *   (finding 5): no trimming, no newline collapsing.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   SESSION_TITLE_MAX_LENGTH,

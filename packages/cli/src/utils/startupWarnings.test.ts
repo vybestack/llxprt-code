@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { getStartupWarnings } from './startupWarnings';
 import fs from 'fs/promises';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';

@@ -19,7 +19,7 @@
  * reaching `runStream` (via `runStreamRef`) without live provider networking.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';

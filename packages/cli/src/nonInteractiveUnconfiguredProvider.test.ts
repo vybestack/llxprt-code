@@ -16,8 +16,8 @@
  * logic" — fromConfig is mocked only to assert it is NOT called.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,

@@ -3,7 +3,7 @@
  * Split from profileApplication.lb.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import {

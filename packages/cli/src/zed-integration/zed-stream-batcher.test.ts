@@ -22,7 +22,7 @@
  *   literal.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import { EmojiFilter } from '@vybestack/llxprt-code-core';
 import { StreamBatcher, STREAM_BLOCKED_MESSAGE } from './zed-stream-batcher.js';

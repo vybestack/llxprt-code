@@ -2,7 +2,7 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P10
  * @requirement REQ-005
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';

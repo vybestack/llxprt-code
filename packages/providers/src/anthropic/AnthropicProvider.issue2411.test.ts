@@ -25,7 +25,7 @@
  * it tests the real production code path that the bug traverses.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   AnthropicProvider,
   isAnthropicOAuthBaseURL,

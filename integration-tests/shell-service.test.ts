@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import { ShellExecutionService } from '../packages/core/src/services/shellExecutionService.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 describe('ShellExecutionService programmatic integration tests', () => {
   let testDir: string;

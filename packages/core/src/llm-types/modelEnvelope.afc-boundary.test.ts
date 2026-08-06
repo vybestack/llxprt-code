@@ -19,7 +19,7 @@
  * @requirement:REQ-001.4
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   toModelStreamChunk,
   extractAfcHistory,

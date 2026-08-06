@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PromptService } from './prompt-service.js';
 import type { PromptContext } from './types.js';
 import * as fs from 'node:fs/promises';

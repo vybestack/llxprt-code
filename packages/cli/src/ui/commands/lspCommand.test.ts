@@ -10,7 +10,7 @@
  * REQ-STATUS-035, REQ-STATUS-040, REQ-STATUS-045, REQ-STATUS-050
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { lspCommand } from './lspCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { MessageActionReturn, SlashCommand } from './types.js';

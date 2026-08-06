@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { ToolCallDecision } from '@vybestack/llxprt-code-core/telemetry/index.js';
 import * as SessionContext from '../contexts/SessionContext.js';

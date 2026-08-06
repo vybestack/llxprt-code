@@ -11,7 +11,7 @@
 // provides a fresh module graph — the previous test file triggers registration
 // via parse(), so this file's import starts from a clean state.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 const { registerSpy, mockLang } = vi.hoisted(() => {
   const mockLang = {

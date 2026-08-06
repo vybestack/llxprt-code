@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { Text } from 'ink';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
 import { renderWithProviders } from '../../../test-utils/render.js';

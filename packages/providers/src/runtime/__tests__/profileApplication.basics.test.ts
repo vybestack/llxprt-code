@@ -6,7 +6,7 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   Profile,
   LoadBalancerProfile,

@@ -12,7 +12,7 @@
  * explicit Gemini configurations still resolve correctly.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { resolveProviderAndModel } from '../providerModelResolver.js';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';

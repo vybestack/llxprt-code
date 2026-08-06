@@ -12,7 +12,7 @@ import {
   afterAll,
   afterEach,
   vi,
-} from 'vitest';
+} from 'bun:test';
 import {
   initializeParser,
   isParserAvailable,

@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import yargs, { type Argv } from 'yargs';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';

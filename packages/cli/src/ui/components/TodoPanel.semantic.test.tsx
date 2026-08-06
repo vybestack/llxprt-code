@@ -13,7 +13,7 @@ import {
   beforeEach,
   afterEach,
   type MockedFunction,
-} from 'vitest';
+} from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';

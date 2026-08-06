@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, expect, it, afterEach, beforeEach } from 'vitest';
+import { vi, describe, expect, it, afterEach, beforeEach } from 'bun:test';
 import * as child_process from 'child_process';
 import * as path from 'node:path';
 import {

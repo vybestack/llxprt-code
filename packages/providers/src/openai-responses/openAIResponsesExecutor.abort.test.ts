@@ -20,7 +20,7 @@
  * Uses fake timers/signals deterministically — no wall-clock sleeps.
  */
 
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,

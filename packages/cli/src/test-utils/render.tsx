@@ -6,7 +6,7 @@
 
 import { render as inkRender } from 'ink-testing-library';
 import React, { act, createContext, useContext } from 'react';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';

@@ -11,7 +11,7 @@
  * Assertions focus on resolution results and observable cache behavior.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { OAuthManager } from '../precedence.js';
 import { ensureRuntimeState, runtimeScopedStates } from '../precedence.js';

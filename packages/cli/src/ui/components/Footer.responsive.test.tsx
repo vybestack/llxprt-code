@@ -13,7 +13,7 @@ import {
   vi,
   beforeEach,
   type MockedFunction,
-} from 'vitest';
+} from 'bun:test';
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { testRegex } from '../../test-utils/regex.js';

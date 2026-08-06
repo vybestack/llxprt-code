@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { getReleaseVersion } from '../get-release-version.ts';
 import { execSync, spawnSync as realSpawnSync } from 'node:child_process';
 import * as fs from 'node:fs';

@@ -14,7 +14,7 @@
  */
 
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';

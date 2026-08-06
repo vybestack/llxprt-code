@@ -24,7 +24,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { waitFor } from '../../test-utils/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings } from '../../config/settings.js';

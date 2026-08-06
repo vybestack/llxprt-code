@@ -12,7 +12,7 @@
  * the client nothing about remaining headroom.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildUsageUpdate } from './zed-helpers.js';
 
 describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () => {

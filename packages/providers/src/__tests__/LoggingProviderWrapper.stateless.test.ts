@@ -2,7 +2,7 @@
  * @plan PLAN-20251023-STATELESS-HARDENING.P07
  * @requirement REQ-SP4-004
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';

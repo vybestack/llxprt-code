@@ -61,7 +61,7 @@ vi.mock('../ui/commands/permissionsCommand.js', async () => {
   };
 });
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';

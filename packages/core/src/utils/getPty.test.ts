@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { isBunPosix } from './runtime.js';
 
 const PTY_BACKENDS = ['lydell-node-pty', 'node-pty'] as const;

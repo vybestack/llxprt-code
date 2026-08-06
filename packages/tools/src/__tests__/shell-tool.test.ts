@@ -18,7 +18,7 @@
  * ToolResult.returnDisplay — NOT on adapter method call counts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,

@@ -3,7 +3,7 @@
  * @requirement REQ-SP2-001
  * @project-plans/debuglogging/requirements.md
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 /**
  * Synchronously loads the actual (un-mocked) module for a specifier.

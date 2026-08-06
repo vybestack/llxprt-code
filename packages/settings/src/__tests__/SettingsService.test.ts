@@ -10,7 +10,7 @@
  * instead of returning values or changing state.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { SettingsService } from '../settings/SettingsService.js';
 
 describe('SettingsService — global reads and writes', () => {

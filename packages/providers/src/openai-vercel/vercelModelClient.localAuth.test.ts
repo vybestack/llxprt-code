@@ -23,7 +23,7 @@
  * must behave the same for local endpoints so keyless servers (e.g. Ollama) work.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),

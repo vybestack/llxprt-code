@@ -10,7 +10,7 @@
  * mirroring the pattern used by updateActiveProviderBaseUrl.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 const mockConfig = {
   setEphemeralSetting: vi.fn(),

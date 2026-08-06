@@ -18,7 +18,7 @@
  * @pseudocode 002-frame-and-cancel.md lines T1-T11
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as net from 'node:net';
 import * as crypto from 'node:crypto';
 

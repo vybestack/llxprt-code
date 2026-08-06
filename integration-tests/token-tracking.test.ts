@@ -4,7 +4,7 @@
  * Integration TDD Phase - Behavioral tests for token tracking
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
 import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';

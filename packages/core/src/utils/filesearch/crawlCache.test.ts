@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'bun:test';
 import { getCacheKey, read, write, clear } from './crawlCache.js';
 
 describe('CrawlCache', () => {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { terminalSetupCommand } from './terminalSetupCommand.js';
 import * as terminalSetupModule from '../utils/terminalSetup.js';
 import type { CommandContext } from './types.js';

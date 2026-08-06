@@ -35,7 +35,7 @@ import {
   type Mocked,
   type MockedFunction,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import * as fs from 'fs';
 import stripJsonComments from 'strip-json-comments';
 import * as path from 'path';

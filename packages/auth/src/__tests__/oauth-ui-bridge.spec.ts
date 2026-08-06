@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { oauthUIBridge, OAUTH_UI_MAX_PENDING } from '../oauth-ui-bridge.js';
 import type { OAuthUIEvent, OAuthUICallback } from '../oauth-ui-events.js';
 

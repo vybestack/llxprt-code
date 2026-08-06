@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';

@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 // Unmock ink to use real Ink with ink-testing-library
 // The global mock in test-setup.ts conflicts with renderer behavior here.

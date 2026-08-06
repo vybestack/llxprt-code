@@ -10,7 +10,7 @@ import { useKeypress } from './useKeypress.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
-import type { Mock } from 'vitest';
+import type { Mock } from 'bun:test';
 
 // Mock the 'ink' module to control stdin
 vi.mock('ink', async (importOriginal) => {

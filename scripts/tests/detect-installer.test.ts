@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 

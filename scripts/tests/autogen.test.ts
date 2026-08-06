@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { formatDefaultValue } from '../utils/autogen.js';
 
 describe('formatDefaultValue', () => {

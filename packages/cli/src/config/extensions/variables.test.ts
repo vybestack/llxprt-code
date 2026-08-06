@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it } from 'vitest';
+import { expect, describe, it } from 'bun:test';
 import { hydrateString } from './variables.js';
 
 describe('hydrateString', () => {

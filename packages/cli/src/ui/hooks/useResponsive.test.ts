@@ -11,7 +11,7 @@ import {
   vi,
   beforeEach,
   type MockedFunction,
-} from 'vitest';
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useResponsive } from './useResponsive.js';
 import { useTerminalSize } from './useTerminalSize.js';

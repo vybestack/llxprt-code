@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import * as dumpContextModule from '../utils/dumpContext.js';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';

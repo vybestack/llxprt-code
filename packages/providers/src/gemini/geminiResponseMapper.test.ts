@@ -23,7 +23,7 @@
  * @requirement:REQ-001.4
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   GenerateContentResponse,
   type Content,

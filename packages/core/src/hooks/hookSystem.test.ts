@@ -10,7 +10,7 @@
  * @pseudocode:analysis/pseudocode/01-hook-system-lifecycle.md
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Config } from '../config/config.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 

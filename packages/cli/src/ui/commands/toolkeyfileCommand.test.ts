@@ -11,7 +11,7 @@
  * File validation tests use real temp files for behavioral correctness.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { toolkeyfileCommand } from './toolkeyfileCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';

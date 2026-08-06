@@ -23,7 +23,7 @@
 
 import { render } from 'ink-testing-library';
 import { act } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // Under Bun, ink is redirected to the stub via a resolution plugin (not
 // vi.mock), so vi.unmock('ink') is not needed and not supported.

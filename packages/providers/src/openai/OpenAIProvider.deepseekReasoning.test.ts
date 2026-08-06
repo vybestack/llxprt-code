@@ -11,7 +11,7 @@
  *
  * @issue #1142
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';

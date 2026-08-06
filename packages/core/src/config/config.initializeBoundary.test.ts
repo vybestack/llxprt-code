@@ -21,7 +21,7 @@
  * 8. ensureInitialized() after initialize() returns the original promise.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import {

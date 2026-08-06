@@ -17,7 +17,7 @@
  * - Edge cases and boundary conditions
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Config, DiscoveredTool } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { Settings } from './config/settingsSchema.js';

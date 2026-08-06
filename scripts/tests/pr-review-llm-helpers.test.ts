@@ -8,7 +8,7 @@
  * into scripts/pr-review-llm-helpers.ts.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   isParseError,
   runLlxprtPromptWithParse,

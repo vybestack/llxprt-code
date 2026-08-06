@@ -11,7 +11,7 @@
  * not on internal mock call patterns.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { toolkeyCommand } from './toolkeyCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';

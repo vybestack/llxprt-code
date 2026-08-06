@@ -10,7 +10,7 @@
  * @plan PLAN-20260609-ISSUE1590.P04b
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   SESSION_FILE_PREFIX,
   type ConversationRecord,

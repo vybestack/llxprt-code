@@ -17,7 +17,7 @@
  * They will pass after Phase P10 ChatSession refactor.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';

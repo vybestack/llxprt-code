@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { render } from 'ink-testing-library';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import { useTerminalSize } from '../ui/hooks/useTerminalSize.js';
 
 type RenderResult = ReturnType<typeof render>;

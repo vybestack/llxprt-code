@@ -10,7 +10,7 @@
  * These tests verify CLI parsing of the failover/roundrobin policy parameter.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { profileCommand } from '../profileCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';

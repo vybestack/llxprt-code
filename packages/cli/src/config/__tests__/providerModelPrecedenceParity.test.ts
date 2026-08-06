@@ -20,7 +20,7 @@
  *   CLI --model > profile model > settings.model > env vars > alias default > Gemini default
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {

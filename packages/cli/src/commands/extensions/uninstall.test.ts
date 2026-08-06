@@ -13,7 +13,7 @@ import {
   afterEach,
   type Mock,
   type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import { handleUninstall, uninstallCommand } from './uninstall.js';
 import yargs from 'yargs';
 import type * as extensionModule from '../../config/extension.js';

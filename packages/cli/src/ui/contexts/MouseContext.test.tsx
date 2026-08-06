@@ -7,7 +7,7 @@
 import type React from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
-import { vi, type Mock } from 'vitest';
+import { vi, type Mock } from 'bun:test';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
 import { MouseProvider, useMouseContext } from './MouseContext.js';

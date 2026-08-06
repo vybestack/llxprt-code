@@ -10,7 +10,7 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';

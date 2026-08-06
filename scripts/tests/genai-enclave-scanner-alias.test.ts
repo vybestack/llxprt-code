@@ -13,7 +13,7 @@
  * lexical shadow resolution and fail-closed dynamic export mutations.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   scanGenaiImports,
   scanGeminiExports,

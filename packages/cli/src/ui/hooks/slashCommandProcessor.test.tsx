@@ -72,7 +72,7 @@ vi.mock('react', async (importOriginal) => {
   };
 });
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
 import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';

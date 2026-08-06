@@ -15,7 +15,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { beforeEach, afterEach } from 'vitest';
+import { beforeEach, afterEach } from 'bun:test';
 import type { IToolHost } from '../../../interfaces/IToolHost.js';
 import type { ASTEditTool, ASTEditToolParams } from '../../ast-edit.js';
 import type { ToolResult } from '../../tools.js';

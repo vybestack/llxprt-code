@@ -6,7 +6,7 @@ import {
   beforeEach,
   afterEach,
   beforeAll,
-} from 'vitest';
+} from 'bun:test';
 
 const runWithScopeMock = vi.fn((callback: () => unknown) => callback());
 const getRuntimeBridgeMock = vi.fn(() => ({

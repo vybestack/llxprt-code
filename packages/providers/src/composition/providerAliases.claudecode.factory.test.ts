@@ -14,7 +14,7 @@
  * @issue #2274 — Split Claude Code OAuth from Anthropic API-key access
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // Stub the Anthropic SDK at the HTTP boundary so the real alias factory +
 // AnthropicProvider can exercise the dynamic /models listing path without a

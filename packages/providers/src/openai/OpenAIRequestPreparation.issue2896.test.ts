@@ -14,7 +14,7 @@
  * Acceptance rows covered: B3–B12.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';

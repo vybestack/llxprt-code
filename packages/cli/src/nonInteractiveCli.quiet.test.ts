@@ -14,8 +14,8 @@ import {
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { MockInstance } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { MockInstance } from 'bun:test';
 
 type ParsedStreamEvent = {
   type: string;

@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 // Mock before imports
 // SessionController reads the runtime bridge both as a hook and via the

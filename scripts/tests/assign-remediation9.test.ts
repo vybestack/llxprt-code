@@ -15,7 +15,7 @@
  *     validation
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { execFileSync } from 'child_process';
 import * as nodePath from 'path';
 import { asRecord, stateIssue } from './typed-test-helpers.ts';

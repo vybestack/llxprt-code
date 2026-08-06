@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ActivateSkillTool } from './activate-skill.js';
 import type { ISkillService, SkillInfo } from '../interfaces/index.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';

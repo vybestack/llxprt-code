@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { MemoryUsageDisplay } from './MemoryUsageDisplay.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';

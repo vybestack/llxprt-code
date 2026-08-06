@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, afterEach } from 'vitest';
+import { beforeEach, afterEach } from 'bun:test';
 
 const execFileAsync = promisify(execFile);
 

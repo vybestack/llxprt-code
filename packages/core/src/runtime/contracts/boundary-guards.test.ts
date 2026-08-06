@@ -19,7 +19,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
 import type {

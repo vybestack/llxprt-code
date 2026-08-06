@@ -11,7 +11,7 @@
  * rather than an invalid value on the wire.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Kind } from '@vybestack/llxprt-code-tools';
 import {
   ACP_TOOL_KINDS,

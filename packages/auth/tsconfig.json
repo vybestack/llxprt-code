@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/auth.tsbuildinfo",
     "lib": ["ES2023"],
     "composite": true,
-    "types": ["node", "vitest/globals"],
+    "types": ["node", "vitest/globals", "bun-types/test"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-auth": ["./index.ts"]

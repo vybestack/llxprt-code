@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import stripAnsi from 'strip-ansi';
 import { act } from 'react';
 import { renderHook } from '../../../test-utils/render.js';

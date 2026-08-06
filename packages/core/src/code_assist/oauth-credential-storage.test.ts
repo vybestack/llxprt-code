@@ -13,7 +13,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { OAuthCredentialStorage } from './oauth-credential-storage.js';
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { OAuthCredentials } from '@vybestack/llxprt-code-mcp';

@@ -15,7 +15,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from 'vitest';
+import { test } from 'bun:test';
 
 const isEnabled = process.env.LLXPRT_E2E_TMUX === '1';
 const runTest = isEnabled ? test : test.skip;

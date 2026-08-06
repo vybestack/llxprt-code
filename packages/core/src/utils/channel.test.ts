@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { isNightly, isPreview, isStable, _clearCache } from './channel.js';
 import * as packageJson from './package.js';
 

@@ -11,7 +11,7 @@
  * from restored history so a later prompt never retitles the session.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
 import { Session } from './zedIntegration.js';

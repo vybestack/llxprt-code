@@ -13,7 +13,7 @@
  * previously produced dead sessions via the silent gemini fallback.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';

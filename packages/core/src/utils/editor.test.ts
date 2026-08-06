@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import {
   checkHasEditorType,
   getDiffCommand,

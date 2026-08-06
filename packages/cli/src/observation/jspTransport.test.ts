@@ -5,7 +5,7 @@
  */
 
 import { createServer, type Server } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import type { JspBoundDocument, JspSnapshotDocument } from './jspDocuments.js';
 import { JspHttpPublisher } from './jspPublisher.js';
 import { JspBoundedQueue, type JspQueueSink } from './jspQueue.js';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ToolRenderSuppressionHook } from '../hooks/tool-render-suppression-hook.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import type { ConfigParameters } from '../config/config.js';

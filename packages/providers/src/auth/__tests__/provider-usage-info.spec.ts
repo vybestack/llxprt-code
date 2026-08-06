@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // Hoisted mock factories

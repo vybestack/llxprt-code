@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'bun:test';
 
 afterEach(() => {
   vi.clearAllTimers();

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 import { Session } from './zedIntegration.js';

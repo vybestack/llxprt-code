@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 
 import * as actualNodeFs from 'node:fs'; // For setup/teardown
 import fs from 'node:fs';

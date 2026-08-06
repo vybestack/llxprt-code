@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchSyntheticUsage, formatSyntheticUsage } from './usageInfo.js';
 
 describe('syntheticUsageInfo', () => {

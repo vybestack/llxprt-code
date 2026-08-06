@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 // IMPORTANT: Must import mock setup BEFORE importing the source module.
 // Bun's mock.module only applies if registered before the source module loads.
 import { secureBrowserMocks } from './secure-browser-launcher-mock-setup.js';

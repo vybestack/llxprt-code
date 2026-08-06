@@ -19,7 +19,7 @@
  * Consumer Smoke separately packs and installs the artifact in a clean project.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';

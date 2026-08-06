@@ -20,7 +20,7 @@
  * moves real tool code and adapters are wired up.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { CheckAsyncTasksTool, ListSubagentsTool } from '../index.js';
 import type {
   ISubagentService,

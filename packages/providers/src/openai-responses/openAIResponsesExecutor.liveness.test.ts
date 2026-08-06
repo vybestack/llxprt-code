@@ -14,7 +14,7 @@
  * executor and real SSE parser run.
  */
 
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 import * as fs from 'node:fs';

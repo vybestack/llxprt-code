@@ -14,7 +14,7 @@
  * test files (ast-edit-rust-validation.test.ts, ast-edit-c-validation.test.ts).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { extractImports } from '../language-analysis.js';
 
 // ---------------------------------------------------------------------------

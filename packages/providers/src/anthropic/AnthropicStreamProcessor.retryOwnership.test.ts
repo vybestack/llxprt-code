@@ -5,7 +5,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';

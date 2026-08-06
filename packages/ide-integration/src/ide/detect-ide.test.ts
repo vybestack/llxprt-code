@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'bun:test';
 import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 
 describe('detectIde', () => {

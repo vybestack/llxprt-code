@@ -7,7 +7,7 @@
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 

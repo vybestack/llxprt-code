@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, vi } from 'vitest';
+import { expect, describe, it, vi } from 'bun:test';
 
 /**
  * Tests for detectCommandSubstitution through the REGEX FALLBACK path.

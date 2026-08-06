@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { JsonFormatter } from '@vybestack/llxprt-code-core';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { permitsBucketFailover, RetriesExhaustedError } from '../errors.js';

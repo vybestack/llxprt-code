@@ -26,7 +26,7 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach, it, vi } from 'vitest';
+import { describe, expect, beforeEach, afterEach, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';

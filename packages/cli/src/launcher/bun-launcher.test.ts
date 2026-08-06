@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { FatalError } from '@vybestack/llxprt-code-core';
 import {

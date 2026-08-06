@@ -10,7 +10,7 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HookEventHandler } from './hookEventHandler.js';
 import type { Config } from '../config/config.js';
 import type { HookRegistry } from './hookRegistry.js';

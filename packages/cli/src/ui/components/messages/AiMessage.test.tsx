@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { Text } from 'ink';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { AiMessage } from './AiMessage.js';
 import { StreamingState } from '../../types.js';
 import { renderWithProviders } from '../../../test-utils/render.js';

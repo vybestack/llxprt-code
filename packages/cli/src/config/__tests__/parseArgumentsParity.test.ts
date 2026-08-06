@@ -15,7 +15,7 @@
  *   - Boolean default handling
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 

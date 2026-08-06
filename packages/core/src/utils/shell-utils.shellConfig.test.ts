@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
+import { expect, describe, it, beforeEach, afterEach, vi } from 'bun:test';
 import { escapeShellArg, getShellConfiguration } from './shell-utils.js';
 
 const mockQuote = vi.hoisted(() => vi.fn());

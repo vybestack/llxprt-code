@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-} from 'vitest';
+} from 'bun:test';
 import type { LogEntry } from './logger.js';
 import { Logger, MessageSenderType } from './logger.js';
 import { Storage } from '@vybestack/llxprt-code-settings';

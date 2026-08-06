@@ -8,7 +8,7 @@
  * Test to verify circular reference handling in telemetry logging
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { logToolCall } from './loggers.js';
 import { ToolCallEvent } from './types.js';
 import type { Config } from '../config/config.js';

@@ -14,7 +14,7 @@
  * @plan PLAN-20250214-CREDPROXY.P22
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { ProactiveScheduler } from '../proactive-scheduler.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

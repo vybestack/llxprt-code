@@ -10,14 +10,14 @@
  * @requirement:REQ-THINK-UI-003
  */
 
-import type { Mock } from 'vitest';
+import type { Mock } from 'bun:test';
 import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';

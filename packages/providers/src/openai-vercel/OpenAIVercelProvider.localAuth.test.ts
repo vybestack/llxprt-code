@@ -22,7 +22,7 @@
  * for local endpoints, so `loadApiKey` does not throw before the request fires.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import { AuthenticationError } from './errors.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

@@ -14,7 +14,7 @@
  * weak per-file derivation.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as crypto from 'node:crypto';
 import {
   encryptEnvelopeString,

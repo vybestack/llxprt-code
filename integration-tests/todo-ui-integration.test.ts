@@ -5,7 +5,7 @@
  */
 
 import { strict as assert } from 'assert';
-import { it } from 'vitest';
+import { it } from 'bun:test';
 import { TestRig, printDebugInfo } from './test-helper.js';
 
 // Skip todo tests in CI by default - Flash model has issues with todo formatting

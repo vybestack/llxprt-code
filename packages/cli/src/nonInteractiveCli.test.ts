@@ -17,7 +17,7 @@ import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 type ParsedStreamEvent = {
   type: string;

@@ -13,7 +13,7 @@
  * 3. model.allMemoriesAreCore merges user memory into core memory
  */
 
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'bun:test';
 import {
   getCoreSystemPromptAsync,
   loadCoreMemoryContent,

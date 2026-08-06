@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import '../../../test-utils/customMatchers.js';
 import { handleVimAction } from './vim-buffer-actions.js';
 import { createTestState } from './vim-buffer-actions-test-helpers.js';

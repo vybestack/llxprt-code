@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf } from 'bun:test';
 import type {
   ContentPart,
   ContentPartUnion,

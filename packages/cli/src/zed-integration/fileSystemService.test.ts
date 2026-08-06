@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mocked } from 'bun:test';
 import { AcpFileSystemService } from './fileSystemService.js';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { FileSystemService } from '@vybestack/llxprt-code-storage';

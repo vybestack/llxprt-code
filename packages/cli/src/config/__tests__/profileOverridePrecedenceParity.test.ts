@@ -21,7 +21,7 @@
  *     (only when --provider is NOT explicit)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {

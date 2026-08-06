@@ -18,7 +18,7 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { SENTINEL_FILENAME } from './quota-guard.js';
 
 /**
@@ -114,7 +114,7 @@ const fixtureRoots: string[] = [];
  * non-zero.
  */
 function setupFileSource(): string {
-  return `import { beforeEach } from 'vitest';
+  return `import { beforeEach } from 'bun:test';
 import { getQuotaGuardTrip } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};
 
 beforeEach((ctx) => {
@@ -138,7 +138,7 @@ beforeEach((ctx) => {
  * body — if the skip works, that body never runs and the marker never appears.
  */
 function fixtureTestSource(): string {
-  return `import { describe, it, expect } from 'vitest';
+  return `import { describe, it, expect } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tripQuotaGuard } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};
@@ -228,7 +228,7 @@ function createFixture(): { root: string; stateDir: string } {
  */
 function raceWorkerSource(index: number): string {
   const reason = `${RACE_REASON_PREFIX}${index}"`;
-  return `import { it, expect } from 'vitest';
+  return `import { it, expect } from 'bun:test';
 import { readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tripQuotaGuard } from ${JSON.stringify(QUOTA_GUARD_MODULE_URL)};

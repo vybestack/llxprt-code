@@ -11,7 +11,7 @@
  * Behavior: Ctrl+C double-press, Ctrl+S copy mode, Cmd+M/Alt+M markdown, Ctrl+F shell focus.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   renderWithProviders,
   createMockSettings,

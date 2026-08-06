@@ -8,7 +8,7 @@
 
 import { type MutableRefObject, act } from 'react';
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   OpenAIProviderContextProvider,
   useOpenAIProviderContext,

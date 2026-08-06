@@ -7,7 +7,7 @@
 import * as glob from 'glob';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FileCommandLoader } from './FileCommandLoader.js';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (condition === undefined || condition === null || condition === false) {

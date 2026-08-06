@@ -9,7 +9,7 @@
  * DI-refactored: SettingsService → ISettingsService local test double
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   AuthPrecedenceResolver,
   flushRuntimeAuthScope,

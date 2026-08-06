@@ -5,7 +5,7 @@
  */
 
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';

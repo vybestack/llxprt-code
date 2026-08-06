@@ -13,7 +13,7 @@
  * API-key-only (supportsOAuth false) and `claudecode` as OAuth (true).
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 

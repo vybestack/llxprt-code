@@ -7,7 +7,7 @@
  * Tests for AllBucketsExhaustedError status propagation and message cleaning
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   AllBucketsExhaustedError,
   type BucketFailureReason,

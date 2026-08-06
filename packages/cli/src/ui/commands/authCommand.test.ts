@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { CommandContext } from './types.js';

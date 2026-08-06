@@ -15,7 +15,7 @@
  * Acceptance rows covered: A4, A5, A6.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   commitModelParam,
   NOT_A_NUMBER_MESSAGE,

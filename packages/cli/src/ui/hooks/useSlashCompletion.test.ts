@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';

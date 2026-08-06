@@ -10,7 +10,7 @@
  * IMPORTANT: Tests public API behavior ONLY (generateChatCompletion).
  * Does NOT test private methods or implementation details (RULES.md lines 102-107).
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type {
   ThinkingBlock,

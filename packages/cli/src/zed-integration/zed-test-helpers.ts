@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, type Mock } from 'vitest';
+import { vi, type Mock } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
 import {

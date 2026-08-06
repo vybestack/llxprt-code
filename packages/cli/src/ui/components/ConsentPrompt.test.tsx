@@ -6,7 +6,7 @@
 
 import { Colors } from '../colors.js';
 import { Text } from 'ink';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { render } from 'ink-testing-library';
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';

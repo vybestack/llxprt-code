@@ -11,7 +11,7 @@
  * Behavior: Callback identities stable, no excessive re-renders.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   renderWithProviders,
   createMockSettings,

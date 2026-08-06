@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({

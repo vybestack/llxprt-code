@@ -3,7 +3,7 @@
  * @requirement REQ-001.1, REQ-001.2, REQ-001.3, REQ-001.4, REQ-001.5
  * @pseudocode lines 10-26
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   mapGeminiFinishReason,

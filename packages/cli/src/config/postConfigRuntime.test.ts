@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
   LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { renderWithProviders } from '../../test-utils/render.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';

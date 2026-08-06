@@ -9,7 +9,7 @@
  * @requirement REQ-ASYNC-010, REQ-ASYNC-011
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { AsyncTaskManager } from './asyncTaskManager.js';
 import { AsyncTaskReminderService } from './asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from './asyncTaskAutoTrigger.js';

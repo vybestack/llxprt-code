@@ -44,7 +44,7 @@ import {
   afterEach,
   type Mocked,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import * as fs from 'fs'; // fs will be mocked separately
 import stripJsonComments from 'strip-json-comments'; // Will be mocked separately
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';

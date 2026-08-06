@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 
-import { vi, describe, expect, it, afterEach, beforeEach } from 'vitest';
+import { vi, describe, expect, it, afterEach, beforeEach } from 'bun:test';
 import * as gitUtils from '../../utils/gitUtils.js';
 import {
   setupGithubCommand,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe } from 'vitest';
+import { describe } from 'bun:test';
 import {
   evalTest,
   saveMemoryFactEquals,

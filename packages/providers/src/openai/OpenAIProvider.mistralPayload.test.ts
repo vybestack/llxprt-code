@@ -8,7 +8,7 @@
  * @see https://docs.mistral.ai/capabilities/function_calling
  * @issue #760
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import {
   buildMessagesWithReasoning,

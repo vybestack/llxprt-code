@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'bun:test';
 import { AsyncFzf } from 'fzf';
 
 import { FileSearchFactory, AbortError, filter } from './fileSearch.js';

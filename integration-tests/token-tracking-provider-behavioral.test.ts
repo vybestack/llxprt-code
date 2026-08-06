@@ -7,7 +7,7 @@
  * Provider-specific behavioral tests for token tracking
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import { AnthropicProvider } from '@vybestack/llxprt-code-providers';

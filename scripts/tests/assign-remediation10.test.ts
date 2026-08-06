@@ -33,7 +33,7 @@
  * state, not invocation counts.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import yaml from 'js-yaml';
 import {
   asOptionalRecord,

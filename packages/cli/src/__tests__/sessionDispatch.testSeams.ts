@@ -13,7 +13,7 @@
  * fired, which branch ran), never merely that a seam was invoked.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 /**
  * Sentinel thrown by the safe process.exit seam so the test runner is never

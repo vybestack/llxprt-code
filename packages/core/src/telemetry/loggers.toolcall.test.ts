@@ -18,7 +18,7 @@ import { ToolCallDecision } from '@vybestack/llxprt-code-telemetry/telemetry/too
 import { ToolCallEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { vi, describe, beforeEach, it, expect } from 'vitest';
+import { vi, describe, beforeEach, it, expect } from 'bun:test';
 import * as uiTelemetry from './uiTelemetry.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 

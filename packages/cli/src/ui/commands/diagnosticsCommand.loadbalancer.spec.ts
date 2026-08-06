@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
 import { diagnosticsCommand } from './diagnosticsCommand.js';
 import type { MessageActionReturn } from './types.js';

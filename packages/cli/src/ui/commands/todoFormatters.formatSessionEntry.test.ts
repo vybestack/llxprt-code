@@ -9,7 +9,7 @@
  * { todos, paused } envelope format that TodoStore writes to disk.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { formatSessionEntry } from './todoFormatters.js';
 import type { TodoSessionFile } from './todoOperations.js';
 

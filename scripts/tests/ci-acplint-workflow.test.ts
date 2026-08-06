@@ -5,7 +5,7 @@
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import type { WorkflowDocument, WorkflowJob } from './typed-test-helpers.ts';
 import { parseWorkflowYaml, asOptionalRecord } from './typed-test-helpers.ts';
 import { readRootFile, stepNamed } from './ocr-review-workflow-helpers.ts';

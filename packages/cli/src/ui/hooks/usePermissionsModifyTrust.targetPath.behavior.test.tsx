@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import path from 'node:path';
 import { renderHook } from '../../test-utils/render.js';
 import {

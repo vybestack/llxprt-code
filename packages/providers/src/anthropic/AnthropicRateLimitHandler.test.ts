@@ -2,7 +2,7 @@
  * Tests for AnthropicRateLimitHandler pure functions
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   type AnthropicRateLimitInfo,
   extractRateLimitHeaders,

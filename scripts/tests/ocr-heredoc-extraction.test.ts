@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { extractHeredocBody } from './ocr-review-workflow-helpers.ts';
 
 describe('extractHeredocBody — robust heredoc extraction (P4)', () => {

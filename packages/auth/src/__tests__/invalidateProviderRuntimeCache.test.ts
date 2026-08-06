@@ -14,7 +14,7 @@
  * token from disk.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   invalidateProviderRuntimeCache,
   runtimeScopedStates,

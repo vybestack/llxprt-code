@@ -12,7 +12,7 @@
  * structure, script presence, and documentation consistency.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

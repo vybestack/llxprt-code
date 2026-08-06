@@ -18,7 +18,7 @@
  * rather than racing with setTimeout.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   createStreamWatchdog,
   type StreamWatchdogOptions,

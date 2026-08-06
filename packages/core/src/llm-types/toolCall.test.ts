@@ -3,7 +3,7 @@
  * @requirement REQ-004.1, REQ-004.2, REQ-004.3
  * @pseudocode lines 60-78
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   toolResultContentFromLegacyPartListUnion,

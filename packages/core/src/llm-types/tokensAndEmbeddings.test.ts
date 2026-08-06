@@ -3,7 +3,7 @@
  * @requirement REQ-008.1, REQ-008.2
  * @pseudocode lines 100-103
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
   CountTokensRequest,

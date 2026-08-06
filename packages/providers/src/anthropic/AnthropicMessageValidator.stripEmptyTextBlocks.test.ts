@@ -15,7 +15,7 @@
  * other content.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 import { stripEmptyTextBlocks } from './AnthropicMessageValidator.js';
 

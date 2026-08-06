@@ -13,7 +13,7 @@ import {
   afterEach,
   type Mock,
   type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import { handleLink } from './link.js';
 import type * as extensionModule from '../../config/extension.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';

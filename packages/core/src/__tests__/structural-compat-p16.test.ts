@@ -24,7 +24,7 @@
  * No mock theater. No reverse testing.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   ISettingsService,
   ISecureStore,

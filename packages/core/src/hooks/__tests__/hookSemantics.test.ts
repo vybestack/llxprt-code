@@ -10,7 +10,7 @@
  *              DELTA-HTEL-001, DELTA-HTEL-002, DELTA-HFAIL-001, DELTA-HAPP-001, DELTA-HAPP-002
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import type { AggregatedHookResult } from '../hookAggregator.js';
 import type { HookOutput, HookExecutionResult, HookConfig } from '../types.js';

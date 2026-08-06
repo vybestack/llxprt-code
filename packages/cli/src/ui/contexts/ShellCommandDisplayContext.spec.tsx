@@ -5,7 +5,7 @@
  */
 
 import React, { act, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   createMockSettings,
   renderWithProviders,

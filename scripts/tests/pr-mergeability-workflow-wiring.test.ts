@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import vm from 'vm';
 import { normalize, readRootFile } from './ocr-review-workflow-helpers.ts';
 import {

@@ -10,7 +10,7 @@ if (process.env.NO_COLOR !== undefined) {
 }
 
 import { setSimulate429 } from './src/utils/testUtils.js';
-import { beforeAll, beforeEach, afterEach } from 'vitest';
+import { beforeAll, beforeEach, afterEach } from 'bun:test';
 import { clearActiveProviderRuntimeContext } from './src/runtime/providerRuntimeContext.js';
 import { initializeTestProviderRuntime } from './src/test-utils/runtime.js';
 

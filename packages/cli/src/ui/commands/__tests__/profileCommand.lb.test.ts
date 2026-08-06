@@ -7,7 +7,7 @@
  * Issue #489 Phase 7
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { profileCommand } from '../profileCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';

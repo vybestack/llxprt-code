@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {

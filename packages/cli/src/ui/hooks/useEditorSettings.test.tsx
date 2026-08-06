@@ -12,7 +12,7 @@ import {
   it,
   vi,
   type MockedFunction,
-} from 'vitest';
+} from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { join, resolve, win32 } from 'node:path';
 import { resolveBunPath, defaultPathCommand } from './bun-path-resolver.js';
 

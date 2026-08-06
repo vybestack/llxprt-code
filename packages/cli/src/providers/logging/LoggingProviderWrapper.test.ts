@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import type { IContent, Config } from '@vybestack/llxprt-code-core';
 import type { IProvider, ITool } from '@vybestack/llxprt-code-providers';
 

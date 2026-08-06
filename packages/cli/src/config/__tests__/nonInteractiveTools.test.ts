@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
 
 describe('non-interactive approval defaults', () => {

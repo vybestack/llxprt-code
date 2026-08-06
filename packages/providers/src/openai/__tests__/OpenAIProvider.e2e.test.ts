@@ -4,7 +4,7 @@
  * @plan PLAN-20251202-THINKING.P16
  * @requirement REQ-THINK-003, REQ-THINK-004, REQ-THINK-005, EC-006
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from '../OpenAIProvider';
 import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder';
 import type {

@@ -9,8 +9,8 @@
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
-import type { Mock } from 'vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Key } from './KeypressContext.js';
 import {
   KeypressProvider,

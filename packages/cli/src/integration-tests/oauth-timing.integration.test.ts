@@ -18,7 +18,7 @@
  */
 
 import * as path from 'path';
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   AuthPrecedenceResolver,
   type OAuthManager as CoreOAuthManager,

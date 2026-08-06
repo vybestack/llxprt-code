@@ -8,7 +8,7 @@
  * Unit tests for streamUtils.ts pure utilities and config-bound helpers.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   UnauthorizedError,
   parseAndFormatApiError,

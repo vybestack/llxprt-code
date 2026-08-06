@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { DirectWebFetchToolParams } from './direct-web-fetch.js';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import type { IToolHost, ToolResult as _ToolResult } from '../index.js';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { HookRunner } from './hookRunner.js';
 import { HookEventName, HookType, type HookInput } from './types.js';
 import type { Config } from '../config/config.js';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { render } from '../../test-utils/render.js';
 import { AnsiOutputText } from './AnsiOutput.js';
 import type { AnsiOutput, AnsiToken } from '@vybestack/llxprt-code-core';

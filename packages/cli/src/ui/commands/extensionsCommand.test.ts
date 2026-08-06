@@ -9,7 +9,7 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { MessageType } from '../types.js';
 import { extensionsCommand } from './extensionsCommand.js';
 import { type CommandContext } from './types.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { type ExtensionUpdateAction } from '../state/extensions.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 

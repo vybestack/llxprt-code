@@ -14,7 +14,7 @@
  * and a mocked buildZedTerminalSetup that throws — no result-shaped mocks.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core';

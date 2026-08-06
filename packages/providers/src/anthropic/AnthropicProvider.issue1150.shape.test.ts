@@ -19,7 +19,7 @@
  *
  * These tests document the exact bugs that need to be fixed.
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,

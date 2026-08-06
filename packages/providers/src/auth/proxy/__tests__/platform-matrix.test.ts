@@ -14,7 +14,7 @@
  * @requirement R4.1, R4.2, R4.3, R27.1, R27.2, R27.3
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import * as net from 'node:net';
 import * as fs from 'node:fs';

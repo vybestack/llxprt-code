@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import type { ContractContent } from '../core/clientContract.js';
 import type { IContent } from '../services/history/IContent.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';

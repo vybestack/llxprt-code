@@ -11,7 +11,7 @@
  * contract so a future change cannot quietly drop files from the run.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   mkdirSync,
   mkdtempSync,

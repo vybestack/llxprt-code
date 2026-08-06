@@ -17,7 +17,7 @@
  * dependent package (A5).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   existsSync,
   mkdirSync,

@@ -15,7 +15,7 @@
  * and into the terminal combined thinking block), not just the parser unit.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
 import { processStreamingResponse } from './OpenAIStreamProcessor.js';

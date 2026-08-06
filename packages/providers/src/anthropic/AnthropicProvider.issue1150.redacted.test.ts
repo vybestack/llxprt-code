@@ -11,7 +11,7 @@
  *
  * Error being fixed: "messages.X.content.0: Invalid `data` in `redacted_thinking` block"
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,

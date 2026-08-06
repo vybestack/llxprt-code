@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';

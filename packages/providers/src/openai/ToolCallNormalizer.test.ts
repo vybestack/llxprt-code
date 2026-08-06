@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { NormalizedToolCall } from './ToolCallNormalizer.js';
 import { ToolCallNormalizer } from './ToolCallNormalizer.js';
 

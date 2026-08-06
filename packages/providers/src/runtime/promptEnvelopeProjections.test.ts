@@ -17,7 +17,7 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A3, A4, A5, A9, finding #6)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   projectAnthropicPromptEnvelope,

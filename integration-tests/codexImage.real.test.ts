@@ -27,7 +27,7 @@
  * Honors `KEEP_OUTPUT=true` so retained runs preserve the images.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { TestRig } from './test-helper.js';
 import fs from 'node:fs';
 import path from 'node:path';

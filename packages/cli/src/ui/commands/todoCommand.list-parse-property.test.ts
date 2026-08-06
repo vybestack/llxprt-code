@@ -9,7 +9,7 @@
  * @requirement REQ-003, REQ-004, REQ-005, REQ-006, REQ-007
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { todoCommand, parsePosition } from './todoCommand.js';
 import type { CommandContext } from './types.js';
 import type { Todo } from '@vybestack/llxprt-code-core';

@@ -12,7 +12,7 @@ import {
   vi,
   beforeEach,
   type MockedFunction,
-} from 'vitest';
+} from 'bun:test';
 import { ProviderDialog } from './ProviderDialog.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { testRegex } from '../../test-utils/regex.js';

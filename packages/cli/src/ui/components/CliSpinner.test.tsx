@@ -11,7 +11,7 @@ import {
   configureUnicodeSupport,
   resetUnicodeSupportForTesting,
 } from '../contexts/UnicodeRenderingContext.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 describe('<CliSpinner />', () => {
   beforeEach(() => {

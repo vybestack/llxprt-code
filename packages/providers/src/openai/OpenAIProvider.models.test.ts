@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 
 // Use vi.hoisted so the mock is created in the hoisted scope the vi.mock

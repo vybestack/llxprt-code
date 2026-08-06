@@ -3,7 +3,7 @@
  * @requirement REQ-002.1, REQ-002.2, REQ-002.3
  * @pseudocode lines 30-37
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   isJsonSchema,

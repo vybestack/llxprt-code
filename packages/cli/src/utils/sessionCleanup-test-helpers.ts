@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { type Config } from '@vybestack/llxprt-code-core';
 import { SESSION_FILE_PREFIX } from '@vybestack/llxprt-code-storage';

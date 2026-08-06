@@ -8,7 +8,7 @@
 
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import React, { act } from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';

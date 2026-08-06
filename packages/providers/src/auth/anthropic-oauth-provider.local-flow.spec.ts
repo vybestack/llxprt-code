@@ -6,7 +6,7 @@ import {
   beforeEach,
   afterEach,
   type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 
 vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),

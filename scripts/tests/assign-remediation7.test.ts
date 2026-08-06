@@ -19,7 +19,7 @@
  *       locking must converge to exactly one deterministic bot winner.
  */
 
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach } from 'bun:test';
 import { execFileSync, spawn, type ChildProcess } from 'child_process';
 import {
   mkdtempSync,

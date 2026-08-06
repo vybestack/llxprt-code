@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import * as nodeFs from 'node:fs';
 import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   parseMapResponse,
   parseGroupResponse,

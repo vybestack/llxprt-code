@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 
 vi.mock('./runtimeAccessors.js', () => {

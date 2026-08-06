@@ -15,7 +15,7 @@
  * @requirement REQ-013
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { renderGithubResult, renderChecks } from './github-display.js';
 
 describe('github result rendering', () => {

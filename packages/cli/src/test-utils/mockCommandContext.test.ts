@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect } from 'bun:test';
 import { createMockCommandContext } from './mockCommandContext.js';
 
 describe('createMockCommandContext', () => {

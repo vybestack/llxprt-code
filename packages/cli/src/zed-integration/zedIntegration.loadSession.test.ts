@@ -25,7 +25,7 @@
  * is asserted without a provider bootstrap.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';

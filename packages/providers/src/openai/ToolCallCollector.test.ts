@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ToolCallCollector } from './ToolCallCollector.js';
 
 describe('ToolCallCollector', () => {

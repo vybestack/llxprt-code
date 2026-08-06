@@ -15,7 +15,7 @@
  * Two-phase swap
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../test-utils/assertions.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import { performResume } from '../services/performResume.js';

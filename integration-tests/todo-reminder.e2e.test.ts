@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { test, expect } from 'vitest';
+import { test, expect } from 'bun:test';
 import { join } from 'node:path';
 import { TestRig, printDebugInfo } from './test-helper.js';
 

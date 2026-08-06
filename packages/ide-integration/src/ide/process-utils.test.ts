@@ -12,7 +12,7 @@ import {
   afterEach,
   beforeAll,
   beforeEach,
-} from 'vitest';
+} from 'bun:test';
 
 const mockedExec = vi.hoisted(() => vi.fn());
 vi.mock('node:util', () => ({

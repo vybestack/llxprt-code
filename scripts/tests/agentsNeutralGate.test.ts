@@ -22,7 +22,7 @@
  * @requirement:REQ-012.1
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';

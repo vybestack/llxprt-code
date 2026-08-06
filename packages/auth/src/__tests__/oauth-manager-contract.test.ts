@@ -21,7 +21,7 @@
  * At runtime, we verify the minimal contract methods exist and are callable.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { OAuthManager as AuthOAuthManagerInterface } from '../precedence.js';
 
 // ─── Compile-time structural compatibility ───────────────────────────────────

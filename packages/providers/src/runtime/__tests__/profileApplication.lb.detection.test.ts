@@ -14,7 +14,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   Profile,
   LoadBalancerProfile,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { EmojiFilter } from '@vybestack/llxprt-code-core';
 import { StreamingSanitizer } from '../streamingSanitizer.js';
 

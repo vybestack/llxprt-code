@@ -15,7 +15,7 @@
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-18
  */
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type { IProvider } from '@vybestack/llxprt-code-providers';

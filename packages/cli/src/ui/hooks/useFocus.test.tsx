@@ -8,7 +8,7 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { EventEmitter } from 'events';
 import { useFocus } from './useFocus.js';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import { useStdin, useStdout } from 'ink';
 
 // Mock the ink hooks

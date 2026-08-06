@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   existsSync,
   mkdtempSync,
@@ -496,7 +496,7 @@ describe('orchestrateTests', () => {
     mkdirSync(join(root, 'scripts', 'tests'), { recursive: true });
     writeFileSync(
       join(root, 'scripts', 'tests', 'dummy.test.ts'),
-      `import { describe, it, expect } from 'vitest';
+      `import { describe, it, expect } from 'bun:test';
 describe('dummy', () => { it('passes', () => { expect(1).toBe(1); }); });`,
     );
 

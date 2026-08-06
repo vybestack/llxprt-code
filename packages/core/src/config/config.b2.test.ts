@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';

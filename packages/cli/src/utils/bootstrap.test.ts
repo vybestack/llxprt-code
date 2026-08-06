@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import os from 'node:os';
 import v8 from 'node:v8';

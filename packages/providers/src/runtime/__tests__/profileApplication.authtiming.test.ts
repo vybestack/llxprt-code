@@ -8,7 +8,7 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {

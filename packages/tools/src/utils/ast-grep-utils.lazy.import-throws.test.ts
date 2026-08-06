@@ -14,7 +14,7 @@
 // file specifically tests import survival when the registration spy is rigged
 // to throw, which requires a different mock configuration.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 const { registerSpy, mockLang } = vi.hoisted(() => {
   const mockLang = {

@@ -9,7 +9,7 @@
  * lifecycle cleanup.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   ProactiveRenewalManager,
   MAX_PROACTIVE_RENEWAL_FAILURES,

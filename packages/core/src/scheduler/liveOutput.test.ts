@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { accumulateLiveOutput } from './liveOutput.js';
 import type { AnsiOutput, AnsiToken } from '../utils/terminalSerializer.js';
 

@@ -6,7 +6,7 @@
 
 import { render } from 'ink-testing-library';
 import { act } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'bun:test';
 
 vi.unmock('ink');
 

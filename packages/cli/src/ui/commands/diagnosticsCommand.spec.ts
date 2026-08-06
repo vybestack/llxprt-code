@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { diagnosticsCommand } from './diagnosticsCommand.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { type MCPOAuthCredentials } from '@vybestack/llxprt-code-core';

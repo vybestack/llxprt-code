@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, afterEach } from 'vitest';
+import { vi, describe, it, expect, afterEach } from 'bun:test';
 import {
   McpClientManager,
   DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,

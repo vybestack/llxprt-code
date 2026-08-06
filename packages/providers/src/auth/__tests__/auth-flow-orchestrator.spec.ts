@@ -7,7 +7,7 @@
  * Covers lock parameters, lock acquisition order, and lock release on exceptions.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type {
   OAuthToken,
   TokenStore,

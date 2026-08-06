@@ -8,8 +8,8 @@
  * the mock setup without exceeding max-lines.
  */
 
-import { vi } from 'vitest';
-import type { MockInstance } from 'vitest';
+import { vi } from 'bun:test';
+import type { MockInstance } from 'bun:test';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';

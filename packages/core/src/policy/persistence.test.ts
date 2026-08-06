@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createPolicyUpdater } from './config.js';

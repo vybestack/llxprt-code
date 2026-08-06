@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import crypto from 'node:crypto';
 import { renderHook } from '../../test-utils/render.js';
 import { useBanner } from './useBanner.js';

@@ -11,7 +11,7 @@
  * (missing, non-numeric, zero/negative, or fractional/sub-unit values).
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 

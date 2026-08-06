@@ -6,7 +6,7 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import type {
   Agent,
   AgentEvent,

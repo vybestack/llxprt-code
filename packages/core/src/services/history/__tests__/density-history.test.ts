@@ -18,7 +18,7 @@
  * Phase 08 will implement the methods and make these pass.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { HistoryService } from '../HistoryService.js';
 import type { IContent } from '../IContent.js';

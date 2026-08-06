@@ -11,7 +11,7 @@
  * semantics.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { fixtureValue } from './import-actual-fixture.js';
 
 vi.mock('./import-actual-fixture.js', async (importOriginal) => {

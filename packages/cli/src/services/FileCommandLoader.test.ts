@@ -11,7 +11,7 @@ import {
   FILE_COMMANDS_UNTRUSTED_MESSAGE,
   type FileCommandRuntime,
 } from './FileCommandLoader.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';

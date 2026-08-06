@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { PromptResolver } from './prompt-resolver.js';
 import type { PromptContext } from './types.js';
 import * as fs from 'node:fs';

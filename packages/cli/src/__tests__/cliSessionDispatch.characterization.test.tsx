@@ -28,7 +28,7 @@ import {
   beforeAll,
   afterAll,
   vi,
-} from 'vitest';
+} from 'bun:test';
 
 const { mockWriteToStderr } = vi.hoisted(() => ({
   mockWriteToStderr: vi.fn<(chunk: string | Uint8Array) => boolean>(() => true),

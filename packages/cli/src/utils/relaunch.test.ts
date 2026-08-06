@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { relaunchAppInChildProcess } from './relaunch.js';

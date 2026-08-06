@@ -20,7 +20,7 @@
  * verifies that a profile's ephemeral settings cannot change the trust evaluation.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {

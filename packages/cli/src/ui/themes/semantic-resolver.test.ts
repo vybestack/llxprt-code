@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { resolveSemanticColors } from './semantic-resolver.js';
 import type { SemanticColors } from './semantic-tokens.js';
 import type { ColorsTheme } from './theme.js';

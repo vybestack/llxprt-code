@@ -7,7 +7,7 @@
  * RED tests that fail via VALUE MISMATCH against the P03 stubs/current
  * implementation. P05 implements the real logic.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   emptyModelOutput,

@@ -1,5 +1,5 @@
 import React, { act } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { AppAction, AppState } from '../reducers/appReducer.js';

@@ -9,7 +9,7 @@
  */
 
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import type { MemoryLoadResult } from '../utils/memoryDiscovery.js';

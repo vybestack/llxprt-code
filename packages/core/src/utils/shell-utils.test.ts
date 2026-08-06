@@ -12,7 +12,7 @@ import {
   beforeAll,
   vi,
   afterEach,
-} from 'vitest';
+} from 'bun:test';
 import {
   checkCommandPermissions,
   getCommandRoots,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { SimpleExtensionLoader } from './extensionLoader.js';
 import type { Config } from '../config/config.js';
 import { type McpClientManager } from '@vybestack/llxprt-code-mcp';

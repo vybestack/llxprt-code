@@ -16,7 +16,7 @@
  * transitions. It is infrastructure, not a business-logic mirror.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { normalize, readRootFile } from './ocr-review-workflow-helpers.ts';

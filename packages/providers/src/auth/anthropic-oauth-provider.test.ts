@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 

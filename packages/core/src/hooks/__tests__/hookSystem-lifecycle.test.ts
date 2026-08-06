@@ -17,7 +17,7 @@
  * No reverse tests (no `.not.toThrow()`) except for idempotency cases.
  */
 
-import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { SessionStartSource, SessionEndReason } from '../types.js';
 import type { DebugLogger } from '../../debug/index.js';

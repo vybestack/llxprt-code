@@ -17,7 +17,7 @@ import {
   it,
   vi,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { loadSettings, USER_SETTINGS_PATH } from './settings.js';
 import { resetTrustedFoldersForTesting, TrustLevel } from './trustedFolders.js';
 

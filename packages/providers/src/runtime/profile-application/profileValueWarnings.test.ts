@@ -11,7 +11,7 @@
  * not a gate: unknown keys and custom-model parameters must never warn.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   collectProfileValueWarnings,
   formatProfileValueWarnings,

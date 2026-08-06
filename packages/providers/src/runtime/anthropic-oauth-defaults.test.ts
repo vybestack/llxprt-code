@@ -11,7 +11,7 @@
  * - oauthManager.isOAuthEnabled('claudecode') returns true (OAuth is actively being used)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 const {

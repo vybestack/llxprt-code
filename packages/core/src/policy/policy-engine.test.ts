@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { PolicyEngine } from './policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from './types.js';
 

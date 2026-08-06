@@ -7,7 +7,7 @@
  * @plan PLAN-20260623-ISSUE2132
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, type MockInstance } from 'vitest';
+import { vi, type MockInstance } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalInputError } from '@vybestack/llxprt-code-core';
 import {

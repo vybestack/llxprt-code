@@ -29,7 +29,7 @@ import {
   ExtensionDisableEvent,
   FileOperation,
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
-import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, it, expect } from 'bun:test';
 
 // Mock ClearcutLogger to avoid import errors
 const mockClearcutLogger = {

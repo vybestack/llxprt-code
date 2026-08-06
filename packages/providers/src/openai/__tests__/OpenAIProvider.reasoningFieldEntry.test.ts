@@ -22,7 +22,7 @@
  * stream processor), so they prove the actual end-to-end wiring.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import type {
   IContent,

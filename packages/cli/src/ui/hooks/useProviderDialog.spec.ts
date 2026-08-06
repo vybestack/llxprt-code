@@ -9,7 +9,7 @@
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { MessageType } from '../types.js';

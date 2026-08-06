@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { handleDisable, disableCommand } from './disable.js';
 import yargs from 'yargs';
 import { FatalConfigError } from '@vybestack/llxprt-code-core';

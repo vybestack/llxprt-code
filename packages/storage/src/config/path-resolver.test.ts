@@ -15,7 +15,7 @@
  * resolver (the single-implementation contract).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as path from 'node:path';
 import {
   resolveGlobalConfigDir,

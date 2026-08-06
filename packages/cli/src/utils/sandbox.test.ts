@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import type { MockInstance } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
+import type { MockInstance } from 'bun:test';
 import {
   buildSandboxEnvArgs,
   getPassthroughEnvVars,

@@ -22,7 +22,7 @@ import {
   expect,
   beforeEach,
   afterEach,
-} from 'vitest';
+} from 'bun:test';
 import { createProfileNameWriter } from './nonInteractiveCli.js';
 
 function createMockConfig(): Config {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import { type HistoryItem, MessageType, ToolCallStatus } from '../types.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';

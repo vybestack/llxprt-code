@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { runCleanupSteps } from './augment-bun-vi.js';
 
 vi.mock('./import-actual-fixture.js', async (importOriginal) => {

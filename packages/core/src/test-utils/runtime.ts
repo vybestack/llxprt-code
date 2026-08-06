@@ -10,7 +10,7 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
 import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
 // Type-only import of vitest: erased at compile time, creates no runtime edge.
 // Required to obtain the precise `vi.fn()` Mock<T> return type.
-import type { vi as ViNamespace } from 'vitest';
+import type { vi as ViNamespace } from 'bun:test';
 import {
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,

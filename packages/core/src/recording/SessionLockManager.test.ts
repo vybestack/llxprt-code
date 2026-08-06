@@ -27,7 +27,7 @@
  * the Phase 09 stub — that is correct TDD.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as path from 'path';
 import * as os from 'os';
 import {

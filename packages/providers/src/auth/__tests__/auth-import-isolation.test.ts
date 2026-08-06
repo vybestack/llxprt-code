@@ -28,7 +28,7 @@
  * zero tool implementations," not "zero contact with the tools package."
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 
 describe('auth import isolation @issue:2417', () => {
   afterEach(() => {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 import { GoogleGenAI } from '@google/genai';
 import type { ModelGenerationRequest } from '../llm-types/modelRequest.js';

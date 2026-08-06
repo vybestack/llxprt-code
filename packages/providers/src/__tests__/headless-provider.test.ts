@@ -20,7 +20,7 @@
  * settings file.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // Mock os so Storage.getGlobalSettingsPath() resolves under a fake homedir.

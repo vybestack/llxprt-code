@@ -21,8 +21,8 @@
  * and passed in.
  */
 
-import { vi } from 'vitest';
-import type { Mock } from 'vitest';
+import { vi } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { createRequire } from 'node:module';
 import type { ConfigParameters, SandboxConfig } from './config.js';
 import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';

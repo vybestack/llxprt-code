@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { StreamingState } from '../../../types.js';
 import { useSteer } from './useSteer.js';

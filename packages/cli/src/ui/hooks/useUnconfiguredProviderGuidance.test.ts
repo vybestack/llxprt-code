@@ -14,7 +14,7 @@ import {
   it,
   vi,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
 

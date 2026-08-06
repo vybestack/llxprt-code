@@ -16,7 +16,7 @@
  */
 
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
-import { beforeEach } from 'vitest';
+import { beforeEach } from 'bun:test';
 
 beforeEach(async () => {
   await yieldToEventLoop();

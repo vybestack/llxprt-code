@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';

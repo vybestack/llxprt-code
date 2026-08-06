@@ -7,7 +7,7 @@
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 const mockOpenBrowserSecurely = vi.hoisted(() => vi.fn());
 const mockHttpServer = vi.hoisted(() => ({
@@ -25,7 +25,7 @@ vi.mock('node:http', () => ({
   createServer: vi.fn(() => mockHttpServer),
 }));
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as http from 'node:http';
 import * as crypto from 'node:crypto';
 import { MCPOAuthProvider } from './oauth-provider.js';

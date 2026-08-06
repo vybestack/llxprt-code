@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
 import type { LoadedSettings } from '../../config/settings.js';
 

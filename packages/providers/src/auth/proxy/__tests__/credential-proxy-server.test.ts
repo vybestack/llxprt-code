@@ -14,7 +14,7 @@
  * @plan PLAN-20250214-CREDPROXY.P16
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 
 import {

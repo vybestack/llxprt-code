@@ -16,7 +16,7 @@
  * - Every line of production code is written in response to a failing test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { triggerToolNotificationHook } from '../core/coreToolHookTriggers.js';
 import { NotificationType } from './types.js';
 import type { Config } from '../config/config.js';

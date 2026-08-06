@@ -16,7 +16,7 @@
  * so a single user intent produced two foreign dialects on the wire.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';

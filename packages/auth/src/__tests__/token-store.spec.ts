@@ -8,7 +8,7 @@
  * __tests__/keyring-token-store.integration.test.ts.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { KeyringTokenStore } from '../keyring-token-store.js';
 import type { OAuthToken } from '../types.js';
 import type { IDebugLogger, ISecureStore } from '../interfaces/index.js';

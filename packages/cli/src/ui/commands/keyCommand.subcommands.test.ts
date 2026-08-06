@@ -14,7 +14,7 @@
  * @requirement R12, R13, R14, R15, R16, R17, R18, R19, R20, R27.2
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';

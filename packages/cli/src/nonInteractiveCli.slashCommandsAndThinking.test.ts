@@ -19,8 +19,8 @@ import {
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Mock, MockInstance } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { Mock, MockInstance } from 'bun:test';
 import type { LoadedSettings } from './config/settings.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 

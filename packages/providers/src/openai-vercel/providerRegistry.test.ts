@@ -16,7 +16,7 @@
  * is in place.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import {

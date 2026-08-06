@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useAutoAcceptIndicator } from './useAutoAcceptIndicator.js';

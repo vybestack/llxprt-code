@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, afterEach } from 'vitest';
+import { beforeEach, afterEach } from 'bun:test';
 
 /**
  * Shared temp-fixture helper per dev-docs/RULES.md: one line of setup per

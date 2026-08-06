@@ -14,7 +14,7 @@
  * state.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 
 const runtimeApi = {
   getCliOAuthManager: vi.fn().mockImplementation(() => {

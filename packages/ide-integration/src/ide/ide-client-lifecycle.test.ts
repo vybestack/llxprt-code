@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mocked,
-} from 'vitest';
+} from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
 import { ideContext, IdeContextNotificationSchema } from './ideContext.js';
 import * as fs from 'node:fs';

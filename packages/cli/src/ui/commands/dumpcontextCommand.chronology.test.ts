@@ -9,7 +9,7 @@
  * unknown fields with HTTP 400.
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect } from 'bun:test';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';

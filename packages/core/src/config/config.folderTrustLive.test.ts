@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config, ApprovalMode } from './config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';

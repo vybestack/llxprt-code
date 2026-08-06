@@ -19,7 +19,7 @@
  * returning buckets, returning [] if they don't match.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import type * as Core from '@vybestack/llxprt-code-core';
 import type * as SettingsPackage from '@vybestack/llxprt-code-settings';

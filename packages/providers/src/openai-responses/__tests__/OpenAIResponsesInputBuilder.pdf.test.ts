@@ -19,7 +19,7 @@
  * Each test calls buildOpenAIResponsesInput with realistic IContent[] histories.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {

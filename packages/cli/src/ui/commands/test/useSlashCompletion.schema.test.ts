@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 const { schemaHandlerSpy, createHandlerMock } = vi.hoisted(() => {
   const schemaHandlerSpy = vi.fn().mockResolvedValue({

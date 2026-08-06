@@ -14,7 +14,7 @@
  * logic is mocked.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';

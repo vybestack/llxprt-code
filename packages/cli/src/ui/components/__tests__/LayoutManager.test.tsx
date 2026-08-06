@@ -6,7 +6,7 @@
 
 import { render } from '../../../test-utils/render.js';
 import React, { act } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { LayoutManager, useLayout } from '../LayoutManager.js';

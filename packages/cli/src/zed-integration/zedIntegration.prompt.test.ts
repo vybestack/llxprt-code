@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core';

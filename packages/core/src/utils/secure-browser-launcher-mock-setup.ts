@@ -18,7 +18,7 @@
  * configure them (mockResolvedValue, etc.) and assert on them.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import { createRequire } from 'node:module';
 import type * as ChildProcessModule from 'node:child_process';
 import type { ExecFileOptions } from 'node:child_process';

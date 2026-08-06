@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MockInstance } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { MockInstance } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
 import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';

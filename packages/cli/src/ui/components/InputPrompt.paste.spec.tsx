@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 
 // Mock ink before any imports
 // chalk is deliberately NOT mocked. Ink's colorize calls chalk.hex for hex

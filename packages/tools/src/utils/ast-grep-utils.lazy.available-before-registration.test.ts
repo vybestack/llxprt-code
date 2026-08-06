@@ -12,7 +12,7 @@
 // under Bun). The parent file's tests trigger registration before checking
 // availability, so this assertion needs its own clean import.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 const { registerSpy, mockLang } = vi.hoisted(() => {
   const mockLang = {

@@ -9,7 +9,7 @@
  * @requirement:HOOK-087,HOOK-088,HOOK-089,HOOK-090,HOOK-091
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { HookRegistry, HookRegistryEntry } from './hookRegistry.js';
 import { HookEventName, HookType } from './types.js';
 

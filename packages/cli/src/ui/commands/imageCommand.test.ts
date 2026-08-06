@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { imageCommand } from './imageCommand.js';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';

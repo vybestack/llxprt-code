@@ -13,7 +13,7 @@
  * `applyRequestBodyOverrides`).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';

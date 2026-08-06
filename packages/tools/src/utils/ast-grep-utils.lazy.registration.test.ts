@@ -10,7 +10,7 @@
 // once (issue #2399). Split into a separate file so the Bun orchestrator
 // provides a fresh module graph (vi.resetModules is unsupported under Bun).
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
 const { registerSpy, mockLang } = vi.hoisted(() => {
   const mockLang = {

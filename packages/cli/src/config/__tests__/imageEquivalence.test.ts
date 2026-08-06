@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildNormalizedImageRequest } from '@vybestack/llxprt-code-core/services/image/imageOperation.js';
 import { parseImageCommand } from '../../ui/commands/imageCommandTokenizer.js';
 import { detectImageMode } from '../imageMode.js';

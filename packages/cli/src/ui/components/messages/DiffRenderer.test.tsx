@@ -8,7 +8,7 @@ import { OverflowProvider } from '../../contexts/OverflowContext.js';
 import { render } from 'ink-testing-library';
 import { DiffRenderer } from './DiffRenderer.js';
 import * as CodeColorizer from '../../utils/CodeColorizer.js';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 describe('<OverflowProvider><DiffRenderer /></OverflowProvider>', () => {
   const mockColorizeCode = vi.spyOn(CodeColorizer, 'colorizeCode');

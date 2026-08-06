@@ -9,7 +9,7 @@ if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { themeManager, DEFAULT_THEME } from './theme-manager.js';
 import type { CustomTheme } from './theme.js';
 import type { SemanticColors } from './semantic-tokens.js';

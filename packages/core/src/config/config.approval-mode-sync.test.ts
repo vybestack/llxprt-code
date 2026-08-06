@@ -22,7 +22,7 @@
  * (ALLOW / ASK_USER / DENY) across mode transitions — no mock theater.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import {

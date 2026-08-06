@@ -6,7 +6,7 @@
  * auto-detection.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   resolveToolFormat,
   getToolFormatOverride,

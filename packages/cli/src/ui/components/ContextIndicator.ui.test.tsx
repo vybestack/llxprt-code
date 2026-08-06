@@ -11,7 +11,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';

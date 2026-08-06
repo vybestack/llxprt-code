@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useShellPathCompletion } from './useShellPathCompletion.js';

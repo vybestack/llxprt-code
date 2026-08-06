@@ -17,7 +17,7 @@
  * of the logger default stub.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import { CodexDeviceFlow } from '../flows/codex-device-flow.js';

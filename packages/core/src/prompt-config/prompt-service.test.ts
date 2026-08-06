@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PromptService, type PromptServiceConfig } from './prompt-service.js';
 import type { PromptContext } from './types.js';
 import type { PromptInstaller } from './prompt-installer.js';

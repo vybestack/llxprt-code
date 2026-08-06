@@ -15,7 +15,7 @@
  * @requirement R2.3, R12.5, R26.1
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   createTokenStore,
   createProviderKeyStorage,

@@ -12,7 +12,7 @@ import {
   afterEach,
   beforeAll,
   afterAll,
-} from 'vitest';
+} from 'bun:test';
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,

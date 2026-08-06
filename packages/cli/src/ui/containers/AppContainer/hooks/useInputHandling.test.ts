@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import type { TextBuffer } from '../../../components/shared/text-buffer.js';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../../../types.js';

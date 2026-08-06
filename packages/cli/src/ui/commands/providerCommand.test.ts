@@ -12,13 +12,13 @@ import {
   afterEach,
   vi,
   beforeAll,
-} from 'vitest';
+} from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Mock } from 'vitest';
+import type { Mock } from 'bun:test';
 
 /**
  * Minimal typed Agent double for the /provider switch path. The command only

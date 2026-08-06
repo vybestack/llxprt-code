@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/ide-integration.tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2023"],
     "composite": true,
-    "types": ["node", "vitest/globals"],
+    "types": ["node", "vitest/globals", "bun-types/test"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-ide-integration": ["./index.ts"]

@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {

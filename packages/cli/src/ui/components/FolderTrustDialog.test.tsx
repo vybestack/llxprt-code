@@ -10,7 +10,7 @@ import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { act, StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());

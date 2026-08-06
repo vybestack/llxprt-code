@@ -7,7 +7,7 @@
 import { installNonInteractiveSigintHandler } from './cli.js';
 import { runExitCleanup } from './utils/cleanup.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(async () => {}),

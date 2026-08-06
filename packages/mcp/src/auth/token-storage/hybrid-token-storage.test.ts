@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HybridTokenStorage } from './hybrid-token-storage.js';
 import { KeychainTokenStorage } from './keychain-token-storage.js';
 import { FileTokenStorage } from './file-token-storage.js';

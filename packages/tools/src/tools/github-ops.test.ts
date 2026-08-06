@@ -17,7 +17,7 @@
  * @requirement REQ-008, REQ-012
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   GITHUB_OP_SPECS,
   GITHUB_SUPPORTED_OPS,

@@ -20,7 +20,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';

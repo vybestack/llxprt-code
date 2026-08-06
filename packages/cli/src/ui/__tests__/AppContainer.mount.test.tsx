@@ -11,7 +11,7 @@
  * Tests the observable behavior: component mounts and renders DefaultAppLayout.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // Mock heavy dependencies first before importing component
 vi.mock('../hooks/agentStream/index.js', () => ({

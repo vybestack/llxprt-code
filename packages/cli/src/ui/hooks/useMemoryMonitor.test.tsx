@@ -5,7 +5,7 @@
  */
 
 import { renderHook } from '../../test-utils/render.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   useMemoryMonitor,
   MEMORY_CHECK_INTERVAL_MS,

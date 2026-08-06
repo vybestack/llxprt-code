@@ -30,7 +30,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ModelLimitsCatalogSchema } from './model-limits.schema.js';
 import {
   DEFAULT_TOKEN_LIMIT,

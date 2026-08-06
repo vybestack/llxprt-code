@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGitBranchName, FETCH_DEBOUNCE_MS } from './useGitBranchName.js';

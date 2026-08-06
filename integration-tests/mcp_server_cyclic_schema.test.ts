@@ -17,7 +17,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, afterEach, beforeEach } from 'vitest';
+import { describe, it, afterEach, beforeEach } from 'bun:test';
 import { TestRig } from './test-helper.js';
 
 // Create a minimal MCP server that doesn't require external dependencies

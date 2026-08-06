@@ -28,7 +28,7 @@
  * RESPONSES_API_MODELS fallback when unauthenticated / fetch fails).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { RESPONSES_API_MODELS } from '../../openai/RESPONSES_API_MODELS.js';
 import type { IModel } from '../../IModel.js';

@@ -5,7 +5,7 @@
  */
 
 import { TestRig } from './test-helper.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 

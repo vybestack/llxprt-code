@@ -8,7 +8,7 @@
  * causing /stats model to show "No API calls" even after making requests.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
