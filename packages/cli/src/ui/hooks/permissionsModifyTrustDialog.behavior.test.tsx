@@ -410,7 +410,8 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
 
-    expect(mockedSetValue).toHaveBeenCalledExactlyOnceWith(
+    expect(mockedSetValue).toHaveBeenCalledTimes(1);
+    expect(mockedSetValue).toHaveBeenCalledWith(
       CONFIGURED_WORKSPACE,
       TrustLevel.TRUST_FOLDER,
     );

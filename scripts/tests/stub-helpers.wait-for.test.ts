@@ -69,7 +69,6 @@ function installVitestScheduler(): void {
 
 afterEach(() => {
   setWaitForScheduler(null);
-  vi.clearAllTimers();
   vi.useRealTimers();
 });
 

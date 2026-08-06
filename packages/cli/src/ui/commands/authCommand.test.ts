@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, setSystemTime } from 'bun:test';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { CommandContext } from './types.js';
@@ -127,7 +127,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2025-01-01T00:00:00.000Z');
-        vi.setSystemTime(now);
+        setSystemTime(now);
 
         const mockIsEnabled = vi.fn().mockReturnValue(true);
         const mockIsAuthenticated = vi.fn().mockResolvedValue(true);

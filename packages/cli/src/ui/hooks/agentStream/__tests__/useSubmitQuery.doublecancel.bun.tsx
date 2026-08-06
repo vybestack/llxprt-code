@@ -433,7 +433,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       expect(queuedSubmissionsRef.current).toHaveLength(0);
     } finally {
       rendered.unmount();
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -493,7 +492,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       expect(processedQueries).toStrictEqual(['next submission']);
     } finally {
       rendered.unmount();
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });

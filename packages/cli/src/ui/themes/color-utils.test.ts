@@ -376,7 +376,6 @@ describe('Color Utils', () => {
         writable: true,
         configurable: true,
       });
-      vi.clearAllTimers();
     });
 
     it('should return undefined when stdin is not a TTY', async () => {

@@ -36,10 +36,8 @@ describe('AgentHookManager', () => {
     it('fires hook on first call for a prompt_id', async () => {
       mockBefore.mockResolvedValue(undefined);
       await manager.fireBeforeAgentHookSafe('p1', 'hello');
-      expect(mockBefore).toHaveBeenCalledExactlyOnceWith(
-        expect.anything(),
-        'hello',
-      );
+      expect(mockBefore).toHaveBeenCalledTimes(1);
+      expect(mockBefore).toHaveBeenCalledWith(expect.anything(), 'hello');
     });
 
     it('does not fire hook again for same prompt_id', async () => {

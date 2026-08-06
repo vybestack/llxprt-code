@@ -475,7 +475,6 @@ describe('useReactToolScheduler in YOLO Mode', () => {
 
   afterEach(() => {
     cleanup();
-    vi.clearAllTimers();
     vi.useRealTimers();
     for (const [sessionId, scheduler] of createdSchedulers.entries()) {
       scheduler.dispose();

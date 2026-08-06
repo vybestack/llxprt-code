@@ -7,7 +7,6 @@
 import { afterEach, expect, it, vi } from 'bun:test';
 
 afterEach(() => {
-  vi.clearAllTimers();
   vi.useRealTimers();
 });
 

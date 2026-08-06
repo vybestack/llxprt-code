@@ -45,7 +45,7 @@ describe('LSP entry path resolution', () => {
     expect(existsSync(brokenPath)).toBe(false);
   });
 
-  it.runIf(hasImportMetaResolve)(
+  it.skipIf(!hasImportMetaResolve)(
     'resolves via import.meta.resolve when package is installed',
     () => {
       // Call through `import.meta` rather than detaching `resolve` into a

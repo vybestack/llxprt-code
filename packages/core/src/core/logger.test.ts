@@ -12,6 +12,7 @@ import {
   beforeEach,
   afterEach,
   afterAll,
+  setSystemTime,
 } from 'bun:test';
 import type { LogEntry } from './logger.js';
 import { Logger, MessageSenderType } from './logger.js';
@@ -102,7 +103,7 @@ describe('Logger', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
+    setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
     // Clean up before the test
     await cleanupLogAndCheckpointFiles();
     // Ensure the directory exists for the test

@@ -106,7 +106,8 @@ describe('validateDnsResolutionOrder', () => {
 
   it('should return the default "ipv4first" and log a warning for an invalid string', () => {
     expect(validateDnsResolutionOrder('invalid-value')).toBe('ipv4first');
-    expect(debugWarnSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(debugWarnSpy).toHaveBeenCalledTimes(1);
+    expect(debugWarnSpy).toHaveBeenCalledWith(
       'Invalid value for dnsResolutionOrder in settings: "invalid-value". Using default "ipv4first".',
     );
   });

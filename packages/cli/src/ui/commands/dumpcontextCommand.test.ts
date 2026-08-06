@@ -210,7 +210,8 @@ describe('dumpcontextCommand', () => {
       const result = await dumpcontextAction(ctxWithHistory, 'now');
 
       expect(mockSetEphemeralSetting).not.toHaveBeenCalled();
-      expect(dumpRequestContext).toHaveBeenCalledExactlyOnceWith(
+      expect(dumpRequestContext).toHaveBeenCalledTimes(1);
+      expect(dumpRequestContext).toHaveBeenCalledWith(
         expect.objectContaining({ url: 'immediate-context-dump' }),
         'anthropic',
         undefined,
@@ -265,7 +266,8 @@ describe('dumpcontextCommand', () => {
 
       const result = await dumpcontextAction(ctxWithHistory, 'now');
 
-      expect(dumpRequestContext).toHaveBeenCalledExactlyOnceWith(
+      expect(dumpRequestContext).toHaveBeenCalledTimes(1);
+      expect(dumpRequestContext).toHaveBeenCalledWith(
         expect.objectContaining({ url: 'immediate-context-dump' }),
         'anthropic',
         undefined,

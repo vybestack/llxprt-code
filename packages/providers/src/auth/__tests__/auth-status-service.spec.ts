@@ -865,11 +865,15 @@ describe('AuthStatusService.logout proactive renewal cleanup', () => {
     await service.logout('device-code-test', 'bucket-x');
 
     // Must be called with the exact provider+bucket
-    expect(
+    const clearRenewalsForProvider =
       proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
         typeof vi.fn
-      >,
-    ).toHaveBeenCalledExactlyOnceWith('device-code-test', 'bucket-x');
+      >;
+    expect(clearRenewalsForProvider).toHaveBeenCalledTimes(1);
+    expect(clearRenewalsForProvider).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-x',
+    );
 
     // Over-broad cleanup methods must NOT be called
     expect(

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, setSystemTime } from 'bun:test';
 import { statsCommand } from './statsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -32,7 +32,7 @@ describe('statsCommand', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(endTime);
+    setSystemTime(endTime);
 
     // 1. Create the mock context with all default values
     mockContext = createMockCommandContext();

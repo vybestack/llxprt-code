@@ -228,7 +228,8 @@ describe('IDEServer', () => {
       vi.clearAllMocks();
       await ideServer.stop();
 
-      expect(fs.unlink).toHaveBeenCalledExactlyOnceWith(expectedPortFile);
+      expect(fs.unlink).toHaveBeenCalledTimes(1);
+      expect(fs.unlink).toHaveBeenCalledWith(expectedPortFile);
     });
 
     it('should clear environment variables on stop', async () => {

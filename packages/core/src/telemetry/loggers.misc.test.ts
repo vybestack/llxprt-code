@@ -29,7 +29,15 @@ import {
   ExtensionDisableEvent,
   FileOperation,
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
-import { vi, describe, beforeEach, afterEach, it, expect } from 'bun:test';
+import {
+  vi,
+  describe,
+  beforeEach,
+  afterEach,
+  it,
+  expect,
+  setSystemTime,
+} from 'bun:test';
 
 // Mock ClearcutLogger to avoid import errors
 const mockClearcutLogger = {
@@ -85,13 +93,12 @@ describe('loggers', () => {
 
   beforeEach(() => {
     mockIsTelemetrySdkInitialized.mockReturnValue(true);
-    vi.clearAllTimers();
     vi.spyOn(logs, 'getLogger').mockReturnValue(mockLogger);
     vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
       mockUiEvent.addEvent,
     );
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
 
   describe('logHookCall', () => {

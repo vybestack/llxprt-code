@@ -181,7 +181,8 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
         new Set(),
       );
 
-      expect(warn).toHaveBeenCalledExactlyOnceWith(
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
         expect.stringContaining(missingKeyfile),
       );
     } finally {
@@ -212,9 +213,8 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
         new Set(),
       );
 
-      expect(warn).toHaveBeenCalledExactlyOnceWith(
-        expect.stringContaining(emptyKeyfile),
-      );
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(emptyKeyfile));
     } finally {
       warn.mockRestore();
       fs.rmSync(tempDir, { recursive: true, force: true });

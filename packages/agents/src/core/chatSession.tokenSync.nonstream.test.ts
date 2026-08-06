@@ -132,7 +132,8 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const actualCount = historyService.getTotalTokens();
       expect(actualCount).toBe(5000);
-      expect(recordActual).toHaveBeenCalledExactlyOnceWith('test-prompt-id', {
+      expect(recordActual).toHaveBeenCalledTimes(1);
+      expect(recordActual).toHaveBeenCalledWith('test-prompt-id', {
         actualPromptTokens: 5000,
         cachedTokens: 0,
       });

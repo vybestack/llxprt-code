@@ -98,7 +98,7 @@ function invokeCredentialSetup(
   };
 }
 
-describe.sequential('#1456 credential proxy network policy', () => {
+describe('#1456 credential proxy network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let tmpDir = '';
   let isolatedHome: string;

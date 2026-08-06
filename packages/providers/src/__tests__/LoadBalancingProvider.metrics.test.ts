@@ -55,7 +55,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   });
 
   afterEach(() => {
-    vi.clearAllTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

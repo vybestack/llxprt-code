@@ -337,7 +337,8 @@ describe('executeAnthropicApiCall dumpContext behavior', () => {
       ).rejects.toThrow('API Error');
 
       expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-      expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+      expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+      expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
         '20260101-120000-anthropic-test12',
         'anthropic',
         { error: 'API Error: Rate limit exceeded' },

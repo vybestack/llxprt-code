@@ -27,7 +27,7 @@ import {
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { vi, describe, beforeEach, it, expect } from 'bun:test';
+import { vi, describe, beforeEach, it, expect, setSystemTime } from 'bun:test';
 import type { RuntimeUsageMetadata } from '../runtime/AgentRuntimeContext.js';
 import * as uiTelemetry from './uiTelemetry.js';
 
@@ -61,7 +61,7 @@ describe('loggers', () => {
       mockUiEvent.addEvent,
     );
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
 
   describe('logCliConfiguration', () => {

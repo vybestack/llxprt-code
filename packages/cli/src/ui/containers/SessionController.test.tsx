@@ -144,7 +144,6 @@ describe('SessionController', () => {
       isPaidMode: false,
     });
     vi.clearAllMocks();
-    vi.clearAllTimers();
     vi.useFakeTimers();
 
     mockAddItem = vi.fn();
@@ -186,7 +185,6 @@ describe('SessionController', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
-    vi.clearAllTimers();
     vi.restoreAllMocks();
   });
 

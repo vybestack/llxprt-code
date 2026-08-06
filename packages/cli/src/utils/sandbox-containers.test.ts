@@ -103,7 +103,7 @@ function buildThenSetup(fixturePath: string): {
   };
 }
 
-describe.sequential('#1456 container network policy', () => {
+describe('#1456 container network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -244,7 +244,7 @@ const CONTAINER_ENV_VARS = [
 
 const ENV_CONFIG = { command: 'docker', image: 'test' } as const;
 
-describe.sequential('#2946 container credential isolation', () => {
+describe('#2946 container credential isolation', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let tempDirs: string[] = [];
 
@@ -407,7 +407,7 @@ const HARDENING_ENV_KEYS = [
   'LLXPRT_CODE_INTEGRATION_TEST',
 ] as const;
 
-describe.sequential('#2902 sandbox privilege hardening', () => {
+describe('#2902 sandbox privilege hardening', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -620,7 +620,7 @@ const CANONICAL_CONFIG_MOUNT_ENV_KEYS = [
   'LLXPRT_LOG_HOME',
 ] as const;
 
-describe.sequential('#3081 canonical config mount + env pinning', () => {
+describe('#3081 canonical config mount + env pinning', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -783,7 +783,7 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
   });
 });
 
-describe.sequential('#3081 current-user container-home agreement', () => {
+describe('#3081 current-user container-home agreement', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 

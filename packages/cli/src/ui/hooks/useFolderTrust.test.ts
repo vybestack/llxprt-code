@@ -338,7 +338,6 @@ describe('useFolderTrust', () => {
       );
       resolutionSpy.mockRestore();
     } finally {
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -410,7 +409,6 @@ describe('useFolderTrust', () => {
         expect.any(Number),
       );
     } finally {
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -470,7 +468,6 @@ describe('useFolderTrust', () => {
         expect.any(Number),
       );
     } finally {
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });

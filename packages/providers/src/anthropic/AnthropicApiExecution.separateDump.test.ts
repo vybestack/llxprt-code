@@ -238,7 +238,8 @@ describe('AnthropicApiExecution separate request/response dump', () => {
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-anthropic-test12',
       'anthropic',
       {

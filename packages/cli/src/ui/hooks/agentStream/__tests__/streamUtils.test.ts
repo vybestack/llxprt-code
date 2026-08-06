@@ -419,7 +419,8 @@ describe('processSlashCommandResult', () => {
       'prompt-1',
       mockSignal,
     );
-    expect(mockScheduleToolCalls).toHaveBeenCalledExactlyOnceWith(
+    expect(mockScheduleToolCalls).toHaveBeenCalledTimes(1);
+    expect(mockScheduleToolCalls).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'my_tool',
@@ -539,7 +540,8 @@ describe('handleSubmissionError', () => {
       Date.now(),
     );
     expect(result).toBe(false);
-    expect(mockAddItem).toHaveBeenCalledExactlyOnceWith(
+    expect(mockAddItem).toHaveBeenCalledTimes(1);
+    expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'error' }),
       expect.any(Number),
     );

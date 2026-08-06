@@ -521,7 +521,8 @@ describe('memoryCommand', () => {
 
       await refreshCommand.action!(jitContext, '');
 
-      expect(mockRefresh).toHaveBeenCalledExactlyOnceWith();
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      expect(mockRefresh).toHaveBeenCalledWith();
       expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
       expect(jitContext.ui.setLlxprtMdFileCount).toHaveBeenCalledWith(3);
       expect(jitContext.ui.addItem).toHaveBeenCalledWith(

@@ -660,7 +660,7 @@ function assertScrubbedEnvironment(harness: SeatbeltHarness): void {
   expect(childEnvironment).not.toContain('LLXPRT_CREDENTIAL_SOCKET=');
 }
 
-describe.sequential('#1456 Seatbelt network policy', () => {
+describe('#1456 Seatbelt network policy', () => {
   let environmentSnapshot: Record<string, string | undefined>;
   let originalCwd: string;
 

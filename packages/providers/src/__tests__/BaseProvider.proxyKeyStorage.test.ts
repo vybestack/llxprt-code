@@ -186,7 +186,7 @@ function buildChatOptions(settings: SettingsService) {
 const PROXY_SERVED_KEY = 'proxy-served-secret-key-2946';
 const NAMED_KEY = 'my-named-key';
 
-describe.sequential('#2946 BaseProvider proxy-aware key storage', () => {
+describe('#2946 BaseProvider proxy-aware key storage', () => {
   let tmpDir: string;
   let priorSocketEnv: string | undefined;
   let server: CredentialProxyServer | undefined;

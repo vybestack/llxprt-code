@@ -28,7 +28,6 @@ describe('checkForUpdates', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    vi.clearAllTimers();
     // Clear DEV environment variable before each test
     delete process.env.DEV;
 

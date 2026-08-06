@@ -735,9 +735,9 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         // Confirm the spies were actually installed before relying on
         // not.toHaveBeenCalled(); otherwise a silently failed spy would make
         // the guard assertions meaningless.
-        expect(vi.isMockFunction(fs.mkdirSync)).toBe(true);
-        expect(vi.isMockFunction(fs.chmodSync)).toBe(true);
-        expect(vi.isMockFunction(fs.unlinkSync)).toBe(true);
+        expect(fs.mkdirSync).toHaveProperty('mock');
+        expect(fs.chmodSync).toHaveProperty('mock');
+        expect(fs.unlinkSync).toHaveProperty('mock');
 
         try {
           const pipePath = await server.start();

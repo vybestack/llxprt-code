@@ -144,7 +144,6 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.clearAllTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

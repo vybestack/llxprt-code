@@ -18,7 +18,8 @@ describe('recordActualTokenUsage', () => {
         { promptTokens: 100, cachedTokens: 25 },
       ),
     ).resolves.toBeUndefined();
-    expect(recordActual).toHaveBeenCalledExactlyOnceWith('prompt-1', {
+    expect(recordActual).toHaveBeenCalledTimes(1);
+    expect(recordActual).toHaveBeenCalledWith('prompt-1', {
       actualPromptTokens: 100,
       cachedTokens: 25,
     });
@@ -33,7 +34,8 @@ describe('recordActualTokenUsage', () => {
       { promptTokens: 50, cache_read_input_tokens: 10 },
     );
 
-    expect(recordActual).toHaveBeenCalledExactlyOnceWith('prompt-2', {
+    expect(recordActual).toHaveBeenCalledTimes(1);
+    expect(recordActual).toHaveBeenCalledWith('prompt-2', {
       actualPromptTokens: 50,
       cachedTokens: 10,
     });
@@ -77,7 +79,8 @@ describe('recordActualTokenUsage', () => {
       { promptTokens: 200, cachedTokens: 30, cache_read_input_tokens: 99 },
     );
 
-    expect(recordActual).toHaveBeenCalledExactlyOnceWith('prompt-prec', {
+    expect(recordActual).toHaveBeenCalledTimes(1);
+    expect(recordActual).toHaveBeenCalledWith('prompt-prec', {
       actualPromptTokens: 200,
       cachedTokens: 30,
     });
@@ -92,7 +95,8 @@ describe('recordActualTokenUsage', () => {
       { promptTokens: 200, cache_read_input_tokens: 88 },
     );
 
-    expect(recordActual).toHaveBeenCalledExactlyOnceWith('prompt-fb', {
+    expect(recordActual).toHaveBeenCalledTimes(1);
+    expect(recordActual).toHaveBeenCalledWith('prompt-fb', {
       actualPromptTokens: 200,
       cachedTokens: 88,
     });
@@ -107,7 +111,8 @@ describe('recordActualTokenUsage', () => {
       { promptTokens: 5 },
     );
 
-    expect(recordActual).toHaveBeenCalledExactlyOnceWith('prompt-nocache', {
+    expect(recordActual).toHaveBeenCalledTimes(1);
+    expect(recordActual).toHaveBeenCalledWith('prompt-nocache', {
       actualPromptTokens: 5,
       cachedTokens: 0,
     });

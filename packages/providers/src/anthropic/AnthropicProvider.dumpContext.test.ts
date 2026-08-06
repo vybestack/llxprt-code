@@ -263,7 +263,8 @@ describe('AnthropicProvider dumpContext integration', () => {
       })(),
     ).rejects.toThrow(/API Error/);
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'anthropic',
       '/v1/messages',
       expect.objectContaining({
@@ -271,7 +272,8 @@ describe('AnthropicProvider dumpContext integration', () => {
       }),
       'https://api.anthropic.com',
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-anthropic-test12',
       'anthropic',
       { error: 'API Error: Rate limit exceeded' },

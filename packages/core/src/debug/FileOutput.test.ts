@@ -97,7 +97,6 @@ describe('FileOutput', () => {
     if (fileOutput) {
       await fileOutput.dispose();
     }
-    vi.clearAllTimers();
   });
 
   /**

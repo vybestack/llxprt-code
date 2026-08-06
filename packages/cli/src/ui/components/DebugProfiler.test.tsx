@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  setSystemTime,
+} from 'bun:test';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
@@ -95,14 +103,14 @@ describe('DebugProfiler', () => {
 
   it('should not report frames as idle if an action happens shortly after', async () => {
     const startTime = Date.now();
-    vi.setSystemTime(startTime);
+    setSystemTime(startTime);
 
     for (let i = 0; i < 5; i++) {
       profiler.reportFrameRendered();
       vi.advanceTimersByTime(20);
     }
 
-    vi.setSystemTime(startTime + 400);
+    setSystemTime(startTime + 400);
     profiler.reportAction();
 
     vi.advanceTimersByTime(600);
@@ -113,7 +121,7 @@ describe('DebugProfiler', () => {
 
   it('should report frames as idle if no action happens nearby', async () => {
     const startTime = Date.now();
-    vi.setSystemTime(startTime);
+    setSystemTime(startTime);
 
     for (let i = 0; i < 5; i++) {
       profiler.reportFrameRendered();
@@ -128,7 +136,7 @@ describe('DebugProfiler', () => {
 
   it('should not report frames as idle if an action happens shortly before', async () => {
     const startTime = Date.now();
-    vi.setSystemTime(startTime);
+    setSystemTime(startTime);
 
     profiler.reportAction();
 
@@ -147,7 +155,7 @@ describe('DebugProfiler', () => {
 
   it('should correctly identify mixed idle and non-idle frames', async () => {
     const startTime = Date.now();
-    vi.setSystemTime(startTime);
+    setSystemTime(startTime);
 
     for (let i = 0; i < 3; i++) {
       profiler.reportFrameRendered();
@@ -172,7 +180,7 @@ describe('DebugProfiler', () => {
 
   it('should not report idle frames when actions are interleaved', async () => {
     const startTime = Date.now();
-    vi.setSystemTime(startTime);
+    setSystemTime(startTime);
 
     profiler.reportFrameRendered();
     vi.advanceTimersByTime(20);
@@ -196,7 +204,7 @@ describe('DebugProfiler', () => {
 
   it('should not report frames as idle if debugNumAnimatedComponents > 0', async () => {
     const startTime = Date.now();
-    vi.setSystemTime(startTime);
+    setSystemTime(startTime);
     debugState.debugNumAnimatedComponents = 1;
 
     for (let i = 0; i < 5; i++) {

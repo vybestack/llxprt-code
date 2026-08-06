@@ -12,6 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
+  setSystemTime,
 } from 'bun:test';
 import {
   getEnvironmentContext,
@@ -78,7 +79,7 @@ describe('getEnvironmentContext', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-08-05T12:00:00Z'));
+    setSystemTime(new Date('2025-08-05T12:00:00Z'));
 
     mockToolRegistry = {
       getTool: vi.fn(),

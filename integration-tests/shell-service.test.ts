@@ -43,7 +43,7 @@ describe('ShellExecutionService programmatic integration tests', () => {
     expect(result.output).toContain('hello from the service');
   });
 
-  it.runIf(process.platform === 'win32')(
+  it.skipIf(process.platform !== 'win32')(
     'should execute "dir" on Windows',
     async () => {
       const testFile = 'test-file-windows.txt';

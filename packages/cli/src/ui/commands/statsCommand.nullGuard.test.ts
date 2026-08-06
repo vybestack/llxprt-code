@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  setSystemTime,
+} from 'bun:test';
 import { statsCommand } from './statsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -29,7 +37,7 @@ describe('statsCommand null sessionStartTime guard', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-07-14T10:00:30.000Z'));
+    setSystemTime(new Date('2025-07-14T10:00:30.000Z'));
 
     mockContext = createMockCommandContext();
     getCliOAuthManagerMock.mockReset();

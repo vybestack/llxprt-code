@@ -47,7 +47,8 @@ describe('recordFinalizedPromptEnvelopeEstimate', () => {
       estimate(),
     );
 
-    expect(refineEstimate).toHaveBeenCalledExactlyOnceWith('prompt-finalized', {
+    expect(refineEstimate).toHaveBeenCalledTimes(1);
+    expect(refineEstimate).toHaveBeenCalledWith('prompt-finalized', {
       provider: 'openai',
       model: 'gpt-4o',
       estimatedTokens: 12,
