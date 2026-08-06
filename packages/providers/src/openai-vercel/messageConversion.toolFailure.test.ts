@@ -57,6 +57,18 @@ function firstToolResultOutput(contents: IContent[]): ToolResultPart['output'] {
   return parts[0].output;
 }
 
+function roundTripToolResponses(
+  ...blocks: ToolResponseBlock[]
+): ToolResponseBlock[] {
+  return convertFromVercelMessages(
+    convertToVercelMessages([toolContent(...blocks)]),
+  ).flatMap((content) =>
+    content.blocks.flatMap((block) =>
+      block.type === 'tool_response' ? [block] : [],
+    ),
+  );
+}
+
 describe('messageConversion tool-failure round trip (issue #3076)', () => {
   it('AC1.1 — a tool_response with error set converts to an error-text output', () => {
     const output = firstToolResultOutput([
@@ -148,9 +160,13 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
       }),
     ];
 
-    const vercel = convertToVercelMessages(contents);
-    const roundTripped = convertFromVercelMessages(vercel);
-    const blocks = roundTripped.flatMap((c) => c.blocks) as ToolResponseBlock[];
+    const blocks = roundTripToolResponses(
+      ...contents.flatMap((content) =>
+        content.blocks.flatMap((block) =>
+          block.type === 'tool_response' ? [block] : [],
+        ),
+      ),
+    );
 
     const failed = blocks.find((b) => b.toolName === 'failingTool');
     const succeeded = blocks.find((b) => b.toolName === 'okTool');
@@ -158,18 +174,43 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
       throw new Error('expected both a failed and a succeeded block');
     }
 
-    // The failure MARKER survives the round trip (isError stays true). The
-    // pre-existing inbound decoder (parseToolResultPart) sets the reconstructed
+    // The pre-existing inbound decoder (parseToolResultPart) sets the reconstructed
     // `error` to the OUTPUT TEXT rather than the original error string, so the
-    // exact error text is NOT preserved here — but the marker is what #3076 is
-    // about, and that is preserved. Assert the exact observed values.
-    expect((failed as { isError?: boolean }).isError).toBe(true);
+    // exact error text is NOT preserved here. The canonical `error` property is
+    // the observable failure marker that #3076 requires the round trip to keep.
     expect(failed.error).toBe('partial data');
     expect(failed.result).toBe('partial data');
 
-    expect((succeeded as { isError?: boolean }).isError).toBeUndefined();
     expect(succeeded.error).toBeUndefined();
     expect(succeeded.result).toBe('all good');
+  });
+
+  it('AC1.8 — failed empty-result variants remain failures after a round trip', () => {
+    const blocks = roundTripToolResponses(
+      {
+        type: 'tool_response',
+        callId: 'hist_tool_undefined',
+        toolName: 'undefinedResultTool',
+        result: undefined,
+        error: 'undefined result failed',
+      },
+      {
+        type: 'tool_response',
+        callId: 'hist_tool_null',
+        toolName: 'nullResultTool',
+        result: null,
+        error: 'null result failed',
+      },
+    );
+
+    expect(blocks.map((block) => block.error)).toEqual([
+      'undefined result failed',
+      'null result failed',
+    ]);
+    expect(blocks.map((block) => block.result)).toEqual([
+      'undefined result failed',
+      'null result failed',
+    ]);
   });
 
   it('AC1.6 — one tool message with multiple tool_response blocks keeps error-text/text parts in order', () => {

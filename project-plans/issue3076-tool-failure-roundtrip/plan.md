@@ -130,6 +130,8 @@ relied on by the success path and is not what this issue is about.
   produces one tool message whose parts carry `error-text` and `text` respectively, in order.
 - AC1.7 A failed block with `result: null` (falls through to the empty-result placeholder)
   yields the error text as the `error-text` value.
+- AC1.8 Failed blocks with `result: undefined` or `result: null` remain marked failed via
+  the canonical `error` property after a full Vercel round trip.
 
 ### Part 2 — `packages/core/src/services/history/ContentConverters.ts`
 
@@ -172,7 +174,7 @@ relied on by the success path and is not what this issue is about.
 New Bun (`bun:test`) files — no existing Vitest suite is modified:
 
 1. `packages/providers/src/openai-vercel/messageConversion.toolFailure.test.ts`
-   covers AC1.1 – AC1.7 by driving the real exported converters with real `IContent`
+   covers AC1.1 – AC1.8 by driving the real exported converters with real `IContent`
    fixtures and asserting on the produced `ToolResultPart` / reconstructed blocks.
    Must be registered in `scripts/bun-test-manifest-data-providers.ts` (curated file list).
 2. `packages/core/src/services/history/ContentConverters.toolFailure.test.ts`
