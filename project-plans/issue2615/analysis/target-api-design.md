@@ -75,6 +75,23 @@ The defect was never its location. It is that consumers reach it at
 happens to live under a `services/history` folder. Same symbol, same package, wrong contract.
 Publishing it as a named seam fixes that without moving a line of code.
 
+> **Corrected — this seam is two seams, and the nesting is the other way round.** An earlier draft
+> folded `llm-types/index.js` (66 production imports) into `./content`. That inverts the existing
+> structure. `packages/core/src/llm-types/index.ts` describes itself as the "Barrel for the neutral
+> llm-types layer" and already re-exports the `IContent` content model type-only "so that consumers
+> importing from this barrel get the complete picture in one place." It additionally covers finish
+> reasons, JSON schema, tool declarations, model envelopes, requests, errors, token and embedding
+> types, and grounding.
+>
+> So `llm-types` is the **broader wire vocabulary that contains the content model**, not a peer to
+> be absorbed by it. Two seams: `./content` for the content model, and `./llm-types` (or
+> `./model-protocol`) for the neutral protocol layer. Collapsing them under the name "content"
+> would misname the larger of the two.
+>
+> Note also that `llm-types/index.ts` is built from 14 `export *` statements — it is itself an
+> instance of the growth mechanism rule 2 forbids, and converting it to explicit re-exports is part
+> of publishing it.
+
 The existing hand-rolled `ContentValidation` const is precisely where zod belongs: this is data
 crossing every package boundary, currently validated by bespoke code.
 
@@ -103,9 +120,25 @@ So the concrete class does not need to be public. Publish an interface plus a co
 for the handful of production sites, and give tests a helper in the `test-utils` package. The
 apparent "181 construction sites" objection dissolves under the test/production split (§8 Q1).
 
-### Seam E — Confirmation bus (61 imports)
+### Seam E — Confirmation bus (61 imports) — **withdrawn as proposed**
 
-`MessageBus` (60 references). Currently a compat subclass (§4).
+`MessageBus` (60 references), currently a compatibility subclass (§4).
+
+An earlier draft proposed publishing this as a core `./policy` seam. That would publish a shim as
+public API. Both modules say so themselves:
+
+- `packages/core/src/confirmation-bus/message-bus.ts` — "Backward-compatible core adapter over the
+  policy package MessageBus," retained only "to preserve the historic two-argument constructor."
+- `packages/core/src/confirmation-bus/types.ts` — "Backward-compatible re-export shim. The
+  confirmation bus now lives in `@vybestack/llxprt-code-policy`."
+
+Publishing these would violate Hard Rule 1 of #2618 and entrench exactly the cross-package proxying
+§4 identifies as a defect. Generic policy and confirmation-bus consumers should import
+`@vybestack/llxprt-code-policy` directly.
+
+If core genuinely owns a session-scoped confirmation concern — the debug-logger injection the
+subclass performs is the only candidate — it should be published under a name describing *that*
+role, not as a general core policy facade.
 
 ## 4. Core's public API is partly a proxy for other packages
 
@@ -399,23 +432,32 @@ issue**. The table below records progress toward that, and is incomplete.
 Applying rule 0 — group by domain, name the contract, let the count fall out. Every one of the 88
 production reach-through subpaths is assigned to a candidate seam:
 
-| Candidate seam | Paths it absorbs | Production imports |
-|---|---|---|
-| `./content` | 2 | 216 |
-| `./config` (role interfaces, §6) | 6 | 156 |
-| `./session` | 8 | 114 |
-| `./runtime` (shape settled by #2616) | 7 | 91 |
-| `./runtime/contracts` (exists) | 6 | 70 |
-| `./policy` | 4 | 42 |
-| `./history` | 5 | 35 |
-| `./tool-scheduling` | 6 | 28 |
-| `./prompts` | 4 | 23 |
-| `./hooks` | 3 | 16 |
-| `./models` | 3 | 9 |
-| **Named subtotal** | **54** | **800** |
-| Utility sprawl — needs triage | 22 | 148 |
-| Services — needs triage | 8 | 18 |
-| Other | 4 | 12 |
+| Candidate seam | Paths | Prod imports | Status after review |
+|---|---|---|---|
+| `./content` | 1 | 150 | Retained — content model only |
+| `./llm-types` | 1 | 66 | **Split out** — neutral protocol layer, contains content |
+| `./config` (capabilities, §6) | 6 | 156 | **Blocked** — contract unpinned (81–156) |
+| `./session` | 8 | 114 | **Must split** — contracts vs orchestration |
+| `./runtime` | 7 | 91 | **Blocked on #2616** — must not become a god-context |
+| `./runtime/contracts` (exists) | 6 | 70 | Retained — the one validated seam |
+| `./history` | 5 | 35 | Retained as interface + factory |
+| `./tool-scheduling` | 6 | 28 | Retained for contracts only; adapters stay internal |
+| `./prompts` | 4 | 23 | Must split data/ports from registries and resolvers |
+| `./hooks` | 3 | 16 | Must split data/ports from lifecycle implementation |
+| `./models` | 2 | ~6 | Registry only — see below |
+| ~~`./policy`~~ | 4 | 42 | **Withdrawn** — would publish a shim; use the policy package |
+| Utility sprawl — triage | 22 | 148 | Candidate filter only, needs ownership check |
+| Services — triage | 8 | 18 | Unassigned |
+| Other | 4 | 12 | Unassigned |
+
+`./models` was previously grouped with `parsers/TextToolCallParser.js` and
+`models/provider-integration.js`. Those are three different concerns — a model registry, a text
+tool-call parser, and provider hydration — combined only because grouping them reduced the entry
+count. Rule 0 forbids exactly that. The registry is a real domain; the parser and hydration need
+their own dispositions.
+
+**No row in this table is final.** Three are blocked on other work, three require splitting, one is
+withdrawn, and 34 paths remain unassigned.
 
 Two observations.
 
