@@ -55,6 +55,12 @@ const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
 const ROGUE_TEST_PATH = 'scripts/rogue.test.ts';
 const ROGUE_BUN_PATH = 'scripts/rogue.bun.ts';
 
+/**
+ * Output cap for a guard subprocess. Named so the overflow diagnostic and the
+ * limit it reports cannot drift apart.
+ */
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+
 /** Minimal valid Bun test source used to populate temp-repo fixtures. */
 const STUB_TEST_SOURCE = `import { it } from 'bun:test';
 `;
@@ -100,18 +106,28 @@ async function runGuard(
       cwd: REPO_ROOT,
       encoding: 'utf8',
       timeout,
-      maxBuffer: 10 * 1024 * 1024,
+      maxBuffer: MAX_OUTPUT_BYTES,
     });
     stdout = result.stdout;
     stderr = result.stderr;
   } catch (error) {
     const err = error as {
-      code?: number;
+      code?: number | string;
       signal?: string;
       message: string;
       stdout?: string;
       stderr?: string;
     };
+    // Node kills the child with SIGTERM for BOTH a timeout and a maxBuffer
+    // overflow, so the buffer case must be identified by its error code first.
+    // Otherwise runaway output is misreported as a timeout and the real cause
+    // is hidden.
+    if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      throw new Error(
+        `Guard exceeded the ${MAX_OUTPUT_BYTES / (1024 * 1024)} MB output ` +
+          `buffer — likely runaway output: ${err.message}`,
+      );
+    }
     if (err.signal === 'SIGTERM') {
       throw new Error(
         `Guard timed out after ${timeout / 1000}s: ${err.message}`,
@@ -232,10 +248,12 @@ describe('findUndiscoveredTestFiles', () => {
   });
 
   it('returns results sorted by POSIX path', () => {
+    // Input is deliberately NOT in sorted order, so the assertion fails if
+    // sorting is ever dropped. Passing pre-sorted input would prove nothing.
     const tracked = [
+      'test/mmm.spec.ts',
       'scripts/zzz.test.ts',
       'src/aaa.test.ts',
-      'test/mmm.spec.ts',
     ];
     expect(findUndiscoveredTestFiles(tracked, [])).toEqual([
       'scripts/zzz.test.ts',
