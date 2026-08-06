@@ -188,12 +188,16 @@ function runLauncher(
     timeout: LAUNCH_TIMEOUT_MS,
     windowsHide: true,
   });
-  const match = result.stdout.match(EXIT_TOKEN_RE);
+  // spawnSync leaves stdout/stderr null when the process fails to start; reading
+  // .match() off null throws a TypeError that masks the real spawn error.
+  const stdout = result.stdout ?? '';
+  const stderr = result.stderr ?? '';
+  const match = stdout.match(EXIT_TOKEN_RE);
   const exitCode = match ? Number(match[1]) : -1;
   return {
     exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
+    stdout,
+    stderr,
     error: result.error,
   };
 }

@@ -912,6 +912,21 @@ describe('platform launcher package invariants (issue #2978)', () => {
       ).toBeDefined();
       expect(optionalDeps[pkg]).toBe(cliVersion);
     }
+
+    // The launcher packages are intentionally not workspaces (issue #2978), so
+    // version.ts bumps their own version field explicitly. That field must also
+    // equal the cli version, or the exact pin above would target a registry
+    // version that does not exist and npm would skip the platform package.
+    const launcherDirForPkg: Record<string, string> = {
+      [POSIX_PKG]: 'llxprt-cli-posix',
+      [WIN32_PKG]: 'llxprt-cli-win32',
+    };
+    for (const pkg of PLATFORM_PKGS) {
+      expect(
+        asString(readManifest(launcherDirForPkg[pkg]).version),
+        `${pkg} own version must equal packages/cli's version`,
+      ).toBe(cliVersion);
+    }
   });
 
   it.each([

@@ -27,7 +27,7 @@ goto :find_main
 echo LLxprt Code: could not locate the @vybestack/llxprt-code package. 1>&2
 echo Your installation may be corrupt; reinstall @vybestack/llxprt-code. 1>&2
 endlocal
-exit /b 1
+exit /b 43
 :main_ok
 
 rem Resolve the entry point (prebuilt bundle first, then TypeScript source).
@@ -40,7 +40,7 @@ echo LLxprt Code: entry point was not found. 1>&2
 echo Expected: !ENTRY! 1>&2
 echo Your installation may be corrupt; reinstall @vybestack/llxprt-code. 1>&2
 endlocal
-exit /b 1
+exit /b 43
 :entry_ok
 
 rem Resolve the Bun runtime (mirrors src/launcher/bun-path-resolver.ts).
@@ -64,15 +64,33 @@ goto :bun_loop
 
 :bun_pass2
 rem Pass 2: @oven prebuilt variants (issue #2978), nearest ancestor first.
+rem Both bun-windows-x64 and bun-windows-x64-baseline satisfy npm's os/cpu
+rem filters, so both may be installed and this launcher has to choose. The
+rem non-baseline build requires AVX2 and dies with SIGILL on CPUs without it,
+rem so it is preferred only when IsProcessorFeaturePresent(40) confirms AVX2,
+rem and is dropped outright when the CPU is confirmed to lack it. If the probe
+rem is inconclusive (e.g. no PowerShell on PATH) we fail open and still list it
+rem last, so a host that installed only the AVX2 build keeps working. arm64
+rem hosts get bun-windows-aarch64, previously missing entirely which left them
+rem with no candidate at all.
+set "OVEN_VARIANTS=bun-windows-x64-baseline bun-windows-x64"
+set "OVEN_ARCH=%PROCESSOR_ARCHITECTURE%"
+if defined PROCESSOR_ARCHITEW6432 set "OVEN_ARCH=%PROCESSOR_ARCHITEW6432%"
+if /i "!OVEN_ARCH!"=="ARM64" (
+  set "OVEN_VARIANTS=bun-windows-aarch64"
+  goto :oven_ready
+)
+for /f "delims=" %%A in ('powershell -NoProfile -Command "(Add-Type -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern bool IsProcessorFeaturePresent(int f);' -Name K -Namespace W -PassThru)::IsProcessorFeaturePresent(40)" 2^>nul') do set "OVEN_AVX2=%%A"
+if /i "!OVEN_AVX2!"=="True" set "OVEN_VARIANTS=bun-windows-x64 bun-windows-x64-baseline"
+if /i "!OVEN_AVX2!"=="False" set "OVEN_VARIANTS=bun-windows-x64-baseline"
+:oven_ready
 set "WALK=!MAIN_PKG!"
 :oven_loop
-if exist "!WALK!\node_modules\@oven\bun-windows-x64\bin\bun.exe" (
-  set "BUN_EXE=!WALK!\node_modules\@oven\bun-windows-x64\bin\bun.exe"
-  goto :bun_found
-)
-if exist "!WALK!\node_modules\@oven\bun-windows-x64-baseline\bin\bun.exe" (
-  set "BUN_EXE=!WALK!\node_modules\@oven\bun-windows-x64-baseline\bin\bun.exe"
-  goto :bun_found
+for %%V in (!OVEN_VARIANTS!) do (
+  if exist "!WALK!\node_modules\@oven\%%V\bin\bun.exe" (
+    set "BUN_EXE=!WALK!\node_modules\@oven\%%V\bin\bun.exe"
+    goto :bun_found
+  )
 )
 for %%I in ("!WALK!\..") do set "PARENT=%%~fI"
 if "!PARENT!"=="!WALK!" goto :bun_pass3
@@ -95,7 +113,7 @@ if not defined BUN_EXE (
   echo LLxprt Code: could not locate the Bun runtime. 1>&2
   echo Install Bun from https://bun.sh or ensure it is on PATH, then retry. 1>&2
   endlocal
-  exit /b 1
+  exit /b 43
 )
 
 rem Exec Bun with the entry point, forwarding all arguments verbatim.

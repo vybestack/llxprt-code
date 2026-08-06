@@ -123,7 +123,7 @@ LLxprt Code由[Bun](https://bun.sh)运行时驱动。当您运行`llxprt`时，�
 
 **npm v12安装脚本默认拒绝（RFC 0054）：** npm v12默认禁用依赖安装脚本。`bun`包通过`postinstall`将其二进制文件从`@oven/bun-<platform>`可选依赖移动到`bun/bin/bun.exe`。当安装脚本被阻止时，该二进制文件永远不会出现。LLxprt Code将全部16个`@oven/bun-<platform>`包声明为自己的`optionalDependencies`；这些tarball仅包含`bin/bun[.exe]`且没有安装脚本，因此在默认拒绝下仍会出现。启动器和TypeScript解析器在`bun/bin/bun.exe`不存在时回退到它们。主机检测（CPU特性、ABI）仅在此回退路径上运行 — 正常安装永远不会fork检测子进程。
 
-如果未找到包本地的Bun运行时，启动器会打印可操作的错误（退出码43）：
+只有在以上每个候选项都已探测并被拒绝之后 — 包括每一层级及其`@oven`回退，以及macOS的`PATH`优先路径 — 启动器才会打印可操作的错误（退出码43）：
 
 > LLxprt Code: bundled Bun runtime was not found. Reinstall the package with "npm install @vybestack/llxprt-code" to restore the bundled Bun dependency, or visit https://bun.sh
 
@@ -131,7 +131,7 @@ LLxprt Code由[Bun](https://bun.sh)运行时驱动。当您运行`llxprt`时，�
 
 - **npm用户：** 重新运行`npm install @vybestack/llxprt-code`（或`npm install -g @vybestack/llxprt-code`）以恢复捆绑的Bun依赖项。
 - **Homebrew用户：** 运行`brew upgrade llxprt-code`获取最新配方，或运行`brew reinstall llxprt-code`恢复损坏的安装。
-- **所有用户：** 如果无法恢复捆绑的Bun依赖项，重新安装包是受支持的路径。启动器不会使用单独安装的全局Bun。
+- **所有用户：** 如果无法恢复捆绑的Bun依赖项，重新安装包是受支持的路径。除上文所述的macOS `PATH`优先路径外，启动器不会使用单独安装的全局Bun。
 
 **Windows pty注意事项：** 在Windows上，`node-pty`模块存在已知的终端调整大小竞争条件（`Cannot resize a pty that has already exited`）。CLI在进程级别静默此特定错误。在POSIX系统上，Bun下使用专用的`bun-pty`适配器（`packages/core/src/utils/bunPtyAdapter.ts`）代替`node-pty`以解决Bun挂起问题。Windows使用`@lydell/node-pty`（以`node-pty`作为回退），而不是Bun适配器。如果您在Windows上遇到终端大小调整问题，请使用兼容的终端模拟器；调整大小竞争在`node-pty`本身中，而不是Bun运行时中。
 

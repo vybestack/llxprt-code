@@ -761,6 +761,15 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: ['scripts/tests/issue-2978-oven-fallback.bun.test.ts'],
   },
   {
+    // Behavioural tests for the Windows batch launcher (issue #2978). The
+    // published win32 payload provides `llxprt` via its own os-gated package,
+    // so these drive the real .cmd through cmd.exe. Vitest skips
+    // `*.bun.test.ts`, so without this entry the suite would never run.
+    workspace: 'scripts-launcher-win32',
+    cwd: '.',
+    files: ['scripts/tests/issue-2978-windows-launcher.bun.test.ts'],
+  },
+  {
     // Bun-native test for the prebuilt CLI bundle (issue #2999). Builds the
     // bundle via the exported config, executes it, and asserts --version
     // output, proving externals resolve and the artifact is genuinely

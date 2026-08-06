@@ -420,11 +420,14 @@ jobs:
       # and leave no `llxprt` command on disk.
       - name: Publish @vybestack/llxprt-cli-posix
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-cli-posix --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        # Not a workspace (issue #2978); publish from the package dir directly.
+        working-directory: packages/llxprt-cli-posix
+        run: npm publish --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-cli-win32
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-cli-win32 --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        working-directory: packages/llxprt-cli-win32
+        run: npm publish --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}

@@ -5475,7 +5475,7 @@ ignore@7.0.5
 
 MIT License
 
-Copyright (c) 2026 kael
+Copyright (c) 2013-2026 kael
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

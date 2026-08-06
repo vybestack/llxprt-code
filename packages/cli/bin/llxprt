@@ -259,6 +259,50 @@ if [ -z "$_llxprt_entry" ]; then
   _llxprt_entry="$_llxprt_pkg_root/index.ts"
 fi
 
+# Issue #2978: the os-gated launcher package ships only bin/llxprt, so when
+# the launcher runs from node_modules/@vybestack/llxprt-cli-posix the entry
+# lives in the SIBLING @vybestack/llxprt-code package. Walk up the tree
+# looking for it, mirroring the win32 launcher :find_main loop.
+# _llxprt_pkg_root is left untouched; Bun resolution still keys off the
+# launcher package root.
+if [ ! -f "$_llxprt_entry" ]; then
+  _llxprt_walk=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || _llxprt_walk=""
+  while [ -n "$_llxprt_walk" ]; do
+    _llxprt_main="$_llxprt_walk/node_modules/@vybestack/llxprt-code"
+    # Honour the same entry precedence as above: a published install ships BOTH
+    # bundle/llxprt.js and index.ts, so probing index.ts first would silently
+    # run from source and bypass the prebuilt bundle.
+    if [ "${LLXPRT_FORCE_SOURCE_ENTRY:-0}" != "1" ] && \
+       [ -f "$_llxprt_main/bundle/llxprt.js" ]; then
+      _llxprt_entry="$_llxprt_main/bundle/llxprt.js"
+      break
+    fi
+    if [ -f "$_llxprt_main/index.ts" ]; then
+      _llxprt_entry="$_llxprt_main/index.ts"
+      break
+    fi
+    _llxprt_parent=$(cd -- "$_llxprt_walk/.." 2>/dev/null && pwd) || _llxprt_parent=""
+    if [ -z "$_llxprt_parent" ] || [ "$_llxprt_parent" = "$_llxprt_walk" ]; then
+      break
+    fi
+    _llxprt_walk="$_llxprt_parent"
+  done
+fi
+
+# Issue #2978: the os-gated launcher package's own package.json carries no
+# "bun" pin, so _llxprt_bun_pin above comes back empty and _llxprt_bun_validates
+# would accept ANY executable @oven candidate without a version check. Recover
+# the pin from the main package that actually declares it.
+if [ -z "$_llxprt_bun_pin" ] && [ -n "$_llxprt_entry" ]; then
+  _llxprt_main_pkg_json=$(dirname -- "$_llxprt_entry")/package.json
+  if [ ! -f "$_llxprt_main_pkg_json" ]; then
+    _llxprt_main_pkg_json=$(dirname -- "$(dirname -- "$_llxprt_entry")")/package.json
+  fi
+  if [ -f "$_llxprt_main_pkg_json" ]; then
+    _llxprt_bun_pin=$(sed -n 's/^[[:space:]]*"bun"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_main_pkg_json" 2>/dev/null | head -n1)
+  fi
+fi
+
 if [ ! -f "$_llxprt_entry" ]; then
   printf '%s
 ' 'LLxprt Code: entry point was not found.' >&2
@@ -411,7 +455,7 @@ _llxprt_probe_oven() {
         fi
         ;;
       win32)
-        if powershell -NoProfile -Command "(Add-Type -MemberDefinition '[DllImport("kernel32.dll")] public static extern bool IsProcessorFeaturePresent(int f);' -Name K -Namespace W -PassThru)::IsProcessorFeaturePresent(40)" 2>/dev/null | grep -qi 'True'; then
+        if powershell -NoProfile -Command "(Add-Type -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern bool IsProcessorFeaturePresent(int f);' -Name K -Namespace W -PassThru)::IsProcessorFeaturePresent(40)" 2>/dev/null | grep -qi 'True'; then
           _llxprt_po_avx2=1
         fi
         ;;

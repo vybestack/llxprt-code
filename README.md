@@ -123,7 +123,7 @@ The launcher never scans `.bin` symlinks. When the package's `package.json` decl
 
 **npm v12 install-script default-deny (RFC 0054):** npm v12 disables dependency install scripts by default. The `bun` package ships its binary via a `postinstall` that moves it from an `@oven/bun-<platform>` optional dependency into `bun/bin/bun.exe`. When install scripts are blocked, that binary never materializes. LLxprt Code declares all 16 `@oven/bun-<platform>` packages as its own `optionalDependencies`; those tarballs contain only `bin/bun[.exe]` with no install scripts, so they materialize under default-deny. The launcher and TypeScript resolver fall back to them when `bun/bin/bun.exe` is absent. Host detection (CPU features, ABI) runs only on this fallback path — a normal install never forks detection subprocesses.
 
-If no package-local Bun runtime is found, the launcher prints an actionable error (exit code 43):
+Only after every candidate above has been probed and rejected — each level and its `@oven` fallback, plus the macOS `PATH` preference — does the launcher print an actionable error (exit code 43):
 
 > LLxprt Code: bundled Bun runtime was not found. Reinstall the package with "npm install @vybestack/llxprt-code" to restore the bundled Bun dependency, or visit https://bun.sh
 
@@ -131,7 +131,7 @@ To resolve this:
 
 - **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
 - **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
-- **All users:** If the bundled Bun dependency cannot be restored, reinstalling the package is the supported path. A separately installed global Bun is not used by the launcher.
+- **All users:** If the bundled Bun dependency cannot be restored, reinstalling the package is the supported path. Outside the macOS `PATH` preference described above, a separately installed global Bun is not used by the launcher.
 
 **Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level. On POSIX systems under Bun, a dedicated `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is used instead of `node-pty` to work around a Bun hang. Windows uses `@lydell/node-pty` (with `node-pty` as fallback), not the Bun adapter. If you encounter terminal sizing issues on Windows, use a compatible terminal emulator; the resize race is in `node-pty` itself, not the Bun runtime.
 

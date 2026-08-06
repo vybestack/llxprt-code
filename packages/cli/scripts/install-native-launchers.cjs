@@ -583,12 +583,28 @@ function ovenWindowsHasAvx2() {
   }
 }
 
+/** Memoized result of {@link selectHostOvenVariants}; `null` until computed. */
+let hostOvenVariantsCache = null;
+
 /**
  * Detects the host platform and selects the ordered list of @oven variant
  * candidates. Detection (sysctl, /proc/cpuinfo, PowerShell) runs ONLY here —
  * i.e. only when bun/bin/bun.exe was not found.
+ *
+ * The result is memoized because the caller probes this once per ancestor
+ * directory while walking up the tree; without the cache an unresolved bun
+ * forks sysctl/PowerShell once per level. The host cannot change mid-process,
+ * and an empty result is cached too so a negative detection is not re-run.
  */
 function selectHostOvenVariants() {
+  if (hostOvenVariantsCache !== null) {
+    return hostOvenVariantsCache;
+  }
+  hostOvenVariantsCache = selectHostOvenVariantsUncached();
+  return hostOvenVariantsCache;
+}
+
+function selectHostOvenVariantsUncached() {
   const os = process.platform;
   let arch = ovenNormalizeArch(process.arch);
   if (os === 'darwin' && arch === 'x64' && ovenIsRosetta2()) {
