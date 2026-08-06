@@ -390,8 +390,10 @@ describe('AuthDialog', () => {
     await wait();
 
     stdin.write('3');
-    await wait();
-    expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
+    // Polled rather than slept on, for the same reason as above.
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
+    });
     unmount();
   });
 });
