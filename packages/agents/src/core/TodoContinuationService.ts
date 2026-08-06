@@ -149,14 +149,18 @@ export enum PostTurnAction {
 }
 
 /**
- * Immutable snapshot of the attempt-local task-list continuation state. Only the
- * three values mutated by an in-flight attempt are captured; reminder level,
- * activity counters and prompt-scoped state are excluded.
+ * Immutable snapshot of the attempt-local task-list continuation state. The five
+ * values mutated by an in-flight attempt are captured; prompt-scoped state is
+ * excluded. `toolActivityCount` and `toolCallReminderLevel` are included
+ * because recordModelActivity updates them before a transport Retry rolls back
+ * the abandoned attempt.
  */
 export interface TodoContinuationSnapshot {
   readonly lastTodoToolTurn: number | undefined;
   readonly consecutiveComplexTurns: number;
   readonly lastTodoSnapshot: readonly Todo[] | undefined;
+  readonly toolActivityCount: number;
+  readonly toolCallReminderLevel: 'none' | 'base' | 'escalated';
 }
 
 export interface PostTurnContext {
@@ -549,6 +553,8 @@ export class TodoContinuationService {
         this.lastTodoSnapshot !== undefined
           ? this.lastTodoSnapshot.map((todo) => structuredClone(todo))
           : undefined,
+      toolActivityCount: this.toolActivityCount,
+      toolCallReminderLevel: this.toolCallReminderLevel,
     };
   }
 
@@ -563,6 +569,8 @@ export class TodoContinuationService {
       snapshot.lastTodoSnapshot !== undefined
         ? snapshot.lastTodoSnapshot.map((todo) => structuredClone(todo))
         : undefined;
+    this.toolActivityCount = snapshot.toolActivityCount;
+    this.toolCallReminderLevel = snapshot.toolCallReminderLevel;
   }
 
   setLastTodoToolTurn(turn: number): void {

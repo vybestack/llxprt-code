@@ -135,10 +135,17 @@ function streamFrom(
 
 // --- real service construction ---
 
-function makeLoopConfig(toolCallThreshold: number): Config {
+function makeLoopConfig(
+  toolCallThreshold: number,
+  maxTurnsPerPrompt?: number,
+): Config {
   return {
-    getEphemeralSetting: (key: string) =>
-      key === 'toolCallLoopThreshold' ? toolCallThreshold : undefined,
+    getEphemeralSetting: (key: string) => {
+      if (key === 'toolCallLoopThreshold') return toolCallThreshold;
+      if (key === 'maxTurnsPerPrompt' && maxTurnsPerPrompt !== undefined)
+        return maxTurnsPerPrompt;
+      return undefined;
+    },
     getMaxSessionTurns: () => 100,
     getIdeMode: () => false,
     getContinueOnFailedApiCall: () => false,
@@ -150,8 +157,11 @@ function makeLoopConfig(toolCallThreshold: number): Config {
   } as unknown as Config;
 }
 
-function makeRealLoopDetector(threshold: number): LoopDetectionService {
-  return new LoopDetectionService(makeLoopConfig(threshold));
+function makeRealLoopDetector(
+  threshold: number,
+  maxTurnsPerPrompt?: number,
+): LoopDetectionService {
+  return new LoopDetectionService(makeLoopConfig(threshold, maxTurnsPerPrompt));
 }
 
 function makeRealTodoContinuationService(): TodoContinuationService {
@@ -600,22 +610,25 @@ describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048
       expect(loopDetector.addAndCheck(toolA)).toBe(false);
     });
 
-    it('preserves prompt identity and turn counts across checkpoint/restore', async () => {
-      const loopDetector = makeRealLoopDetector(50);
+    it('preserves prompt turn counts across checkpoint/restore (maxTurnsPerPrompt=3)', async () => {
+      const loopDetector = makeRealLoopDetector(50, 3);
       loopDetector.reset('prompt-X');
+      // Two turns accumulate turnsInCurrentPrompt=2 (< 3 threshold).
+      await loopDetector.turnStarted(new AbortController().signal);
       await loopDetector.turnStarted(new AbortController().signal);
       const checkpoint = loopDetector.checkpoint();
+      // Abandoned attempt mutates attempt-scoped detector state only.
       loopDetector.addAndCheck({
         type: AgentEventType.Content,
         value: 'some content',
       });
+      // Restore undoes attempt-scoped mutations but must NOT reset
+      // turnsInCurrentPrompt (prompt-scoped, excluded from the snapshot). If
+      // restore had cleared it to 0, the next turn would be turn 1 and return
+      // false; with correct restore it is turn 3, hitting the threshold.
       loopDetector.restore(checkpoint);
-      // Re-running reset on the same prompt id is a no-op identity-wise; the
-      // point is restore did not wipe prompt-scoped counters. A fresh prompt
-      // resets cleanly afterward.
-      loopDetector.reset('prompt-Y');
       expect(await loopDetector.turnStarted(new AbortController().signal)).toBe(
-        false,
+        true,
       );
     });
 
@@ -646,26 +659,35 @@ describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048
   });
 
   describe('TodoContinuationService checkpoint/restore (direct contract)', () => {
-    it('snapshots and restores all three attempt-local fields', () => {
+    it('snapshots and restores all five attempt-local fields', () => {
       const service = makeRealTodoContinuationService();
       service.consecutiveComplexTurns = 3;
       service.setLastTodoToolTurn(4);
       service.lastTodoSnapshot = [
         { id: 'orig', content: 'task', status: 'in_progress' },
       ];
+      // recordModelActivity mutates these mid-attempt, so they must survive a
+      // transport Retry rollback (MessageStreamOrchestrator records model
+      // activity before the Retry signal clears abandoned state).
+      service.toolActivityCount = 4;
+      service.toolCallReminderLevel = 'base';
 
       const snapshot = service.checkpoint();
 
-      // Simulate an abandoned attempt.
+      // Simulate an abandoned attempt mutating every attempt-local field.
       service.consecutiveComplexTurns = 9;
       service.setLastTodoToolTurn(40);
       service.lastTodoSnapshot = [
         { id: 'gone', content: 'x', status: 'pending' },
       ];
+      service.toolActivityCount = 99;
+      service.toolCallReminderLevel = 'escalated';
 
       service.restore(snapshot);
 
       expect(service.consecutiveComplexTurns).toBe(3);
+      expect(service.toolActivityCount).toBe(4);
+      expect(service.toolCallReminderLevel).toBe('base');
       // Restored cadence and complexity counters satisfy the escalation policy.
       expect(service.shouldEscalateReminder(7)).toBe(true);
       expect(service.lastTodoSnapshot[0]?.id).toBe('orig');

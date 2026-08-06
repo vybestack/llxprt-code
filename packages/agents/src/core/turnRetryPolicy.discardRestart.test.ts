@@ -66,6 +66,22 @@ const policyTable: readonly PolicyRow[] = [
     expected: true,
   },
   {
+    name: 'pre-output InvalidStreamError with aborted signal does not retry',
+    error: new InvalidStreamError('no text', 'NO_RESPONSE_TEXT'),
+    attempt: 0,
+    hasYieldedOutput: false,
+    params: paramsWithAbortSignal(true),
+    expected: false,
+  },
+  {
+    name: 'pre-output EmptyStreamError with aborted signal does not retry',
+    error: new EmptyStreamError('empty'),
+    attempt: 0,
+    hasYieldedOutput: false,
+    params: paramsWithAbortSignal(true),
+    expected: false,
+  },
+  {
     name: 'pre-output transient connection error retries',
     error: new Error('Connection error.'),
     attempt: 0,

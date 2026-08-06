@@ -256,9 +256,14 @@ function useStreamAttemptDiscardedHandler(deps: StreamEventHandlerDeps) {
       setPendingHistoryItem(null);
     }
     pendingResponse.reset();
+    // Resolve the retraction capability before draining the ledger so a
+    // missing removeItems wiring fails fast without losing committed segment
+    // IDs. reset() does not touch the ledger, so an early throw preserves the
+    // ids for a later, correctly-wired retraction.
+    const retract = requireHistoryRetraction(removeItems);
     const retracted = pendingResponse.drainCommittedSegments();
     if (retracted.length > 0) {
-      requireHistoryRetraction(removeItems)(retracted);
+      retract(retracted);
     }
     thinkingBlocksRef.current = [];
     setThought(null);

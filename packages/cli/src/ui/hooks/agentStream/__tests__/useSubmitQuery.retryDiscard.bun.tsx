@@ -207,19 +207,28 @@ function buildUseSubmitQueryDeps(
   deps: RetryDiscardDeps,
   overrides: {
     runtime?: StreamRuntime;
+    /**
+     * When the key is present (even as undefined) it replaces the history
+     * retraction wiring, letting a test simulate an unwired hook.
+     */
+    removeItems?: (ids: readonly number[]) => void;
   } = {},
 ): (streamingState: StreamingState) => UseSubmitQueryDeps {
   const queueOperations = createQueueOperations(deps.queuedSubmissionsRef);
   const flushPendingHistoryItem = (timestamp: number) => {
     deps.flushCalls.push(timestamp);
   };
+  const hasRemoveItemsOverride = 'removeItems' in overrides;
+  const removeItems = hasRemoveItemsOverride
+    ? overrides.removeItems
+    : deps.removeItemsRecorder.removeItems;
   const stableDeps = {
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
     agent: createMockAgent(),
     addItem: deps.addItemRecorder.addItem,
-    removeItems: deps.removeItemsRecorder.removeItems,
+    removeItems,
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
@@ -265,6 +274,7 @@ function renderUseSubmitQuery(
   overrides: {
     runtime?: StreamRuntime;
     initialStreamingState?: StreamingState;
+    removeItems?: (ids: readonly number[]) => void;
   } = {},
 ) {
   const getDeps = buildUseSubmitQueryDeps(deps, overrides);
@@ -475,7 +485,13 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
 
     const signal = await startActiveTurn(result, rerender, deps);
 
-    // Add a user item that should survive the retraction
+    // Add a real earlier history item (a prior user message) and capture its
+    // actual id. It must survive the retraction of the abandoned attempt.
+    const earlierItemId = deps.addItemRecorder.addItem(
+      { type: 'user', text: 'an earlier message' },
+      0,
+    );
+    // Stream the assistant message, then abandon it.
     await route(result, { type: 'text', text: 'para one\n\npara two' }, signal);
     await route(result, { type: 'retry' }, signal);
 
@@ -484,6 +500,8 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
     expect(deps.removeItemsRecorder.calls.length).toBe(1);
     const retracted = deps.removeItemsRecorder.calls[0]?.ids ?? [];
     expect(retracted.length).toBe(1);
+    // The earlier history item's id must be absent from the retraction set.
+    expect(retracted).not.toContain(earlierItemId);
   });
 
   it('drains nothing on a second retry', async () => {
@@ -501,6 +519,51 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
     // Second retry: the ledger was drained, so nothing to retract
     await route(result, { type: 'retry' }, signal);
     expect(deps.removeItemsRecorder.calls.length).toBe(1);
+  });
+
+  it('fails fast without losing ledger ids when retraction is unwired', async () => {
+    const deps = createRetryDiscardDeps();
+    const { result, rerender } = renderUseSubmitQuery(deps, {
+      removeItems: undefined,
+    });
+
+    const signal = await startActiveTurn(result, rerender, deps);
+
+    // Stream a multi-paragraph message so the content processor commits a
+    // stable segment and records its id in the committed-segment ledger.
+    await route(
+      result,
+      { type: 'text', text: ['para one', '', 'para two'].join('\n') },
+      signal,
+    );
+
+    const committedCall = deps.addItemRecorder.calls.find(
+      (c) =>
+        typeof c.item.text === 'string' && c.item.text.includes('para one'),
+    );
+    if (committedCall === undefined) {
+      throw new Error('Expected a committed stable segment');
+    }
+    const committedId = committedCall.id;
+
+    // With retraction unwired (removeItems undefined), routing the retry must
+    // throw BEFORE draining the ledger so the committed id is not lost.
+    let caught: unknown;
+    try {
+      await route(result, { type: 'retry' }, signal);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught instanceof Error).toBe(true);
+    expect(
+      caught instanceof Error &&
+        caught.message.includes('History retraction is required'),
+    ).toBe(true);
+
+    // The ledger was not drained: the committed id survives for a later,
+    // correctly-wired retraction.
+    const retained = deps.pendingResponse.drainCommittedSegments();
+    expect(retained).toContain(committedId);
   });
 
   /**

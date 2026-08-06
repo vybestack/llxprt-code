@@ -89,11 +89,14 @@ export interface StreamAttemptContext {
  * errors or transient network errors that are NOT user-initiated aborts, and
  * only while the retry budget remains.
  *
- * Before output the classification is bit-for-bit identical to the pre-#3048
- * contract. After output only a transient transport failure
- * (`isNetworkTransientError`) that is not an abort may restart the turn: a
- * content-validity verdict about discarded output is not a transport failure,
- * and the abandoned attempt must not be re-sent on its own merits.
+ * A user/system abort is checked before any content/stream-error
+ * classification in every branch, so an abort that surfaces as a pre-output
+ * InvalidStreamError/EmptyStreamError is never retried. For non-abort errors
+ * before output the classification matches the pre-#3048 contract. After
+ * output only a transient transport failure (`isNetworkTransientError`) may
+ * restart the turn: a content-validity verdict about discarded output is not a
+ * transport failure, and the abandoned attempt must not be re-sent on its own
+ * merits.
  */
 export function shouldRetryStreamAttempt(
   error: unknown,
@@ -103,8 +106,12 @@ export function shouldRetryStreamAttempt(
 ): boolean {
   const withinBudget = attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1;
   if (!withinBudget || isTerminalRetryError(error)) return false;
+  // Abort must win before any content/stream-error classification: a
+  // user/system cancellation is never retryable even if it surfaces as a
+  // pre-output InvalidStreamError/EmptyStreamError.
+  if (isAbortError(error, params)) return false;
   if (context.hasYieldedOutput) {
-    return isNetworkTransientError(error) && !isAbortError(error, params);
+    return isNetworkTransientError(error);
   }
   if (
     error instanceof InvalidStreamError ||
@@ -112,7 +119,7 @@ export function shouldRetryStreamAttempt(
   ) {
     return true;
   }
-  return isNetworkTransientError(error) && !isAbortError(error, params);
+  return isNetworkTransientError(error);
 }
 
 /**
