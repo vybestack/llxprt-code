@@ -20,9 +20,9 @@ describe('platform launcher package invariants (issue #2978)', () => {
   // (bin/llxprt.mjs): npm v12 no longer runs install scripts, so it derives
   // the Windows cmd-shim from the bin target's shebang, and a POSIX #!/bin/sh
   // shebang produces a broken .cmd that invokes /bin/sh (which does not exist
-  // on Windows). The two os-gated platform packages are still published by
-  // release.yml as a standalone install surface, but packages/cli deliberately
-  // does NOT depend on them (see the bootstrapping guard below).
+  // on Windows). The two os-gated platform packages that once carried this bin
+  // have been removed entirely; the names below survive only so the guard below
+  // can prove they are never reintroduced as dependencies.
   const POSIX_PKG = '@vybestack/llxprt-cli-posix';
   const WIN32_PKG = '@vybestack/llxprt-cli-win32';
   const PLATFORM_PKGS = [POSIX_PKG, WIN32_PKG] as const;
@@ -74,9 +74,9 @@ describe('platform launcher package invariants (issue #2978)', () => {
   });
 
   it('packages/cli does not depend on the platform launcher packages', () => {
-    // Regression guard for a bootstrapping deadlock. release.yml publishes the
-    // launcher packages as part of a release, so for any version that has not
-    // shipped yet they do not exist on the registry. While packages/cli
+    // Regression guard for a bootstrapping deadlock these packages once caused.
+    // They were published only as part of a release, so for any version that
+    // had not shipped yet they did not exist on the registry. While packages/cli
     // declared them, no lockfile entry could be generated for them and every
     // workflow running `npm ci` failed with EUSAGE ("Missing: ... from lock
     // file") — which could only be cleared by a release that itself required
