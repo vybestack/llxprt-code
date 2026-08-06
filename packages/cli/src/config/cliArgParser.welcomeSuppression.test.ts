@@ -5,11 +5,21 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 
 const emptySettings: Settings = {};
+
+function parseInSubprocess(args: string[]) {
+  const parserUrl = new URL('./cliArgParser.ts', import.meta.url).href;
+  const script = `process.argv = ${JSON.stringify(['node', 'llxprt', ...args])}; const { parseArguments } = await import(${JSON.stringify(parserUrl)}); await parseArguments({});`;
+  return spawnSync(process.execPath, ['--eval', script], {
+    encoding: 'utf8',
+    env: { ...process.env, LLXPRT_JSP_BOOTSTRAP_FILE: '' },
+  });
+}
 
 describe('parseArguments selector and non-selector parsing', () => {
   const originalArgv = process.argv;
@@ -121,5 +131,39 @@ describe('parseArguments selector and non-selector parsing', () => {
     ];
     const argv = await parseArguments(emptySettings);
     expect(argv.profileLoad).toBe('last');
+  });
+
+  it('rejects --profile-load when --profile is repeated', () => {
+    const result = parseInSubprocess([
+      '--profile',
+      'first',
+      '--profile',
+      'last',
+      '--profile-load',
+      'named',
+    ]);
+    expect({
+      status: result.status,
+      hasConflictMessage: `${result.stdout}${result.stderr}`.includes(
+        'Cannot use both --profile and --profile-load',
+      ),
+    }).toEqual({ status: 1, hasConflictMessage: true });
+  });
+
+  it('rejects --profile when --profile-load is repeated', () => {
+    const result = parseInSubprocess([
+      '--profile',
+      'inline',
+      '--profile-load',
+      'first',
+      '--profile-load',
+      'last',
+    ]);
+    expect({
+      status: result.status,
+      hasConflictMessage: `${result.stdout}${result.stderr}`.includes(
+        'Cannot use both --profile and --profile-load',
+      ),
+    }).toEqual({ status: 1, hasConflictMessage: true });
   });
 });

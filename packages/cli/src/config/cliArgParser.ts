@@ -314,10 +314,9 @@ function validatePromptModeArgs(argv: Record<string, unknown>): void {
 
 function validateRootArgs(argv: Record<string, unknown>): true {
   validatePromptModeArgs(argv);
-  if (
-    hasNonEmptyString(argv['profile']) &&
-    hasNonEmptyString(argv['profileLoad'])
-  ) {
+  const profile = pickLastRepeatedStringOption(argv['profile']);
+  const profileLoad = pickLastRepeatedStringOption(argv['profileLoad']);
+  if (hasNonEmptyString(profile) && hasNonEmptyString(profileLoad)) {
     throw new Error(
       'Cannot use both --profile and --profile-load. Use one at a time.',
     );
