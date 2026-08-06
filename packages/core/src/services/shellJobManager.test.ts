@@ -656,7 +656,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
     expect(terminal?.exitCode).toBe(1);
   });
 
-  it('reaches the running state with a live pid for a long-running job', () => {
+  it('reaches the running state with a live pid for a long-running job', async () => {
     const job = manager.launch({
       command: 'Start-Sleep -Seconds 30',
       cwd: os.tmpdir(),

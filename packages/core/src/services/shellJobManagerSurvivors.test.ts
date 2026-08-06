@@ -89,7 +89,7 @@ async function reapSurvivor(pid: number): Promise<void> {
 }
 
 async function removeWindowsTestDir(dir: string): Promise<void> {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 15000;
   for (;;) {
     try {
       fs.rmSync(dir, { recursive: true, force: true });

@@ -721,6 +721,10 @@ export class IDEServer {
     }
   }
 
+  isListening(): boolean {
+    return this.server?.listening ?? false;
+  }
+
   async stop(): Promise<void> {
     // Close and clear all tracked session transports first so their
     // keep-alive timers and session state are released promptly rather than

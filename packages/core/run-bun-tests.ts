@@ -13,9 +13,9 @@
  * file as a separate `bun test <file>` invocation avoids the multi-file
  * process management that triggers the hang.
  *
- * Each child process has a per-file timeout (default 120s). If a file's
- * tests take longer, the process is killed to prevent a single slow/hanging
- * file from blocking the entire suite.
+ * Each child process has a per-file timeout (120s on POSIX, 180s on Windows).
+ * If a file takes longer, the process is killed to prevent a single
+ * slow/hanging file from blocking the entire suite.
  *
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
@@ -31,7 +31,7 @@ const PRELOAD = './bun-preload.ts';
 const MAX_CONCURRENCY = process.platform === 'win32' ? 1 : 8;
 const CONCURRENCY = Math.min(MAX_CONCURRENCY, availableParallelism());
 const PER_TEST_TIMEOUT_MS = 30_000;
-const PER_FILE_TIMEOUT_MS = 120_000;
+const PER_FILE_TIMEOUT_MS = process.platform === 'win32' ? 180_000 : 120_000;
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];

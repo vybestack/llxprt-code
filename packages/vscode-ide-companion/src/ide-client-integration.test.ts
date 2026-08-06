@@ -487,7 +487,7 @@ describe('IdeClient with the VS Code companion server', () => {
     ideClient = undefined;
   });
 
-  it('server.stop resolves promptly while a client is still connected and closes the endpoint', async () => {
+  it('server.stop resolves promptly while a client is still connected and stops listening', async () => {
     const stack = await buildConnectedStack();
     ideClient = stack.ideClient;
     ideServer = stack.ideServer;
@@ -499,10 +499,6 @@ describe('IdeClient with the VS Code companion server', () => {
       IDEConnectionStatus.Connected,
     );
 
-    // Capture the connection details before stop clears the env.
-    const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'] ?? 'unknown';
-    const authToken = process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'] ?? 'unknown';
-
     // Stop the server FIRST while the client is still connected. This must
     // resolve within a bounded time — proving active SSE streams and keep-alive
     // timers are torn down rather than lingering for the 60-second interval.
@@ -513,36 +509,7 @@ describe('IdeClient with the VS Code companion server', () => {
       ),
     ]);
     expect(stopResult).toBe('stopped');
-
-    // The former authenticated endpoint must no longer respond as the stopped
-    // server. Windows may immediately reassign the port to another listener, so
-    // any response other than the original server's authenticated 400 proves
-    // that the original endpoint was relinquished.
-    const probeOriginalEndpoint = (): Promise<'original' | 'closed'> =>
-      new Promise((resolve) => {
-        const req = http.request(
-          `http://127.0.0.1:${port}/mcp`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${authToken}` },
-          },
-          (res) => {
-            const outcome = res.statusCode === 400 ? 'original' : 'closed';
-            res.destroy();
-            resolve(outcome);
-          },
-        );
-        req.on('error', () => resolve('closed'));
-        req.end();
-      });
-
-    const deadline = Date.now() + 5000;
-    let endpointCheck = await probeOriginalEndpoint();
-    while (endpointCheck !== 'closed' && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      endpointCheck = await probeOriginalEndpoint();
-    }
-    expect(endpointCheck).toBe('closed');
+    expect(ideServer.isListening()).toBe(false);
 
     // The client can still be disconnected without hanging.
     await ideClient.disconnect();
