@@ -61,6 +61,7 @@ export interface AppContainerRuntimeProps {
   initialRecordingService?: SessionRecordingService;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
+  suppressStartupWelcome?: boolean;
 }
 
 type HookResults = {
@@ -452,6 +453,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     runtime: bootstrap.runtime,
     consoleMessages: bootstrap.consoleMessages,
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
+    suppressStartupWelcome: props.suppressStartupWelcome,
   });
   const input = useAppInput(
     buildInputParams(
