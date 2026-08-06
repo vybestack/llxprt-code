@@ -26,7 +26,10 @@ import { join } from 'node:path';
 import { availableParallelism } from 'node:os';
 
 const PRELOAD = './bun-preload.ts';
-const CONCURRENCY = Math.min(8, availableParallelism());
+// PowerShell/taskkill-heavy suites exhaust the Windows runner when eight Bun
+// children launch together; POSIX runners do not exhibit that resource cliff.
+const MAX_CONCURRENCY = process.platform === 'win32' ? 2 : 8;
+const CONCURRENCY = Math.min(MAX_CONCURRENCY, availableParallelism());
 const PER_FILE_TIMEOUT_MS = 60_000;
 
 function findTestFiles(dir: string): string[] {

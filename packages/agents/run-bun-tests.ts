@@ -46,13 +46,13 @@ const TEST_ROOTS = ['src'] as const;
 /** Upper bound on file concurrency, regardless of how many cores are present. */
 const MAX_CONCURRENCY = 4;
 
-/** Lower bound, so a single-core reporting environment still makes progress. */
-const MIN_CONCURRENCY = 2;
+/** Lower bound: small CI runners need one free core for each Bun child. */
+const MIN_CONCURRENCY = 1;
 
 /**
  * Number of test files executed at once.
  *
- * Deliberately half the core count, clamped to [2, 4]. Each file is a fresh
+ * Deliberately half the core count, clamped to [1, 4]. Each file is a fresh
  * `bun test` process that re-executes the whole agents module graph, and many
  * suites under `src/api/__tests__/` additionally build a real Agent (tool
  * registry, provider bootstrap, settings) per test. Saturating every core with

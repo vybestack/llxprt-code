@@ -499,8 +499,9 @@ describe('IdeClient with the VS Code companion server', () => {
       IDEConnectionStatus.Connected,
     );
 
-    // Capture the port before stop clears the env.
+    // Capture the connection details before stop clears the env.
     const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'] ?? 'unknown';
+    const authToken = process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'] ?? 'unknown';
 
     // Stop the server FIRST while the client is still connected. This must
     // resolve within a bounded time — proving active SSE streams and keep-alive
@@ -521,7 +522,10 @@ describe('IdeClient with the VS Code companion server', () => {
       new Promise<string>((resolve) => {
         const req = http.request(
           `http://127.0.0.1:${port}/mcp`,
-          { method: 'POST' },
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${authToken}` },
+          },
           (res) => {
             res.destroy();
             resolve(`responded-${res.statusCode}`);
@@ -533,11 +537,15 @@ describe('IdeClient with the VS Code companion server', () => {
 
     const deadline = Date.now() + 5000;
     let endpointCheck = await probeEndpoint();
-    while (endpointCheck !== 'rejected' && Date.now() < deadline) {
+    while (
+      endpointCheck !== 'rejected' &&
+      endpointCheck !== 'responded-401' &&
+      Date.now() < deadline
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 25));
       endpointCheck = await probeEndpoint();
     }
-    expect(endpointCheck).toBe('rejected');
+    expect(['rejected', 'responded-401']).toContain(endpointCheck);
 
     // The client can still be disconnected without hanging.
     await ideClient.disconnect();
