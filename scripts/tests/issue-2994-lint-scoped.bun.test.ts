@@ -13,7 +13,7 @@
  * hermetic temporary git repositories, and the real failure classifier. No
  * stubbing of git, ESLint, or the runner.
  *
- * Runs under Bun's native runner (see scripts/bun-test-manifest.ts); vitest
+ * Runs under Bun's native runner (see scripts/bun-test-roots.ts); vitest
  * skips `*.bun.test.ts` files.
  */
 

@@ -11,12 +11,11 @@
  * A fresh process per file preserves the isolation expected by the existing
  * workspace suites while still executing every test with Bun's native runner.
  *
- * **Important**: every executed file comes from a root declared in
- * `scripts/bun-test-manifest.ts`. A root either curates an explicit `files`
- * list (used while a workspace is only partly migrated, where Bun's
- * module-lifecycle differences still block some files) or declares `include`
- * globs (used once a root is fully migrated, so a newly added test file runs
- * automatically and cannot be silently dropped).
+ * **Important**: every executed file is discovered by walking the filesystem
+ * from roots declared in `scripts/bun-test-roots.ts`. A root declares the
+ * directories to scan and the execution settings (preload, tsconfig, timeout,
+ * retries, globalSetup). There is no allowlist: a newly added test file is
+ * picked up automatically and can never be silently dropped.
  *
  * Usage:
  *   bun scripts/run_bun_tests.ts [options]
@@ -41,10 +40,7 @@ import {
 } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import {
-  resolveBunNativeTestFiles,
-  type BunTestFile,
-} from './bun-test-manifest.js';
+import { resolveBunTestFiles, type BunTestFile } from './bun-test-roots.js';
 import {
   buildVitestJsonReport,
   parseJUnitXml,
@@ -418,7 +414,7 @@ export interface BunTestSpawnOptions {
 }
 
 /**
- * Shape of a manifest `globalSetup` module. Both hooks are optional so a root
+ * Shape of a root `globalSetup` module. Both hooks are optional so a root
  * can declare setup-only or teardown-only behaviour.
  */
 export interface BunGlobalSetupModule {
@@ -449,7 +445,7 @@ export interface BunTestRunnerDependencies {
 }
 
 /**
- * Builds the full spawn args for a single Bun test file. The manifest entry
+ * Builds the full spawn args for a single Bun test file. The root entry
  * may override the tsconfig and the per-test timeout, and may declare any
  * number of preload scripts (the Bun-native equivalent of Vitest's
  * `setupFiles`).
@@ -578,7 +574,7 @@ function runSingleTestFile(
 
 /**
  * Collects the distinct global-setup modules declared by the selected files,
- * preserving manifest order so setup runs in a deterministic sequence.
+ * preserving root order so setup runs in a deterministic sequence.
  */
 export function collectGlobalSetups(
   files: readonly BunTestFile[],
@@ -647,9 +643,7 @@ export async function runBunTests(
       ? `workspace "${options.workspace}"`
       : 'any workspace';
     dependencies.stderr(`No native Bun test files found for ${scope}.`);
-    dependencies.stderr(
-      'Roots must be declared in scripts/bun-test-manifest.ts.',
-    );
+    dependencies.stderr('Roots must be declared in scripts/bun-test-roots.ts.');
     return 1;
   }
 
@@ -991,7 +985,7 @@ async function main(): Promise<void> {
     invocationDirectory: process.cwd(),
     executable: process.execPath,
     environment: process.env,
-    resolveFiles: resolveBunNativeTestFiles,
+    resolveFiles: resolveBunTestFiles,
     resolveTsconfig: resolveTsconfigOverride,
     loadGlobalSetup: async (path) =>
       (await import(pathToFileURL(path).href)) as BunGlobalSetupModule,
