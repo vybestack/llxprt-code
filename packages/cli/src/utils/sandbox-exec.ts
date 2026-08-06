@@ -35,6 +35,7 @@ import {
   wireCleanupHandlers,
   handleStdinForSandbox,
   restoreStdinAfterSandbox,
+  validateContainerSandboxEnv,
   LOCAL_DEV_SANDBOX_IMAGE_NAME,
 } from './sandbox-containers.js';
 import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
@@ -151,6 +152,7 @@ async function prepareContainerSandbox(
   cliConfig: Config | undefined,
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
+  validateContainerSandboxEnv();
   let credentialProxyBridgeCleanup: (() => void) | undefined;
 
   const { image, workdir, resolvedTmpdir, args } =

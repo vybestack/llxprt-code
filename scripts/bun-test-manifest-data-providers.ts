@@ -363,6 +363,7 @@ export const PROVIDERS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/openai-vercel/__tests__/vercelReasoningCapture.fieldName.test.ts',
     'src/openai-vercel/errorHandling.test.ts',
     'src/openai-vercel/messageConversion.test.ts',
+    'src/openai-vercel/messageConversion.toolFailure.test.ts',
     'src/openai-vercel/modelListing.test.ts',
     'src/openai-vercel/nonStreaming.config.test.ts',
     'src/openai-vercel/nonStreaming.test.ts',

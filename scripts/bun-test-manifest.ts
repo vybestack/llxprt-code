@@ -174,6 +174,68 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'cli',
+    files: [
+      'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      // Extension settings storage drives the REAL SecureStore against an
+      // in-memory keyring, so it needs no module mocking and is Bun-native.
+      'test-bun/settingsStorage.bun.ts',
+      // JSP/1 observation producer (issue #2779). Bun-native from the start:
+      // these are excluded from the Vitest selection so they run only here.
+      'src/observation/jspBounds.test.ts',
+      'src/observation/jspProducer.test.ts',
+      'src/observation/jspProducerState.test.ts',
+      'src/observation/jspRedaction.test.ts',
+      'src/observation/jspSchema.test.ts',
+      'src/observation/jspTransport.test.ts',
+      'src/observation/jspWiring.test.ts',
+      'src/observation/observationTap.test.ts',
+      'src/utils/sandbox-containers.test.ts',
+      // Issue #3081: legacy→canonical migration categorization for config
+      // entries that were previously routed to the data directory.
+      'test-bun/pathMigration.issue3081.bun.ts',
+      // Issue #3081: sandbox env helpers (current-user detection, container
+      // home resolution, Windows path translation).
+      'test-bun/sandbox-env.bun.ts',
+      // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
+      // and likewise excluded from the Vitest selection.
+      'src/utils/sandbox-ssh-agent-preflight.test.ts',
+      // Process memory hardening (issue #3028). Imports the real `bun:test`
+      // API rather than the Vitest shim, so it runs only here and is excluded
+      // from the Vitest selection.
+      'src/launcher/process-memory-hardening.test.ts',
+      'src/zed-integration/zed-session-lifecycle.test.ts',
+      // Issue #3063: Zed replay must display the model-facing remedy for a
+      // failed tool call, not the terse marker (AC16).
+      'src/zed-integration/zed-session-replay.toolFailure.test.ts',
+      // Issue #2980: Zed terminal command correlation. Migrated to bun:test
+      // and excluded from the Vitest selection below; the strict wrapper
+      // matcher is exercised here while keeping the lifecycle guard intact.
+      'src/zed-integration/zedIntegration.terminal.test.ts',
+      'test-bun/iContentToHistoryItems.issue2511.bun.ts',
+      'src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
+      'test-utils/augment-bun-vi-cleanup.bun.ts',
+      // Issue #2951: Windows Ctrl+Enter steering. Each file pins
+      // process.platform at the very top before the key-matcher module graph
+      // loads, so win32 and darwin must run in separate processes.
+      'test-bun/steerKey.win32.bun.ts',
+      'test-bun/steerKey.darwin.bun.ts',
+      'test-bun/resolveKeyBindings.bun.ts',
+      'test-bun/keypressLineFeed.bun.ts',
+      'test-bun/profileAuthKeyNameIssue2916.bun.ts',
+    ],
+  },
+  {
+    workspace: 'cli',
+    preload: 'bun-test-setup.ts',
+    files: [
+      'src/ui/hooks/agentStream/__tests__/useAgentEventStream.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useAgentStreamOrchestration.terminal.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.doublecancel.bun.tsx',
+      'src/ui/hooks/agentStream/__tests__/useSubmitQuery.terminalError.bun.tsx',
+    ],
+  },
+  {
     workspace: 'core',
     files: [
       'src/utils/errors.test.ts',

@@ -9,12 +9,24 @@ import {
   loadBootstrapFromEnv,
   createObservationProducer,
   createTodoObservationSubscription,
+  initializeObservationProducer,
+  observeTurnStarted,
+  observeTurnFailed,
   shouldSuppressContent,
+  stopObservationProducer,
+  __setBootstrapWarningStderrWriterForTesting,
   type ObservationSessionContext,
 } from './jspWiring.js';
 import type { JspPostResult } from './jspPublisher.js';
 import type { JspSnapshotDocument, JspBoundDocument } from './jspDocuments.js';
-import { todoEvents, FatalConfigError } from '@vybestack/llxprt-code-core';
+import {
+  todoEvents,
+  FatalConfigError,
+  patchStdio,
+  coreEvents,
+  CoreEvent,
+  type OutputPayload,
+} from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -77,53 +89,131 @@ describe('loadBootstrapFromEnv', () => {
     await Promise.allSettled(
       dirs.map((dir) => fs.rm(dir, { recursive: true, force: true })),
     );
+    vi.restoreAllMocks();
   });
 
-  const origEnv = { ...process.env };
-
-  beforeEach(() => {
-    delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
+  it('A1: returns null and warns nothing when env is absent or empty', () => {
+    const warnings: string[] = [];
+    const warn = (message: string) => {
+      warnings.push(message);
+    };
+    expect(loadBootstrapFromEnv({}, warn)).toBeNull();
+    expect(
+      loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: '' }, warn),
+    ).toBeNull();
+    expect(warnings).toHaveLength(0);
   });
 
-  afterEach(() => {
-    process.env = { ...origEnv };
-  });
-
-  it('returns null when env is absent (observation disabled)', () => {
-    expect(loadBootstrapFromEnv()).toBeNull();
-  });
-
-  it('returns parsed bootstrap when env points to a valid file', async () => {
-    const file = await writeTempFile(
-      'bootstrap.json',
-      JSON.stringify(validBootstrapJson),
-    );
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const result = loadBootstrapFromEnv();
-    expect(result).not.toBeNull();
-    expect(result?.agentId).toBe('agent-alex');
-  });
-
-  it('throws on unreadable bootstrap file (fail fast, exit 52)', () => {
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE =
+  it('A2: a missing file returns null and emits one warning naming the variable, the escaped path, and disabled observation', () => {
+    const warnings: string[] = [];
+    const warn = (message: string) => {
+      warnings.push(message);
+    };
+    const missingPath =
       join(
         tmpdir(),
         'jsp-no-such-file-' + Math.random().toString(36).slice(2),
       ) + '.json';
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
-    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
-    expect(error.message).toContain('could not be read');
+    const result = loadBootstrapFromEnv(
+      { LLXPRT_JSP_BOOTSTRAP_FILE: missingPath },
+      warn,
+    );
+    expect(result).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    // The path is rendered in a control-character-safe escaped form.
+    expect(warnings[0]).toContain(JSON.stringify(missingPath));
+    expect(warnings[0]).toContain('observation is disabled');
   });
 
-  it('throws on malformed bootstrap (fail fast, exit 52)', async () => {
+  it('A3: an existing directory (a read failure that is not ENOENT) returns null with the same warning shape', () => {
+    const warnings: string[] = [];
+    const warn = (message: string) => {
+      warnings.push(message);
+    };
+    const dirPath = tmpdir();
+    const result = loadBootstrapFromEnv(
+      { LLXPRT_JSP_BOOTSTRAP_FILE: dirPath },
+      warn,
+    );
+    expect(result).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(warnings[0]).toContain(JSON.stringify(dirPath));
+    expect(warnings[0]).toContain('observation is disabled');
+  });
+
+  it('A4: with stdio patched (real startup ordering), the default-sink warning bypasses the patched stream to physical stderr and leaves stdout clean', () => {
+    // Reproduce the cli.tsx startup ordering: patchStdio() (line 134) runs
+    // before setupObservation -> loadBootstrapFromEnv (line 210). patchStdio
+    // redirects process.stderr/stdout.write to the coreEvents Output bus, so
+    // a warning routed to physical stderr via writeToStderr (a pre-patch bound
+    // original) must NOT appear on that bus — proving it bypassed the patched
+    // stream rather than being silently swallowed or buffered.
+    const emitted: OutputPayload[] = [];
+    const onOutput = (payload: OutputPayload) => {
+      emitted.push(payload);
+    };
+    coreEvents.on(CoreEvent.Output, onOutput);
+    const physicalWarnings: string[] = [];
+    __setBootstrapWarningStderrWriterForTesting((message) => {
+      physicalWarnings.push(message);
+    });
+    const missingPath =
+      join(
+        tmpdir(),
+        'jsp-no-such-file-' + Math.random().toString(36).slice(2),
+      ) + '.json';
+    let restorePatched: (() => void) | undefined;
+    try {
+      restorePatched = patchStdio();
+      // Production default sink — no injected sink.
+      loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: missingPath });
+    } finally {
+      restorePatched?.();
+      coreEvents.off(CoreEvent.Output, onOutput);
+      __setBootstrapWarningStderrWriterForTesting(null);
+    }
+    // The warning bypassed the patched stream: nothing was forwarded to the
+    // bus on either fd, so stdout stayed clean and the warning was neither
+    // redirected nor buffered.
+    expect(emitted).toHaveLength(0);
+    expect(physicalWarnings).toHaveLength(1);
+    expect(physicalWarnings[0]).toContain(JSON.stringify(missingPath));
+    expect(physicalWarnings[0]).toContain('observation is disabled');
+
+    // Control: the patch WAS active during the call, so the empty result is a
+    // genuine bypass rather than a no-op patch. A direct write through the
+    // patched stream surfaces on the bus.
+    const control: OutputPayload[] = [];
+    const onControl = (payload: OutputPayload) => {
+      control.push(payload);
+    };
+    coreEvents.on(CoreEvent.Output, onControl);
+    let restoreControl: (() => void) | undefined;
+    try {
+      restoreControl = patchStdio();
+      process.stdout.write('control-stdout\n');
+    } finally {
+      restoreControl?.();
+      coreEvents.off(CoreEvent.Output, onControl);
+    }
+    expect(
+      control.some((p) => String(p.chunk).includes('control-stdout')),
+    ).toBe(true);
+  });
+
+  it('A5: malformed JSON still throws FatalConfigError with the variable, the escaped path, and the category', async () => {
     const file = await writeTempFile('bad.json', '{ not json');
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    const error = expectFatalBootstrap(() =>
+      loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: file }),
+    );
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain(JSON.stringify(file));
     expect(error.message).toContain('malformed JSON');
   });
 
-  it('throws on non-loopback endpoint (insecure, exit 52)', async () => {
+  it('A6a: a non-loopback endpoint still throws with the path and without secrets', async () => {
     const file = await writeTempFile(
       'insecure.json',
       JSON.stringify({
@@ -131,24 +221,174 @@ describe('loadBootstrapFromEnv', () => {
         endpoint: 'http://10.0.0.5:9123',
       }),
     );
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    const error = expectFatalBootstrap(() =>
+      loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: file }),
+    );
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain(JSON.stringify(file));
     expect(error.message).toContain('rejected (JSP-E004)');
     // A credential-bearing file's secrets must not leak into the diagnostic.
     expect(error.message).not.toContain('pub-secret-xyz');
     expect(error.message).not.toContain('reg-abc');
   });
 
-  it('throws on wrong protocol version (exit 52)', async () => {
+  it('A6b: a wrong protocol version still throws with the path and without secrets', async () => {
     const file = await writeTempFile(
       'wrong.json',
       JSON.stringify({ ...validBootstrapJson, protocol: 'jsp/2' }),
     );
-    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = file;
-    const error = expectFatalBootstrap(() => loadBootstrapFromEnv());
+    const error = expectFatalBootstrap(() =>
+      loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: file }),
+    );
     expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    expect(error.message).toContain(JSON.stringify(file));
     expect(error.message).toContain('rejected (JSP-E003)');
+    expect(error.message).not.toContain('pub-secret-xyz');
+    expect(error.message).not.toContain('reg-abc');
+  });
+
+  it('A7: a valid bootstrap file returns the parsed document and emits no warning', async () => {
+    const warnings: string[] = [];
+    const warn = (message: string) => {
+      warnings.push(message);
+    };
+    const file = await writeTempFile(
+      'bootstrap.json',
+      JSON.stringify(validBootstrapJson),
+    );
+    const result = loadBootstrapFromEnv(
+      { LLXPRT_JSP_BOOTSTRAP_FILE: file },
+      warn,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.agentId).toBe('agent-alex');
+    expect(warnings).toHaveLength(0);
+  });
+});
+
+describe('bootstrap warning sink hardening (default best-effort, injected strict)', () => {
+  const missingPath =
+    join(tmpdir(), 'jsp-hardening-' + Math.random().toString(36).slice(2)) +
+    '.json';
+
+  it('B1: the default sink swallows a throwing physical stderr writer so a missing-file warning never becomes fatal startup', () => {
+    // A destroyed/throwing stderr must not propagate and turn a missing-file
+    // warning back into a fatal startup error. fd-2 destruction is not
+    // reliably throwable in-process, so swap the physical writer the default
+    // sink delegates to (then guards) via the test seam.
+    __setBootstrapWarningStderrWriterForTesting(() => {
+      throw new Error('stderr destroyed');
+    });
+    try {
+      // No injected warningSink — the production default sink is exercised.
+      expect(
+        loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: missingPath }),
+      ).toBeNull();
+    } finally {
+      __setBootstrapWarningStderrWriterForTesting(null);
+    }
+  });
+
+  it('B2: an explicitly injected throwing sink propagates and is not swallowed', () => {
+    // Injected sinks bypass the default's guard and stay strict by contract.
+    const throwingSink = (): never => {
+      throw new Error('injected sink failure');
+    };
+    expect(() =>
+      loadBootstrapFromEnv(
+        { LLXPRT_JSP_BOOTSTRAP_FILE: missingPath },
+        throwingSink,
+      ),
+    ).toThrow('injected sink failure');
+  });
+});
+
+describe('bootstrap diagnostic path sanitization (no log injection)', () => {
+  it('C1: a warning path with newlines and ANSI escapes is escaped so it cannot inject log lines', () => {
+    const warnings: string[] = [];
+    const warn = (message: string) => {
+      warnings.push(message);
+    };
+    // A path carrying raw newlines and an ANSI color escape. The read fails
+    // (the path does not exist), so the warning branch is exercised.
+    const maliciousPath = '/tmp/no-such\ndanger\n\x1b[31mred\x1b[0m.json';
+    const result = loadBootstrapFromEnv(
+      { LLXPRT_JSP_BOOTSTRAP_FILE: maliciousPath },
+      warn,
+    );
+    expect(result).toBeNull();
+    expect(warnings).toHaveLength(1);
+    const message = warnings[0];
+    // The escaped representation names the actual path safely.
+    expect(message).toContain(JSON.stringify(maliciousPath));
+    // The path's newlines are escaped to backslash-n, so the message is a
+    // single logical line (only the message's own trailing newline remains).
+    expect(message.split('\n')).toHaveLength(2);
+    // The raw ESC control byte never reaches the warning.
+    expect(message).not.toContain('\x1b');
+  });
+
+  it('C2: a fatal malformed-JSON diagnostic uses the escaped path without exposing the body', async () => {
+    const file = await writeTempFile('bad-control.json', '{ not json');
+    const error = expectFatalBootstrap(() =>
+      loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: file }),
+    );
+    expect(error.message).toContain('LLXPRT_JSP_BOOTSTRAP_FILE');
+    // The escaped representation names the path safely.
+    expect(error.message).toContain(JSON.stringify(file));
+    // The credential-bearing file body must never appear in the diagnostic.
+    expect(error.message).not.toContain('not json');
+  });
+});
+
+describe('initializeObservationProducer (startup survives a stale pointer)', () => {
+  const origEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
+  });
+
+  afterEach(async () => {
+    process.env = { ...origEnv };
+    vi.restoreAllMocks();
+    __setBootstrapWarningStderrWriterForTesting(null);
+    // Reset module-level producer/tap state so no observation subscription
+    // leaks into sibling describe blocks.
+    await stopObservationProducer();
+  });
+
+  it('A8: a missing bootstrap file disables observation without aborting startup', () => {
+    const missingPath =
+      join(
+        tmpdir(),
+        'jsp-no-such-file-' + Math.random().toString(36).slice(2),
+      ) + '.json';
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = missingPath;
+    // Capture the warning via the test seam rather than a patched-stream spy:
+    // the production default sink routes to physical stderr through the
+    // pre-patch-bound writeToStderr, which a process.stderr.write spy cannot
+    // intercept. This also keeps the runner output clean.
+    const warnings: string[] = [];
+    __setBootstrapWarningStderrWriterForTesting((message) => {
+      warnings.push(message);
+    });
+    try {
+      // This is the reported bug: a stale inherited pointer must not abort the
+      // CLI before the TUI loads. initializeObservationProducer must return
+      // normally, leaving observation inert.
+      expect(() => initializeObservationProducer(sessionContext)).not.toThrow();
+
+      // The warning fired once through the full startup path, naming the path.
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(JSON.stringify(missingPath));
+
+      // With no producer created, observation calls are inert and must not
+      // throw or reach any transport.
+      expect(() => observeTurnStarted()).not.toThrow();
+      expect(() => observeTurnFailed()).not.toThrow();
+    } finally {
+      __setBootstrapWarningStderrWriterForTesting(null);
+    }
   });
 });
 
