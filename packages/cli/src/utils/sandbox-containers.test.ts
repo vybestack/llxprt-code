@@ -576,7 +576,7 @@ describe('volumeDestinations', () => {
         '--volume',
         'C:\\Users\\me\\config:/c/Users/me/config:z',
       ]),
-    ).toEqual(['/c/Users/me/config']);
+    ).toStrictEqual(['/c/Users/me/config']);
   });
 });
 
