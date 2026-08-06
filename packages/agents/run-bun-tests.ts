@@ -38,7 +38,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { availableParallelism, tmpdir } from 'node:os';
 
 const TEST_ROOTS = ['src'] as const;
@@ -145,6 +145,21 @@ function findTestFiles(dir: string): string[] {
     }
   }
   return results;
+}
+
+/**
+ * Returns the absolute paths of every test file this runner would execute for
+ * the given absolute workspace `root`. The script entry point calls this same
+ * function (see `main`), so the two can never diverge.
+ *
+ * Root scanned: `src`. Files match the `TEST_FILE_SUFFIXES` conventions and
+ * the `PRUNED_DIRECTORIES` entries (build/dependency output) plus dot-prefixed
+ * directories are skipped.
+ */
+export function discoverTestFiles(root: string): string[] {
+  return TEST_ROOTS.flatMap((testRoot) =>
+    findTestFiles(join(root, testRoot)),
+  ).sort();
 }
 
 interface TestResult {
@@ -345,7 +360,8 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const testFiles = TEST_ROOTS.flatMap((root) => findTestFiles(root)).sort();
+  const root = import.meta.dir;
+  const testFiles = discoverTestFiles(root).map((file) => relative(root, file));
   if (testFiles.length === 0) {
     console.error('No test files found under: ' + TEST_ROOTS.join(', '));
     process.exit(1);
@@ -412,4 +428,6 @@ async function main(): Promise<void> {
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
-await main();
+if (import.meta.main) {
+  await main();
+}

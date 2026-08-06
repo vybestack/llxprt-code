@@ -39,12 +39,15 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(projection.method).toBe('messages/v1');
     expect(projection.model).toBe('claude-3-5-sonnet-20241022');
     expect(projection.projectionRevision).toBe(3);
+    // Assert immutability before toMatchObject: Bun's expect mutates the
+    // received object's properties when resolving asymmetric matchers, which
+    // would otherwise unfreeze finalizedProjection before this check runs.
+    expect(Object.isFrozen(projection.finalizedProjection)).toBe(true);
     expect(projection.finalizedProjection).toMatchObject({
       kind: 'llxprt-provider-prompt-v3',
       protocol: 'anthropic-messages',
       promptText: expect.any(String),
     });
-    expect(Object.isFrozen(projection.finalizedProjection)).toBe(true);
   });
 
   it('counts more tokens for a larger prompt (messages+system+tools), not the full HTTP body', async () => {

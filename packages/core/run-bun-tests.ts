@@ -22,12 +22,14 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
 const PRELOAD = './bun-preload.ts';
 const CONCURRENCY = Math.min(8, availableParallelism());
 const PER_FILE_TIMEOUT_MS = 60_000;
+
+const TEST_ROOTS = ['src', 'test'] as const;
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
@@ -45,13 +47,33 @@ function findTestFiles(dir: string): string[] {
     if (stat.isDirectory()) {
       results.push(...findTestFiles(fullPath));
     } else if (
-      (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) &&
+      (entry.endsWith('.test.ts') ||
+        entry.endsWith('.test.tsx') ||
+        entry.endsWith('.spec.ts') ||
+        entry.endsWith('.spec.tsx')) &&
       !entry.endsWith('.d.ts')
     ) {
       results.push(fullPath);
     }
   }
   return results.sort();
+}
+
+/**
+ * Returns the absolute paths of every test file this runner would execute for
+ * the given absolute workspace `root`. The script entry point calls this same
+ * function (see `main`), so the two can never diverge.
+ *
+ * Roots scanned: `src` and `test`. Files match `*.test.ts` / `*.test.tsx` /
+ * `*.spec.ts` / `*.spec.tsx` (`.d.ts` excluded); `dist`, `node_modules`,
+ * `coverage` and dot-prefixed entries are skipped.
+ */
+export function discoverTestFiles(root: string): string[] {
+  const results: string[] = [];
+  for (const testRoot of TEST_ROOTS) {
+    results.push(...findTestFiles(join(root, testRoot)));
+  }
+  return results;
 }
 
 interface TestResult {
@@ -115,7 +137,7 @@ function generateJUnit(
   const testCases = results
     .map((r) => {
       const className = escapeXml(
-        r.file.replace(/^src\//, '').replace(/\.test\.tsx?$/, ''),
+        r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
       );
       const exitCode = r.exitCode ?? -1;
       const failureXml = r.passed
@@ -139,7 +161,8 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const testFiles = [...findTestFiles('src'), ...findTestFiles('test')];
+  const root = import.meta.dir;
+  const testFiles = discoverTestFiles(root).map((file) => relative(root, file));
   if (testFiles.length === 0) {
     console.error('No test files found');
     process.exit(1);
@@ -185,4 +208,6 @@ async function main(): Promise<void> {
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
-main();
+if (import.meta.main) {
+  await main();
+}

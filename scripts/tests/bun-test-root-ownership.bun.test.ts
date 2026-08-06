@@ -10,17 +10,14 @@
  * The sharded matrix runs each workspace's own `test` script plus the root
  * `test:scripts`; that is the only thing that executes tests. A root nobody
  * runs would silently never execute, and a root two scripts run would burn CI
- * twice for no signal. This is the guarantee that lets the parity job stop
- * re-running the whole manifest.
+ * twice for no signal.
  */
 
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import {
-  BUN_NATIVE_TEST_MANIFEST,
-  type BunTestWorkspaceEntry,
-} from '../bun-test-manifest.ts';
+import { BUN_TEST_ROOTS, type BunTestRoot } from '../bun-test-roots.js';
+import { TEST_EXECUTORS } from '../check-test-file-coverage.js';
 import { SCRIPTS_SHARD_ROOTS, scriptsRootCommand } from '../test.ts';
 
 const repoRoot = resolve(import.meta.dir, '..', '..');
@@ -35,21 +32,6 @@ function readPackageJson(path: string): PackageJson {
 }
 
 const rootPackage = readPackageJson(join(repoRoot, 'package.json'));
-
-/**
- * Roots whose files are executed by a workspace's own bespoke Bun runner
- * rather than the shared manifest runner, so no `--workspace` token appears.
- * Each entry names the script that covers it.
- */
-const COVERED_BY_BESPOKE_RUNNER: Readonly<Record<string, string>> = {
-  // packages/core/run-bun-tests.ts scans src/ and test/, which includes the
-  // single file the manifest lists for `core`.
-  core: 'packages/core/run-bun-tests.ts',
-  // packages/cli/run-bun-tests.ts discovers every test file in the workspace
-  // (issue #2843), which subsumes the files the manifest used to list for
-  // `cli`.
-  cli: 'packages/cli/run-bun-tests.ts',
-};
 
 /**
  * Every command the sharded CI matrix actually executes.
@@ -79,38 +61,77 @@ function scriptsRunning(root: string): readonly string[] {
   );
 }
 
-const offlineRoots: readonly BunTestWorkspaceEntry[] =
-  BUN_NATIVE_TEST_MANIFEST.filter((entry) => entry.credentialed !== true);
+const offlineRoots: readonly BunTestRoot[] = BUN_TEST_ROOTS.filter(
+  (root) => root.credentialed !== true,
+);
 
-describe('Bun-native manifest root ownership', () => {
+describe('Bun-native test root ownership', () => {
   it('has at least one root to check', () => {
     expect(offlineRoots.length).toBeGreaterThan(0);
   });
 
   for (const entry of offlineRoots) {
-    const bespoke = COVERED_BY_BESPOKE_RUNNER[entry.workspace];
-
-    it(`runs the "${entry.workspace}" root exactly once`, () => {
-      const runners = scriptsRunning(entry.workspace);
-      if (bespoke !== undefined) {
-        // A bespoke runner already covers these files; the shared runner must
-        // not also run them, or they would execute twice in the same shard.
-        expect(runners).toEqual([]);
-        return;
-      }
+    it(`runs the "${entry.root}" root exactly once`, () => {
+      const runners = scriptsRunning(entry.root);
       expect(runners).toHaveLength(1);
     });
   }
 
   it('runs every credentialed root only on explicit request', () => {
-    const credentialed = BUN_NATIVE_TEST_MANIFEST.filter(
+    const credentialed = BUN_TEST_ROOTS.filter(
       (entry) => entry.credentialed === true,
     );
     expect(credentialed.length).toBeGreaterThan(0);
     for (const entry of credentialed) {
       // Credentialed roots call a real provider, so no workspace `test` script
       // may pull them into the offline gate.
-      expect(scriptsRunning(entry.workspace)).toEqual([]);
+      expect(scriptsRunning(entry.root)).toEqual([]);
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// Bespoke-runner executors must still be wired in their workspace test scripts
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the workspace name from a bespoke-runner executor name of the form
+ * `packages/<workspace> test script (run-bun-tests.ts)`. Returns undefined for
+ * executors that do not name a bespoke runner.
+ */
+function workspaceFromBespokeExecutor(name: string): string | undefined {
+  const match =
+    /^packages\/([a-z0-9-]+) test script \(run-bun-tests\.ts\)$/.exec(name);
+  return match?.[1];
+}
+
+interface BespokeWorkspace {
+  readonly name: string;
+  readonly workspace: string;
+}
+
+const bespokeRunnerWorkspaces: readonly BespokeWorkspace[] = TEST_EXECUTORS.map(
+  (executor) => ({
+    name: executor.name,
+    workspace: workspaceFromBespokeExecutor(executor.name),
+  }),
+).filter((entry): entry is BespokeWorkspace => entry.workspace !== undefined);
+
+describe('bespoke-runner executors are wired by their workspace test script', () => {
+  it('has at least one bespoke runner executor to check', () => {
+    expect(bespokeRunnerWorkspaces.length).toBeGreaterThan(0);
+  });
+
+  for (const { name, workspace } of bespokeRunnerWorkspaces) {
+    it(`asserts packages/${workspace} test script invokes run-bun-tests.ts`, () => {
+      const pkg = readPackageJson(
+        join(repoRoot, 'packages', workspace, 'package.json'),
+      );
+      const testScript = pkg.scripts?.['test'] ?? '';
+      expect(
+        testScript,
+        `${name}: packages/${workspace} test script must invoke run-bun-tests.ts`,
+      ).toContain('run-bun-tests');
+    });
+  }
 });

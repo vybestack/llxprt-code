@@ -107,6 +107,7 @@
     "lint:agents-api-surface": "bun scripts/check-agents-api-surface.ts",
     "lint:test-shards": "bun scripts/check-test-shards.ts",
     "lint:affected-shards": "bun scripts/check-affected-test-shards.ts",
+    "lint:test-file-coverage": "bun scripts/check-test-file-coverage.ts",
     "affected-shards": "node scripts/affected-test-shards.ts",
     "affected-shards:replay": "node scripts/affected-test-shards.ts --replay 120",
     "lint:all": "./scripts/lint-all.sh",
