@@ -217,13 +217,15 @@ function renderDiagnostic(diagnostic: unknown): string {
   if (diagnostic === null || typeof diagnostic !== 'object') {
     return String(diagnostic);
   }
-  const { position } = diagnostic as {
+  const { message, position } = diagnostic as {
+    message?: unknown;
     position?: { file?: string; line?: number; column?: number } | null;
   };
   const where = position?.file
     ? ` (${position.file}:${position.line ?? 0}:${position.column ?? 0})`
     : '';
-  return `${String(diagnostic)}${where}`;
+  const text = typeof message === 'string' ? message : String(diagnostic);
+  return `${text}${where}`;
 }
 
 /**

@@ -6,7 +6,7 @@
 
 import { it } from 'vitest';
 import { strict as assert } from 'node:assert';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 const isWin = process.platform === 'win32';
 
@@ -29,7 +29,15 @@ it.skipIf(!isWin)(
     // workspace root so the agent can see the files it is asked to operate on.
     const workspaceDir = rig.testDir;
     assert.ok(workspaceDir, 'rig.setup() must establish a test directory');
-    execSync('git init', { cwd: workspaceDir, stdio: 'ignore' });
+    const gitInit = spawnSync('git', ['init'], {
+      cwd: workspaceDir,
+      encoding: 'utf8',
+    });
+    assert.equal(
+      gitInit.status,
+      0,
+      `git init failed for the test workspace: ${gitInit.error?.message ?? gitInit.stderr}`,
+    );
 
     // Test 1: Verify PowerShell UTF-8 path handling
     const utf8Path = 'テスト.txt';

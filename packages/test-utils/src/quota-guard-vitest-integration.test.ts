@@ -86,10 +86,13 @@ function resolveNodeExecutable(): string {
   // (it fails EINVAL), and every real Windows Node install ships `node.exe`.
   const names = process.platform === 'win32' ? ['node.exe'] : ['node'];
   const searchPath = process.env['PATH'] ?? '';
-  for (const dir of searchPath.split(delimiter)) {
-    if (dir === '') {
+  for (const pathEntry of searchPath.split(delimiter)) {
+    if (pathEntry === '') {
       continue;
     }
+    // Windows PATH entries containing spaces are sometimes wrapped in quotes;
+    // those quotes are syntax, not part of the directory name.
+    const dir = pathEntry.replace(/^"(.*)"$/, '$1');
     for (const name of names) {
       const candidate = join(dir, name);
       if (existsSync(candidate)) {
