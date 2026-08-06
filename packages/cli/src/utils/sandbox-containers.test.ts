@@ -18,6 +18,8 @@ import {
   addContainerEnvVars,
   addContainerVolumeMounts,
 } from './sandbox-containers.js';
+import { getContainerPath } from './sandbox-env.js';
+import { USER_SETTINGS_DIR } from '../config/settings.js';
 
 // Explicit factory mock: Bun's automock walks every export of
 // node:child_process and hits getters that access private fields
@@ -533,5 +535,128 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
     const userIdx = proxyArgs.indexOf('--user');
     expect(userIdx).toBeGreaterThanOrEqual(0);
     expect(proxyArgs[userIdx + 1]).toBe('501:20');
+  });
+});
+
+// Parsing helpers that operate on the produced docker argv. They look only at
+// the real buildContainerRunArgs output — no mocks — so the assertions pin the
+// observable container behaviour, not a stub's call arguments.
+function volumeDestinations(args: readonly string[]): string[] {
+  const dests: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--volume' && i + 1 < args.length) {
+      const parts = args[i + 1].split(':');
+      // [host, dest] or [host, dest, options]
+      if (parts.length >= 2) dests.push(parts[1]);
+    }
+  }
+  return dests;
+}
+
+function envValue(args: readonly string[], name: string): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--env' && i + 1 < args.length) {
+      const pair = args[i + 1];
+      if (pair.startsWith(`${name}=`)) return pair.slice(name.length + 1);
+    }
+  }
+  return undefined;
+}
+
+const CANONICAL_CONFIG_MOUNT_ENV_KEYS = [
+  'SANDBOX_SET_UID_GID',
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+
+describe.sequential('#3081 canonical config mount + env pinning', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let fixturePath = '';
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-3081-'));
+    vi.resetAllMocks();
+    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    // Force the non-current-user path deterministically: the Debian/Ubuntu
+    // auto-detect makes shouldUseCurrentUserInSandboxSync return true on some
+    // CI hosts. containerHome is then /home/node regardless of host.
+    process.env.SANDBOX_SET_UID_GID = 'false';
+    for (const key of CANONICAL_CONFIG_MOUNT_ENV_KEYS) {
+      if (key !== 'SANDBOX_SET_UID_GID') delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    vi.restoreAllMocks();
+    if (fixturePath !== '') {
+      fs.rmSync(fixturePath, { recursive: true, force: true });
+    }
+  });
+
+  it('mounts the host config dir at path parity (the canonical destination)', () => {
+    const args = buildArgs(fixturePath);
+    const hostConfigDir = USER_SETTINGS_DIR;
+    const containerConfigDir = getContainerPath(hostConfigDir);
+
+    expect(args).toContain('--volume');
+    expect(args).toContain(`${hostConfigDir}:${containerConfigDir}`);
+  });
+
+  it('emits no --volume destination ending in the legacy /.llxprt', () => {
+    const args = buildArgs(fixturePath);
+
+    const dests = volumeDestinations(args);
+    expect(dests.every((d) => !d.endsWith('/.llxprt'))).toBe(true);
+  });
+
+  it('pins LLXPRT_CONFIG_HOME to the config mount destination', () => {
+    const args = buildArgs(fixturePath);
+    const containerConfigDir = getContainerPath(USER_SETTINGS_DIR);
+
+    expect(envValue(args, 'LLXPRT_CONFIG_HOME')).toBe(containerConfigDir);
+  });
+
+  it('pins DATA/CACHE/LOG homes pairwise distinct and outside the config mount', () => {
+    const args = buildArgs(fixturePath);
+    const configMount = getContainerPath(USER_SETTINGS_DIR);
+
+    const data = envValue(args, 'LLXPRT_DATA_HOME');
+    const cache = envValue(args, 'LLXPRT_CACHE_HOME');
+    const log = envValue(args, 'LLXPRT_LOG_HOME');
+    expect(data).toBeDefined();
+    expect(cache).toBeDefined();
+    expect(log).toBeDefined();
+    expect(data).not.toBe(cache);
+    expect(data).not.toBe(log);
+    expect(cache).not.toBe(log);
+    // None of the ephemeral roots may resolve inside the mounted config dir,
+    // otherwise data/cache/logs would be persisted back to the host config.
+    for (const root of [data, cache, log]) {
+      expect(root?.startsWith(`${configMount}/`)).toBe(false);
+      expect(root).not.toBe(configMount);
+    }
+  });
+
+  it('produces no duplicate --volume destination', () => {
+    // Simulate the host collapsing all four roots to one config dir.
+    process.env.LLXPRT_CONFIG_HOME = fixturePath;
+    const args = buildArgs(fixturePath);
+
+    const dests = volumeDestinations(args);
+    expect(new Set(dests).size).toBe(dests.length);
+  });
+
+  it('covers the resolved config dir with an emitted --volume destination (regression)', () => {
+    // The bug: the destination the CLI resolved inside the container
+    // (/home/node/.config/llxprt-code) was NOT covered by any --volume mount.
+    const args = buildArgs(fixturePath);
+    const resolvedConfigDir = envValue(args, 'LLXPRT_CONFIG_HOME');
+
+    expect(resolvedConfigDir).toBeDefined();
+    expect(volumeDestinations(args)).toContain(resolvedConfigDir);
   });
 });

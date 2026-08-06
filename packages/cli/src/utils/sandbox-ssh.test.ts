@@ -835,9 +835,11 @@ describe('setupSshAgentDockerLinux', () => {
 
   it('falls back to TCP bridge when host uid differs from container uid', async () => {
     process.getuid = () => 501;
-    // shouldUseCurrentUserInSandbox returns false when os-release is unavailable
-    const { readFile } = await import('node:fs/promises');
-    vi.mocked(readFile).mockRejectedValue(new Error('not found'));
+    // shouldUseCurrentUserInSandboxSync returns false when os-release is
+    // unavailable. The detection reads /etc/os-release synchronously.
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('not found');
+    });
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
@@ -852,11 +854,8 @@ describe('setupSshAgentDockerLinux', () => {
 
   it('uses direct bind-mount on Debian/Ubuntu (shouldUseCurrentUserInSandbox)', async () => {
     process.getuid = () => 501;
-    const { readFile } = await import('node:fs/promises');
-    vi.mocked(readFile).mockResolvedValue(
-      Buffer.from(
-        'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"',
-      ) as never,
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(
+      'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"',
     );
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     // shouldUseCurrentUserInSandbox logs an INFO message via debugLogger.log on Debian/Ubuntu

@@ -49,6 +49,14 @@ const CONFIG_ENTRIES = new Set([
   '.env',
   'LLXPRT.md',
   '.LLXPRT_SYSTEM',
+  // Issue #3081: these are read from the CONFIG directory but were missing
+  // from this set, so the migration categorizer routed them to DATA instead.
+  // welcomeConfig.json — getWelcomeConfigPath (USER_SETTINGS_DIR)
+  // trustedFolders.json — getTrustedFoldersPath (USER_SETTINGS_DIR)
+  // skills — Storage.getUserSkillsDir() = <configDir>/skills
+  'welcomeConfig.json',
+  'trustedFolders.json',
+  'skills',
 ]);
 
 const DATA_ENTRIES = new Set([
@@ -78,7 +86,7 @@ const TMP_SKILLS_DIR = 'skills';
 
 const MIGRATION_MARKER_FILE = '.migration-complete.json';
 
-const MIGRATION_MARKER_VERSION = 1;
+export const MIGRATION_MARKER_VERSION = 2;
 
 const REPAIR_MARKER_FILE = '.profile-repair-complete.json';
 

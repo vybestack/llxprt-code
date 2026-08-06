@@ -33,6 +33,7 @@ import {
   isSandboxDebugModeEnabled,
   shouldAllocateSandboxTty,
   shouldUseCurrentUserInSandbox,
+  resolveSandboxContainerHome,
   parseImageName,
   sandboxPorts,
   resolveDebugPort,
@@ -184,20 +185,34 @@ export function buildContainerRunArgs(
   }
   if (shouldAllocateSandboxTty()) args.push('-t');
   args.push('--volume', `${workdir}:${containerWorkdir}`);
-  const userSettingsDirOnHost = USER_SETTINGS_DIR;
-  const userSettingsDirInSandbox = getContainerPath(
-    `/home/node/${SETTINGS_DIRECTORY_NAME}`,
+  // Issue #3081: mount the host config directory at path parity and pin all
+  // four canonical roots via env overrides. The legacy /home/node/.llxprt
+  // destination is dropped: the in-container CLI resolves its config through
+  // Storage to /home/node/.config/llxprt-code, so nothing was mounted where
+  // it looks and every sandboxed launch saw an empty config. Setting
+  // LLXPRT_CONFIG_HOME also short-circuits the in-container startup
+  // migration. Data/cache/log stay container-local (ephemeral); only the
+  // config directory crosses the boundary, unchanged from before — mounting
+  // the data directory would push raw OAuth/provider credentials across the
+  // sandbox boundary (#2946). All four roots must be pinned because
+  // resolveGlobalDataDir/CacheDir/LogDir fall back to LLXPRT_CONFIG_HOME.
+  const hostConfigDir = USER_SETTINGS_DIR;
+  const containerConfigDir = getContainerPath(hostConfigDir);
+  if (!fs.existsSync(hostConfigDir)) {
+    fs.mkdirSync(hostConfigDir, { recursive: true });
+  }
+  args.push('--volume', `${hostConfigDir}:${containerConfigDir}`);
+  const containerHome = resolveSandboxContainerHome();
+  args.push(
+    '--env',
+    `LLXPRT_CONFIG_HOME=${containerConfigDir}`,
+    '--env',
+    `LLXPRT_DATA_HOME=${path.posix.join(containerHome, '.local/share/llxprt-code')}`,
+    '--env',
+    `LLXPRT_CACHE_HOME=${path.posix.join(containerHome, '.cache/llxprt-code')}`,
+    '--env',
+    `LLXPRT_LOG_HOME=${path.posix.join(containerHome, '.local/state/llxprt-code')}`,
   );
-  if (!fs.existsSync(userSettingsDirOnHost)) {
-    fs.mkdirSync(userSettingsDirOnHost);
-  }
-  args.push('--volume', `${userSettingsDirOnHost}:${userSettingsDirInSandbox}`);
-  if (userSettingsDirInSandbox !== userSettingsDirOnHost) {
-    args.push(
-      '--volume',
-      `${userSettingsDirOnHost}:${getContainerPath(userSettingsDirOnHost)}`,
-    );
-  }
   mountGitConfigFiles(args, os.homedir(), '/home/node');
   args.push(
     '--volume',
@@ -426,7 +441,9 @@ export async function setupContainerUser(
     const gid = execSync('id -g').toString().trim();
 
     const username = 'gemini';
-    const homeDir = getContainerPath(os.homedir());
+    // Use the shared container-home resolution so the HOME pinned here and the
+    // LLXPRT_*_HOME roots set by buildContainerRunArgs agree (#3081).
+    const homeDir = resolveSandboxContainerHome();
     const setupUserCommands = [
       `groupadd -f -g ${gid} ${username}`,
       `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${homeDir} -s /bin/bash ${username}`,
@@ -454,7 +471,7 @@ export async function setupContainerUser(
       'fi',
     ].join('\n');
     userFlag = `--user ${uid}:${gid}`;
-    args.push('--env', `HOME=${os.homedir()}`);
+    args.push('--env', `HOME=${homeDir}`);
   }
 
   return userFlag;

@@ -19,6 +19,7 @@ import {
   performMigration,
   isMigrationComplete,
   markMigrationComplete,
+  MIGRATION_MARKER_VERSION,
   type MigrationDestinations,
   type MigrationResult,
 } from './pathMigration.js';
@@ -212,7 +213,10 @@ describe('migration-completion marker (#2237)', () => {
   );
 
   it.each([
-    { name: 'current', marker: JSON.stringify({ version: 1 }) },
+    {
+      name: 'current',
+      marker: JSON.stringify({ version: MIGRATION_MARKER_VERSION }),
+    },
     { name: 'newer', marker: JSON.stringify({ version: 999 }) },
   ])(
     'treats a $name marker as complete without a rerun diagnostic',

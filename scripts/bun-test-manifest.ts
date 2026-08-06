@@ -191,6 +191,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
       'src/utils/sandbox-containers.test.ts',
+      // Issue #3081: legacy→canonical migration categorization for config
+      // entries that were previously routed to the data directory.
+      'test-bun/pathMigration.issue3081.bun.ts',
       // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',

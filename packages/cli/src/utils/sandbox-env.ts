@@ -7,7 +7,6 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const PASSTHROUGH_VARIABLES = [
@@ -146,7 +145,7 @@ function osReleaseContainsLike(content: string, keyword: string): boolean {
   return false;
 }
 
-export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
+export function shouldUseCurrentUserInSandboxSync(): boolean {
   const envVar = process.env.SANDBOX_SET_UID_GID?.toLowerCase().trim();
 
   if (envVar === '1' || envVar === 'true') {
@@ -158,7 +157,7 @@ export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
 
   if (os.platform() === 'linux') {
     try {
-      const osReleaseContent = await readFile('/etc/os-release', 'utf8');
+      const osReleaseContent = fs.readFileSync('/etc/os-release', 'utf8');
       if (
         osReleaseContent.includes('ID=debian') ||
         osReleaseContent.includes('ID=ubuntu') ||
@@ -177,4 +176,25 @@ export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
     }
   }
   return false;
+}
+
+export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
+  return shouldUseCurrentUserInSandboxSync();
+}
+
+/**
+ * The container HOME used to derive container-local XDG directories.
+ *
+ * Mirrors the HOME that {@link setupContainerUser} pins (the host home under
+ * `SANDBOX_SET_UID_GID`/Debian-Ubuntu auto-detect, otherwise the image default
+ * `/home/node`). Sharing this single resolution between
+ * {@link buildContainerRunArgs} — which sets the `LLXPRT_*_HOME` env overrides
+ * — and the user setup guarantees the in-container HOME and the pinned roots
+ * can never disagree. Synchronous so it is callable from the synchronous
+ * arg builder.
+ */
+export function resolveSandboxContainerHome(): string {
+  return shouldUseCurrentUserInSandboxSync()
+    ? getContainerPath(os.homedir())
+    : '/home/node';
 }
