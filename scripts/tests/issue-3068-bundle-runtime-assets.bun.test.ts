@@ -33,6 +33,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -127,10 +128,24 @@ describe('issue #3068: CLI bundle ships its runtime assets', () => {
     signal: NodeJS.Signals | null;
   };
 
+  // Positive control for the assertion below: the same launch with the staged
+  // tree-sitter.wasm removed. Without it the "no abort" assertion could only
+  // ever prove the absence of a string, never that the check has teeth.
+  let wasmRemovedLaunch: {
+    stdout: string;
+    stderr: string;
+    status: number | null;
+    signal: NodeJS.Signals | null;
+  };
+
+  // Budget must cover the worst case of everything this hook does, otherwise
+  // the hook can time out while each individual step is still inside its own
+  // limit: buildRealBundle (120s) + two launches (60s each).
   beforeAll(() => {
     buildRealBundle();
     providerLaunch = launchBundleProviderResolve();
-  }, 150_000);
+    wasmRemovedLaunch = launchWithoutTreeSitterWasm();
+  }, 260_000);
 
   afterAll(() => {
     // The bundle is a gitignored publish artifact; remove it so a stale build
@@ -250,7 +265,23 @@ describe('issue #3068: CLI bundle ships its runtime assets', () => {
     expect(combined).not.toContain("Provider 'openai' not found");
   });
 
-  it('does not abort on a missing tree-sitter.wasm', () => {
+  it('prints the emscripten abort when the staged tree-sitter.wasm is absent', () => {
+    // Positive control. web-tree-sitter resolves its WASM through
+    // `import.meta.url`, which Bun rewrites to the bundle's own URL, so an
+    // unstaged wasm makes the launch print exactly the pair of lines from the
+    // issue report. Pinning that here is what gives the "no abort" assertion
+    // below its teeth: it proves the strings genuinely appear when the asset is
+    // missing, rather than never appearing for some unrelated reason.
+    const combined = wasmRemovedLaunch.stdout + wasmRemovedLaunch.stderr;
+    expect(
+      combined.length,
+      'wasm-removed launch produced no output; the control proves nothing',
+    ).toBeGreaterThan(0);
+    expect(combined).toContain('failed to asynchronously prepare wasm');
+    expect(combined).toContain('tree-sitter.wasm');
+  });
+
+  it('launches a fully staged bundle without the tree-sitter abort', () => {
     const combined = providerLaunch.stdout + providerLaunch.stderr;
     // Positive progress guard: prove the launch reached Config construction
     // (which awaits initializeParser(), where a missing wasm prints its abort)
@@ -262,10 +293,8 @@ describe('issue #3068: CLI bundle ships its runtime assets', () => {
     // setupRuntimeContext -> createProviderManager with "Provider 'openai' not
     // found" BEFORE Config construction ever awaits initializeParser(), so on a
     // full revert NEITHER wasm string appears and these absence assertions
-    // would hold vacuously. Removing ONLY tree-sitter.wasm from an otherwise
-    // complete bundle DOES reproduce both abort lines from the issue, so this
-    // progress guard is what distinguishes "wasm is fine" from "the launch
-    // never got far enough to print the abort".
+    // would hold vacuously. This progress guard is what distinguishes "wasm is
+    // fine" from "the launch never got far enough to print the abort".
     expect(
       combined,
       'launch did not reach Config/post-Config execution; wasm assertions ' +
@@ -372,6 +401,31 @@ function launchBundleProviderResolve(): {
     };
   } finally {
     rmSync(isolatedHome, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Runs the same launch with the staged `tree-sitter.wasm` temporarily moved
+ * aside, reproducing the exact state issue #3068 reported. The file is restored
+ * in a `finally` so every later assertion still sees a complete bundle.
+ *
+ * Moving the real file is deliberate: web-tree-sitter derives the WASM location
+ * from the bundle's own URL, so the artifact must be launched from its real
+ * directory for the lookup to point where the issue says it points.
+ */
+function launchWithoutTreeSitterWasm(): {
+  stdout: string;
+  stderr: string;
+  status: number | null;
+  signal: NodeJS.Signals | null;
+} {
+  const wasmPath = join(bundleDir, 'tree-sitter.wasm');
+  const stashedPath = `${wasmPath}.stashed`;
+  renameSync(wasmPath, stashedPath);
+  try {
+    return launchBundleProviderResolve();
+  } finally {
+    renameSync(stashedPath, wasmPath);
   }
 }
 
