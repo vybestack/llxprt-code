@@ -390,6 +390,9 @@ export class ShellJobManager {
     signal: string | null,
   ): void {
     this.survivors.delete(ctx.record.id);
+    if (ctx.record.phase === 'capping') {
+      return;
+    }
     const isCancelling = ctx.record.phase === 'cancelling';
     const { state, details } = classifyExit(code, signal, isCancelling);
     this.finalizeJob(ctx, state, details);
@@ -397,6 +400,9 @@ export class ShellJobManager {
 
   private handleError(ctx: ShellJobContext, err: Error): void {
     this.survivors.delete(ctx.record.id);
+    if (ctx.record.phase === 'capping') {
+      return;
+    }
     this.finalizeJob(ctx, 'failed', { failureReason: err.message });
   }
 
@@ -874,6 +880,9 @@ export class ShellJobManager {
   private async failJobIfOverCapAsync(ctx: ShellJobContext): Promise<void> {
     const totalSize = this.getTotalLogSize(ctx.record);
     if (totalSize > this.logMaxBytes) {
+      // Claim the terminal transition before taskkill: killing the child emits
+      // its exit event, which must not finalize the job without the cap reason.
+      ctx.record.phase = 'capping';
       // Guard the kill by ORIGINAL child identity (PID-reuse safe) and
       // record the survivor so dispose can reap if this kill does not
       // observe the exit.
@@ -884,6 +893,7 @@ export class ShellJobManager {
         });
         await this.safeWindowsKill(ctx.record.pid);
       }
+      ctx.record.phase = null;
       this.finalizeJob(ctx, 'failed', {
         failureReason: `Log output exceeded cap (${this.logMaxBytes} bytes)`,
       });

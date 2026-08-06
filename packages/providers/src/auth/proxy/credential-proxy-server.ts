@@ -1028,7 +1028,7 @@ export class CredentialProxyServer {
     // `pause()` before `end()`: end half-closes the write side only, so an
     // in-flight frame would otherwise still be decoded and dispatched on a
     // connection this call has already decided to close.
-    socket.pause().end(frame);
+    socket.pause().end(frame, () => socket.destroy());
     const timer = setTimeout(
       () => socket.destroy(),
       HANDSHAKE_DESTROY_TIMEOUT_MS,

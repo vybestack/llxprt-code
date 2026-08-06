@@ -41,7 +41,7 @@ it.skipIf(!isWin)(
 
     // Test 1: Verify PowerShell UTF-8 path handling
     const utf8Path = 'テスト.txt';
-    const scriptContent = `
+    const scriptContent = `\uFEFF
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 if (Test-Path '${utf8Path}') {
   Write-Host "File exists"
