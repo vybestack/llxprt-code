@@ -57,6 +57,11 @@ function createMockStreamingResponse() {
       controller.enqueue(
         encoder.encode('data: {"type":"content.delta","delta":"ok"}\n\n'),
       );
+      controller.enqueue(
+        encoder.encode(
+          'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+        ),
+      );
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
     },

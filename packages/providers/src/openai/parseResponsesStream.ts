@@ -13,6 +13,7 @@ import {
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { isAcceptedTerminalEventType } from './responsesTerminalEvents.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 import type {
   DispatchResult,
@@ -50,6 +51,14 @@ export interface ParseResponsesStreamOptions {
    * Malformed data and the [DONE] sentinel do not count.
    */
   onStreamLiveness?: StreamLivenessListener;
+  /**
+   * When true, reader EOF reached without an accepted terminal response event
+   * (response.completed, response.done, response.incomplete) raises a
+   * StreamInterruptionError instead of completing normally. Used by the
+   * HTTP/SSE path to detect a connection cut mid-body (issue #3049).
+   * Default false so the WebSocket caller and existing tests are untouched.
+   */
+  requireTerminalEvent?: boolean;
 }
 
 /**
@@ -796,6 +805,7 @@ function* dispatchEvent(
   return {
     ...result,
     lastLoggedType: newLastLoggedType,
+    dispatchedEventType: event.type,
   };
 }
 
@@ -818,10 +828,13 @@ async function* tryDispatchEvent(
   try {
     event = JSON.parse(data);
   } catch {
-    // Skip malformed JSON events: return unchanged state
+    // Skip malformed JSON events: return unchanged state and no dispatched
+    // event type so it contributes neither to logging dedup nor to terminal
+    // tracking.
     return {
       ...state,
       lastLoggedType,
+      dispatchedEventType: undefined,
     };
   }
 
@@ -845,6 +858,7 @@ export async function* parseResponsesStream(
     includeThinkingInResponse = true,
     responsesStored = false,
     onStreamLiveness,
+    requireTerminalEvent = false,
   } = options;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -861,6 +875,7 @@ export async function* parseResponsesStream(
   const emittedThoughts = new Map<string, { hasEncrypted: boolean }>();
 
   let lastLoggedType: string | undefined;
+  let acceptedTerminalSeen = false;
 
   try {
     const streamActive = { done: false };
@@ -897,7 +912,28 @@ export async function* parseResponsesStream(
         );
         state = dispatchState;
         lastLoggedType = dispatchState.lastLoggedType;
+        // Record accepted-terminal state monotonically for every
+        // successfully dispatched event (OR semantics). `lastLoggedType` is
+        // deduplicated and can be overwritten by a later nonterminal event in
+        // the same chunk, so terminal tracking must use the per-event
+        // dispatched type. A protocol-failure terminal (response.failed/error)
+        // still throws during dispatch above and is never masked (#3049).
+        acceptedTerminalSeen ||= isAcceptedTerminalEventType(
+          dispatchState.dispatchedEventType,
+        );
       }
+    }
+    // Reader reached EOF. When the caller opted in (HTTP/SSE path), a body
+    // that never carried an accepted terminal event is a truncated stream,
+    // not a complete response. Throw on the normal completion path only —
+    // never from `finally`, so consumer-driven break/return() is not turned
+    // into an error and in-flight exceptions are not masked (issue #3049).
+    if (requireTerminalEvent && !acceptedTerminalSeen) {
+      throw createStreamInterruptionError(
+        'Responses stream ended without an accepted terminal response event ' +
+          '(expected one of: response.completed, response.done, ' +
+          'response.incomplete)',
+      );
     }
   } finally {
     reader.releaseLock();

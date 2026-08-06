@@ -32,6 +32,7 @@ import {
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
@@ -58,6 +59,7 @@ interface FetchStreamParams {
   responsesStored: boolean;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
+  normalizedOptions: NormalizedGenerateChatOptions;
   onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
 }
 
@@ -142,14 +144,34 @@ async function* fetchStreamWithRetries(
 ): AsyncIterableIterator<IContent> {
   let streamingAttempt = 0;
   let currentDelay = params.streamRetryInitialDelayMs;
+  let lastError: unknown;
 
   while (streamingAttempt < params.maxStreamingAttempts) {
     streamingAttempt += 1;
+    // AC2 (#3049): after the first attempt, consume a slot from the shared
+    // transport budget so internal retries are bounded by the same `retries`
+    // count as the orchestrator, not retries × retries. When no budget is
+    // attached (direct unit tests without an orchestrator),
+    // tryConsumeTransportAttempt returns true and today's
+    // maxStreamingAttempts-only behavior is unchanged.
+    if (
+      streamingAttempt > 1 &&
+      !tryConsumeTransportAttempt(params.normalizedOptions)
+    ) {
+      throw lastError;
+    }
+
+    const yieldedForAttempt: { value: boolean } = { value: false };
     try {
       const response = await fetchResponse(params);
-      yield* parseSuccessfulResponse(response, params, deps);
+      yield* parseSuccessfulResponse(response, params, deps, yieldedForAttempt);
       return;
     } catch (error) {
+      lastError = error;
+      // AC1 (#3049): content was already yielded for this attempt, so
+      // replaying into the same iterator would concatenate two attempts'
+      // text. Rethrow immediately and let the orchestrator decide.
+      if (yieldedForAttempt.value) throw error;
       currentDelay = await handleStreamRetry(
         error,
         {
@@ -185,6 +207,7 @@ async function* parseSuccessfulResponse(
     'includeThinkingInResponse' | 'responsesStored' | 'onStreamLiveness'
   >,
   deps: ResponsesExecutorDeps,
+  yieldedMarker: { value: boolean },
 ): AsyncIterableIterator<IContent> {
   if (!response.ok) await throwApiError(response, deps);
   if (!response.body) {
@@ -196,11 +219,15 @@ async function* parseSuccessfulResponse(
     includeThinkingInResponse: params.includeThinkingInResponse,
     responsesStored: params.responsesStored,
     onStreamLiveness: params.onStreamLiveness,
+    // AC3 (#3049): an HTTP/SSE body that reaches EOF without an accepted
+    // terminal event is a truncated stream, not a complete response.
+    requireTerminalEvent: true,
   };
   for await (const message of parseResponsesStream(
     response.body,
     streamOptions,
   )) {
+    yieldedMarker.value = true;
     yield message;
   }
 }
