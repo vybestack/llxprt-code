@@ -49,11 +49,12 @@ function publishTodos(
     todos,
     timestamp: new Date(),
   };
+  const previousPublication = originPublicationRef.current;
   originPublicationRef.current = eventData;
   try {
     todoEvents.emitTodoUpdated(eventData);
   } finally {
-    originPublicationRef.current = null;
+    originPublicationRef.current = previousPublication;
   }
 }
 

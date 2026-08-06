@@ -738,5 +738,35 @@ describe('TodoProvider observation (issue #3052)', () => {
 
       expect(mounted.result.current.todos).toEqual(nested);
     });
+
+    it('preserves a synchronously nested provider update as the final list', async () => {
+      const sessionId = 'echo-nested-provider';
+      const agentId = 'agent-nested-provider';
+      const mounted = await seedDiskAndMount(
+        sessionId,
+        [todo('np-seed', 'Seed')],
+        agentId,
+      );
+      const nested: Todo[] = [todo('np-nested', 'Nested provider update')];
+      let nestedPublished = false;
+      const publishNested = (): void => {
+        if (nestedPublished) return;
+        nestedPublished = true;
+        mounted.result.current.updateTodos(nested);
+      };
+      todoEvents.prependListener(TodoEvent.TODO_UPDATED, publishNested);
+      cleanups.push(() =>
+        todoEvents.removeListener(TodoEvent.TODO_UPDATED, publishNested),
+      );
+
+      act(() => {
+        mounted.result.current.updateTodos([todo('np-origin', 'Origin')]);
+      });
+
+      expect(mounted.result.current.todos).toEqual(nested);
+      await waitFor(() => {
+        expect(readDiskTodos(sessionId, agentId)).toEqual(nested);
+      });
+    });
   });
 });
