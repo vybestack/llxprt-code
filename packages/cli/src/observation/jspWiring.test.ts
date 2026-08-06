@@ -155,6 +155,10 @@ describe('loadBootstrapFromEnv', () => {
       emitted.push(payload);
     };
     coreEvents.on(CoreEvent.Output, onOutput);
+    const physicalWarnings: string[] = [];
+    __setBootstrapWarningStderrWriterForTesting((message) => {
+      physicalWarnings.push(message);
+    });
     const missingPath =
       join(
         tmpdir(),
@@ -168,11 +172,15 @@ describe('loadBootstrapFromEnv', () => {
     } finally {
       restorePatched?.();
       coreEvents.off(CoreEvent.Output, onOutput);
+      __setBootstrapWarningStderrWriterForTesting(null);
     }
     // The warning bypassed the patched stream: nothing was forwarded to the
     // bus on either fd, so stdout stayed clean and the warning was neither
     // redirected nor buffered.
     expect(emitted).toHaveLength(0);
+    expect(physicalWarnings).toHaveLength(1);
+    expect(physicalWarnings[0]).toContain(JSON.stringify(missingPath));
+    expect(physicalWarnings[0]).toContain('observation is disabled');
 
     // Control: the patch WAS active during the call, so the empty result is a
     // genuine bypass rather than a no-op patch. A direct write through the
@@ -320,11 +328,8 @@ describe('bootstrap diagnostic path sanitization (no log injection)', () => {
     expect(message).not.toContain('\x1b');
   });
 
-  it('C2: a fatal (malformed-JSON) diagnostic escapes a quote-bearing path so it cannot break out of the message', async () => {
-    // Newlines are not creatable in a real filename, so use a filesystem-legal
-    // double-quote (JSON.stringify escapes it to \"). The file reads but is
-    // malformed, so the fatal branch is exercised with an escaped path.
-    const file = await writeTempFile('bad"quote.json', '{ not json');
+  it('C2: a fatal malformed-JSON diagnostic uses the escaped path without exposing the body', async () => {
+    const file = await writeTempFile('bad-control.json', '{ not json');
     const error = expectFatalBootstrap(() =>
       loadBootstrapFromEnv({ LLXPRT_JSP_BOOTSTRAP_FILE: file }),
     );
