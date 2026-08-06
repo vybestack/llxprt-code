@@ -100,6 +100,7 @@
     "lint:genai-enclave": "bun scripts/check-genai-enclave.ts",
     "lint:legacy-paths": "bun scripts/check-legacy-paths.ts",
     "lint:no-new-js": "bun scripts/check-no-new-js-files.ts",
+    "lint:cli-test-discovery": "bun scripts/check-cli-test-discovery.ts",
     "lint:copyright-year": "bun scripts/check-copyright-year.ts",
     "lint:doc-links": "bun scripts/check-doc-links.ts",
     "lint:doc-placement": "bun scripts/check-doc-placement.ts",

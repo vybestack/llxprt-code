@@ -379,6 +379,10 @@ jobs:
         run: |-
           npm run lint:no-new-js
 
+      - name: 'Run CLI test-discovery guard (#2923)'
+        run: |-
+          npm run lint:cli-test-discovery
+
       - name: 'Run copyright-year guard (#2820)'
         env:
           COPYRIGHT_GUARD_BASE: >-
