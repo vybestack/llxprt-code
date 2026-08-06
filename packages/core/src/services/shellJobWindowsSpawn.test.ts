@@ -41,7 +41,7 @@ const UNREF_SPAWN_TIMEOUT_MS = 25000;
 /**
  * The spawner must exit before this elapsed time when unref() is present.
  * Typical measured elapsed on this machine is ~2–5s (PowerShell cold start
- * + import). The old bound (10000ms) was too tight on CI where cold starts
+ * + import). The old bound (12000ms) was too tight on CI where cold starts
  * can approach it. 20000ms still catches a genuine unref regression: with
  * unref removed the spawner hangs for UNREF_SLEEP_SECONDS (30s) and is only
  * killed by UNREF_SPAWN_TIMEOUT_MS (25000ms), so elapsed would be ~25000ms

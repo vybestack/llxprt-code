@@ -206,7 +206,9 @@ export function buildContainerRunArgs(
   return args;
 }
 
-function parseCustomMount(spec: string): readonly [string, string?, string?] {
+export function parseCustomMount(
+  spec: string,
+): readonly [string, string?, string?] {
   const fromStart = /^[A-Za-z]:[\\/]/.test(spec) ? 2 : 0;
   const fromEnd = spec.indexOf(':', fromStart);
   if (fromEnd === -1) return [spec];
@@ -214,9 +216,18 @@ function parseCustomMount(spec: string): readonly [string, string?, string?] {
   const from = spec.slice(0, fromEnd);
   const remainder = spec.slice(fromEnd + 1);
   const mode = /:(ro|rw)$/.exec(remainder);
-  return mode === null
-    ? [from, remainder]
-    : [from, remainder.slice(0, -mode[0].length), mode[1]];
+  if (mode !== null) {
+    return [from, remainder.slice(0, -mode[0].length), mode[1]];
+  }
+
+  const targetStart = /^[A-Za-z]:[\\/]/.test(remainder) ? 2 : 0;
+  const unsupportedMode = remainder.indexOf(':', targetStart);
+  if (unsupportedMode !== -1) {
+    throw new FatalSandboxError(
+      `Unsupported mount mode '${remainder.slice(unsupportedMode + 1)}' in '${spec}'; expected 'ro' or 'rw'`,
+    );
+  }
+  return [from, remainder];
 }
 
 /** Adds custom SANDBOX_MOUNTS volume flags. */
