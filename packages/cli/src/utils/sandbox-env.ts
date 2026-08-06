@@ -143,9 +143,11 @@ function osReleaseValue(content: string, key: string): string | undefined {
   }
   const value = line.slice(prefix.length).trim();
   const quote = value.at(0);
-  return quote !== undefined && (quote === '"' || quote === "'")
-    ? value.slice(1, value.endsWith(quote) ? -1 : undefined)
-    : value;
+  if (quote !== '"' && quote !== "'") {
+    return value;
+  }
+  const closingQuote = value.endsWith(quote) ? -1 : undefined;
+  return value.slice(1, closingQuote);
 }
 
 function isDebianLikeOsRelease(content: string): boolean {
