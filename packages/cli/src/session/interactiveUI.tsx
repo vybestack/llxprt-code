@@ -153,6 +153,7 @@ export async function startInteractiveUI(
   resumedHistory?: IContent[],
   initialRecordingService?: SessionRecordingService,
   initialLockHandle?: LockHandle | null,
+  suppressStartupWelcome?: boolean,
 ) {
   const version = await getCliVersion();
 
@@ -212,6 +213,7 @@ export async function startInteractiveUI(
               resumedHistory={resumedHistory}
               initialRecordingService={initialRecordingService}
               initialLockHandle={initialLockHandle}
+              suppressStartupWelcome={suppressStartupWelcome}
             />
           </SettingsContext.Provider>
         </ErrorBoundary>

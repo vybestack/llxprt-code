@@ -50,6 +50,7 @@ interface AppProps {
   initialRecordingService?: SessionRecordingService;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
+  suppressStartupWelcome?: boolean;
 }
 
 /**
