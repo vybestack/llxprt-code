@@ -476,9 +476,9 @@ function runScriptTests(
   if (!existsSync(join(rootDir, SCRIPTS_TEST_DIRECTORY))) {
     return;
   }
-  // Each root runs as its own invocation so a root with a much larger budget
-  // (the release-install smoke, issue #2780) cannot weaken the timeout that
-  // catches hangs in the rest of the harness. Fail-fast between roots.
+  // Each root runs as its own invocation so a root declaring a much larger
+  // budget cannot weaken the timeout that catches hangs in another root.
+  // Fail-fast between roots.
   for (const root of SCRIPTS_SHARD_ROOTS) {
     const result = runPhase(
       'scripts',
