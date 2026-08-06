@@ -131,8 +131,7 @@ function setupConfigMock(): ContentGeneratorConfig {
     getAllTools: vi.fn().mockReturnValue([]),
   };
   const fileService = new FileDiscoveryService('/test/dir');
-  const MockedConfig =
-    (Config, true as unknown as Mock<(...args: never[]) => unknown>);
+  const MockedConfig = Config as unknown as Mock<(...args: never[]) => unknown>;
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: 'test-model',
     apiKey: 'test-key',
