@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { AgentEventType } from '@vybestack/llxprt-code-core';
 
 import { vi } from 'vitest';
 import type {
@@ -101,9 +102,12 @@ function mapRawStream(
     };
     for await (const rawEvent of rawStream) {
       // sawActivity gate: set true for any event that is not a standalone
-      // AgentExecutionBlocked (mirrors eventAdapter.ts).
+      // AgentExecutionBlocked (mirrors eventAdapter.ts). Compared against the
+      // enum member, not its name: the discriminant on the wire is the enum
+      // VALUE ('agent_execution_blocked').
       const isStandaloneBlocked =
-        (rawEvent as { type?: string }).type === 'AgentExecutionBlocked';
+        (rawEvent as { type?: string }).type ===
+        AgentEventType.AgentExecutionBlocked;
       if (!isStandaloneBlocked) {
         state.sawActivity = true;
       }
@@ -125,6 +129,9 @@ function mapRawStream(
         ...(state.lastFinished !== null
           ? { finished: state.lastFinished }
           : {}),
+        // AgentExecutionStopped now defers its done to this synthesis, so the
+        // stop payload has to be carried here too (mirrors makeDone).
+        ...(state.lastStop !== null ? { stop: state.lastStop } : {}),
       } as AgentEvent;
     }
   })();
