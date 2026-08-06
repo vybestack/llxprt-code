@@ -727,6 +727,11 @@ describe('Trusted Folders Caching', () => {
 
   it('should cache the loaded folders object', () => {
     const readSpy = vi.spyOn(fs, 'readFileSync');
+    // fs.readFileSync is already a module mock, and Bun's spyOn returns that
+    // existing mock rather than installing a fresh one, so it still carries
+    // the calls earlier tests made. Start the count from zero.
+    readSpy.mockClear();
+    resetTrustedFoldersForTesting();
 
     // First call should read the file
     loadTrustedFolders();

@@ -4,14 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  mock,
+} from 'bun:test';
+import { createRequire } from 'node:module';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// This integration test needs the real config files. Bun runs each test file
-// in its own process and nothing mocks providerAliases here, so no unmocking
-// is required.
+// This integration test needs the real config files, but the workspace preload
+// globally stubs providerAliases. mock.module does not intercept require(), so
+// require reaches the genuine module, which is then registered back over the
+// stub. This must run before the awaited imports below, which pull in the
+// consumers that read the alias entries.
+const ALIASES_SPECIFIER =
+  '@vybestack/llxprt-code-providers/composition/providerAliases.js';
+const aliasesRequire = createRequire(import.meta.url);
+const realProviderAliasesModule = aliasesRequire(
+  ALIASES_SPECIFIER,
+) as typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+// Register under both the package specifier and the resolved path: consumers
+// inside the providers package import it relatively, and mock.module keys on
+// whatever string the importer used.
+for (const id of new Set([
+  ALIASES_SPECIFIER,
+  aliasesRequire.resolve(ALIASES_SPECIFIER),
+])) {
+  mock.module(id, () => realProviderAliasesModule);
+}
 
 // Loaded with top-level await rather than a static import so the modules that
 // consume providerAliases are evaluated AFTER the unmock above. Static imports
@@ -28,11 +54,13 @@ const {
 const { NodeFileSystem } = await import(
   '@vybestack/llxprt-code-providers/composition/IFileSystem.js'
 );
-import {
+// Also deferred: this barrel transitively pulls in the alias consumers, and a
+// static import would be hoisted above the re-registration above.
+const {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
+} = await import('@vybestack/llxprt-code-core');
 
 describe('Provider alias integration', () => {
   let tempDir: string;
