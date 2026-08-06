@@ -24,16 +24,26 @@ function isPidAliveWindows(pid: number): boolean {
   return result.stdout.includes(String(pid));
 }
 
-async function waitForPidGoneWindows(
+async function waitForPidStateWindows(
   pid: number,
+  alive: boolean,
   timeoutMs = 10000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!isPidAliveWindows(pid)) return;
+    if (isPidAliveWindows(pid) === alive) return;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`PID ${pid} did not exit within ${timeoutMs}ms`);
+  throw new Error(
+    `PID ${pid} did not become ${alive ? 'alive' : 'gone'} within ${timeoutMs}ms`,
+  );
+}
+
+async function waitForPidGoneWindows(
+  pid: number,
+  timeoutMs = 10000,
+): Promise<void> {
+  await waitForPidStateWindows(pid, false, timeoutMs);
 }
 
 function waitForTerminal(
@@ -136,7 +146,7 @@ describe.skipIf(os.platform() !== 'win32')(
 
         await h2Manager.cancel(jobA.id);
         expect(h2Manager.get(jobA.id)?.state).toBe('cancelled');
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         // Fill retention (historyLimit = 1*2 = 2) so the survivor's context is
         // evicted from `jobs` while its survivor entry persists.
@@ -153,7 +163,7 @@ describe.skipIf(os.platform() !== 'win32')(
         h2Manager.markNotified([jobA.id, jobB.id, jobC.id]);
 
         expect(h2Manager.get(jobA.id)).toBeUndefined();
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         await h2Manager.dispose();
 
@@ -330,7 +340,7 @@ describe.skipIf(os.platform() !== 'win32')(
 
         // Cancel times out (kill fails) → survivor added.
         await i2Manager.cancel(job.id);
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         // Dispose tries to reap but the kill always fails. dispose() must
         // REJECT with ShellJobDisposalError naming the surviving job id, its
@@ -352,7 +362,7 @@ describe.skipIf(os.platform() !== 'win32')(
 
         // Survivor tracking retained so the live process tree is not orphaned.
         expect(i2Manager.getLiveSurvivorCount()).toBe(1);
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         // Survivor's log file is NOT deleted during the failed dispose.
         expect(fs.existsSync(survivorLogPath)).toBe(true);

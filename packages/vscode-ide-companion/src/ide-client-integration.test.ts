@@ -514,12 +514,12 @@ describe('IdeClient with the VS Code companion server', () => {
     ]);
     expect(stopResult).toBe('stopped');
 
-    // The former endpoint no longer accepts connections. `stop()` resolving
-    // means the server relinquished the socket, but releasing the listening
-    // descriptor is the runtime's job and is not necessarily complete on the
-    // very next turn — poll within a bounded budget rather than racing it.
-    const probeEndpoint = (): Promise<string> =>
-      new Promise<string>((resolve) => {
+    // The former authenticated endpoint must no longer respond as the stopped
+    // server. Windows may immediately reassign the port to another listener, so
+    // any response other than the original server's authenticated 400 proves
+    // that the original endpoint was relinquished.
+    const probeOriginalEndpoint = (): Promise<'original' | 'closed'> =>
+      new Promise((resolve) => {
         const req = http.request(
           `http://127.0.0.1:${port}/mcp`,
           {
@@ -527,25 +527,22 @@ describe('IdeClient with the VS Code companion server', () => {
             headers: { Authorization: `Bearer ${authToken}` },
           },
           (res) => {
+            const outcome = res.statusCode === 400 ? 'original' : 'closed';
             res.destroy();
-            resolve(`responded-${res.statusCode}`);
+            resolve(outcome);
           },
         );
-        req.on('error', () => resolve('rejected'));
+        req.on('error', () => resolve('closed'));
         req.end();
       });
 
     const deadline = Date.now() + 5000;
-    let endpointCheck = await probeEndpoint();
-    while (
-      endpointCheck !== 'rejected' &&
-      endpointCheck !== 'responded-401' &&
-      Date.now() < deadline
-    ) {
+    let endpointCheck = await probeOriginalEndpoint();
+    while (endpointCheck !== 'closed' && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 25));
-      endpointCheck = await probeEndpoint();
+      endpointCheck = await probeOriginalEndpoint();
     }
-    expect(['rejected', 'responded-401']).toContain(endpointCheck);
+    expect(endpointCheck).toBe('closed');
 
     // The client can still be disconnected without hanging.
     await ideClient.disconnect();

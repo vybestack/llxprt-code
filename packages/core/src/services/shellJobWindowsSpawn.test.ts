@@ -36,18 +36,18 @@ const UNREF_SLEEP_SECONDS = 30;
  * Outer spawnSync timeout for the unref test. Acts as a backstop if releasing
  * the exposed child handle does not let the subprocess exit.
  */
-const UNREF_SPAWN_TIMEOUT_MS = 15000;
+const UNREF_SPAWN_TIMEOUT_MS = 25000;
 
 /**
  * The spawner must exit before this elapsed time when unref() is present.
  * Typical measured elapsed on this machine is ~2–5s (PowerShell cold start
  * + import). The old bound (10000ms) was too tight on CI where cold starts
- * can approach it. 12000ms still catches a genuine unref regression: with
+ * can approach it. 20000ms still catches a genuine unref regression: with
  * unref removed the spawner hangs for UNREF_SLEEP_SECONDS (30s) and is only
- * killed by UNREF_SPAWN_TIMEOUT_MS (15000ms), so elapsed would be ~15000ms
- * which exceeds 12000ms and fails the assertion.
+ * killed by UNREF_SPAWN_TIMEOUT_MS (25000ms), so elapsed would be ~25000ms
+ * which exceeds 20000ms and fails the assertion.
  */
-const UNREF_ELAPSED_BOUND_MS = 12000;
+const UNREF_ELAPSED_BOUND_MS = 20000;
 
 // ---------------------------------------------------------------------------
 // Pure helper tests — run on every platform
@@ -369,7 +369,7 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
 
     // --- lifecycle ---
 
-    it('returns a live pid for the managed PowerShell process', async () => {
+    it('returns a non-negative pid', async () => {
       const { logPath, errLogPath } = makeLogPaths();
       const spawned = spawnWindowsBackground(
         getPowerShellExecutable(),

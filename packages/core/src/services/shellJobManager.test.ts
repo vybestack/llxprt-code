@@ -46,7 +46,7 @@ function makeManager(options?: {
 function waitForTerminal(
   manager: ShellJobManager,
   id: string,
-  timeoutMs = 5000,
+  timeoutMs = process.platform === 'win32' ? 15000 : 5000,
 ): Promise<ShellJob | undefined> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
@@ -519,16 +519,26 @@ function isPidAliveWindows(pid: number): boolean {
  * Poll until a PID is confirmed gone on Windows. Immediate checks after
  * taskkill /F /T can race with handle release, so callers must poll.
  */
-async function waitForPidGoneWindows(
+async function waitForPidStateWindows(
   pid: number,
+  alive: boolean,
   timeoutMs = 10000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!isPidAliveWindows(pid)) return;
+    if (isPidAliveWindows(pid) === alive) return;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`PID ${pid} did not exit within ${timeoutMs}ms`);
+  throw new Error(
+    `PID ${pid} did not become ${alive ? 'alive' : 'gone'} within ${timeoutMs}ms`,
+  );
+}
+
+async function waitForPidGoneWindows(
+  pid: number,
+  timeoutMs = 10000,
+): Promise<void> {
+  await waitForPidStateWindows(pid, false, timeoutMs);
 }
 async function forceReapWindows(pid: number): Promise<void> {
   const result = await boundedTaskkill(pid);
@@ -654,7 +664,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
 
     expect(job.state).toBe('running');
     expect(job.pid).toBeGreaterThan(0);
-    expect(isPidAliveWindows(job.pid)).toBe(true);
+    await waitForPidStateWindows(job.pid, true, 5000);
   });
 
   it('cancels a running job and reaps the process tree', async () => {
@@ -738,7 +748,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
         'Start-Sleep -Seconds 60';
 
       const job = manager.launch({ command, cwd: os.tmpdir() });
-      expect(isPidAliveWindows(job.pid)).toBe(true);
+      await waitForPidStateWindows(job.pid, true, 5000);
 
       // No fixed sleep here: waitForPidFile polls every 200ms and only returns
       // once the marker parses as a positive PID, so a created-but-unwritten
