@@ -8,8 +8,7 @@
  * Issue #3083 behavioral coverage for the early JSP bootstrap capture,
  * memory/sandbox argv transport, and startup ordering.
  *
- * Bun-native (registered in scripts/bun-test-manifest.ts and excluded from the
- * Vitest selection in packages/cli/vitest.test-groups.ts). These tests exercise
+ * Bun-native and discovered by the CLI workspace runner. These tests exercise
  * the REAL `captureBootstrapEnvPath`, `resolveBootstrapSelection`,
  * `augmentArgvWithInternalEnvPath`, `loadBootstrap`, `parseArguments`, and
  * `setupObservation` functions with real `process.env`, real child processes,
