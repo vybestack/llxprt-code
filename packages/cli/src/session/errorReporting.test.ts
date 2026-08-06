@@ -8,9 +8,10 @@ const { writeToStderr } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return { ...actual, writeToStderr };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  writeToStderr,
+}));
 
 // Loaded with top-level await instead of a static import so the module under
 // test is evaluated AFTER the core mock above is registered.

@@ -23,27 +23,23 @@ import {
 } from './subagent-test-helpers.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
-  return {
-    ...actual,
-    IdeClient: {
-      getInstance: vi.fn().mockResolvedValue({
-        getConnectionStatus: vi.fn(),
-        initialize: vi.fn(),
-        shutdown: vi.fn(),
-      }),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual,
+  IdeClient: {
+    getInstance: vi.fn().mockResolvedValue({
+      getConnectionStatus: vi.fn(),
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+    }),
+  },
+}));
 const actual2 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
-  return {
-    ...actual2,
-    getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  ...actual2,
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+}));
 
 describe('subagent.ts', () => {
   describe('ContextState', () => {

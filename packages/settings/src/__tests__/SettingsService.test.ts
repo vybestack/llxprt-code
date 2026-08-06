@@ -390,7 +390,7 @@ describe('SettingsService — provider trust boundary', () => {
     svc.setProviderSetting('openai', 'constructor', 'safe-value');
 
     const settings = svc.getProviderSettings('openai');
-    expect(settings['__proto__'] as unknown as boolean).toBe(false);
+    expect(settings['__proto__'] as boolean).toBe(false);
     expect(settings.constructor as unknown as string).toBe('safe-value');
   });
   it('imports only record-shaped provider entries from profile data', async () => {

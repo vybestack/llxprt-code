@@ -65,12 +65,10 @@ const reactStub = (() => {
 })();
 
 const actual = { ...(await import('react')) };
-void vi.mock('react', () => {
-  return {
-    ...actual,
-    ...reactStub.module,
-  };
-});
+void vi.mock('react', () => ({
+  ...actual,
+  ...reactStub.module,
+}));
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
@@ -146,12 +144,10 @@ const sessionStatsMock = {
 };
 
 const actualActual = { ...(await import('../contexts/SessionContext.js')) };
-void vi.mock('../contexts/SessionContext.js', () => {
-  return {
-    ...actualActual,
-    useSessionStats: vi.fn(() => sessionStatsMock),
-  };
-});
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actualActual,
+  useSessionStats: vi.fn(() => sessionStatsMock),
+}));
 
 const loaderMocks = (() => {
   const builtinLoaderInstance = { loadCommands: vi.fn() };

@@ -44,34 +44,28 @@ void vi.mock('simple-git', () => ({
 }));
 
 const mockedOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
 const actual = { ...(await import('../trustedFolders.js')) };
-void vi.mock('../trustedFolders.js', () => {
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn(),
-  };
-});
+void vi.mock('../trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn(),
+}));
 
 const mockLogExtensionInstallEvent = vi.fn();
 const mockLogExtensionUninstall = vi.fn();
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual,
-    logExtensionInstallEvent: mockLogExtensionInstallEvent,
-    logExtensionUninstall: mockLogExtensionUninstall,
-    ExtensionInstallEvent: vi.fn(),
-    ExtensionUninstallEvent: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  logExtensionInstallEvent: mockLogExtensionInstallEvent,
+  logExtensionUninstall: mockLogExtensionUninstall,
+  ExtensionInstallEvent: vi.fn(),
+  ExtensionUninstallEvent: vi.fn(),
+}));
 
 describe('update tests', () => {
   let tempHomeDir: string;

@@ -14,12 +14,10 @@ const realPromisesModule = { ...(await import('fs/promises')) };
 
 void vi.mock('fs/promises', () => automock(realPromisesModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    getErrorMessage: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  getErrorMessage: vi.fn(),
+}));
 
 /**
  * Tests for startup warnings functionality.

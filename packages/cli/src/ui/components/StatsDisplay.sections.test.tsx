@@ -20,21 +20,17 @@ import {
 
 // Mock the SessionContext to provide controlled data for testing
 const actual = { ...(await import('../contexts/SessionContext.js')) };
-void vi.mock('../contexts/SessionContext.js', () => {
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
 // Mock the RuntimeContext to provide controlled data for testing
 const actualActual = { ...(await import('../contexts/RuntimeContext.js')) };
-void vi.mock('../contexts/RuntimeContext.js', () => {
-  return {
-    ...actualActual,
-    useRuntimeApi: vi.fn(),
-  };
-});
+void vi.mock('../contexts/RuntimeContext.js', () => ({
+  ...actualActual,
+  useRuntimeApi: vi.fn(),
+}));
 
 const useSessionStatsMock = SessionContext.useSessionStats as Mock<
   typeof SessionContext.useSessionStats

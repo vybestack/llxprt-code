@@ -18,12 +18,10 @@ const mockFromConfig = vi.fn();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),

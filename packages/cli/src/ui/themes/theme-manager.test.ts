@@ -11,8 +11,11 @@ if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  automock,
+  restoreEnv,
+  setEnv,
+} from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -31,13 +34,11 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 void vi.mock('node:fs', () => automock(realNodeFsModule));
 const actualOs = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+void vi.mock('node:os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+  platform: vi.fn(() => 'linux'),
+}));
 
 const validCustomTheme: CustomTheme = {
   type: 'custom',

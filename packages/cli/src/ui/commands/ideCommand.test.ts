@@ -5,8 +5,8 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
-import {
+import type {
+  Mock,
   vi,
   describe,
   it,
@@ -26,12 +26,10 @@ const realGlobModule = { ...(await import('glob')) };
 void vi.mock('child_process', () => automock(realChildProcessModule));
 void vi.mock('glob', () => automock(realGlobModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    getIdeInstaller: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  getIdeInstaller: vi.fn(),
+}));
 
 describe('ideCommand', () => {
   let mockContext: CommandContext;

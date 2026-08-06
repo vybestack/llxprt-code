@@ -28,26 +28,24 @@ void vi.mock('../../config/extension.js', () => ({
   },
 }));
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-void vi.mock('@vybestack/llxprt-code-mcp', () => {
-  return {
-    ...actual,
-    createTransport: vi.fn(),
-    Storage: {
-      getGlobalSettingsPath: vi
-        .fn()
-        .mockReturnValue('/mock/home/.llxprt/settings.json'),
-      getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalConfigDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalDataDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalCacheDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalLogDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-    },
-    MCPServerStatus: {
-      CONNECTED: 'CONNECTED',
-      DISCONNECTED: 'DISCONNECTED',
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  ...actual,
+  createTransport: vi.fn(),
+  Storage: {
+    getGlobalSettingsPath: vi
+      .fn()
+      .mockReturnValue('/mock/home/.llxprt/settings.json'),
+    getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalConfigDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalDataDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalCacheDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalLogDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+  },
+  MCPServerStatus: {
+    CONNECTED: 'CONNECTED',
+    DISCONNECTED: 'DISCONNECTED',
+  },
+}));
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );

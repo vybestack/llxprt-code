@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import {
+  automock,
+  advanceTimersByTimeAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import {
@@ -27,17 +29,15 @@ const mockShellExecutionService = vi.fn();
 const mockIsActivePty = vi.fn();
 const mockGetLastActivePtyId = vi.fn();
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    ShellExecutionService: {
-      execute: mockShellExecutionService,
-      isActivePty: mockIsActivePty,
-      getLastActivePtyId: mockGetLastActivePtyId,
-    },
-    isBinary: mockIsBinary,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  ShellExecutionService: {
+    execute: mockShellExecutionService,
+    isActivePty: mockIsActivePty,
+    getLastActivePtyId: mockGetLastActivePtyId,
+  },
+  isBinary: mockIsBinary,
+}));
 void vi.mock('fs', () => automock(realFsModule));
 // Mock os to always return 'linux' for consistent testing across platforms
 const actual = { ...(await import('os')) };
@@ -254,7 +254,7 @@ describe('useShellCommandProcessor', () => {
     act(() => {
       resolveExecutionPromise(createMockServiceResult({ output: 'ok' }));
     });
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith(null);
     expect(addItemToHistoryMock).toHaveBeenCalledTimes(2); // Initial + final
@@ -285,7 +285,7 @@ describe('useShellCommandProcessor', () => {
     act(() => {
       resolveExecutionPromise(createMockServiceResult({ output: 'ok' }));
     });
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
     expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
@@ -307,7 +307,7 @@ describe('useShellCommandProcessor', () => {
         createMockServiceResult({ exitCode: 127, output: 'not found' }),
       );
     });
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     const finalHistoryItem = addItemToHistoryMock.mock
       .calls[1][0] as HistoryItemToolGroup;
@@ -514,7 +514,7 @@ describe('useShellCommandProcessor', () => {
         createMockServiceResult({ aborted: true, output: 'Canceled' }),
       );
     });
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     const finalHistoryItem = addItemToHistoryMock.mock
       .calls[1][0] as HistoryItemToolGroup;
@@ -543,7 +543,7 @@ describe('useShellCommandProcessor', () => {
         createMockServiceResult({ rawOutput: binaryBuffer }),
       );
     });
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     const finalHistoryItem = addItemToHistoryMock.mock
       .calls[1][0] as HistoryItemToolGroup;
@@ -569,7 +569,7 @@ describe('useShellCommandProcessor', () => {
     });
     const execPromise = onExecMock.mock.calls[0][0];
 
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith(null);
     expect(addItemToHistoryMock).toHaveBeenCalledTimes(2);
@@ -597,7 +597,7 @@ describe('useShellCommandProcessor', () => {
     });
     const execPromise = onExecMock.mock.calls[0][0];
 
-    await act(async () => await execPromise);
+    await act(async () => execPromise);
 
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith(null);
     expect(addItemToHistoryMock).toHaveBeenCalledTimes(2);
@@ -633,7 +633,7 @@ describe('useShellCommandProcessor', () => {
       act(() => {
         resolveExecutionPromise(createMockServiceResult());
       });
-      await act(async () => await execPromise);
+      await act(async () => execPromise);
 
       const finalHistoryItem = addItemToHistoryMock.mock
         .calls[1][0] as HistoryItemToolGroup;
@@ -660,7 +660,7 @@ describe('useShellCommandProcessor', () => {
       act(() => {
         resolveExecutionPromise(createMockServiceResult());
       });
-      await act(async () => await execPromise);
+      await act(async () => execPromise);
 
       const finalHistoryItem = addItemToHistoryMock.mock
         .calls[1][0] as HistoryItemToolGroup;
@@ -686,7 +686,7 @@ describe('useShellCommandProcessor', () => {
       act(() => {
         resolveExecutionPromise(createMockServiceResult({ output: 'live' }));
       });
-      await act(async () => await execPromise);
+      await act(async () => execPromise);
 
       expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
       expect(setShellInputFocusedMock).not.toHaveBeenCalledWith(false);
@@ -709,7 +709,7 @@ describe('useShellCommandProcessor', () => {
       act(() => {
         resolveExecutionPromise(createMockServiceResult({ output: 'done' }));
       });
-      await act(async () => await execPromise);
+      await act(async () => execPromise);
 
       expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
       expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
@@ -732,7 +732,7 @@ describe('useShellCommandProcessor', () => {
       act(() => {
         resolveExecutionPromise(createMockServiceResult({ output: 'dead' }));
       });
-      await act(async () => await execPromise);
+      await act(async () => execPromise);
 
       expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
       expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
@@ -756,7 +756,7 @@ describe('useShellCommandProcessor', () => {
       });
       const execPromise = onExecMock.mock.calls[0][0];
 
-      await act(async () => await execPromise);
+      await act(async () => execPromise);
 
       expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
       expect(setShellInputFocusedMock).not.toHaveBeenCalledWith(false);

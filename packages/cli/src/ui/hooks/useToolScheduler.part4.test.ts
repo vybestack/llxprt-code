@@ -608,7 +608,7 @@ describe('useReactToolScheduler (split)', () => {
       undefined /*updateOutputFn*/,
     );
 
-    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1];
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('success');
     expect(completedCalls[0].response.resultDisplay).toBe('Confirmed display');

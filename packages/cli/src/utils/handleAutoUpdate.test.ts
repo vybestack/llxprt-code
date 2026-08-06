@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'bun:test';
-import {
+import type {
+  Mock,
   describe,
   it,
   expect,
@@ -52,30 +52,26 @@ void vi.mock('./updateEventEmitter.js', () => {
 });
 
 const actual = { ...(await import('node:fs')) };
-void vi.mock('node:fs', () => {
-  return {
-    ...actual,
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    writeSync: vi.fn(),
-    openSync: vi.fn(),
-    closeSync: vi.fn(),
-    mkdirSync: vi.fn(),
-    unlinkSync: vi.fn(),
-    readdirSync: vi.fn(),
-    realpathSync: vi.fn(),
-    constants: actual.constants,
-  };
-});
+void vi.mock('node:fs', () => ({
+  ...actual,
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  writeSync: vi.fn(),
+  openSync: vi.fn(),
+  closeSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  readdirSync: vi.fn(),
+  realpathSync: vi.fn(),
+  constants: actual.constants,
+}));
 
 const actualActual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    ...actualActual,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('node:os', () => ({
+  ...actualActual,
+  homedir: vi.fn(),
+}));
 
 const mockGetInstallationInfo = getInstallationInfo as Mock<
   typeof getInstallationInfo
@@ -134,9 +130,7 @@ describe('handleAutoUpdate', () => {
       unref: vi.fn(),
     }) as unknown as ChildProcess;
 
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof mockSpawn>,
-    );
+    mockSpawn.mockReturnValue(mockChildProcess as unknown);
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');

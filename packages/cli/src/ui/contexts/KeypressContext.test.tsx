@@ -29,12 +29,10 @@ import { EventEmitter } from 'node:events';
 
 // Mock the 'ink' module to control stdin
 const original = { ...(await import('ink')) };
-void vi.mock('ink', () => {
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 const PASTE_START = '\x1B[200~';
 const PASTE_END = '\x1B[201~';

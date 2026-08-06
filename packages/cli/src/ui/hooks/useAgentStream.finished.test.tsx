@@ -7,14 +7,21 @@
 /** @vitest-environment jsdom */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
+import type {
+  Mock,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type Mock,
+} from 'bun:test';
 import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
@@ -43,12 +50,10 @@ const realAtCommandProcessorModule = {
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
-void vi.mock('./useReactToolScheduler.js', () => {
-  return {
-    ...actualSchedulerModule,
-    useReactToolScheduler: vi.fn(),
-  };
-});
+void vi.mock('./useReactToolScheduler.js', () => ({
+  ...actualSchedulerModule,
+  useReactToolScheduler: vi.fn(),
+}));
 const mockUseReactToolScheduler = useReactToolScheduler as Mock<
   (...args: never[]) => unknown
 >;

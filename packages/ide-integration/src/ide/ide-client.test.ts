@@ -35,17 +35,15 @@ const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
 const realNodeOsModule = { ...(await import('node:os')) };
 
 const actual = { ...(await import('node:fs')) };
-void vi.mock('node:fs', () => {
-  return {
-    ...(actual as object),
-    promises: {
-      readFile: vi.fn(),
-      readdir: vi.fn(),
-    },
-    realpathSync: (p: string) => p,
-    existsSync: () => false,
-  };
-});
+void vi.mock('node:fs', () => ({
+  ...(actual as object),
+  promises: {
+    readFile: vi.fn(),
+    readdir: vi.fn(),
+  },
+  realpathSync: (p: string) => p,
+  existsSync: () => false,
+}));
 void vi.mock('./process-utils.js', () => automock(realProcessUtilsModule));
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),

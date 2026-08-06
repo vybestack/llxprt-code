@@ -606,7 +606,7 @@ describe('useReactToolScheduler (split)', () => {
       ToolConfirmationOutcome.Cancel,
     );
 
-    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1];
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('cancelled');
     expect(completedCalls[0].response.responseParts).toStrictEqual(

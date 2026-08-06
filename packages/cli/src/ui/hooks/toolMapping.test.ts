@@ -26,20 +26,18 @@ const { mockWarn } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...actual,
-    DebugLogger: {
-      ...actual.DebugLogger,
-      getLogger: () => ({
-        warn: mockWarn,
-        debug: vi.fn(),
-        info: vi.fn(),
-        error: vi.fn(),
-      }),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  DebugLogger: {
+    ...actual.DebugLogger,
+    getLogger: () => ({
+      warn: mockWarn,
+      debug: vi.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+    }),
+  },
+}));
 
 // Loaded with top-level await instead of a static import: toolMapping.ts
 // resolves its logger at module scope, so it must be evaluated AFTER the mock

@@ -10,14 +10,12 @@ import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
 
 // Mock the ideContext singleton from the ide-integration package
 const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
-  return {
-    ...actual,
-    ideContext: {
-      getIdeContext: vi.fn(),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual,
+  ideContext: {
+    getIdeContext: vi.fn(),
+  },
+}));
 
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 

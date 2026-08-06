@@ -51,12 +51,10 @@ const realAtCommandProcessorModule = {
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
-void vi.mock('./useReactToolScheduler.js', () => {
-  return {
-    ...actualSchedulerModule,
-    useReactToolScheduler: vi.fn(),
-  };
-});
+void vi.mock('./useReactToolScheduler.js', () => ({
+  ...actualSchedulerModule,
+  useReactToolScheduler: vi.fn(),
+}));
 const mockUseReactToolScheduler = useReactToolScheduler as Mock<
   (...args: never[]) => unknown
 >;

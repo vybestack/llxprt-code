@@ -22,12 +22,10 @@ import { SpawnSyncReturns } from 'child_process';
 
 // execSync is mocked for getReleaseVersion internals; subprocess tests guard that spawnSync stays real.
 const actual = { ...(await import('node:child_process')) };
-void vi.mock('node:child_process', () => {
-  return {
-    ...actual,
-    execSync: vi.fn(),
-  };
-});
+void vi.mock('node:child_process', () => ({
+  ...actual,
+  execSync: vi.fn(),
+}));
 
 const mod = { ...(await import('node:fs')) };
 void vi.mock('node:fs', () => {

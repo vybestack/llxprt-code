@@ -24,12 +24,10 @@ void vi.mock('../../config/trustedFolders.js', () => ({
 }));
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    loadServerHierarchicalMemory: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  loadServerHierarchicalMemory: vi.fn(),
+}));
 
 const mockLoadServerHierarchicalMemory = loadServerHierarchicalMemory as Mock<
   typeof loadServerHierarchicalMemory

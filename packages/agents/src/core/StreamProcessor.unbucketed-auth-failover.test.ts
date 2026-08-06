@@ -8,12 +8,10 @@ import { beforeEach, describe, expect, it, vi } from '../testApi.js';
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 const actual = { ...(await import('@vybestack/llxprt-code-auth')) };
-void vi.mock('@vybestack/llxprt-code-auth', () => {
-  return {
-    ...actual,
-    flushRuntimeAuthScope: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-auth', () => ({
+  ...actual,
+  flushRuntimeAuthScope: vi.fn(),
+}));
 
 import { StreamProcessor } from './StreamProcessor.js';
 import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';

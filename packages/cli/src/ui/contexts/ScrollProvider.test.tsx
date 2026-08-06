@@ -19,26 +19,22 @@ import type { MouseEvent } from '../utils/mouse.js';
 const mockUseMouseCallbacks = new Set<(event: MouseEvent) => void | boolean>();
 const React = await import('react');
 
-void vi.mock('../hooks/useMouse.js', () => {
-  return {
-    useMouse: (callback: (event: MouseEvent) => void | boolean) => {
-      React.useLayoutEffect(() => {
-        mockUseMouseCallbacks.add(callback);
-        return () => {
-          mockUseMouseCallbacks.delete(callback);
-        };
-      }, [callback]);
-    },
-  };
-});
+void vi.mock('../hooks/useMouse.js', () => ({
+  useMouse: (callback: (event: MouseEvent) => void | boolean) => {
+    React.useLayoutEffect(() => {
+      mockUseMouseCallbacks.add(callback);
+      return () => {
+        mockUseMouseCallbacks.delete(callback);
+      };
+    }, [callback]);
+  },
+}));
 
 const actual = { ...(await import('ink')) };
-void vi.mock('ink', () => {
-  return {
-    ...actual,
-    getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),
-  };
-});
+void vi.mock('ink', () => ({
+  ...actual,
+  getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),
+}));
 
 const TestScrollable = forwardRef(
   (

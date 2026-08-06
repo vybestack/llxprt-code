@@ -52,14 +52,12 @@ void vi.mock('./utils/cleanup.js', () => ({
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    writeToStdout: vi.fn().mockReturnValue(true),
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  writeToStdout: vi.fn().mockReturnValue(true),
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
+}));
 
 void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),

@@ -25,16 +25,14 @@ const { mockWriteToStdout } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    createInkStdio: vi.fn(() => ({
-      stdout: process.stdout,
-      stderr: process.stderr,
-    })),
-    writeToStdout: mockWriteToStdout,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  createInkStdio: vi.fn(() => ({
+    stdout: process.stdout,
+    stderr: process.stderr,
+  })),
+  writeToStdout: mockWriteToStdout,
+}));
 
 void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),

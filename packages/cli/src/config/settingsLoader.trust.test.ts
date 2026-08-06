@@ -25,25 +25,21 @@ const realFsModule = { ...(await import('fs')) };
 const realOsModule = { ...(await import('os')) };
 
 const actualOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => '/mock/home/user'),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => '/mock/home/user'),
+  platform: vi.fn(() => 'linux'),
+}));
 
 const actualFs = { ...(await import('fs')) };
-void vi.mock('fs', () => {
-  return {
-    ...actualFs,
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    mkdirSync: vi.fn(),
-    realpathSync: vi.fn((location: fs.PathLike): string => String(location)),
-  };
-});
+void vi.mock('fs', () => ({
+  ...actualFs,
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  realpathSync: vi.fn((location: fs.PathLike): string => String(location)),
+}));
 
 const realFs = realFsModule;
 const realOs = realOsModule;
@@ -54,13 +50,11 @@ const mockCoreEvents = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    coreEvents: mockCoreEvents,
-    getIdeTrust: () => undefined,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  coreEvents: mockCoreEvents,
+  getIdeTrust: () => undefined,
+}));
 
 const TRUSTED_FOLDERS_PATH = '/mock/home/user/trustedFolders.json';
 const temporaryDirectories: string[] = [];

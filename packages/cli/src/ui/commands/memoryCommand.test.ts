@@ -20,35 +20,29 @@ import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js'
 import { assertDefined } from '../../test-utils/assertions.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    getErrorMessage: vi.fn((error: unknown) => {
-      if (error instanceof Error) return error.message;
-      return String(error);
-    }),
-    getGlobalCoreMemoryFilePath: vi.fn(
-      () => '/mock/home/.llxprt/.LLXPRT_SYSTEM',
-    ),
-    getProjectCoreMemoryFilePath: vi.fn(
-      (dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`,
-    ),
-    MemoryTool: {
-      ...original.MemoryTool,
-      performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  getErrorMessage: vi.fn((error: unknown) => {
+    if (error instanceof Error) return error.message;
+    return String(error);
+  }),
+  getGlobalCoreMemoryFilePath: vi.fn(() => '/mock/home/.llxprt/.LLXPRT_SYSTEM'),
+  getProjectCoreMemoryFilePath: vi.fn(
+    (dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`,
+  ),
+  MemoryTool: {
+    ...original.MemoryTool,
+    performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 const actualOriginal = {
   ...(await import('../../config/environmentLoader.js')),
 };
-void vi.mock('../../config/environmentLoader.js', () => {
-  return {
-    ...actualOriginal,
-    loadHierarchicalLlxprtMemory: vi.fn(),
-  };
-});
+void vi.mock('../../config/environmentLoader.js', () => ({
+  ...actualOriginal,
+  loadHierarchicalLlxprtMemory: vi.fn(),
+}));
 
 const mockLoadHierarchicalLlxprtMemory = loadHierarchicalLlxprtMemory as Mock<
   (...args: never[]) => unknown

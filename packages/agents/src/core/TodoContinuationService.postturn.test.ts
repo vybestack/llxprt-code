@@ -40,12 +40,10 @@ const {
 })();
 
 const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
-void vi.mock('@vybestack/llxprt-code-tools', () => {
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: mockTodoStoreConstructor,
+}));
 
 void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',

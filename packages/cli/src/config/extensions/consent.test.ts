@@ -52,14 +52,12 @@ void vi.mock('node:fs/promises', () => {
 });
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...actualActual,
-    debugLogger: {
-      log: vi.fn(),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actualActual,
+  debugLogger: {
+    log: vi.fn(),
+  },
+}));
 
 describe('consent', () => {
   let tempDir: string;

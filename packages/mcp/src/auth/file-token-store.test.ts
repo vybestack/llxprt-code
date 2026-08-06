@@ -45,14 +45,12 @@ void vi.mock('@vybestack/llxprt-code-settings', () => ({
 
 // Mock OS methods that might be causing issues
 const actual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    ...actual,
-    hostname: vi.fn().mockReturnValue('test-hostname'),
-    userInfo: vi.fn().mockReturnValue({ username: 'test-user' }),
-    homedir: vi.fn().mockReturnValue('/test/home'),
-  };
-});
+void vi.mock('node:os', () => ({
+  ...actual,
+  hostname: vi.fn().mockReturnValue('test-hostname'),
+  userInfo: vi.fn().mockReturnValue({ username: 'test-user' }),
+  homedir: vi.fn().mockReturnValue('/test/home'),
+}));
 
 const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 1);
 const DEFAULT_OPTIONS = {

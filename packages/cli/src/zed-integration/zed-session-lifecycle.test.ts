@@ -33,12 +33,10 @@ const mockFromConfig = vi.fn();
 const mockDeleteSessionById = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
@@ -50,14 +48,12 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
 }));
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual,
-    deleteSessionById: (
-      ...args: Parameters<typeof actualActual.deleteSessionById>
-    ) => mockDeleteSessionById(...args),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  deleteSessionById: (
+    ...args: Parameters<typeof actualActual.deleteSessionById>
+  ) => mockDeleteSessionById(...args),
+}));
 
 interface StubAgentHandle {
   readonly agent: Agent;

@@ -28,15 +28,13 @@ const mockCheckCommandPermissions = vi.fn();
 const mockShellExecute = vi.fn();
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    checkCommandPermissions: mockCheckCommandPermissions,
-    ShellExecutionService: {
-      execute: mockShellExecute,
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  checkCommandPermissions: mockCheckCommandPermissions,
+  ShellExecutionService: {
+    execute: mockShellExecute,
+  },
+}));
 
 const SUCCESS_RESULT = {
   output: 'default shell output',

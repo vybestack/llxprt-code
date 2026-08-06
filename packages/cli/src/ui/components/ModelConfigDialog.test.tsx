@@ -16,12 +16,10 @@ const real = await import(
   '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
 );
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  return {
-    parseEphemeralSettingValue: real.parseEphemeralSettingValue,
-    ephemeralSettingHelp: real.ephemeralSettingHelp,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+  parseEphemeralSettingValue: real.parseEphemeralSettingValue,
+  ephemeralSettingHelp: real.ephemeralSettingHelp,
+}));
 
 // Use the real parseValue from setCommand (source-resolved, no broken deps)
 import { ModelConfigDialog } from './ModelConfigDialog.js';

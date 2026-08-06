@@ -34,12 +34,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 const mockedOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
 const { uninstallExtension, EXTENSIONS_CONFIG_FILENAME, ExtensionStorage } =
   await import('../extension.js');

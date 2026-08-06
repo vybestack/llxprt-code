@@ -14,12 +14,10 @@ import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 const actualOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+}));
 
 describe('UserAccountManager', () => {
   let tempHomeDir: string;

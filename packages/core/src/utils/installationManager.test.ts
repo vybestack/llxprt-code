@@ -23,29 +23,27 @@ import { randomUUID } from 'crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 const actual = { ...(await import('node:fs')) };
-void vi.mock('node:fs', () => {
-  return {
-    ...actual,
-    readFileSync: vi.fn(actual.readFileSync),
-    existsSync: vi.fn(actual.existsSync),
-  } as typeof actual;
-});
+void vi.mock(
+  'node:fs',
+  () =>
+    ({
+      ...actual,
+      readFileSync: vi.fn(actual.readFileSync),
+      existsSync: vi.fn(actual.existsSync),
+    }) as typeof actual,
+);
 
 const actualOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+}));
 
 const crypto = { ...(await import('crypto')) };
-void vi.mock('crypto', () => {
-  return {
-    ...crypto,
-    randomUUID: vi.fn(),
-  };
-});
+void vi.mock('crypto', () => ({
+  ...crypto,
+  randomUUID: vi.fn(),
+}));
 
 describe('InstallationManager', () => {
   let tempHomeDir: string;

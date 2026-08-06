@@ -21,67 +21,65 @@ import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    Config: vi.fn().mockImplementation((params) => {
-      let provider = params.provider;
-      let model = params.model;
-      let userMemory = params.userMemory;
-      let llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
-      const ephemerals: Record<string, unknown> = {};
-      const settingsServiceInstance = new SettingsService();
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  Config: vi.fn().mockImplementation((params) => {
+    let provider = params.provider;
+    let model = params.model;
+    let userMemory = params.userMemory;
+    let llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
+    const ephemerals: Record<string, unknown> = {};
+    const settingsServiceInstance = new SettingsService();
 
-      return {
-        getProvider: vi.fn(() => provider),
-        setProvider: vi.fn((next: string) => {
-          provider = next;
-        }),
-        getProviderManager: vi.fn(),
-        setProviderManager: vi.fn(),
-        setRuntimeMessageBus: vi.fn(),
-        setRuntimeOAuthManager: vi.fn(),
-        setImageBackendResolver: vi.fn(),
-        setRunImageOperation: vi.fn(),
-        initialize: vi.fn(),
-        getModel: vi.fn(() => model),
-        setModel: vi.fn((next: string) => {
-          model = next;
-        }),
-        setEphemeralSetting: vi.fn((key: string, value: unknown) => {
-          if (value === undefined) {
-            delete ephemerals[key];
-          } else {
-            ephemerals[key] = value;
-          }
-        }),
-        getEphemeralSetting: vi.fn((key: string) => ephemerals[key]),
-        getEphemeralSettings: vi.fn(() => ({ ...ephemerals })),
-        getSettingsService: vi.fn(() => settingsServiceInstance),
-        getConversationLoggingEnabled: vi.fn(() => false),
-        getDebugMode: vi.fn(() => false),
-        getToolRegistry: vi.fn(() => ({})),
-        getSandboxMountDir: vi.fn(() => ''),
-        getMemoryImportFormat: vi.fn(() => 'tree'),
-        getFolderTrust: vi.fn(() => true),
-        getIdeMode: vi.fn(() => false),
-        getFileDiscoveryService: vi.fn(
-          () => params.fileDiscoveryService ?? { initialize: vi.fn() },
-        ),
-        refreshAuth: vi.fn(async () => {}),
-        setUserMemory: vi.fn((next: string) => {
-          userMemory = next;
-        }),
-        getUserMemory: vi.fn(() => userMemory),
-        setLlxprtMdFileCount: vi.fn((next: number) => {
-          llxprtMdFileCount = next;
-        }),
-        getLlxprtMdFileCount: vi.fn(() => llxprtMdFileCount),
-      };
-    }),
-    isRipgrepAvailable: vi.fn().mockResolvedValue(true),
-  };
-});
+    return {
+      getProvider: vi.fn(() => provider),
+      setProvider: vi.fn((next: string) => {
+        provider = next;
+      }),
+      getProviderManager: vi.fn(),
+      setProviderManager: vi.fn(),
+      setRuntimeMessageBus: vi.fn(),
+      setRuntimeOAuthManager: vi.fn(),
+      setImageBackendResolver: vi.fn(),
+      setRunImageOperation: vi.fn(),
+      initialize: vi.fn(),
+      getModel: vi.fn(() => model),
+      setModel: vi.fn((next: string) => {
+        model = next;
+      }),
+      setEphemeralSetting: vi.fn((key: string, value: unknown) => {
+        if (value === undefined) {
+          delete ephemerals[key];
+        } else {
+          ephemerals[key] = value;
+        }
+      }),
+      getEphemeralSetting: vi.fn((key: string) => ephemerals[key]),
+      getEphemeralSettings: vi.fn(() => ({ ...ephemerals })),
+      getSettingsService: vi.fn(() => settingsServiceInstance),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getDebugMode: vi.fn(() => false),
+      getToolRegistry: vi.fn(() => ({})),
+      getSandboxMountDir: vi.fn(() => ''),
+      getMemoryImportFormat: vi.fn(() => 'tree'),
+      getFolderTrust: vi.fn(() => true),
+      getIdeMode: vi.fn(() => false),
+      getFileDiscoveryService: vi.fn(
+        () => params.fileDiscoveryService ?? { initialize: vi.fn() },
+      ),
+      refreshAuth: vi.fn(async () => {}),
+      setUserMemory: vi.fn((next: string) => {
+        userMemory = next;
+      }),
+      getUserMemory: vi.fn(() => userMemory),
+      setLlxprtMdFileCount: vi.fn((next: number) => {
+        llxprtMdFileCount = next;
+      }),
+      getLlxprtMdFileCount: vi.fn(() => llxprtMdFileCount),
+    };
+  }),
+  isRipgrepAvailable: vi.fn().mockResolvedValue(true),
+}));
 
 const createMockSettingsService = () => {
   const providerStore = new Map<string, Record<string, unknown>>();

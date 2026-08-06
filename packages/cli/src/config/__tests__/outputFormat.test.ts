@@ -21,12 +21,10 @@ void vi.mock('../policy.js', () => ({
 }));
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    isRipgrepAvailable: vi.fn().mockResolvedValue(false),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  isRipgrepAvailable: vi.fn().mockResolvedValue(false),
+}));
 
 const baseArgv: CliArgs = {
   model: undefined,

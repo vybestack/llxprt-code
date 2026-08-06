@@ -26,12 +26,10 @@ const { preflightAgentActivationMock } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actual,
-    preflightAgentActivation: preflightAgentActivationMock,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  preflightAgentActivation: preflightAgentActivationMock,
+}));
 
 import { activateConfiguredProvider } from './cliProviderInit.js';
 

@@ -12,13 +12,11 @@ import * as pathActual from 'node:path'; // Import for type info for the mock fa
 
 const realSettingsModule = { ...(await import('./settings.js')) };
 const actualOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => '/mock/home/user'),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => '/mock/home/user'),
+  platform: vi.fn(() => 'linux'),
+}));
 
 // Mock './settings.js' to ensure it uses the mocked 'os.homedir()' for its internal constants.
 void vi.mock('./settings.js', () => {
@@ -88,12 +86,10 @@ const mockCoreEvents = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    coreEvents: mockCoreEvents,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  coreEvents: mockCoreEvents,
+}));
 
 void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),

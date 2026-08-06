@@ -18,27 +18,25 @@ let unlinkSyncError: Error | null = null;
 let closeSyncError: Error | null = null;
 
 const actual = { ...(await import('node:fs')) };
-void vi.mock('node:fs', () => {
-  return {
-    ...actual,
-    writeSync: vi.fn((...args: Parameters<typeof fs.writeSync>) => {
-      if (writeSyncError) throw writeSyncError;
-      return actual.writeSync(...args);
-    }),
-    fsyncSync: vi.fn((...args: Parameters<typeof fs.fsyncSync>) => {
-      if (fsyncSyncError) throw fsyncSyncError;
-      return actual.fsyncSync(...args);
-    }),
-    unlinkSync: vi.fn((...args: Parameters<typeof fs.unlinkSync>) => {
-      if (unlinkSyncError) throw unlinkSyncError;
-      return actual.unlinkSync(...args);
-    }),
-    closeSync: vi.fn((...args: Parameters<typeof fs.closeSync>) => {
-      if (closeSyncError) throw closeSyncError;
-      return actual.closeSync(...args);
-    }),
-  };
-});
+void vi.mock('node:fs', () => ({
+  ...actual,
+  writeSync: vi.fn((...args: Parameters<typeof fs.writeSync>) => {
+    if (writeSyncError) throw writeSyncError;
+    return actual.writeSync(...args);
+  }),
+  fsyncSync: vi.fn((...args: Parameters<typeof fs.fsyncSync>) => {
+    if (fsyncSyncError) throw fsyncSyncError;
+    return actual.fsyncSync(...args);
+  }),
+  unlinkSync: vi.fn((...args: Parameters<typeof fs.unlinkSync>) => {
+    if (unlinkSyncError) throw unlinkSyncError;
+    return actual.unlinkSync(...args);
+  }),
+  closeSync: vi.fn((...args: Parameters<typeof fs.closeSync>) => {
+    if (closeSyncError) throw closeSyncError;
+    return actual.closeSync(...args);
+  }),
+}));
 
 // Import AFTER the mock is set up.
 const {

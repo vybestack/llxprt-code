@@ -337,45 +337,43 @@ void vi.mock('../../config/settings.js', () => {
 });
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    triggerSessionStartHook: vi.fn().mockResolvedValue(null),
-    triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
-    SessionStartSource: { Startup: 'startup' },
-    SessionEndReason: { Exit: 'exit' },
-    coreEvents: {
-      on: vi.fn(),
-      off: vi.fn(),
-      drainFeedbackBacklog: vi.fn(),
-    },
-    CoreEvent: {
-      UserFeedback: 'user_feedback',
-      SettingsChanged: 'settings_changed',
-    },
-    DebugLogger: Object.assign(
-      vi.fn(() => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  triggerSessionStartHook: vi.fn().mockResolvedValue(null),
+  triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
+  SessionStartSource: { Startup: 'startup' },
+  SessionEndReason: { Exit: 'exit' },
+  coreEvents: {
+    on: vi.fn(),
+    off: vi.fn(),
+    drainFeedbackBacklog: vi.fn(),
+  },
+  CoreEvent: {
+    UserFeedback: 'user_feedback',
+    SettingsChanged: 'settings_changed',
+  },
+  DebugLogger: Object.assign(
+    vi.fn(() => ({
+      debug: vi.fn(),
+      log: vi.fn(),
+      error: vi.fn(),
+    })),
+    {
+      getLogger: vi.fn(() => ({
         debug: vi.fn(),
         log: vi.fn(),
         error: vi.fn(),
       })),
-      {
-        getLogger: vi.fn(() => ({
-          debug: vi.fn(),
-          log: vi.fn(),
-          error: vi.fn(),
-        })),
-      },
-    ),
-    debugLogger: { debug: vi.fn(), log: vi.fn(), error: vi.fn() },
-    uiTelemetryService: { setTokenTrackingMetrics: vi.fn() },
-    getSettingsService: vi.fn(),
-    ideContext: {
-      subscribeToIdeContext: vi.fn(() => vi.fn()),
-      getIdeContext: vi.fn(() => undefined),
     },
-  };
-});
+  ),
+  debugLogger: { debug: vi.fn(), log: vi.fn(), error: vi.fn() },
+  uiTelemetryService: { setTokenTrackingMetrics: vi.fn() },
+  getSettingsService: vi.fn(),
+  ideContext: {
+    subscribeToIdeContext: vi.fn(() => vi.fn()),
+    getIdeContext: vi.fn(() => undefined),
+  },
+}));
 
 void vi.mock('node:process', () => ({
   default: {

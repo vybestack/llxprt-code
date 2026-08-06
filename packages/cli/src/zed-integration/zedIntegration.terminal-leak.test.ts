@@ -26,21 +26,17 @@ const mockFromConfig = vi.fn();
 const mockBuildZedTerminalSetup = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
 const actualActual = { ...(await import('./zed-terminal-setup.js')) };
-void vi.mock('./zed-terminal-setup.js', () => {
-  return {
-    ...actualActual,
-    buildZedTerminalSetup: (...args: unknown[]) =>
-      mockBuildZedTerminalSetup(...args),
-  };
-});
+void vi.mock('./zed-terminal-setup.js', () => ({
+  ...actualActual,
+  buildZedTerminalSetup: (...args: unknown[]) =>
+    mockBuildZedTerminalSetup(...args),
+}));
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),

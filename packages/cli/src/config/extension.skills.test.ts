@@ -25,35 +25,29 @@ import { createExtension } from '../test-utils/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 const mockedOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
 const actual = { ...(await import('./trustedFolders.js')) };
-void vi.mock('./trustedFolders.js', () => {
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn().mockReturnValue(true),
-  };
-});
+void vi.mock('./trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn().mockReturnValue(true),
+}));
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual,
-    logExtensionEnable: vi.fn(),
-    logExtensionInstallEvent: vi.fn(),
-    logExtensionUninstall: vi.fn(),
-    logExtensionDisable: vi.fn(),
-    ExtensionEnableEvent: vi.fn(),
-    ExtensionInstallEvent: vi.fn(),
-    ExtensionUninstallEvent: vi.fn(),
-    ExtensionDisableEvent: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  logExtensionEnable: vi.fn(),
+  logExtensionInstallEvent: vi.fn(),
+  logExtensionUninstall: vi.fn(),
+  logExtensionDisable: vi.fn(),
+  ExtensionEnableEvent: vi.fn(),
+  ExtensionInstallEvent: vi.fn(),
+  ExtensionUninstallEvent: vi.fn(),
+  ExtensionDisableEvent: vi.fn(),
+}));
 
 describe('extension skills loading', () => {
   let tempHomeDir: string;

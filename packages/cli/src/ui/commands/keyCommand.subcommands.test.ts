@@ -87,12 +87,10 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 let mockStorage: ProviderKeyStorage;
 
 const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
-void vi.mock('@vybestack/llxprt-code-storage', () => {
-  return {
-    ...actual,
-    getProviderKeyStorage: () => mockStorage,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-storage', () => ({
+  ...actual,
+  getProviderKeyStorage: () => mockStorage,
+}));
 
 // @plan:PLAN-20250214-CREDPROXY.P33
 // Mock the factory to use our test storage. The credential-store factory now
@@ -101,14 +99,12 @@ void vi.mock('@vybestack/llxprt-code-storage', () => {
 const actualActual = {
   ...(await import('@vybestack/llxprt-code-providers/auth.js')),
 };
-void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
-  return {
-    ...actualActual,
-    createProviderKeyStorage: () => mockStorage,
-    createTokenStore: () => ({}),
-    resetFactorySingletons: () => {},
-  };
-});
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+  ...actualActual,
+  createProviderKeyStorage: () => mockStorage,
+  createTokenStore: () => ({}),
+  resetFactorySingletons: () => {},
+}));
 
 // ─── Test Setup ──────────────────────────────────────────────────────────────
 

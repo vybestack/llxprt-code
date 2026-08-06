@@ -19,15 +19,13 @@ import process from 'process';
 import { performance } from 'node:perf_hooks';
 
 const actual = { ...(await import('fs')) };
-void vi.mock('fs', () => {
-  return {
-    ...actual,
-    existsSync: vi.fn(() => true),
-    readFileSync: vi.fn(() => '{}'),
-    writeFileSync: vi.fn(),
-    mkdirSync: vi.fn(),
-  };
-});
+void vi.mock('fs', () => ({
+  ...actual,
+  existsSync: vi.fn(() => true),
+  readFileSync: vi.fn(() => '{}'),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
 
 describe('Settings Remediation Integration', () => {
   let config: Config;

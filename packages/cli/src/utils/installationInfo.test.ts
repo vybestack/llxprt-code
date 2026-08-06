@@ -34,29 +34,23 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...actual,
-    debugLogger: mockDebugLogger,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  debugLogger: mockDebugLogger,
+}));
 
 const actualFs = { ...(await import('fs')) };
-void vi.mock('fs', () => {
-  return {
-    ...actualFs,
-    realpathSync: vi.fn(),
-    existsSync: vi.fn(),
-  };
-});
+void vi.mock('fs', () => ({
+  ...actualFs,
+  realpathSync: vi.fn(),
+  existsSync: vi.fn(),
+}));
 
 const actualActual = { ...(await import('child_process')) };
-void vi.mock('child_process', () => {
-  return {
-    ...actualActual,
-    execSync: vi.fn(),
-  };
-});
+void vi.mock('child_process', () => ({
+  ...actualActual,
+  execSync: vi.fn(),
+}));
 
 const mockedIsGitRepository = isGitRepository as Mock<typeof isGitRepository>;
 const mockedRealPathSync = fs.realpathSync as unknown as Mock<

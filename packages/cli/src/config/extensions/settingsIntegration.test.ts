@@ -76,12 +76,10 @@ void vi.mock('./settingsStorage.js', () => {
 });
 
 const actualActual = { ...(await import('../../utils/gitUtils.js')) };
-void vi.mock('../../utils/gitUtils.js', () => {
-  return {
-    ...actualActual,
-    getWorkspaceIdentity: vi.fn(actualActual.getWorkspaceIdentity),
-  };
-});
+void vi.mock('../../utils/gitUtils.js', () => ({
+  ...actualActual,
+  getWorkspaceIdentity: vi.fn(actualActual.getWorkspaceIdentity),
+}));
 
 const actualGitUtils = realGitUtilsModule;
 

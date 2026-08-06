@@ -42,21 +42,17 @@ const realAtCommandProcessorModule = {
 };
 
 const original = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...original,
-    fromConfig: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...original,
+  fromConfig: vi.fn(),
+}));
 
 const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualOriginal,
-    shutdownTelemetry: vi.fn(),
-    isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualOriginal,
+  shutdownTelemetry: vi.fn(),
+  isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
+}));
 
 void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn().mockResolvedValue(undefined),

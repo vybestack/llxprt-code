@@ -32,14 +32,12 @@ const realPromisesModule = { ...(await import('node:fs/promises')) };
 
 void vi.mock('node:fs/promises', () => automock(realPromisesModule));
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    coreEvents: {
-      emitFeedback: vi.fn(),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  coreEvents: {
+    emitFeedback: vi.fn(),
+  },
+}));
 
 describe('rewindFileOps', () => {
   const mockConversation: ConversationRecord = {

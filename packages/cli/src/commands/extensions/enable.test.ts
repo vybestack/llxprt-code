@@ -27,12 +27,10 @@ const mockEnableExtension: Mock<
 > = vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
-void vi.mock('../../config/extension.js', () => {
-  return {
-    ...actual,
-    enableExtension: mockEnableExtension,
-  };
-});
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  enableExtension: mockEnableExtension,
+}));
 
 void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: Error) => error.message),

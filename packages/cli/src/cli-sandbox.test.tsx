@@ -74,9 +74,10 @@ void vi.mock('update-notifier', () => ({
 }));
 
 const actual = { ...(await import('./utils/events.js')) };
-void vi.mock('./utils/events.js', () => {
-  return { ...actual, appEvents: { emit: vi.fn() } };
-});
+void vi.mock('./utils/events.js', () => ({
+  ...actual,
+  appEvents: { emit: vi.fn() },
+}));
 
 void vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''),
@@ -84,19 +85,17 @@ void vi.mock('./utils/sandbox.js', () => ({
 }));
 
 const actualActual = { ...(await import('./utils/bootstrap.js')) };
-void vi.mock('./utils/bootstrap.js', () => {
-  return {
-    ...actualActual,
-    shouldRelaunchForMemory: vi.fn(() => []),
-    isDebugMode: vi.fn(() => false),
-    computeSandboxMemoryArgs: vi.fn(
-      (..._args: Parameters<typeof actualActual.computeSandboxMemoryArgs>) =>
-        ['-m', '4096'] as unknown as ReturnType<
-          typeof actualActual.computeSandboxMemoryArgs
-        >,
-    ),
-  };
-});
+void vi.mock('./utils/bootstrap.js', () => ({
+  ...actualActual,
+  shouldRelaunchForMemory: vi.fn(() => []),
+  isDebugMode: vi.fn(() => false),
+  computeSandboxMemoryArgs: vi.fn(
+    (..._args: Parameters<typeof actualActual.computeSandboxMemoryArgs>) =>
+      ['-m', '4096'] as unknown as ReturnType<
+        typeof actualActual.computeSandboxMemoryArgs
+      >,
+  ),
+}));
 
 void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn().mockResolvedValue(0),
@@ -128,15 +127,13 @@ void vi.mock('ink', () => ({
 // Mock the provider-activation executor so main() does not invoke real
 // providers-runtime mutators that require a wired CLI runtime context.
 const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actualActual2,
-    executeProviderActivation: vi.fn().mockResolvedValue({
-      authFailed: false,
-      infoMessages: [],
-    }),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actualActual2,
+  executeProviderActivation: vi.fn().mockResolvedValue({
+    authFailed: false,
+    infoMessages: [],
+  }),
+}));
 
 void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
@@ -153,14 +150,12 @@ const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
 };
 const actualActual3 = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual3,
-    writeToStdout: mockWriteToStdout,
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual3,
+  writeToStdout: mockWriteToStdout,
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
+}));
 
 describe('cli sandbox maxHeapSizeMB integration', () => {
   const originalEnv = { ...process.env };

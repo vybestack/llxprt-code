@@ -7,21 +7,17 @@
 // Mock 'os' first.
 import * as osActual from 'os';
 const actualOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => '/mock/home/user'),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => '/mock/home/user'),
+  platform: vi.fn(() => 'linux'),
+}));
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    getIdeTrust: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  getIdeTrust: vi.fn(),
+}));
 
 import { FatalConfigError, getIdeTrust } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -69,20 +65,18 @@ function createErrorWithCode(message: string, code: string): Error {
 const TRUSTED_FOLDERS_FILE_MODE = 0o600;
 
 const actualFs = { ...(await import('fs')) };
-void vi.mock('fs', () => {
-  return {
-    ...actualFs,
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    renameSync: vi.fn(),
-    chmodSync: vi.fn(),
-    statSync: vi.fn(),
-    unlinkSync: vi.fn(),
-    mkdirSync: vi.fn(),
-    realpathSync: vi.fn((location: fs.PathLike) => location),
-  };
-});
+void vi.mock('fs', () => ({
+  ...actualFs,
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
+  chmodSync: vi.fn(),
+  statSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  realpathSync: vi.fn((location: fs.PathLike) => location),
+}));
 
 void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),

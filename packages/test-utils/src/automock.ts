@@ -117,7 +117,7 @@ function automockValue(
 /** Wraps a non-object factory result so consumers still see a default export. */
 function toNamespace(exports: unknown): object {
   return typeof exports === 'object' && exports !== null
-    ? (exports as object)
+    ? exports
     : { default: exports };
 }
 

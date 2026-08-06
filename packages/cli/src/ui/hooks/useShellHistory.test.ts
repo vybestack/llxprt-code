@@ -32,12 +32,10 @@ void vi.mock('fs/promises', () => ({
 void vi.mock('os', () => automock(realOsModule));
 void vi.mock('crypto', () => automock(realCryptoModule));
 const actualFs = { ...(await import('fs')) };
-void vi.mock('fs', () => {
-  return {
-    ...actualFs,
-    mkdirSync: vi.fn(),
-  };
-});
+void vi.mock('fs', () => ({
+  ...actualFs,
+  mkdirSync: vi.fn(),
+}));
 const pathModule = await import('path');
 const actual = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => {

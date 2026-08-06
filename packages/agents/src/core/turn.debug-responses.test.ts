@@ -32,13 +32,11 @@ const actual = {
 };
 void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => {
-    return {
-      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
-      // real implementation so thinking/tool_call/text detection is correct.
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+    // real implementation so thinking/tool_call/text detection is correct.
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 describe('Turn - debug responses and finished event outcome', () => {

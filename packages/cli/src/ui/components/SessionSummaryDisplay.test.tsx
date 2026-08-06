@@ -12,12 +12,10 @@ import type { SessionMetrics } from '../contexts/SessionContext.js';
 import { createSessionMetrics } from '../../test-utils/sessionMetrics.js';
 
 const actual = { ...(await import('../contexts/SessionContext.js')) };
-void vi.mock('../contexts/SessionContext.js', () => {
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
 const useSessionStatsMock = SessionContext.useSessionStats as Mock<
   typeof SessionContext.useSessionStats

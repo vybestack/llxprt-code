@@ -17,12 +17,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    isRipgrepAvailable: vi.fn().mockResolvedValue(true),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  isRipgrepAvailable: vi.fn().mockResolvedValue(true),
+}));
 
 // Regression test for start.js model.missing when provider != gemini and no model provided.
 // Expected behavior: provider aliases with defaultModel should supply a non-empty model.

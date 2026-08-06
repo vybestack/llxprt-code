@@ -30,21 +30,15 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 const original = { ...(await import('./sandbox-ssh.js')) };
-void vi.mock('./sandbox-ssh.js', () => {
-  return {
-    ...original,
-    setupCredentialProxyDockerMacOS:
-      bridgeMocks.setupCredentialProxyDockerMacOS,
-  };
-});
+void vi.mock('./sandbox-ssh.js', () => ({
+  ...original,
+  setupCredentialProxyDockerMacOS: bridgeMocks.setupCredentialProxyDockerMacOS,
+}));
 const actualOriginal = { ...(await import('./sandbox-podman.js')) };
-void vi.mock('./sandbox-podman.js', () => {
-  return {
-    ...actualOriginal,
-    setupCredentialProxyPodmanMacOS:
-      bridgeMocks.setupCredentialProxyPodmanMacOS,
-  };
-});
+void vi.mock('./sandbox-podman.js', () => ({
+  ...actualOriginal,
+  setupCredentialProxyPodmanMacOS: bridgeMocks.setupCredentialProxyPodmanMacOS,
+}));
 
 import { setupCredentialProxy } from './sandbox-containers.js';
 

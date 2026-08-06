@@ -34,13 +34,9 @@ const realRealInkModule = {
 
 void vi.mock('ink', () => realRealInkModule);
 
-void vi.mock('../components/ContextSummaryDisplay.js', () => {
-  return {
-    ContextSummaryDisplay: () => (
-      <Text color="white">context-summary-mock</Text>
-    ),
-  };
-});
+void vi.mock('../components/ContextSummaryDisplay.js', () => ({
+  ContextSummaryDisplay: () => <Text color="white">context-summary-mock</Text>,
+}));
 
 function renderInlineContent(props: InlineContentProps) {
   const rendered = render(

@@ -44,12 +44,10 @@ void vi.mock('../utils/gitUtils.js', () => ({
 
 const hoistedMockHomedir = vi.fn();
 const actual = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...actual,
-    homedir: hoistedMockHomedir,
-  };
-});
+void vi.mock('os', () => ({
+  ...actual,
+  homedir: hoistedMockHomedir,
+}));
 
 const hoistedMockDebugLogger = {
   debug: vi.fn(),

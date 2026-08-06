@@ -24,25 +24,23 @@ import { assertDefined } from '../../test-utils/assertions.js';
 const mockKeyStore = new Map<string, string>();
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    ToolKeyStorage: class MockToolKeyStorage {
-      async saveKey(toolName: string, key: string): Promise<void> {
-        mockKeyStore.set(toolName, key);
-      }
-      async getKey(toolName: string): Promise<string | null> {
-        return mockKeyStore.get(toolName) ?? null;
-      }
-      async deleteKey(toolName: string): Promise<void> {
-        mockKeyStore.delete(toolName);
-      }
-      async hasKey(toolName: string): Promise<boolean> {
-        return mockKeyStore.has(toolName);
-      }
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  ToolKeyStorage: class MockToolKeyStorage {
+    async saveKey(toolName: string, key: string): Promise<void> {
+      mockKeyStore.set(toolName, key);
+    }
+    async getKey(toolName: string): Promise<string | null> {
+      return mockKeyStore.get(toolName) ?? null;
+    }
+    async deleteKey(toolName: string): Promise<void> {
+      mockKeyStore.delete(toolName);
+    }
+    async hasKey(toolName: string): Promise<boolean> {
+      return mockKeyStore.has(toolName);
+    }
+  },
+}));
 
 describe('toolkeyCommand', () => {
   let context: CommandContext;

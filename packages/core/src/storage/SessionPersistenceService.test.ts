@@ -17,20 +17,18 @@ import * as crypto from 'node:crypto';
 
 // Mock fs before importing the module under test
 const actual = { ...(await import('node:fs')) };
-void vi.mock('node:fs', () => {
-  return {
-    ...actual,
-    promises: {
-      ...actual.promises,
-      mkdir: vi.fn(),
-      writeFile: vi.fn(),
-      rename: vi.fn(),
-      readdir: vi.fn(),
-      readFile: vi.fn(),
-      access: vi.fn(),
-    },
-  };
-});
+void vi.mock('node:fs', () => ({
+  ...actual,
+  promises: {
+    ...actual.promises,
+    mkdir: vi.fn(),
+    writeFile: vi.fn(),
+    rename: vi.fn(),
+    readdir: vi.fn(),
+    readFile: vi.fn(),
+    access: vi.fn(),
+  },
+}));
 
 import * as fs from 'node:fs';
 import {

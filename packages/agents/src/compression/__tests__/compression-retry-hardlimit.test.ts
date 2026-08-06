@@ -37,15 +37,13 @@ import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/
 import { makeHttpError } from './compression-retry-helpers.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
-void vi.mock('@vybestack/llxprt-code-settings', () => {
-  return {
-    ...original,
-    Storage: {
-      ...original.Storage,
-      getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...original,
+  Storage: {
+    ...original.Storage,
+    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+  },
+}));
 
 // Mock the delay utility so retryWithBackoff doesn't actually wait in tests
 void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({

@@ -91,12 +91,10 @@ function createStubProvider(): IProvider {
 let mockStorageRef: ProviderKeyStorage | null = null;
 
 const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
-void vi.mock('@vybestack/llxprt-code-storage', () => {
-  return {
-    ...actual,
-    getProviderKeyStorage: () => mockStorageRef,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-storage', () => ({
+  ...actual,
+  getProviderKeyStorage: () => mockStorageRef,
+}));
 
 // @plan:PLAN-20250214-CREDPROXY.P35
 // Also mock the factory to use the same mockStorageRef since runtimeSettings
@@ -104,12 +102,10 @@ void vi.mock('@vybestack/llxprt-code-storage', () => {
 const actualActual = {
   ...(await import('@vybestack/llxprt-code-providers/auth.js')),
 };
-void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
-  return {
-    ...actualActual,
-    createProviderKeyStorage: () => mockStorageRef,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+  ...actualActual,
+  createProviderKeyStorage: () => mockStorageRef,
+}));
 
 const { parseBootstrapArgs } = await import('../../config/profileBootstrap.js');
 

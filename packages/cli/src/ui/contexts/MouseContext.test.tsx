@@ -14,12 +14,10 @@ import { MouseProvider, useMouseContext } from './MouseContext.js';
 import { useMouse } from '../hooks/useMouse.js';
 
 const original = { ...(await import('ink')) };
-void vi.mock('ink', () => {
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 class MockStdin extends EventEmitter {
   isTTY = true;

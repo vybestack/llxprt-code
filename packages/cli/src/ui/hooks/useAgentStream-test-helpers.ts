@@ -52,16 +52,14 @@ export const mockSendMessageStream = coreMocks.mockSendMessageStream;
 export const mockStartChat = coreMocks.mockStartChat;
 
 const actualCoreModule = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualCoreModule,
-    GitService: vi.fn(),
-    AgentClient: coreMocks.MockedAgentClientClass,
-    UserPromptEvent: coreMocks.MockedUserPromptEvent,
-    parseAndFormatApiError: coreMocks.mockParseAndFormatApiError,
-    tokenLimit: vi.fn().mockReturnValue(100),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualCoreModule,
+  GitService: vi.fn(),
+  AgentClient: coreMocks.MockedAgentClientClass,
+  UserPromptEvent: coreMocks.MockedUserPromptEvent,
+  parseAndFormatApiError: coreMocks.mockParseAndFormatApiError,
+  tokenLimit: vi.fn().mockReturnValue(100),
+}));
 
 /**
  * Creates a minimal fake Agent that delegates history/model calls to a mock

@@ -33,13 +33,11 @@ import type { IStorageService } from '../interfaces/index.js';
 const realOsModule = { ...(await import('os')) };
 
 const actual = { ...(await import('fs/promises')) };
-void vi.mock('fs/promises', () => {
-  return {
-    ...actual,
-    mkdir: vi.fn(),
-    readFile: vi.fn(),
-  };
-});
+void vi.mock('fs/promises', () => ({
+  ...actual,
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+}));
 
 void vi.mock('fs', () => ({
   mkdirSync: vi.fn(),
@@ -242,9 +240,7 @@ describe('MemoryTool', () => {
       // Spy on the static method for these tests
       performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
       // Cast needed as spyOn returns MockInstance
     });
 
@@ -538,9 +534,7 @@ describe('MemoryTool', () => {
     it('should save to project directory when scope is "project"', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = {
         fact: 'Project-specific fact',
@@ -571,9 +565,7 @@ describe('MemoryTool', () => {
     it('should save to project directory by default (when scope is undefined and workingDir is set)', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = { fact: 'Project fact by default' };
       const invocation = memoryTool.build(params);
@@ -599,9 +591,7 @@ describe('MemoryTool', () => {
     it('should save to global directory when scope is explicitly "global"', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = { fact: 'Global fact', scope: 'global' as const };
       const invocation = memoryTool.build(params);
@@ -626,9 +616,7 @@ describe('MemoryTool', () => {
     it('should fallback to global when scope is "project" but no working directory is set', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = { fact: 'Project fact without workdir', scope: 'project' };
       const invocation = memoryTool.build(params);

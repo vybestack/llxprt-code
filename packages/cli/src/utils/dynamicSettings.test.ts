@@ -15,21 +15,19 @@ const { mockLog, mockDebugLoggerError } = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...actual,
-    DebugLogger: vi.fn().mockImplementation(() => ({
-      log: mockLog,
-    })),
-    debugLogger: {
-      error: mockDebugLoggerError,
-      warn: vi.fn(),
-      debug: vi.fn(),
-      log: vi.fn(),
-      info: vi.fn(),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  DebugLogger: vi.fn().mockImplementation(() => ({
+    log: mockLog,
+  })),
+  debugLogger: {
+    error: mockDebugLoggerError,
+    warn: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    info: vi.fn(),
+  },
+}));
 
 // Loaded with top-level await instead of a static import so the module under
 // test constructs its DebugLogger from the mock registered above.

@@ -11,13 +11,11 @@ const realFsModule = { ...(await import('fs')) };
 const realOsModule = { ...(await import('os')) };
 
 const actual = { ...(await import('node:child_process')) };
-void vi.mock('node:child_process', () => {
-  return {
-    ...actual,
-    execSync: vi.fn(),
-    spawnSync: vi.fn(() => ({ status: 0 })),
-  };
-});
+void vi.mock('node:child_process', () => ({
+  ...actual,
+  execSync: vi.fn(),
+  spawnSync: vi.fn(() => ({ status: 0 })),
+}));
 void vi.mock('fs', () => automock(realFsModule));
 void vi.mock('os', () => automock(realOsModule));
 

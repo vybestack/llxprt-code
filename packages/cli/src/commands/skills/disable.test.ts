@@ -30,21 +30,17 @@ const debugLogger = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...actual,
-    debugLogger,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  debugLogger,
+}));
 
 const actualActual = { ...(await import('../../config/settings.js')) };
-void vi.mock('../../config/settings.js', () => {
-  return {
-    ...actualActual,
-    loadSettings: vi.fn(),
-    isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
-  };
-});
+void vi.mock('../../config/settings.js', () => ({
+  ...actualActual,
+  loadSettings: vi.fn(),
+  isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
+}));
 
 void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),

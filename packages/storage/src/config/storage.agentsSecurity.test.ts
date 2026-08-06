@@ -16,9 +16,7 @@ const { homedirMock } = {
 };
 
 const actual = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return { ...actual, homedir: homedirMock };
-});
+void vi.mock('os', () => ({ ...actual, homedir: homedirMock }));
 
 // Imported AFTER vi.mock is established (vi.mock is hoisted above imports).
 import { Storage } from './storage.js';

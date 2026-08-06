@@ -7,13 +7,11 @@
 import { describe, it, expect, vi } from 'bun:test';
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    checkHasEditorType: vi.fn().mockReturnValue(true),
-    allowEditorTypeInSandbox: vi.fn().mockReturnValue(true),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  checkHasEditorType: vi.fn().mockReturnValue(true),
+  allowEditorTypeInSandbox: vi.fn().mockReturnValue(true),
+}));
 
 import {
   editorSettingsManager,

@@ -69,12 +69,10 @@ void vi.mock('./useIdeTrustListener.js', () => ({
 }));
 
 const actual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    ...actual,
-    homedir: () => '/mock/home/user',
-  };
-});
+void vi.mock('node:os', () => ({
+  ...actual,
+  homedir: () => '/mock/home/user',
+}));
 
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
 

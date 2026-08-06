@@ -38,14 +38,12 @@ const { mockPlatform, mockTmpdir } = {
 };
 
 const actual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
-    ...actual,
-    platform: mockPlatform,
-    tmpdir: mockTmpdir,
-  };
-});
+void vi.mock('node:os', () => ({
+  default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
+  ...actual,
+  platform: mockPlatform,
+  tmpdir: mockTmpdir,
+}));
 
 /**
  * Fake IShellExecutionService that returns controlled stdout/stderr/exitCode.

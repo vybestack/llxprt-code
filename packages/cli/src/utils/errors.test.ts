@@ -17,33 +17,31 @@ import {
 
 // Mock the core modules
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...original,
-    parseAndFormatApiError: vi.fn((error: unknown) => {
-      if (error instanceof Error) {
-        return `API Error: ${error.message}`;
-      }
-      return `API Error: ${String(error)}`;
-    }),
-    FatalToolExecutionError: class extends Error {
-      constructor(message: string) {
-        super(message);
-        this.name = 'FatalToolExecutionError';
-        this.exitCode = 54;
-      }
-      exitCode: number;
-    },
-    FatalCancellationError: class extends Error {
-      constructor(message: string) {
-        super(message);
-        this.name = 'FatalCancellationError';
-        this.exitCode = 130;
-      }
-      exitCode: number;
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  parseAndFormatApiError: vi.fn((error: unknown) => {
+    if (error instanceof Error) {
+      return `API Error: ${error.message}`;
+    }
+    return `API Error: ${String(error)}`;
+  }),
+  FatalToolExecutionError: class extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'FatalToolExecutionError';
+      this.exitCode = 54;
+    }
+    exitCode: number;
+  },
+  FatalCancellationError: class extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'FatalCancellationError';
+      this.exitCode = 130;
+    }
+    exitCode: number;
+  },
+}));
 
 describe('errors', () => {
   let mockConfig: Config;

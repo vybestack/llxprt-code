@@ -15,27 +15,23 @@ import { StatsDisplay } from './StatsDisplay.js';
 
 // Mock the theme module
 const original = { ...(await import('../semantic-colors.js')) };
-void vi.mock('../semantic-colors.js', () => {
-  return {
-    ...original,
-    theme: {
-      ...original.theme,
-      ui: {
-        ...original.theme.ui,
-        gradient: [], // Empty array to potentially trigger the crash
-      },
+void vi.mock('../semantic-colors.js', () => ({
+  ...original,
+  theme: {
+    ...original.theme,
+    ui: {
+      ...original.theme.ui,
+      gradient: [], // Empty array to potentially trigger the crash
     },
-  };
-});
+  },
+}));
 
 // Mock the context to provide controlled data for testing
 const actual = { ...(await import('../contexts/SessionContext.js')) };
-void vi.mock('../contexts/SessionContext.js', () => {
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
 const mockSessionStats: SessionStatsState = {
   sessionId: 'test-session',

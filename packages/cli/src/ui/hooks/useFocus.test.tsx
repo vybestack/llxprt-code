@@ -13,13 +13,11 @@ import { useStdin, useStdout } from 'ink';
 
 // Mock the ink hooks
 const original = { ...(await import('ink')) };
-void vi.mock('ink', () => {
-  return {
-    ...original,
-    useStdin: vi.fn(),
-    useStdout: vi.fn(),
-  };
-});
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+  useStdout: vi.fn(),
+}));
 
 const mockedUseStdin = useStdin as Mock<typeof useStdin>;
 const mockedUseStdout = useStdout as Mock<typeof useStdout>;

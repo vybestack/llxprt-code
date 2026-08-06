@@ -622,7 +622,7 @@ describe('useReactToolScheduler (split)', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1];
     expect(completedCalls).toHaveLength(1);
     const completedCall = completedCalls[0];
     expect(completedCall.status).toBe('success');
@@ -674,7 +674,7 @@ describe('useReactToolScheduler (split)', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    const completionArgs = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const completionArgs = onComplete.mock.calls[0][1];
     expect(completionArgs).toHaveLength(1);
     const failedCall = completionArgs[0];
     expect(failedCall.status).toBe('error');

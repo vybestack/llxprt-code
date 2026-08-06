@@ -57,48 +57,40 @@ void vi.mock('simple-git', () => ({
 }));
 
 const mockedOs = { ...(await import('os')) };
-void vi.mock('os', () => {
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
 const actual = { ...(await import('./trustedFolders.js')) };
-void vi.mock('./trustedFolders.js', () => {
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn(),
-  };
-});
+void vi.mock('./trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn(),
+}));
 
 const mockLogExtensionEnable = vi.fn();
 const mockLogExtensionInstallEvent = vi.fn();
 const mockLogExtensionUninstall = vi.fn();
 const mockLogExtensionDisable = vi.fn();
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual,
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
 
-    logExtensionEnable: mockLogExtensionEnable,
-    logExtensionInstallEvent: mockLogExtensionInstallEvent,
-    logExtensionUninstall: mockLogExtensionUninstall,
-    logExtensionDisable: mockLogExtensionDisable,
-    ExtensionEnableEvent: vi.fn(),
-    ExtensionInstallEvent: vi.fn(),
-    ExtensionUninstallEvent: vi.fn(),
-    ExtensionDisableEvent: vi.fn(),
-  };
-});
+  logExtensionEnable: mockLogExtensionEnable,
+  logExtensionInstallEvent: mockLogExtensionInstallEvent,
+  logExtensionUninstall: mockLogExtensionUninstall,
+  logExtensionDisable: mockLogExtensionDisable,
+  ExtensionEnableEvent: vi.fn(),
+  ExtensionInstallEvent: vi.fn(),
+  ExtensionUninstallEvent: vi.fn(),
+  ExtensionDisableEvent: vi.fn(),
+}));
 
 const actualActual2 = { ...(await import('child_process')) };
-void vi.mock('child_process', () => {
-  return {
-    ...actualActual2,
-    execSync: vi.fn(),
-  };
-});
+void vi.mock('child_process', () => ({
+  ...actualActual2,
+  execSync: vi.fn(),
+}));
 
 const mockLoadSettings = vi.fn();
 

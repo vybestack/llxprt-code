@@ -147,7 +147,7 @@ async function waitForWithFakeTimers<T>(
         hasPending = true;
         pendingResolved = false;
         pendingRejected = false;
-        (result as Promise<T>).then(
+        result.then(
           (value: T) => {
             pendingResolved = true;
             pendingValue = value;

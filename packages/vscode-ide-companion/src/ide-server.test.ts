@@ -53,12 +53,10 @@ void vi.mock('node:fs/promises', () => ({
 }));
 
 const actual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    ...actual,
-    tmpdir: vi.fn(() => '/tmp'),
-  };
-});
+void vi.mock('node:os', () => ({
+  ...actual,
+  tmpdir: vi.fn(() => '/tmp'),
+}));
 
 describe('IDEServer', () => {
   let mockContext: vscode.ExtensionContext;

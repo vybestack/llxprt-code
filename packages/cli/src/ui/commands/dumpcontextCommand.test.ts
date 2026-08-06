@@ -10,16 +10,14 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
-void vi.mock('@vybestack/llxprt-code-providers', () => {
-  return {
-    ...actual,
-    dumpRequestContext: vi.fn().mockResolvedValue({
-      baseId: '20260101-120000-anthropic-abc123',
-      requestFilename: '20260101-120000-anthropic-abc123-request.json',
-      dumpDir: '/tmp/.llxprt/dumps',
-    }),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-providers', () => ({
+  ...actual,
+  dumpRequestContext: vi.fn().mockResolvedValue({
+    baseId: '20260101-120000-anthropic-abc123',
+    requestFilename: '20260101-120000-anthropic-abc123-request.json',
+    dumpDir: '/tmp/.llxprt/dumps',
+  }),
+}));
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 

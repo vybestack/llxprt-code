@@ -10,14 +10,12 @@ import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
+import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   TrackedCompletedToolCall,
   TrackedToolCall,
-} from './useReactToolScheduler.js';
-import {
-  useReactToolScheduler,
-  type ScheduleFn,
-  type MarkToolsAsDisplayClearedFn,
+  ScheduleFn,
+  MarkToolsAsDisplayClearedFn,
 } from './useReactToolScheduler.js';
 import type {
   AgentClientContract as AgentClient,

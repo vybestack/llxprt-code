@@ -15,14 +15,12 @@ const mockGetClient = vi.fn(() => ({
 
 // Mock the google-auth-library to use a shared mock function
 const actual = { ...(await import('google-auth-library')) };
-void vi.mock('google-auth-library', () => {
-  return {
-    ...actual,
-    GoogleAuth: vi.fn().mockImplementation(() => ({
-      getClient: mockGetClient,
-    })),
-  };
-});
+void vi.mock('google-auth-library', () => ({
+  ...actual,
+  GoogleAuth: vi.fn().mockImplementation(() => ({
+    getClient: mockGetClient,
+  })),
+}));
 
 const defaultSAConfig: MCPServerConfig = {
   url: 'https://my-iap-service.run.app',

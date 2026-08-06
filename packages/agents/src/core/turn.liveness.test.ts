@@ -46,11 +46,9 @@ const actual = {
 };
 void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => {
-    return {
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 type Part = { text: string };

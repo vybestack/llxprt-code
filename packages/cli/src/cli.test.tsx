@@ -113,14 +113,12 @@ void vi.mock('update-notifier', () => ({
 }));
 
 const actual = { ...(await import('./utils/events.js')) };
-void vi.mock('./utils/events.js', () => {
-  return {
-    ...actual,
-    appEvents: {
-      emit: vi.fn(),
-    },
-  };
-});
+void vi.mock('./utils/events.js', () => ({
+  ...actual,
+  appEvents: {
+    emit: vi.fn(),
+  },
+}));
 
 void vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
@@ -129,13 +127,11 @@ void vi.mock('./utils/sandbox.js', () => ({
 
 // Mock bootstrap utilities for deferred init tests
 const actualActual = { ...(await import('./utils/bootstrap.js')) };
-void vi.mock('./utils/bootstrap.js', () => {
-  return {
-    ...actualActual,
-    shouldRelaunchForMemory: vi.fn(() => []),
-    isDebugMode: vi.fn(() => false),
-  };
-});
+void vi.mock('./utils/bootstrap.js', () => ({
+  ...actualActual,
+  shouldRelaunchForMemory: vi.fn(() => []),
+  isDebugMode: vi.fn(() => false),
+}));
 
 void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn().mockResolvedValue(0),
@@ -182,12 +178,10 @@ const { preflightAgentActivationMock } = {
   }),
 };
 const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actualActual2,
-    preflightAgentActivation: preflightAgentActivationMock,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actualActual2,
+  preflightAgentActivation: preflightAgentActivationMock,
+}));
 
 void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
@@ -207,14 +201,12 @@ const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
 };
 const actualActual3 = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual3,
-    writeToStdout: mockWriteToStdout,
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual3,
+  writeToStdout: mockWriteToStdout,
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
+}));
 
 describe('cli.tsx main function', () => {
   /**

@@ -30,27 +30,23 @@ const mockKeyfileStore = new Map<string, string>();
 const mockedHomedir = vi.fn();
 
 const original = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return { ...original, homedir: mockedHomedir };
-});
+void vi.mock('node:os', () => ({ ...original, homedir: mockedHomedir }));
 
 const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualOriginal,
-    ToolKeyStorage: class MockToolKeyStorage {
-      async setKeyfilePath(toolName: string, filePath: string): Promise<void> {
-        mockKeyfileStore.set(toolName, filePath);
-      }
-      async getKeyfilePath(toolName: string): Promise<string | null> {
-        return mockKeyfileStore.get(toolName) ?? null;
-      }
-      async clearKeyfilePath(toolName: string): Promise<void> {
-        mockKeyfileStore.delete(toolName);
-      }
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualOriginal,
+  ToolKeyStorage: class MockToolKeyStorage {
+    async setKeyfilePath(toolName: string, filePath: string): Promise<void> {
+      mockKeyfileStore.set(toolName, filePath);
+    }
+    async getKeyfilePath(toolName: string): Promise<string | null> {
+      return mockKeyfileStore.get(toolName) ?? null;
+    }
+    async clearKeyfilePath(toolName: string): Promise<void> {
+      mockKeyfileStore.delete(toolName);
+    }
+  },
+}));
 
 describe('toolkeyfileCommand', () => {
   let context: CommandContext;

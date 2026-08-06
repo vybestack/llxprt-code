@@ -84,33 +84,31 @@ function buildRuntimeContext(
 
 // Mock content generator to avoid real API calls
 const actual = { ...(await import('../core/contentGenerator.js')) };
-void vi.mock('../core/contentGenerator.js', () => {
-  return {
-    ...actual,
-    createContentGenerator: vi.fn().mockResolvedValue({
-      generateContent: vi.fn().mockResolvedValue({
-        response: {
-          text: () => 'mock response',
-          candidates: [],
-          usageMetadata: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      }),
-      generateContentStream: vi.fn().mockResolvedValue({
-        async *stream() {
-          yield {
-            text: () => 'mock stream',
-            candidates: [],
-            usageMetadata: {
-              inputTokens: 10,
-              outputTokens: 20,
-              totalTokens: 30,
-            },
-          };
-        },
-      }),
+void vi.mock('../core/contentGenerator.js', () => ({
+  ...actual,
+  createContentGenerator: vi.fn().mockResolvedValue({
+    generateContent: vi.fn().mockResolvedValue({
+      response: {
+        text: () => 'mock response',
+        candidates: [],
+        usageMetadata: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      },
     }),
-  };
-});
+    generateContentStream: vi.fn().mockResolvedValue({
+      async *stream() {
+        yield {
+          text: () => 'mock stream',
+          candidates: [],
+          usageMetadata: {
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+        };
+      },
+    }),
+  }),
+}));
 
 describe('ChatSession Isolation Integration Tests', () => {
   beforeEach(() => {

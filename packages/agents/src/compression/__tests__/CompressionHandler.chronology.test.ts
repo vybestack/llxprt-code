@@ -39,15 +39,13 @@ import { CompressionHandler } from '../CompressionHandler.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
-void vi.mock('@vybestack/llxprt-code-settings', () => {
-  return {
-    ...original,
-    Storage: {
-      ...original.Storage,
-      getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...original,
+  Storage: {
+    ...original.Storage,
+    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+  },
+}));
 
 const STRATEGY_METADATA: CompressionResultMetadata = {
   originalMessageCount: 0,

@@ -531,7 +531,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1];
     expect(completedCalls[0].request.agentId).toBe('primary');
   });
 });

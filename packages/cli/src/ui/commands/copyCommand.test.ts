@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'bun:test';
-import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import type {
+  Mock,
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  type Mock,
+} from 'bun:test';
 import { copyCommand } from './copyCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';

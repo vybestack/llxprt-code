@@ -38,20 +38,16 @@ const mockRules: Array<{
 }> = [];
 
 const actual = { ...(await import('node:process')) };
-void vi.mock('node:process', () => {
-  return {
-    ...actual,
-    cwd: mockedCwd,
-  };
-});
+void vi.mock('node:process', () => ({
+  ...actual,
+  cwd: mockedCwd,
+}));
 
 const actualActual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    ...actualActual,
-    homedir: mockedHomedir,
-  };
-});
+void vi.mock('node:os', () => ({
+  ...actualActual,
+  homedir: mockedHomedir,
+}));
 
 void vi.mock('../../config/trustedFolders.js', () => {
   const actual = realTrustedFoldersModule;

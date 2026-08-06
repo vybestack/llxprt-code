@@ -39,18 +39,16 @@ const debugLogger = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actual,
-    // discoverSkillsForConfig owns the session MessageBus + Config.initialize
-    // lifecycle (behaviorally tested in core/skills/skillDiscovery.test.ts).
-    // Here it is stubbed as the external boundary so these tests focus on the
-    // command's display/filtering behavior. The command does not emit through
-    // core events; logging goes through the telemetry-package debugLogger,
-    // whose owner is mocked below.
-    discoverSkillsForConfig: vi.fn(),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  // discoverSkillsForConfig owns the session MessageBus + Config.initialize
+  // lifecycle (behaviorally tested in core/skills/skillDiscovery.test.ts).
+  // Here it is stubbed as the external boundary so these tests focus on the
+  // command's display/filtering behavior. The command does not emit through
+  // core events; logging goes through the telemetry-package debugLogger,
+  // whose owner is mocked below.
+  discoverSkillsForConfig: vi.fn(),
+}));
 
 // list.ts logs through the telemetry-package debugLogger (its owner after
 // #2378), so mock THAT package here — not core — to capture the command's

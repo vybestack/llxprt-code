@@ -24,12 +24,10 @@ void vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
 const actual = { ...(await import('child_process')) };
-void vi.mock('child_process', () => {
-  return {
-    ...actual,
-    spawn: mockCpSpawn,
-  };
-});
+void vi.mock('child_process', () => ({
+  ...actual,
+  spawn: mockCpSpawn,
+}));
 void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));

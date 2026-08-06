@@ -126,12 +126,10 @@ void vi.mock(
   }),
 );
 const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
-void vi.mock('@vybestack/llxprt-code-tools', () => {
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: mockTodoStoreConstructor,
+}));
 const __actual = { ...(await import('./turn')) };
 void vi.mock('./turn', () => {
   const result = __actual as
@@ -181,18 +179,16 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
 const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
-  return {
-    ...actual3,
-    ideContext: {
-      ...actual3.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual3,
+  ideContext: {
+    ...actual3.ideContext,
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
+}));
 const actual4 = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };

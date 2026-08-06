@@ -30,16 +30,14 @@ const debugLoggerMock = {
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...actual,
-    debugLogger: {
-      ...actual.debugLogger,
-      warn: debugLoggerMock.warn,
-      error: debugLoggerMock.error,
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  debugLogger: {
+    ...actual.debugLogger,
+    warn: debugLoggerMock.warn,
+    error: debugLoggerMock.error,
+  },
+}));
 
 import { ensureAcpProviderActivated } from './cliProviderInit.js';
 

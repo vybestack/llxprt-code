@@ -28,14 +28,12 @@ const mockRequestConsentNonInteractive: Mock<
 > = vi.fn();
 
 const actual = { ...(await import('../../config/extension.js')) };
-void vi.mock('../../config/extension.js', () => {
-  return {
-    ...actual,
-    installOrUpdateExtension: mockInstallOrUpdateExtension,
-    loadExtensionByName: mockLoadExtensionByName,
-    requestConsentNonInteractive: mockRequestConsentNonInteractive,
-  };
-});
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  installOrUpdateExtension: mockInstallOrUpdateExtension,
+  loadExtensionByName: mockLoadExtensionByName,
+  requestConsentNonInteractive: mockRequestConsentNonInteractive,
+}));
 
 void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: unknown) => {

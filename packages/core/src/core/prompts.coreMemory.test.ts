@@ -41,16 +41,12 @@ const realLlxprtCodeSettingsModule = {
 const PROJECT_DIR = path.resolve('/my/project');
 
 const actual = { ...(await import('node:fs/promises')) };
-void vi.mock('node:fs/promises', () => {
-  return {
-    ...actual,
-    readFile: vi
-      .fn()
-      .mockRejectedValue(
-        Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
-      ),
-  };
-});
+void vi.mock('node:fs/promises', () => ({
+  ...actual,
+  readFile: vi
+    .fn()
+    .mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })),
+}));
 
 const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),

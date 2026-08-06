@@ -23,22 +23,20 @@ import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
 
 const actual = { ...(await import('./config/settings.js')) };
-void vi.mock('./config/settings.js', () => {
-  return {
-    ...actual,
-    loadSettings: vi.fn(() => ({
-      merged: {
-        advanced: {},
-        security: { auth: {} },
-        ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
-      },
-      errors: [],
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-    })),
-    migrateDeprecatedSettings: vi.fn(),
-  };
-});
+void vi.mock('./config/settings.js', () => ({
+  ...actual,
+  loadSettings: vi.fn(() => ({
+    merged: {
+      advanced: {},
+      security: { auth: {} },
+      ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
+    },
+    errors: [],
+    setValue: vi.fn(),
+    forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+  })),
+  migrateDeprecatedSettings: vi.fn(),
+}));
 
 void vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn(),
@@ -51,24 +49,22 @@ void vi.mock('./config/cliArgParser.js', () => ({
 const actualActual = {
   ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
 };
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  return {
-    ...actualActual,
-    setCliRuntimeContext: vi.fn(),
-    switchActiveProvider: vi.fn(async () => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: 'gemini',
-      infoMessages: [],
-    })),
-    setActiveModel: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    getActiveModelParams: vi.fn(() => ({})),
-    loadProfileByName: vi.fn(),
-    applyCliArgumentOverrides: vi.fn(async () => {}),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+  ...actualActual,
+  setCliRuntimeContext: vi.fn(),
+  switchActiveProvider: vi.fn(async () => ({
+    changed: true,
+    previousProvider: null,
+    nextProvider: 'gemini',
+    infoMessages: [],
+  })),
+  setActiveModel: vi.fn(),
+  setActiveModelParam: vi.fn(),
+  clearActiveModelParam: vi.fn(),
+  getActiveModelParams: vi.fn(() => ({})),
+  loadProfileByName: vi.fn(),
+  applyCliArgumentOverrides: vi.fn(async () => {}),
+}));
 
 void vi.mock('./config/extension.js', () => ({
   ExtensionStorage: {
@@ -97,15 +93,13 @@ void vi.mock('./cliAgentBootstrap.js', () => ({
 }));
 
 const actualActual2 = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  return {
-    ...actualActual2,
-    resumeSession: vi.fn(),
-    writeToStdout: vi.fn().mockReturnValue(true),
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual2,
+  resumeSession: vi.fn(),
+  writeToStdout: vi.fn().mockReturnValue(true),
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
+}));
 
 void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
@@ -158,12 +152,10 @@ const preflightAgentActivationMock = vi.fn(async () => ({
 }));
 
 const actualActual3 = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => {
-  return {
-    ...actualActual3,
-    preflightAgentActivation: preflightAgentActivationMock,
-  };
-});
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actualActual3,
+  preflightAgentActivation: preflightAgentActivationMock,
+}));
 
 function makeResumeResult(historyText = 'resumed'): ResumeResult {
   return {

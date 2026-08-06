@@ -13,12 +13,10 @@ void vi.mock('../../utils/skillUtils.js', () => ({
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  return {
-    ...(actual as object),
-    debugLogger: { log: vi.fn(), error: vi.fn() },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...(actual as object),
+  debugLogger: { log: vi.fn(), error: vi.fn() },
+}));
 
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { handleInstall, installCommand } from './install.js';

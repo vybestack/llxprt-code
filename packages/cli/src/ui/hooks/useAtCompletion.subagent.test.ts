@@ -7,6 +7,8 @@
 import {
   advanceTimersByTimeAsync,
   runOnlyPendingTimersAsync,
+  createTmpDir,
+  cleanupTmpDir,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act } from 'react';
@@ -19,7 +21,6 @@ import {
   DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
 } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
-import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import { useTestHarnessForAtCompletion } from './useAtCompletion-test-helpers.js';
 import { CommandKind } from '../commands/types.js';
 

@@ -26,12 +26,10 @@ import { EventEmitter } from 'node:events';
 
 // Mock the 'ink' module to control stdin
 const original = { ...(await import('ink')) };
-void vi.mock('ink', () => {
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 // readline will not emit most incomplete kitty sequences but it will give
 // up on sequences like this where the modifier (135) has more than two digits.

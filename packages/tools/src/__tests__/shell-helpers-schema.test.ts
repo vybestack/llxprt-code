@@ -20,13 +20,11 @@ const { mockPlatform } = {
 };
 
 const actual = { ...(await import('node:os')) };
-void vi.mock('node:os', () => {
-  return {
-    default: { platform: mockPlatform, EOL: actual.EOL },
-    platform: mockPlatform,
-    EOL: actual.EOL,
-  };
-});
+void vi.mock('node:os', () => ({
+  default: { platform: mockPlatform, EOL: actual.EOL },
+  platform: mockPlatform,
+  EOL: actual.EOL,
+}));
 
 function createFakeShellService(): IShellExecutionService {
   return {

@@ -27,20 +27,18 @@ void vi.mock('open', () => ({
 }));
 
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-void vi.mock('@vybestack/llxprt-code-mcp', () => {
-  return {
-    ...actual,
-    getMCPServerStatus: vi.fn(),
-    mcpServerRequiresOAuth: new Map<string, boolean>(),
-    MCPOAuthProvider: {
-      authenticate: vi.fn(),
-    },
-    MCPOAuthTokenStorage: {
-      getToken: vi.fn(),
-      isTokenExpired: vi.fn(),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  ...actual,
+  getMCPServerStatus: vi.fn(),
+  mcpServerRequiresOAuth: new Map<string, boolean>(),
+  MCPOAuthProvider: {
+    authenticate: vi.fn(),
+  },
+  MCPOAuthTokenStorage: {
+    getToken: vi.fn(),
+    isTokenExpired: vi.fn(),
+  },
+}));
 
 function assertMessageAction(
   result: unknown,

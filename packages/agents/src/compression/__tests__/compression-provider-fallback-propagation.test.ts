@@ -65,15 +65,13 @@ function makeLogger(): DebugLogger {
 }
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
-void vi.mock('@vybestack/llxprt-code-settings', () => {
-  return {
-    ...original,
-    Storage: {
-      ...original.Storage,
-      getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
-    },
-  };
-});
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...original,
+  Storage: {
+    ...original.Storage,
+    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Finding 1: Provider fallback failure propagation through real wiring
