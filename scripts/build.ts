@@ -69,9 +69,18 @@ function readWorkspacePackageNames(): string[] {
     throw new Error('Root package.json must declare a non-empty `workspaces`.');
   }
   return workspaces.map((relativeDir) => {
-    const pkg = JSON.parse(
-      readFileSync(join(root, relativeDir, 'package.json'), 'utf-8'),
-    ) as { name?: string };
+    let pkg: { name?: string };
+    try {
+      pkg = JSON.parse(
+        readFileSync(join(root, relativeDir, 'package.json'), 'utf-8'),
+      ) as { name?: string };
+    } catch (error) {
+      // Name the workspace: a bare SyntaxError from JSON.parse leaves the
+      // reader to guess which of sixteen manifests is malformed.
+      throw new Error(
+        `Could not read ${relativeDir}/package.json: ${messageOf(error)}`,
+      );
+    }
     if (!pkg.name || !PACKAGE_NAME_PATTERN.test(pkg.name)) {
       throw new Error(
         `Workspace ${relativeDir} has no usable package name: ${String(pkg.name)}`,

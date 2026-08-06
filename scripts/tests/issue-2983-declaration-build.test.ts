@@ -427,6 +427,10 @@ describe('issue #2983 — CI keeps the build off the test path', () => {
     const buildSteps = jobSteps(ciJobs()['test_shard']).filter((step) =>
       String(step.run ?? '').includes('npm run build'),
     );
+    expect(
+      buildSteps,
+      'expected exactly one build step in test_shard',
+    ).toHaveLength(1);
     const condition = String(buildSteps[0].if ?? '');
     for (const shard of GUARD_SHARDS) {
       expect(condition).toContain(`matrix.shard == '${shard}'`);
@@ -473,10 +477,20 @@ describe('issue #2983 — CI keeps the build off the test path', () => {
 
   it('names the real declaration dependents in the lint build comment', () => {
     const ci = readRepoFile('.github/workflows/ci.yml');
-    const comment = ci.slice(
-      ci.indexOf('# Build must run BEFORE the type-aware lint'),
-      ci.indexOf("- name: 'Build declarations for type-aware lint'"),
+    const startMarker = '# Build must run BEFORE the type-aware lint';
+    const endMarker = "- name: 'Build declarations for type-aware lint'";
+    const startIndex = ci.indexOf(startMarker);
+    const endIndex = ci.indexOf(endMarker);
+    // Without these guards a renamed marker yields indexOf === -1, and the
+    // resulting slice spans most of the file — broad enough to still contain
+    // every expected phrase, so the test would pass on stale content.
+    expect(startIndex, `missing marker: ${startMarker}`).toBeGreaterThanOrEqual(
+      0,
     );
+    expect(endIndex, `missing marker: ${endMarker}`).toBeGreaterThan(
+      startIndex,
+    );
+    const comment = ci.slice(startIndex, endIndex);
     expect(comment).toContain('cli -> tools');
     expect(comment).toContain('core -> mcp');
     expect(comment).toContain('a2a-server -> settings/storage/tools');
