@@ -94,10 +94,10 @@ function automockValue(
       Object.defineProperty(mockedConstructor, 'prototype', {
         value: state.prototype,
       });
-      for (const key of Reflect.ownKeys(value)) {
-        if (!['length', 'name', 'prototype'].includes(String(key))) {
-          defineAutomockedProperty(mockedConstructor, value, key, references);
-        }
+      for (const key of Reflect.ownKeys(value).filter(
+        (k) => !['length', 'name', 'prototype'].includes(String(k)),
+      )) {
+        defineAutomockedProperty(mockedConstructor, value, key, references);
       }
       return mockedConstructor;
     }

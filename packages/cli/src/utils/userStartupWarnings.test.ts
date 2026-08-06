@@ -28,16 +28,10 @@ const mockHomedir = vi.fn();
 const actualOs = { ...(await import('node:os')) };
 void vi.mock('node:os', () => ({
   ...actualOs,
-  ...(actualOs.default !== null &&
-  actualOs.default !== undefined &&
-  typeof actualOs.default === 'object'
-    ? {
-        default: {
-          ...(actualOs.default as Record<string, unknown>),
-          homedir: mockHomedir,
-        },
-      }
-    : {}),
+  default: {
+    ...(actualOs.default as Record<string, unknown>),
+    homedir: mockHomedir,
+  },
   homedir: mockHomedir,
 }));
 

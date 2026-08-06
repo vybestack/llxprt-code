@@ -28,7 +28,7 @@ const realChildProcessModule = { ...(await import('child_process')) };
 
 void vi.mock('child_process', () => automock(realChildProcessModule));
 
-describe('isGitHubRepository', async () => {
+describe('isGitHubRepository', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -63,7 +63,7 @@ describe('isGitHubRepository', async () => {
   });
 });
 
-describe('getGitHubRepoInfo', async () => {
+describe('getGitHubRepoInfo', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -100,7 +100,7 @@ describe('getGitHubRepoInfo', async () => {
   });
 });
 
-describe('getGitRepoRoot', async () => {
+describe('getGitRepoRoot', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -137,7 +137,7 @@ describe('getGitRepoRoot', async () => {
   });
 });
 
-describe('getLatestRelease', async () => {
+describe('getLatestRelease', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });

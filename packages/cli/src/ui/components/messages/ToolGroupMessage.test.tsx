@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
 import React from 'react';
 import { Text } from 'ink';

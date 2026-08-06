@@ -316,11 +316,10 @@ describe('envelope-codec — decryptEnvelopeString', () => {
         machineSecretLoader: rejectingLoader,
       }),
     ).rejects.toThrow(/keyring unavailable/);
-    await expect(
-      decryptEnvelopeString(envelopeJson, 'svc', {
-        machineSecretLoader: rejectingLoader,
-      }),
-    ).rejects.not.toBeInstanceOf(EnvelopeCodecError);
+    const caught = await decryptEnvelopeString(envelopeJson, 'svc', {
+      machineSecretLoader: rejectingLoader,
+    }).catch((error: unknown) => error);
+    expect(caught).not.toBeInstanceOf(EnvelopeCodecError);
   });
 });
 

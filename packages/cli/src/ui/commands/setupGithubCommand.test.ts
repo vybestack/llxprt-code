@@ -59,7 +59,7 @@ void vi.mock('../utils/commandUtils.js', () => ({
   getUrlOpenCommand: vi.fn(),
 }));
 
-describe('setupGithubCommand', async () => {
+describe('setupGithubCommand', () => {
   let scratchDir = '';
 
   beforeEach(async () => {

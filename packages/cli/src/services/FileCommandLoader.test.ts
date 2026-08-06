@@ -12,6 +12,7 @@ import {
   type FileCommandRuntime,
 } from './FileCommandLoader.js';
 import {
+  afterAll,
   afterEach,
   beforeEach,
   describe,

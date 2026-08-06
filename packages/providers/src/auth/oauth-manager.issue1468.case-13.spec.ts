@@ -81,8 +81,10 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
     await expect(
       tokenStore.getToken('claudecode', 'named-bucket'),
     ).resolves.toBeNull();
-    await expect(
-      tokenStore.getToken('claudecode', 'foreground-bucket'),
-    ).resolves.not.toBeNull();
+    const foregroundToken = await tokenStore.getToken(
+      'claudecode',
+      'foreground-bucket',
+    );
+    expect(foregroundToken).not.toBeNull();
   });
 });

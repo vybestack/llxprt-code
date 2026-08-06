@@ -47,7 +47,7 @@ function toHaveOnlyValidCharacters(this: { isNot: boolean }, buffer: unknown) {
 }
 
 expect.extend({
-  toHaveOnlyValidCharacters: toHaveOnlyValidCharacters,
+  toHaveOnlyValidCharacters,
 });
 
 // Declare the matcher on Bun's expect. Matchers and AsymmetricMatchers are

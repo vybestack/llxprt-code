@@ -573,7 +573,9 @@ describe('Settings Loading and Merging', () => {
         'DEBUG',
         'DEBUG_MODE',
       ]);
-      expect(process.env.GEMINI_API_KEY ?? '').toBe('test-key');
+      expect((process.env.GEMINI_API_KEY as string | undefined) ?? '').toBe(
+        'test-key',
+      );
       expect(process.env.DEBUG).toBeUndefined();
       expect(process.env.DEBUG_MODE).toBeUndefined();
     });

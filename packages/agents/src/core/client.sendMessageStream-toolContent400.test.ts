@@ -320,7 +320,7 @@ describe('Agent Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
 
       const secondCallArgs = mockTurnRunFn.mock.calls[1];
-      const secondRequest = secondCallArgs?.[0];
+      const secondRequest = secondCallArgs[0];
       expect(secondRequest).toStrictEqual([
         {
           speaker: 'human',
