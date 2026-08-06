@@ -369,7 +369,7 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
 
     // --- lifecycle ---
 
-    it('returns a non-negative pid', async () => {
+    it('returns a live pid for the managed PowerShell process', async () => {
       const { logPath, errLogPath } = makeLogPaths();
       const spawned = spawnWindowsBackground(
         getPowerShellExecutable(),

@@ -5,6 +5,7 @@
  */
 
 import { spawn as cpSpawn, type ChildProcess } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { isBunRuntime } from '../utils/runtime.js';
 import type { ProcessExitInfo } from './shellJobTypes.js';
@@ -27,14 +28,16 @@ interface BunSubprocessLike {
 /**
  * Minimal shape of the Bun global needed for spawn.
  */
+interface BunSpawnOptions {
+  cmd: string[];
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  stdio?: Array<'ignore' | 'pipe' | 'inherit' | number>;
+  detached?: boolean;
+}
+
 interface BunSpawnGlobal {
-  spawn: (options: {
-    cmd: string[];
-    cwd?: string;
-    env?: Record<string, string | undefined>;
-    stdio?: Array<'ignore' | 'pipe' | 'inherit' | number>;
-    detached?: boolean;
-  }) => BunSubprocessLike;
+  spawn: (options: BunSpawnOptions) => BunSubprocessLike;
 }
 
 /**
@@ -103,41 +106,32 @@ function spawnWithBun(
   env: Record<string, string | undefined>,
   logFd: number,
 ): SpawnedProcess {
+  return spawnBunProcess(bun, {
+    cmd: [executable, ...args],
+    cwd,
+    env,
+    stdio: ['ignore', logFd, logFd],
+    detached: true,
+  });
+}
+
+function spawnBunProcess(
+  bun: BunSpawnGlobal,
+  options: BunSpawnOptions,
+): SpawnedProcess {
   let subprocess: BunSubprocessLike;
-  let spawnError: Error | null = null;
-
   try {
-    subprocess = bun.spawn({
-      cmd: [executable, ...args],
-      cwd,
-      env,
-      stdio: ['ignore', logFd, logFd],
-      detached: true,
-    });
+    subprocess = bun.spawn(options);
   } catch (err: unknown) {
-    // Bun.spawn throws synchronously on failures such as a nonexistent cwd
-    // or executable. node:child_process.spawn emits these as async 'error'
-    // events. We normalize by capturing the error and synthesizing a process
-    // that fails immediately.
-    spawnError = err instanceof Error ? err : new Error(String(err));
-    subprocess = null as unknown as BunSubprocessLike;
+    return makeErrorSpawn(err instanceof Error ? err : new Error(String(err)));
   }
 
-  if (spawnError !== null) {
-    return makeErrorSpawn(spawnError);
-  }
-
-  // After the `exited` Promise resolves, read exitCode/signalCode from the
-  // subprocess properties (these are set by Bun before the Promise fires).
   const exited = subprocess.exited.then(
     (): ProcessExitInfo => ({
       exitCode: subprocess.exitCode,
       signal: subprocess.signalCode,
     }),
   );
-
-  // Detach the child from the parent's event loop so background jobs do not
-  // keep the process alive. This mirrors node:child_process's child.unref().
   subprocess.unref();
 
   return {
@@ -145,13 +139,8 @@ function spawnWithBun(
     child: subprocess as unknown as ChildProcess,
     exited,
     onError: (handler) => {
-      // Bun.spawn doesn't emit a separate 'error' event for spawn-time
-      // failures the way node:child_process does. A rejected `exited`
-      // Promise surfaces spawn errors. We attach a catch handler here.
       void subprocess.exited.catch((err: unknown) => {
-        if (err instanceof Error) {
-          handler(err);
-        }
+        if (err instanceof Error) handler(err);
       });
     },
   };
@@ -276,17 +265,47 @@ export function buildWindowsBackgroundBootstrap(
   );
 }
 
+function spawnWindowsCommand(
+  executable: string,
+  args: readonly string[],
+  cwd: string,
+  env: Record<string, string | undefined>,
+  logFd: number,
+  errLogFd: number,
+): SpawnedProcess {
+  const bunSpawn = getBunSpawn();
+  if (bunSpawn !== null) {
+    return spawnBunProcess(bunSpawn, {
+      cmd: [executable, ...args],
+      cwd,
+      env,
+      stdio: ['ignore', logFd, errLogFd],
+    });
+  }
+
+  const child = cpSpawn(executable, args, {
+    cwd,
+    env,
+    shell: false,
+    stdio: ['ignore', logFd, errLogFd],
+  });
+  child.unref();
+  const exited = new Promise<ProcessExitInfo>((resolve) => {
+    child.on('exit', (code, signal) => resolve({ exitCode: code, signal }));
+  });
+  return {
+    pid: child.pid ?? -1,
+    child,
+    exited,
+    onError: (handler) => child.on('error', handler),
+  };
+}
+
 /**
- * Spawn a Windows background job using Start-Process semantics.
+ * Spawns the managed PowerShell process directly with separate output logs.
  *
- * The outer PowerShell process is spawned WITHOUT `detached: true` (which is
- * broken on Windows — see file header) with all stdio ignored. Its exit listener
- * remains referenced until completion, then releases the child handle. The inner
- * command runs via Start-Process with -EncodedCommand, writing stdout and stderr
- * to separate log files.
- *
- * The returned `pid` is the outer PowerShell PID; `taskkill /T /F /PID <pid>`
- * reliably reaps the entire process tree.
+ * Avoiding a Start-Process wrapper makes the returned PID the process that owns
+ * the log handles, so taskkill and exit observation refer to the same process.
  */
 export function spawnWindowsBackground(
   executable: string,
@@ -297,45 +316,19 @@ export function spawnWindowsBackground(
   errLogPath: string,
 ): SpawnedProcess {
   const encodedCommand = encodePowerShellCommand(command);
-  const bootstrap = buildWindowsBackgroundBootstrap({
-    executable,
+  const args = [
+    '-NoProfile',
+    '-NonInteractive',
+    '-EncodedCommand',
     encodedCommand,
-    logPath,
-    errLogPath,
-    cwd,
-  });
-
-  const child = cpSpawn(
-    executable,
-    ['-NoProfile', '-NonInteractive', '-Command', bootstrap],
-    {
-      cwd,
-      env,
-      shell: false,
-      stdio: ['ignore', 'ignore', 'ignore'],
-    },
-  );
-
-  // The exit listener must stay referenced while the job is running so Bun's
-  // node:child_process compatibility layer observes process completion. Once
-  // the exit promise settles, release the handle so completed jobs never keep
-  // the parent alive.
-
-  const exited = new Promise<ProcessExitInfo>((resolve) => {
-    child.on('exit', (code, signal) => {
-      resolve({ exitCode: code, signal });
-    });
-  });
-  void exited.then(() => {
-    child.unref();
-  });
-
-  return {
-    pid: child.pid ?? -1,
-    child,
-    exited,
-    onError: (handler) => {
-      child.on('error', handler);
-    },
-  };
+  ];
+  const logFd = openSync(logPath, 'a');
+  let errLogFd: number | undefined;
+  try {
+    errLogFd = openSync(errLogPath, 'a');
+    return spawnWindowsCommand(executable, args, cwd, env, logFd, errLogFd);
+  } finally {
+    closeSync(logFd);
+    if (errLogFd !== undefined) closeSync(errLogFd);
+  }
 }
