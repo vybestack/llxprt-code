@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '../../packages/test-utils/src/async-timers.js';
 import { afterEach, expect, it, vi } from 'bun:test';
 
 afterEach(() => {
@@ -20,7 +21,7 @@ it('advances natively when a callback clears timers and schedules after await', 
     setTimeout(() => order.push(`nested@${Date.now()}`), 5);
   }, 10);
 
-  await vi.advanceTimersByTimeAsync(20);
+  await advanceTimersByTimeAsync(20);
 
   // The behavioral contract under test: advanceTimersByTimeAsync fires BOTH
   // the original timer and the nested timer scheduled mid-callback (after a

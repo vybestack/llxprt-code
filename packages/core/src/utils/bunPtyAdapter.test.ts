@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { createBunPty } from './bunPtyAdapter.js';
@@ -468,7 +469,7 @@ describe('Bun PTY adapter spawn options', () => {
 
     try {
       pty.kill('SIGTERM');
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(200);
 
       await expect(exit).resolves.toStrictEqual({ exitCode: 143, signal: 15 });
       expect(subprocess.kill).toHaveBeenCalledWith('SIGTERM');
@@ -498,7 +499,7 @@ describe('Bun PTY adapter spawn options', () => {
       pty.kill();
       expect(() => pty.write('ignored')).not.toThrow();
       expect(() => pty.resize(90, 25)).not.toThrow();
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(200);
 
       expect(subprocess.kill).toHaveBeenCalledWith('SIGTERM');
       await expect(exit).resolves.toStrictEqual({ exitCode: 143, signal: 15 });
@@ -521,7 +522,7 @@ describe('Bun PTY adapter spawn options', () => {
     try {
       pty.kill('SIGTERM');
       pty.destroy();
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(200);
 
       expect(subprocess.kill).toHaveBeenCalledWith('SIGTERM');
       expect(subprocess.kill).toHaveBeenCalledWith('SIGKILL');
@@ -552,7 +553,7 @@ describe('Bun PTY adapter spawn options', () => {
 
     try {
       pty.kill('SIGTERM');
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(200);
 
       await expect(exit).resolves.toStrictEqual({ exitCode: 143, signal: 15 });
       expect(received.join('')).toBe('\ufffd');
@@ -574,7 +575,7 @@ describe('Bun PTY adapter spawn options', () => {
 
     try {
       pty.destroy();
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(200);
 
       expect(subprocess.kill).toHaveBeenCalledWith('SIGKILL');
       expect(subprocess.terminal.close).toHaveBeenCalledTimes(1);

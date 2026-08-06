@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { runAllTimersAsync, waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 interface InstanceMock {
@@ -382,7 +383,7 @@ describe('Config MCP wiring on folder trust change', () => {
         // Advance time past the hook initialization timeout and drain
         // all pending timers/microtasks.
         vi.runAllTimers();
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
 
         const result = await outcome;
         expect(result).toBeInstanceOf(Error);
@@ -408,9 +409,7 @@ describe('Config MCP wiring on folder trust change', () => {
       hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
 
       void config.setTrustedFolderLive(true);
-      await vi.waitFor(() =>
-        expect(hookInitializers[0]).toHaveBeenCalledOnce(),
-      );
+      await waitFor(() => expect(hookInitializers[0]).toHaveBeenCalledOnce());
       const initializationSignal = hookInitializers[0].mock.calls[0][0];
 
       const disposed = config.dispose().then(() => 'disposed');
@@ -439,7 +438,7 @@ describe('Config MCP wiring on folder trust change', () => {
         );
 
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
         const disposePromise = config.dispose();
@@ -466,7 +465,7 @@ describe('Config MCP wiring on folder trust change', () => {
 
         const getHookSystemSpy = vi.spyOn(config, 'getHookSystem');
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
         const disposePromise = config.dispose();
@@ -550,7 +549,7 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].stop.mockRejectedValue(stopError);
 
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
 
@@ -567,7 +566,7 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].stop.mockRejectedValue(stopError);
 
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
 

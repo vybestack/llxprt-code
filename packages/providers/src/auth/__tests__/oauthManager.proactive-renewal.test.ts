@@ -12,6 +12,7 @@
  * were silently skipped instead of being refreshed.
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -114,13 +115,13 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     // With jitter (0-30s), timer should be ~270-300s
 
     // Advance time to 265s (safely before the earliest jitter boundary of 270s)
-    await vi.advanceTimersByTimeAsync(265 * 1000);
+    await advanceTimersByTimeAsync(265 * 1000);
 
     // Provider.refreshToken should not have been called yet
     expect(provider.refreshToken).not.toHaveBeenCalled();
 
     // Advance time to trigger renewal (40s covers the remaining 5s + 30s max jitter)
-    await vi.advanceTimersByTimeAsync(40 * 1000);
+    await advanceTimersByTimeAsync(40 * 1000);
 
     // Now refreshToken should have been called
     expect(provider.refreshToken).toHaveBeenCalled();
@@ -149,7 +150,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await manager.getOAuthToken('test-provider');
 
     // Advance time significantly (e.g., 3 minutes)
-    await vi.advanceTimersByTimeAsync(180 * 1000);
+    await advanceTimersByTimeAsync(180 * 1000);
 
     // refreshToken should not have been called because the token lifetime was too short
     expect(provider.refreshToken).not.toHaveBeenCalled();
@@ -185,7 +186,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     expect(result).not.toBeNull();
 
     // Advance timers well past the 2-min lifetime
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    await advanceTimersByTimeAsync(5 * 60 * 1000);
 
     // No proactive renewal timer should have fired since lifetime < 5min
     // refreshToken should NOT be called by any proactive renewal
@@ -224,7 +225,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await manager.getOAuthToken('test-provider');
 
     // Advance to first renewal time (~300s for 600s token)
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
 
     // First refresh should have been called
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
@@ -234,7 +235,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
 
     // Advance to second renewal time: lead = max(300, 0.1*remaining) = 300s
     // Second renewal fires ~900s from start; we're at ~305s, advance ~800s
-    await vi.advanceTimersByTimeAsync(800 * 1000);
+    await advanceTimersByTimeAsync(800 * 1000);
 
     // Second refresh should have been called (proving rescheduling works)
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
@@ -266,22 +267,22 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await manager.getOAuthToken('test-provider');
 
     // Trigger first failure
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
     // Trigger second failure (backoff: 30s * 2^1 = 60s + up to 5s jitter)
-    await vi.advanceTimersByTimeAsync(70 * 1000);
+    await advanceTimersByTimeAsync(70 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(2);
 
     // Trigger third failure (backoff: 30s * 2^2 = 120s + up to 5s jitter)
-    await vi.advanceTimersByTimeAsync(130 * 1000);
+    await advanceTimersByTimeAsync(130 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(3);
 
     // Clear the mock to verify no more retries
     (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
     // Advance time significantly
-    await vi.advanceTimersByTimeAsync(600 * 1000);
+    await advanceTimersByTimeAsync(600 * 1000);
 
     // No more retries should have happened after 3 failures
     expect(provider.refreshToken).not.toHaveBeenCalled();
@@ -309,7 +310,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await manager.getOAuthToken('test-provider');
 
     // Verify timer is scheduled by advancing time
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
     // Clear the mock
@@ -322,7 +323,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     });
 
     // Advance time again - should NOT trigger renewal because timer was cancelled
-    await vi.advanceTimersByTimeAsync(300 * 1000);
+    await advanceTimersByTimeAsync(300 * 1000);
     expect(provider.refreshToken).not.toHaveBeenCalled();
   });
 
@@ -360,7 +361,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     });
 
     // Advance time to trigger renewals
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
 
     // Both buckets should have triggered refresh
     expect(provider.refreshToken).toHaveBeenCalledTimes(2);
@@ -403,7 +404,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     // The refresh should happen through normal getOAuthToken flow, not proactive renewal
 
     // Advance minimal time
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
 
     // Should NOT have triggered refresh through proactive renewal
     // (expired tokens are handled by getOAuthToken, not scheduleProactiveRenewal)
@@ -449,7 +450,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     });
 
     // Advance time to when provider1's timer would have fired
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
 
     // Only provider2's refresh should have been called
     expect(provider1.refreshToken).not.toHaveBeenCalled();
@@ -485,11 +486,11 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await manager.getOAuthToken('test-provider');
 
     // Trigger first failure
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
     // Trigger successful retry (backoff: 30s * 2^1 = 60s + up to 5s jitter)
-    await vi.advanceTimersByTimeAsync(70 * 1000);
+    await advanceTimersByTimeAsync(70 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(2);
 
     // Clear mock to track next renewal
@@ -497,7 +498,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
 
     // If failure counter was properly reset, next renewal should happen at normal interval
     // not exponential backoff
-    await vi.advanceTimersByTimeAsync(1100 * 1000);
+    await advanceTimersByTimeAsync(1100 * 1000);
 
     // Should have triggered renewal again (proving counter was reset)
     expect(provider.refreshToken).toHaveBeenCalled();
@@ -524,7 +525,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await manager.getOAuthToken('test-provider');
 
     // Advance time
-    await vi.advanceTimersByTimeAsync(305 * 1000);
+    await advanceTimersByTimeAsync(305 * 1000);
 
     // Should not attempt refresh because token has no refresh_token
     expect(provider.refreshToken).not.toHaveBeenCalled();

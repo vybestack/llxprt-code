@@ -9,6 +9,7 @@
  * @requirement R2 R4
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { HookSystem } from '../hookSystem.js';
 import type { Config } from '../../config/config.js';
@@ -193,7 +194,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     });
 
     const initialization = hookSystem.initialize();
-    await vi.waitFor(() => expect(registry.initialize).toHaveBeenCalledOnce());
+    await waitFor(() => expect(registry.initialize).toHaveBeenCalledOnce());
     hookSystem.dispose();
     release?.();
 
@@ -284,7 +285,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     });
 
     const initialization = hookSystem.initialize();
-    await vi.waitFor(() => expect(observedSignal).toBeDefined());
+    await waitFor(() => expect(observedSignal).toBeDefined());
     hookSystem.dispose();
 
     expect(observedSignal?.aborted).toBe(true);

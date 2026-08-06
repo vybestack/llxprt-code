@@ -12,6 +12,7 @@
  * These tests document EXISTING behavior prior to ToolExecutor extraction.
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, type Mock } from '../testApi.js';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
@@ -103,7 +104,7 @@ async function _waitForStatus(
   status: ToolCall['status'],
 ): Promise<ToolCall | undefined> {
   let matchingCall: ToolCall | undefined;
-  await vi.waitFor(() => {
+  await waitFor(() => {
     const latestCalls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as
       | ToolCall[]
       | undefined;

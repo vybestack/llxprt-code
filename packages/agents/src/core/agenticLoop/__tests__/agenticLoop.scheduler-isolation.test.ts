@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -105,7 +106,7 @@ describe('AgenticLoop scheduler isolation', () => {
     };
     await mainScheduler.schedule([mainRequest], new AbortController().signal);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(mainCompletions.length).toBeGreaterThan(0);
     });
     expect(mainTool.executeFn).toHaveBeenCalledTimes(1);

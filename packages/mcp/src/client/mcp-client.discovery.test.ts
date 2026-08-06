@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
@@ -165,7 +166,7 @@ describe('mcp-client', () => {
       );
       await client.connect();
       const discovery = client.discover(createTrustedConfig());
-      await vi.waitFor(() => expect(resourceSignal).toBeDefined());
+      await waitFor(() => expect(resourceSignal).toBeDefined());
       await client.disconnect();
 
       expect(resourceSignal?.aborted).toBe(true);

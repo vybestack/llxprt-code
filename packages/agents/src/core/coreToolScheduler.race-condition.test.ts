@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from '../testApi.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -119,7 +120,7 @@ describe('CoreToolScheduler race conditions and recovery', () => {
     );
 
     // Wait for all tools to start executing and set up their resolvers
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(resolvers.size).toBe(5);
       },
@@ -150,7 +151,7 @@ describe('CoreToolScheduler race conditions and recovery', () => {
     resolvers.get(1)?.();
 
     // Wait for all calls to complete
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(completionOrder.length).toBe(5);
         expect(publishOrder.length).toBe(5);
@@ -251,7 +252,7 @@ describe('CoreToolScheduler race conditions and recovery', () => {
     );
 
     // Wait for all calls to complete
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(completionOrder.length).toBe(5);
         expect(publishOrder.length).toBe(5);

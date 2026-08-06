@@ -12,6 +12,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -508,7 +509,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       await schedule(requestWithoutAgent, new AbortController().signal);
     });
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),

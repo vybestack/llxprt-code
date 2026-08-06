@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -240,8 +244,8 @@ describe('checkForUpdates', () => {
       const checkPromise = checkForUpdates(mockSettings);
 
       // Advance timers to trigger the timeout
-      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);
-      await vi.runAllTimersAsync();
+      await advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);
+      await runAllTimersAsync();
 
       const result = await checkPromise;
       expect(result).toBeNull();

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { expect, vi, type Mock } from '../testApi.js';
 import type {
   ToolCall,
@@ -155,7 +156,7 @@ export async function waitForStatus(
   status: ToolCall['status'],
 ): Promise<ToolCall | undefined> {
   let matchingCall: ToolCall | undefined;
-  await vi.waitFor(() => {
+  await waitFor(() => {
     const calls = onToolCallsUpdate.mock.calls;
     const latestCalls = calls[calls.length - 1]?.[0] as ToolCall[] | undefined;
     matchingCall = latestCalls?.find((call) => call.status === status);

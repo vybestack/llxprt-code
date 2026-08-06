@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
@@ -56,7 +57,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('hello');
@@ -76,7 +77,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -98,7 +99,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -106,7 +107,7 @@ describe('useInitialPromptSubmit', () => {
     rerender({ interactiveRuntimeReady: true });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('delegate to a subagent');
@@ -127,7 +128,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('  /help');
@@ -150,7 +151,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -158,7 +159,7 @@ describe('useInitialPromptSubmit', () => {
     rerender({ startupGuardsInitialized: true });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('hello');
@@ -178,7 +179,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith(
@@ -200,7 +201,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('hello');
@@ -224,7 +225,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -246,7 +247,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledTimes(1);
@@ -254,7 +255,7 @@ describe('useInitialPromptSubmit', () => {
     rerender({ startupGuardsInitialized: true });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledTimes(1);
@@ -282,7 +283,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledTimes(1);
@@ -290,13 +291,13 @@ describe('useInitialPromptSubmit', () => {
     rerender({ isFolderTrustDialogOpen: true });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     rerender({ isFolderTrustDialogOpen: false });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledTimes(2);
@@ -324,7 +325,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledTimes(1);
@@ -332,13 +333,13 @@ describe('useInitialPromptSubmit', () => {
     rerender({ interactiveRuntimeReady: false });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     rerender({ interactiveRuntimeReady: true });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledTimes(2);
@@ -359,7 +360,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -378,7 +379,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -401,7 +402,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -438,7 +439,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -449,7 +450,7 @@ describe('useInitialPromptSubmit', () => {
     });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('hello');
@@ -487,7 +488,7 @@ describe('useInitialPromptSubmit', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -498,7 +499,7 @@ describe('useInitialPromptSubmit', () => {
     });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
@@ -509,7 +510,7 @@ describe('useInitialPromptSubmit', () => {
     });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(submitPrompt).toHaveBeenCalledWith('hello');

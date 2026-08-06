@@ -9,6 +9,7 @@
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -565,11 +566,11 @@ describe('TaskTool', () => {
       await invocation.execute(new AbortController().signal);
 
       // Advance past the timeout so the abort fires
-      await vi.advanceTimersByTimeAsync(60);
+      await advanceTimersByTimeAsync(60);
 
       // Now let the scope return normally (simulating scope completing after timeout)
       resolveRun?.();
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
 
       // Wait for the background execution to finish
       await executionPromise;

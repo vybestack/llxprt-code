@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -321,7 +322,7 @@ describe('skillsCommand', () => {
       expect(context.ui.setPendingItem).not.toHaveBeenCalled();
 
       // Fast forward 100ms to trigger the pending item
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -330,11 +331,11 @@ describe('skillsCommand', () => {
       );
 
       // Fast forward another 100ms (reload complete), but pending item should stay
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(context.ui.setPendingItem).not.toHaveBeenCalledWith(null);
 
       // Fast forward to reach 500ms total
-      await vi.advanceTimersByTimeAsync(300);
+      await advanceTimersByTimeAsync(300);
       await actionPromise;
 
       expect(reloadSkillsMock).toHaveBeenCalled();
@@ -452,8 +453,8 @@ describe('skillsCommand', () => {
       getConfig(context).reloadSkills = reloadSkillsMock;
 
       const actionPromise = reloadCmd.action!(context, '');
-      await vi.advanceTimersByTimeAsync(100);
-      await vi.advanceTimersByTimeAsync(400);
+      await advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(400);
       await actionPromise;
 
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);

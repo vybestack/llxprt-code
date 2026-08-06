@@ -10,6 +10,7 @@
  * max-lines disable is needed.
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
@@ -544,7 +545,7 @@ describe('ConfirmationCoordinator', () => {
         | undefined;
       expect(reconfirmDetails).toBeDefined();
       await reconfirmDetails?.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(schedulerAccessor.attemptExecution).toHaveBeenCalledOnce();
       });
 

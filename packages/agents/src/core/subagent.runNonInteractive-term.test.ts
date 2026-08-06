@@ -8,6 +8,7 @@
  * SubAgentScope termination, recovery, runInteractive, scheduling timeout, dispose.
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from '../testApi.js';
 import {
   vi,
@@ -333,7 +334,7 @@ describe('subagent.ts', () => {
       expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
         true,
       );
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+      await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
       await runRejection;
 
@@ -429,7 +430,7 @@ describe('subagent.ts', () => {
       expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
         true,
       );
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       await runRejection;
 
@@ -509,7 +510,7 @@ describe('subagent.ts', () => {
           () => mockSendMessageStream.mock.calls.length > 0,
         ),
       ).toBe(true);
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       await runRejection;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
@@ -727,7 +728,7 @@ describe('subagent.ts', () => {
           () => mockSendMessageStream.mock.calls.length > 0,
         ),
       ).toBe(true);
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       await runRejection;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);

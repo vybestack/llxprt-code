@@ -10,6 +10,7 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -390,7 +391,7 @@ describe('HookRunner', () => {
           // Let the async executeHook start and set up timers.
           // Under fake timers, we need to flush microtasks for the async
           // operation to proceed and register the setTimeout.
-          await vi.advanceTimersByTimeAsync(0);
+          await advanceTimersByTimeAsync(0);
 
           // Advance timers to trigger SIGTERM (timeout=50ms)
           vi.advanceTimersByTime(50);

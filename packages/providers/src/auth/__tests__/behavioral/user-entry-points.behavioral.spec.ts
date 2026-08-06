@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ProactiveRenewalManager } from '../../proactive-renewal-manager.js';
 import {
@@ -62,7 +63,7 @@ describe('User entry point behavioral scenarios', () => {
         auth: { type: 'oauth', buckets: ['bucket-a', 'bucket-b'] },
       });
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       expect(acquireLockSpy).toHaveBeenCalled();
     });
@@ -115,7 +116,7 @@ describe('User entry point behavioral scenarios', () => {
 
       acquireLockSpy.mockClear();
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       expect(acquireLockSpy).not.toHaveBeenCalledWith(
         PROVIDER,
@@ -197,7 +198,7 @@ describe('User entry point behavioral scenarios', () => {
         nearExpiryToken,
       );
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       expect(refreshTokenSpy).toHaveBeenCalledWith(nearExpiryToken);
       expect(saveTokenSpy).toHaveBeenCalledWith(

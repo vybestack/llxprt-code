@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { JsonFormatter } from '@vybestack/llxprt-code-core';
 import type { GenerateChatOptions } from '../IProvider.js';
@@ -418,7 +419,7 @@ describe('request-scoped retry infrastructure', () => {
       };
       const cleanup = closeIteratorBeforeContinuing(iterator, failure, true);
 
-      await vi.advanceTimersByTimeAsync(1_000);
+      await advanceTimersByTimeAsync(1_000);
 
       await expect(cleanup).resolves.toBeUndefined();
     },

@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '../../../test-utils/src/async-timers.js';
 import { vi, describe, it, expect, afterEach, type Mock } from 'bun:test';
 import {
   McpClientManager,
@@ -177,7 +181,7 @@ describe('McpClientManager', () => {
 
       void onToolsUpdated?.();
       await manager.stop();
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       expect(refreshMcpContext).not.toHaveBeenCalled();
 
@@ -250,7 +254,7 @@ describe('McpClientManager', () => {
         .mockResolvedValue(undefined);
 
       const firstRequest = onToolsUpdated?.();
-      await vi.advanceTimersByTimeAsync(300);
+      await advanceTimersByTimeAsync(300);
       const secondRequest = onToolsUpdated?.();
       rejectFirstRefresh(new Error('refresh failed'));
       // Flush the rejection microtask so consumeMcpContextRefreshes catches the
@@ -260,8 +264,8 @@ describe('McpClientManager', () => {
       // beyond the target and never fire. The zero-advance flush lets the
       // microtask run at the current clock position, scheduling the retry at
       // the correct time so the subsequent advance fires it.
-      await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(300);
+      await advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(300);
       await Promise.all([firstRequest, secondRequest]);
 
       expect(refreshMcpContext).toHaveBeenCalledTimes(2);
@@ -845,7 +849,7 @@ describe('McpClientManager', () => {
         // registered. The never-settling connect means discoveryPromise never
         // resolves, so only the timeout can settle the gate.
         const settled = manager.whenDiscoverySettled();
-        await vi.advanceTimersByTimeAsync(
+        await advanceTimersByTimeAsync(
           DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS + 1,
         );
 
@@ -879,7 +883,7 @@ describe('McpClientManager', () => {
 
         await manager.startExtension(makeTestExtension());
         const boundedWait = manager.whenDiscoverySettled();
-        await vi.advanceTimersByTimeAsync(
+        await advanceTimersByTimeAsync(
           DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS + 1,
         );
         await boundedWait;

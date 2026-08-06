@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { useRef, forwardRef, useImperativeHandle, act } from 'react';
 import { render } from 'ink-testing-library';
@@ -257,7 +258,7 @@ describe('ScrollProvider', () => {
 
     expect(scrollBy).not.toHaveBeenCalled();
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(scrollBy).toHaveBeenCalledTimes(1);
     expect(scrollBy).toHaveBeenCalledWith(3);
@@ -311,7 +312,7 @@ describe('ScrollProvider', () => {
 
     expect(scrollBy).not.toHaveBeenCalled();
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(scrollBy).toHaveBeenCalledTimes(1);
     expect(scrollBy).toHaveBeenCalledWith(1);
@@ -363,7 +364,7 @@ describe('ScrollProvider', () => {
       });
     }
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(scrollBy).toHaveBeenCalledTimes(1);
     expect(scrollBy).toHaveBeenCalledWith(1);

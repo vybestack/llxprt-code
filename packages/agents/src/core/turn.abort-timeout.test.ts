@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
@@ -189,7 +190,7 @@ describe('Turn run - abort and idle timeout', () => {
       // for-await body — the for-await loop must make at least one iteration,
       // which requires a macrotask yield, not a microtask drain.
       await flushEventLoop();
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       await runPromise;
 
       expect(returnSpy).toHaveBeenCalled();
@@ -360,7 +361,7 @@ describe('Turn run - abort and idle timeout', () => {
       // here because the provider signal is pushed inside the mock's async
       // generator body, which requires a macrotask yield to enter.
       await flushEventLoop();
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+      await advanceTimersByTimeAsync(testTimeoutMs + 1);
       const events = await eventsPromise;
 
       expect(events).toStrictEqual([

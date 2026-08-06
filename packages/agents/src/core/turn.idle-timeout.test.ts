@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
@@ -146,9 +150,9 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe(AgentEventType.Content);
 
-    await vi.advanceTimersByTimeAsync(2);
+    await advanceTimersByTimeAsync(2);
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(

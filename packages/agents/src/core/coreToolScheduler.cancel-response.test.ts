@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from '../testApi.js';
 import type {
   ToolCall,
@@ -105,7 +106,7 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     scheduler.cancelAll();
 
     // Wait for tool to be cancelled
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -198,7 +199,7 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
 
     // 2. Wait just enough for it to finish and enter checkAndNotifyCompletion
     // (awaiting our slow mock)
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(completionCallCount).toBe(1);
     });
 
@@ -277,7 +278,7 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     );
 
     // 2. Wait for reporting to start
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 

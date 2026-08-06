@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type { ServerAgentStreamEvent, StructuredError } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
@@ -154,7 +158,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     })();
 
     // Before the default timeout: no events, generator still pending.
-    await vi.advanceTimersByTimeAsync(
+    await advanceTimersByTimeAsync(
       DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS - 1,
     );
     // Let the event loop settle so the consumer processes any pending state.
@@ -164,8 +168,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     // Advance past the default first-response timeout (300000ms). Drain all
     // pending timers/microtasks so the rejection deterministically propagates
     // through handleRunError before we await the consumer loop.
-    await vi.advanceTimersByTimeAsync(2);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(2);
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -221,8 +225,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(
@@ -248,8 +252,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(
@@ -293,8 +297,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(events).toContainEqual({
@@ -334,8 +338,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         firstEvents.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await firstRun;
 
     const secondEvents: ServerAgentStreamEvent[] = [];
@@ -347,8 +351,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         secondEvents.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await secondRun;
 
     expect({ firstEvents, secondEvents }).toStrictEqual({
@@ -463,10 +467,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         events.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     await secondTransport;
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(transports).toBe(2);
@@ -515,8 +519,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(events.some((event) => event.type === AgentEventType.Content)).toBe(
@@ -587,8 +591,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     })();
 
     // Let the timeout win the race first.
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     // Release the late first .next() so the losing promise resolves AFTER the
@@ -635,8 +639,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(returnCalls).toBe(1);
@@ -672,8 +676,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         events.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
     releaseAcquisition();
     const guard = failsafe(2000);
@@ -711,8 +715,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         events.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
     const timeoutEvent = events.find(
       (e) => e.type === AgentEventType.StreamIdleTimeout,

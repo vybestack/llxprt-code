@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -120,7 +121,7 @@ describe('mcp-client', () => {
       );
 
       const connectPromise = client.connect();
-      await vi.waitFor(() => expect(sdkClient.connect).toHaveBeenCalledOnce());
+      await waitFor(() => expect(sdkClient.connect).toHaveBeenCalledOnce());
 
       await client.disconnect();
       await connectPromise;
@@ -515,7 +516,7 @@ describe('mcp-client', () => {
       const refreshResources = resourceListHandler?.({
         method: 'notifications/resources/list_changed',
       });
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(mockedClient.listTools).toHaveBeenCalledOnce();
         expect(mockedClient.request).toHaveBeenCalledWith(
           expect.objectContaining({ method: 'resources/list' }),
@@ -801,7 +802,7 @@ describe('mcp-client', () => {
         mockedClient.onerror?.(new Error('connection lost')),
       ).not.toThrow();
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(mockedClient.close).toHaveBeenCalled();
       });
       expect(mockedToolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
@@ -849,7 +850,7 @@ describe('mcp-client', () => {
       );
 
       const connectPromise = client.connect();
-      await vi.waitFor(() => expect(mockedClient.connect).toHaveBeenCalled());
+      await waitFor(() => expect(mockedClient.connect).toHaveBeenCalled());
       await client.disconnect();
       resolveConnect?.();
       await connectPromise;

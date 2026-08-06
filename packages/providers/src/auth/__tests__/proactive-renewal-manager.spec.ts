@@ -9,6 +9,7 @@
  * lifecycle cleanup.
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -106,10 +107,10 @@ describe('ProactiveRenewalManager', () => {
 
       // For 600s remaining: lead = max(300, 60) = 300s
       // Timer should fire ~270-300s from now (300s minus up to 30s jitter)
-      await vi.advanceTimersByTimeAsync(265 * 1000);
+      await advanceTimersByTimeAsync(265 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(40 * 1000);
+      await advanceTimersByTimeAsync(40 * 1000);
       expect(provider.refreshToken).toHaveBeenCalled();
     });
 
@@ -201,7 +202,7 @@ describe('ProactiveRenewalManager', () => {
       // Call again with same expiry — should be a no-op
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       // Should only fire once (not twice)
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
     });
@@ -228,7 +229,7 @@ describe('ProactiveRenewalManager', () => {
       );
 
       // Fire the timer
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       expect(provider.refreshToken).toHaveBeenCalledWith(currentToken);
       expect(tokenStore.saveToken).toHaveBeenCalled();
@@ -248,11 +249,11 @@ describe('ProactiveRenewalManager', () => {
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
 
       // Trigger first failure
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
       // Retry backoff: 30s * 2^1 = 60s + up to 5s jitter
-      await vi.advanceTimersByTimeAsync(70 * 1000);
+      await advanceTimersByTimeAsync(70 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(2);
     });
 
@@ -269,7 +270,7 @@ describe('ProactiveRenewalManager', () => {
 
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith(
         'test-provider',
@@ -349,7 +350,7 @@ describe('ProactiveRenewalManager', () => {
       ).mockResolvedValue(token);
 
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       // Should not call refreshToken since lock was not acquired
       expect(provider.refreshToken).not.toHaveBeenCalled();
@@ -373,22 +374,22 @@ describe('ProactiveRenewalManager', () => {
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
 
       // Trigger first failure
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
       // Trigger second failure (backoff: 30s * 2^1 = 60s + up to 5s jitter)
-      await vi.advanceTimersByTimeAsync(70 * 1000);
+      await advanceTimersByTimeAsync(70 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(2);
 
       // Trigger third failure (backoff: 30s * 2^2 = 120s + up to 5s jitter)
-      await vi.advanceTimersByTimeAsync(130 * 1000);
+      await advanceTimersByTimeAsync(130 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(3);
 
       // Clear the mock to verify no more retries
       (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
       // Advance time significantly
-      await vi.advanceTimersByTimeAsync(600 * 1000);
+      await advanceTimersByTimeAsync(600 * 1000);
 
       // No more retries should have happened after 3 failures
       expect(provider.refreshToken).not.toHaveBeenCalled();
@@ -412,17 +413,17 @@ describe('ProactiveRenewalManager', () => {
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
 
       // Trigger first failure
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
       // Trigger successful retry
-      await vi.advanceTimersByTimeAsync(70 * 1000);
+      await advanceTimersByTimeAsync(70 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(2);
 
       (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
       // If counter was reset, next renewal happens at normal schedule
-      await vi.advanceTimersByTimeAsync(1100 * 1000);
+      await advanceTimersByTimeAsync(1100 * 1000);
       expect(provider.refreshToken).toHaveBeenCalled();
     });
   });
@@ -442,7 +443,7 @@ describe('ProactiveRenewalManager', () => {
 
       manager.clearAllTimers();
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
   });
@@ -469,7 +470,7 @@ describe('ProactiveRenewalManager', () => {
 
       manager.clearRenewalsForProvider('test-provider', 'bucket1');
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       // Only bucket2 should trigger
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
     });
@@ -491,7 +492,7 @@ describe('ProactiveRenewalManager', () => {
 
       manager.clearRenewalsForProvider('test-provider');
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
   });
@@ -508,7 +509,7 @@ describe('ProactiveRenewalManager', () => {
       manager.scheduleProactiveRenewal('test-provider', 'default', token);
       manager.clearProactiveRenewal('test-provider:default');
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
   });
@@ -535,7 +536,7 @@ describe('ProactiveRenewalManager', () => {
         },
       });
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).toHaveBeenCalledTimes(2);
     });
 
@@ -560,7 +561,7 @@ describe('ProactiveRenewalManager', () => {
       // The old-bucket timer should have been cancelled
       manager.clearRenewalsForProvider('test-provider', 'new-bucket');
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
 
@@ -585,7 +586,7 @@ describe('ProactiveRenewalManager', () => {
         },
       });
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
 
@@ -602,7 +603,7 @@ describe('ProactiveRenewalManager', () => {
         },
       });
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
   });

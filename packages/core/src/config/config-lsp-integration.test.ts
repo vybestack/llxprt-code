@@ -10,6 +10,7 @@
  * @pseudocode config-integration.md lines 39-114
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
@@ -457,7 +458,7 @@ describe('Config LSP Integration (P33)', () => {
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBe(true);
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
           const tools = config.getToolRegistry().getAllTools();
           const lspNavTools = tools.filter(
             (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
@@ -483,7 +484,7 @@ describe('Config LSP Integration (P33)', () => {
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBeUndefined();
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
           const tools = config.getToolRegistry().getAllTools();
           const lspNavTools = tools.filter(
             (t: { serverName?: string }) => t.serverName === 'lsp-navigation',

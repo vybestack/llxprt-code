@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -412,7 +413,7 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       act(() => writeSequence(pastedText));
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(keyHandler).toHaveBeenCalledTimes(1);
       });
 

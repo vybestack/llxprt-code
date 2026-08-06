@@ -20,6 +20,7 @@
  * Uses fake timers/signals deterministically — no wall-clock sleeps.
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -247,7 +248,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
 
     // Wait for the first fetch to be called (transient failure), then the
     // retry backoff delay begins.
-    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1), {
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1), {
       interval: 1,
       timeout: 200,
     });

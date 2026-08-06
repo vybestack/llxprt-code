@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -109,7 +110,7 @@ describe('Server Config (config.ts)', () => {
       });
 
       const initialization = initializeTestConfig(config);
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(initializeShellParser).toHaveBeenCalledOnce();
       });
 
@@ -143,7 +144,7 @@ describe('Server Config (config.ts)', () => {
         initializeTestConfig(firstConfig),
         initializeTestConfig(secondConfig),
       ];
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(initializeShellParser).toHaveBeenCalledTimes(2);
       });
 

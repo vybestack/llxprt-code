@@ -8,6 +8,7 @@
  * into scripts/pr-review-llm-helpers.ts.
  */
 
+import { advanceTimersByTimeAsync } from '../../packages/test-utils/src/async-timers.js';
 import { describe, it, expect, vi } from 'bun:test';
 import {
   isParseError,
@@ -174,7 +175,7 @@ describe('runLlxprtPromptWithParse', () => {
         { maxRetries: 1 },
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       expect(vi.getTimerCount()).toBe(0);
       await expect(resultPromise).resolves.toMatchObject({ summary: 'ok' });
     } finally {

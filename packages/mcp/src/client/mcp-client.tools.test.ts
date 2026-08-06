@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -122,7 +123,7 @@ describe('mcp-client', () => {
         mockedClient.setNotificationHandler.mock.calls[0][1];
 
       const refresh = notificationCallback();
-      await vi.waitFor(() => expect(refreshSignal).toBeDefined());
+      await waitFor(() => expect(refreshSignal).toBeDefined());
 
       await client.disconnect();
 
@@ -729,7 +730,7 @@ describe('mcp-client', () => {
       const notificationCallback =
         firstSdkClient.setNotificationHandler.mock.calls[0][1];
       const refresh = notificationCallback();
-      await vi.waitFor(() =>
+      await waitFor(() =>
         expect(toolRegistry.registerTool).toHaveBeenCalledOnce(),
       );
 

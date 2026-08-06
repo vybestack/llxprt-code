@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import {
   CoreToolScheduler,
@@ -222,7 +223,7 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       new AbortController().signal,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -272,7 +273,7 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       new AbortController().signal,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -350,7 +351,7 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       new AbortController().signal,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -415,7 +416,7 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(requests, new AbortController().signal);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -465,7 +466,7 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(requests, new AbortController().signal);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 

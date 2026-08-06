@@ -9,6 +9,10 @@
  */
 
 import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import {
   vi,
   describe,
   it,
@@ -263,7 +267,7 @@ describe('subagent.ts', () => {
                   value: mockChunk({ text: 'Starting...' }),
                 };
                 // Wait past the custom timeout
-                await vi.advanceTimersByTimeAsync(25_000);
+                await advanceTimersByTimeAsync(25_000);
                 yield {
                   type: StreamEventType.CHUNK,
                   value: mockChunk({ text: 'Late response' }),
@@ -295,11 +299,11 @@ describe('subagent.ts', () => {
       const resultPromise = runPromise.catch((e) => e);
 
       // Advance past the custom timeout
-      await vi.advanceTimersByTimeAsync(20_000);
+      await advanceTimersByTimeAsync(20_000);
       await Promise.resolve();
 
       // Run to completion
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       // Scope should have timed out
       const _result = await resultPromise;

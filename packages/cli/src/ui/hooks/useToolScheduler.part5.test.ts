@@ -12,6 +12,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -547,7 +548,7 @@ describe('useReactToolScheduler (split)', () => {
     });
 
     // Wait for the tool to reach awaiting_approval state
-    await vi.waitFor(
+    await waitFor(
       () => {
         const waitingCall = result.current[0].find(
           (c) => c.status === 'awaiting_approval',
@@ -571,7 +572,7 @@ describe('useReactToolScheduler (split)', () => {
     });
 
     // Wait for completion
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),

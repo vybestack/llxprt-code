@@ -7,6 +7,7 @@
  * Covers lock parameters, lock acquisition order, and lock release on exceptions.
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -469,9 +470,7 @@ describe('AuthFlowOrchestrator', () => {
       const orchestrator = createOrchestrator(tokenStore, registry);
 
       const initiator = orchestrator.authenticate('anthropic', 'default');
-      await vi.waitFor(() =>
-        expect(provider.initiateAuth).toHaveBeenCalledOnce(),
-      );
+      await waitFor(() => expect(provider.initiateAuth).toHaveBeenCalledOnce());
       const joiner = orchestrator.authenticate('anthropic', 'default', {
         signalAuthCompletion: true,
       });
@@ -495,9 +494,7 @@ describe('AuthFlowOrchestrator', () => {
       const orchestrator = createOrchestrator(tokenStore, registry);
 
       const initiator = orchestrator.authenticate('anthropic', 'default');
-      await vi.waitFor(() =>
-        expect(provider.initiateAuth).toHaveBeenCalledOnce(),
-      );
+      await waitFor(() => expect(provider.initiateAuth).toHaveBeenCalledOnce());
       const joiner = orchestrator.authenticate('anthropic', 'default', {
         signalAuthCompletion: true,
       });
@@ -535,9 +532,7 @@ describe('AuthFlowOrchestrator', () => {
       const initiator = orchestrator.authenticate('anthropic', 'default', {
         signalAuthCompletion: true,
       });
-      await vi.waitFor(() =>
-        expect(provider.initiateAuth).toHaveBeenCalledOnce(),
-      );
+      await waitFor(() => expect(provider.initiateAuth).toHaveBeenCalledOnce());
       const joiner = orchestrator.authenticate('anthropic', 'default', {
         signalAuthCompletion: true,
       });

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
 const ideClient = {
@@ -76,7 +77,7 @@ describe('Config live IDE trust', () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
 
     const initialization = initializeTestConfig(config);
-    await vi.waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
     await config.setTrustedFolderLive(false);
     resolveIdeClient?.({});
     await initialization;
@@ -112,7 +113,7 @@ describe('Config live IDE trust', () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
 
     const initialization = initializeTestConfig(config);
-    await vi.waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
     ideContext.setIdeContext({ workspaceState: { isTrusted: false } });
     resolveIdeClient?.(ideClient);
     await initialization;

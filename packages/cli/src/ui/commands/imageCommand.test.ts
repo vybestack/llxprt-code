@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import { imageCommand } from './imageCommand.js';
 import { MessageType } from '../types.js';
@@ -222,7 +223,7 @@ describe('imageCommand', () => {
     ) as Promise<void>;
 
     // Wait for the runner to capture the signal.
-    await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+    await waitFor(() => expect(capturedSignal).toBeDefined());
     expect(capturedSignal?.aborted).toBe(false);
     process.emit('SIGINT');
     releaseRunner();

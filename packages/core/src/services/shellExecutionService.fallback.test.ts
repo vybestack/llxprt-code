@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
@@ -376,7 +377,7 @@ describe('ShellExecutionService child_process fallback', () => {
       );
 
       // Now, advance time past the timeout
-      await vi.advanceTimersByTimeAsync(250);
+      await advanceTimersByTimeAsync(250);
 
       // Check the second kill signal
       expect(mockProcessKill).toHaveBeenCalledWith(

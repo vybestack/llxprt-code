@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -418,7 +419,7 @@ describe('Kitty Sequence Parsing', () => {
     }
 
     // Should parse once complete
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'escape',

@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import EventEmitter from 'events';
 import type { ShellOutputEvent } from './shellExecutionService.js';
@@ -196,7 +200,7 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
         true,
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       const handle = await handlePromise;
 
       // Send data
@@ -206,9 +210,9 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
       mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
 
       // Advance time past the finalization timeout
-      await vi.advanceTimersByTimeAsync(1000);
+      await advanceTimersByTimeAsync(1000);
       // Drain any remaining pending microtasks/timers
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       // The result should be available (not hanging)
       const result = await handle.result;

@@ -12,6 +12,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -541,7 +542,7 @@ describe('useReactToolScheduler (split)', () => {
 
     expect(result.current[5]).toBe(false);
 
-    await vi.waitFor(() => expect(result.current[5]).toBe(true), {
+    await waitFor(() => expect(result.current[5]).toBe(true), {
       interval: 10,
       timeout: 5000,
     });
@@ -575,7 +576,7 @@ describe('useReactToolScheduler (split)', () => {
       await schedule(request, new AbortController().signal);
     });
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(mockTool.executeFn).toHaveBeenCalledWith(
           request.args,
@@ -585,7 +586,7 @@ describe('useReactToolScheduler (split)', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),
@@ -637,7 +638,7 @@ describe('useReactToolScheduler (split)', () => {
       await schedule(request, new AbortController().signal);
     });
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),

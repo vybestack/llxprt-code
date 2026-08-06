@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
 import { render } from '../../test-utils/render.js';
 import { useAnimatedScrollbar } from './useAnimatedScrollbar.js';
@@ -66,7 +67,7 @@ describe('useAnimatedScrollbar', () => {
 
     // Advance timers by enough time for animation to complete (200 + 1000 + 300 + buffer)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await advanceTimersByTimeAsync(2000);
     });
 
     expect(debugState.debugNumAnimatedComponents).toBe(0);

@@ -17,6 +17,7 @@
  * shared React state.
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { vi } from '../../../../test-utils/bunTest.js';
@@ -417,18 +418,18 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         rendered.result.current.scheduleNextQueuedSubmission();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(1);
 
       submitQueryRef.current = async () => 'consumed';
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(999);
+        await advanceTimersByTimeAsync(999);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(1);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(0);
     } finally {
@@ -474,18 +475,18 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         rendered.result.current.scheduleNextQueuedSubmission();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       for (let retry = 0; retry < 3; retry += 1) {
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(1000);
+          await advanceTimersByTimeAsync(1000);
         });
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(1);
+          await advanceTimersByTimeAsync(1);
         });
       }
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
 
       expect(queuedSubmissionsRef.current).toStrictEqual([]);

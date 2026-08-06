@@ -22,6 +22,10 @@
  *   literal.
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import { EmojiFilter } from '@vybestack/llxprt-code-core';
@@ -93,14 +97,14 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
     expect(vi.getTimerCount()).toBe(0);
 
     // Let the blocked-path microtask chain settle.
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     const flushCountAfterBlocked = flushBufferSpy.mock.calls.length;
     const textsAfterBlocked = collector.texts();
 
     // Advance well past the batch interval: if the timer had NOT been cleared it
     // would fire here, running an extra flush()+flushBuffer() chain.
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(500);
+    await runAllTimersAsync();
 
     // No additional flushBuffer invocation occurred after the blocked chunk
     // settled — the stale timer was cleared, so nothing fired late.
@@ -126,7 +130,7 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
     const batcher = new StreamBatcher(filter, collector.sendUpdate);
 
     batcher.append('bad \u{1F600}', false);
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(collector.texts()).toContain(STREAM_BLOCKED_MESSAGE);
     // The constant is the exact wire literal (guards accidental drift).
@@ -143,7 +147,7 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
 
     batcher.append('buffered text ', false);
     batcher.append('blocked thought \u{1F600}', true);
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(flushBufferSpy).not.toHaveBeenCalled();
     expect(collector.updates()).toStrictEqual([
@@ -170,8 +174,8 @@ describe('StreamBatcher blocked-path timer handling (issue #1604 E1/E2)', () => 
     // A stray chunk arriving after the owning prompt disposed the batcher must
     // be dropped: no new batch timer, no pending chunk, no late emission.
     batcher.append('late chunk after dispose', false);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(500);
+    await runAllTimersAsync();
     await batcher.flush();
 
     expect(collector.texts()).toStrictEqual(['flushed before dispose']);

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import {
   vi,
   describe,
@@ -536,10 +537,10 @@ describe('McpClientManager trust transitions', () => {
       );
 
       void manager.startConfiguredMcpServers();
-      await vi.waitFor(() => expect(client.connect).toHaveBeenCalledOnce());
+      await waitFor(() => expect(client.connect).toHaveBeenCalledOnce());
 
       const stop = manager.stop();
-      await vi.waitFor(() => expect(client.disconnect).toHaveBeenCalledOnce());
+      await waitFor(() => expect(client.disconnect).toHaveBeenCalledOnce());
       connectReleased.resolve(undefined);
       await stop;
 
@@ -588,7 +589,7 @@ describe('McpClientManager trust transitions', () => {
       );
 
       void manager.startConfiguredMcpServers();
-      await vi.waitFor(() => expect(clientA.discover).toHaveBeenCalledOnce());
+      await waitFor(() => expect(clientA.discover).toHaveBeenCalledOnce());
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
         (name) => {
           events.push(`artifacts-${name}`);
@@ -599,7 +600,7 @@ describe('McpClientManager trust transitions', () => {
       );
 
       const stop = manager.stop();
-      await vi.waitFor(() => expect(clientB.disconnect).toHaveBeenCalledOnce());
+      await waitFor(() => expect(clientB.disconnect).toHaveBeenCalledOnce());
       discoveryReleased.resolve(undefined);
 
       await expect(stop).rejects.toMatchObject({
@@ -699,7 +700,7 @@ describe('McpClientManager trust transitions', () => {
       // Start discovery (in-flight, stuck at connect)
       void manager.startConfiguredMcpServers();
 
-      await vi.waitFor(() => expect(client.connect).toHaveBeenCalled());
+      await waitFor(() => expect(client.connect).toHaveBeenCalled());
 
       const revokePromise = manager.onFolderTrustRevoked();
       expect(manager.getMcpServerCount()).toBe(0);
@@ -742,7 +743,7 @@ describe('McpClientManager trust transitions', () => {
 
       // Start discovery (in-flight, stuck at connect)
       void manager.startConfiguredMcpServers();
-      await vi.waitFor(() => expect(client.connect).toHaveBeenCalled());
+      await waitFor(() => expect(client.connect).toHaveBeenCalled());
 
       // Flip trust to false while connect is pending
       trusted = false;
@@ -795,7 +796,7 @@ describe('McpClientManager trust transitions', () => {
       expect(manager.getMcpServerCount()).toBe(1);
 
       const restart = manager.restartServer('server-a');
-      await vi.waitFor(() => expect(client.connect).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(client.connect).toHaveBeenCalledTimes(2));
       trusted = false;
       resolveReconnect?.();
       await restart;
@@ -880,11 +881,11 @@ describe('McpClientManager trust transitions', () => {
 
       // Start discovery — stuck at connect
       void manager.startConfiguredMcpServers();
-      await vi.waitFor(() => expect(client.connect).toHaveBeenCalled());
+      await waitFor(() => expect(client.connect).toHaveBeenCalled());
 
       // Resolve connect — client gets registered
       resolveConnect();
-      await vi.waitFor(() => expect(manager.getMcpServerCount()).toBe(1));
+      await waitFor(() => expect(manager.getMcpServerCount()).toBe(1));
 
       // Revoke trust while discover is still pending
       await manager.onFolderTrustRevoked();
@@ -933,7 +934,7 @@ describe('McpClientManager trust transitions', () => {
       );
 
       void manager.startConfiguredMcpServers();
-      await vi.waitFor(() => expect(client.discover).toHaveBeenCalledOnce());
+      await waitFor(() => expect(client.discover).toHaveBeenCalledOnce());
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementationOnce(
         () => {
           throw new Error('registry cleanup failed');

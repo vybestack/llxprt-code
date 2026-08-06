@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -118,7 +119,7 @@ describe('AgentExecutor run (Termination Conditions)', () => {
     ]);
 
     mockExecuteToolCall.mockImplementationOnce(async () => {
-      await vi.advanceTimersByTimeAsync(61 * 1000);
+      await advanceTimersByTimeAsync(61 * 1000);
       return createCompletedToolCallResponse({
         callId: 't1',
         name: LSTool.Name,
@@ -199,7 +200,7 @@ describe('AgentExecutor run (Termination Conditions)', () => {
     expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
       true,
     );
-    await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+    await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
     await runRejection;
     expect(capturedSignal?.aborted).toBe(true);

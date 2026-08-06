@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import {
@@ -332,7 +333,7 @@ describe('useShellCommandProcessor', () => {
 
       // Simulate first output with time advancement
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       act(() => {
         mockShellOutputCallback({
@@ -351,7 +352,7 @@ describe('useShellCommandProcessor', () => {
 
       // Advance time past throttle window and send second output
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
+        await advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
       });
       act(() => {
         mockShellOutputCallback({
@@ -381,7 +382,7 @@ describe('useShellCommandProcessor', () => {
 
       // Binary detection should show immediately (lastUpdateTime is -Infinity)
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       act(() => {
         mockShellOutputCallback({ type: 'binary_detected' });
@@ -400,7 +401,7 @@ describe('useShellCommandProcessor', () => {
 
       // Now test progress updates
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
+        await advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
       });
       act(() => {
         mockShellOutputCallback({
@@ -451,7 +452,7 @@ describe('useShellCommandProcessor', () => {
       expect(pendingHistoryItemState?.type).toBe('tool_group');
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
 
       act(() => {

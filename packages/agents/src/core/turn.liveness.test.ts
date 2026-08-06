@@ -16,6 +16,10 @@
  * patterns). No mock theater: real Turn + real timers where feasible.
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import type {
   ServerAgentStreamEvent,
@@ -206,8 +210,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(
@@ -619,8 +623,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -656,8 +660,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(

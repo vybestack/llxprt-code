@@ -19,6 +19,7 @@
  * bodies byte-identical.
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -334,7 +335,7 @@ describe('session-dispatch characterization', () => {
 
       listeners.invokeLast('SIGINT');
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(exitProcess).toHaveBeenCalledWith(130);
       });
       expect(stdio.stderrContent).toContain('Cancelled');
@@ -358,7 +359,7 @@ describe('session-dispatch characterization', () => {
       installNonInteractiveSigintHandler(exitProcess);
 
       listeners.invokeLast('SIGINT');
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(exitProcess).toHaveBeenCalledWith(130);
       });
 

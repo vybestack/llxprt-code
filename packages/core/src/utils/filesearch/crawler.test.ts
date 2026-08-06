@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, afterEach, vi, beforeEach } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -443,7 +444,7 @@ describe('crawler', () => {
       expect(writeSpy).toHaveBeenCalledTimes(1);
 
       // Advance time past the TTL
-      await vi.advanceTimersByTimeAsync(11000);
+      await advanceTimersByTimeAsync(11000);
 
       await crawl(options);
       expect(readSpy).toHaveBeenCalledTimes(2);

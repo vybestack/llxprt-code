@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -142,7 +143,7 @@ describe('connectToMcpServer with OAuth', () => {
       () => 'resolved',
       (error: unknown) => error,
     );
-    await vi.waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
 
     await expectPending(outcome);
     releaseClientClose?.();
@@ -219,7 +220,7 @@ describe('connectToMcpServer with OAuth', () => {
     await connectStarted;
     controller.abort();
     rejectConnect?.(new Error('connect failed'));
-    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+    await waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
 
     await expectPending(outcome);
     releaseTransportClose?.();
@@ -276,7 +277,7 @@ describe('connectToMcpServer with OAuth', () => {
     await connectStarted;
     controller.abort();
     resolveConnect?.();
-    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+    await waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
 
     await expectPending(outcome);
     releaseTransportClose?.();

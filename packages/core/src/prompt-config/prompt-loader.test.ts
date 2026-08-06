@@ -3,6 +3,7 @@
  * These tests verify actual file I/O, compression, and environment detection behavior
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -501,7 +502,7 @@ describe('PromptLoader', () => {
       );
 
       // Poll for up to 2s to avoid CI/macOS filesystem watcher flakiness.
-      await vi.waitFor(
+      await waitFor(
         () => {
           expect(events.length).toBeGreaterThan(0);
           expect(events.some((e) => e.path === testFile)).toBe(true);
@@ -574,7 +575,7 @@ describe('PromptLoader', () => {
       expect(watcher).not.toBeNull();
       watchers.push(requireWatcher(watcher));
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(events.some((event) => event.path === 'initial.md')).toBe(true);
       });
 
@@ -587,7 +588,7 @@ describe('PromptLoader', () => {
         'utf8',
       );
 
-      await vi.waitFor(
+      await waitFor(
         () => {
           expect(events.some((event) => event.path === 'recovered.md')).toBe(
             true,

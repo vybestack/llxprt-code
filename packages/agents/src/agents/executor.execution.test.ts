@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -421,7 +422,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     mockExecuteToolCall.mockImplementation(async (_ctx, reqInfo) => {
       callsStarted++;
       const shouldSignal = callsStarted === 2;
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       // Signal after the await to avoid re-entrancy issues.
       void (shouldSignal && resolverHolder.resolve?.());
       return createCompletedToolCallResponse({
@@ -449,10 +450,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     const runPromise = executor.run({ goal: 'Parallel' }, fixture.signal);
 
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     await bothStarted;
-    await vi.advanceTimersByTimeAsync(150);
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(150);
+    await advanceTimersByTimeAsync(1);
 
     const output = await runPromise;
 

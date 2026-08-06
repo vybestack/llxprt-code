@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { vi, describe, it, expect, afterEach, type Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
@@ -508,7 +509,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     );
 
     void manager.startConfiguredMcpServers();
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(manager.getClient('fast')).toBeDefined();
     });
 

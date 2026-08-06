@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, afterEach } from '../testApi.js';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
@@ -161,7 +162,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     );
 
     // Wait for all tools to start executing
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.filter((c) => c.status === 'executing').length === 3;
     });
@@ -180,7 +181,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     tool0Resolve!();
 
     // The scheduler should complete without hanging
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       },
@@ -261,7 +262,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     );
 
     // Wait for tool to start executing
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.some((c) => c.status === 'executing');
     });
@@ -274,7 +275,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     await schedulePromise;
 
     // Wait for completion
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       },
@@ -364,7 +365,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     );
 
     // Wait for all tools to start
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.filter((c) => c.status === 'executing').length === 3;
     });
@@ -380,7 +381,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     slowToolResolve!();
 
     // Should complete without hanging
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       },

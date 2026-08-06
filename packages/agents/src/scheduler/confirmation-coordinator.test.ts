@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
@@ -258,7 +259,7 @@ describe('ConfirmationCoordinator', () => {
         confirmed: true,
       } satisfies ToolConfirmationResponse);
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       // ProceedOnce path → setScheduled
       expect(statusMutator.setScheduled).toHaveBeenCalledWith('call-1');
     });

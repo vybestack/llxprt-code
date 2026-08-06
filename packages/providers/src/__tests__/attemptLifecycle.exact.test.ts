@@ -20,6 +20,7 @@
  * 10. Exact counts for all scenarios
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type {
@@ -463,7 +464,7 @@ describe('Focused lifecycle review findings', () => {
       const result = await stream.next();
       expect(result.done).toBe(false);
       await stream.return?.(undefined);
-      await vi.waitFor(() => {
+      await waitFor(() => {
         const snap = uiTelemetryService.getSessionSnapshot();
         // 1 request. The abort emits an ApiErrorEvent with error_type='consumer_abort',
         // so totalApiErrors is 1 (abort counts as a terminal error event).

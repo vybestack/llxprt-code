@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '../../../test-utils/src/async-timers.js';
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -218,7 +220,7 @@ describe('McpClient disconnect cleanup', () => {
         () => undefined,
         (error: unknown) => error,
       );
-      await vi.advanceTimersByTimeAsync(10_000);
+      await advanceTimersByTimeAsync(10_000);
 
       await expect(disconnect).resolves.toMatchObject({
         message: "Timed out closing MCP client 'test-server' after 10000ms",
@@ -426,7 +428,7 @@ describe('McpClient disconnect cleanup', () => {
       removeMCPStatusChangeListener(throwingStatusListener);
     }
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(sdkClient.close).toHaveBeenCalled();
     });
 

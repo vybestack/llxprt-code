@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
@@ -40,7 +41,7 @@ describe('useLoadingIndicator', () => {
     expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(PHRASE_CHANGE_INTERVAL_MS + 1);
+      await advanceTimersByTimeAsync(PHRASE_CHANGE_INTERVAL_MS + 1);
     });
 
     // Phrase should cycle if PHRASE_CHANGE_INTERVAL_MS has passed
@@ -54,7 +55,7 @@ describe('useLoadingIndicator', () => {
     );
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60000);
+      await advanceTimersByTimeAsync(60000);
     });
     // The interval is registered from an effect, so its first tick lands a
     // moment after t=0 and a 60s advance yields 59 or 60 depending on exactly
@@ -75,7 +76,7 @@ describe('useLoadingIndicator', () => {
 
     // Timer should not advance further
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await advanceTimersByTimeAsync(2000);
     });
     expect(result.current.elapsedTime).toBe(elapsedWhileResponding);
   });
@@ -87,7 +88,7 @@ describe('useLoadingIndicator', () => {
     );
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000); // 5s
+      await advanceTimersByTimeAsync(5000); // 5s
     });
     expect(result.current.elapsedTime).toBe(5);
 
@@ -106,7 +107,7 @@ describe('useLoadingIndicator', () => {
     expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
+      await advanceTimersByTimeAsync(1000);
     });
     expect(result.current.elapsedTime).toBe(1);
   });
@@ -118,7 +119,7 @@ describe('useLoadingIndicator', () => {
     );
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000); // 10s
+      await advanceTimersByTimeAsync(10000); // 10s
     });
     expect(result.current.elapsedTime).toBe(10);
 
@@ -131,7 +132,7 @@ describe('useLoadingIndicator', () => {
 
     // Timer should not advance
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await advanceTimersByTimeAsync(2000);
     });
     expect(result.current.elapsedTime).toBe(0);
   });
@@ -146,7 +147,7 @@ describe('useLoadingIndicator', () => {
     expect(customPhrases).toContain(result.current.currentLoadingPhrase);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(PHRASE_CHANGE_INTERVAL_MS + 1);
+      await advanceTimersByTimeAsync(PHRASE_CHANGE_INTERVAL_MS + 1);
     });
 
     // Should still be using a custom phrase after change

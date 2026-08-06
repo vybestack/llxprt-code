@@ -13,8 +13,8 @@
  * the first streamed event), and a microtask-only drain will spin forever
  * without ever getting there.
  *
- * `vi.waitFor` is not usable either: it polls on timers, which are frozen while
- * fake timers are installed.
+ * A polling waitFor is not usable either: it polls on timers, which are frozen
+ * while fake timers are installed.
  *
  * The real `setImmediate` is captured at module load — before any test body
  * calls `vi.useFakeTimers()`. Vitest's fake timers replace the global
@@ -22,10 +22,10 @@
  * helpers behave identically under both runners.
  *
  * Important usage constraint: only call these BEFORE advancing the fake clock.
- * Once `vi.advanceTimersByTimeAsync()` has moved fake time forward, a real
+ * Once `advanceTimersByTimeAsync()` has moved fake time forward, a real
  * `setImmediate` callback does not reliably run under Bun on Linux, and the
  * yield never resolves. To let pending work settle after advancing time, use
- * the fake-timer API itself (a further small `vi.advanceTimersByTimeAsync()`)
+ * the fake-timer API itself (a further small `advanceTimersByTimeAsync()`)
  * rather than a real event-loop yield.
  */
 const realSetImmediate = globalThis.setImmediate;

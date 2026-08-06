@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import path from 'node:path';
@@ -328,7 +329,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     act(() => {
       commit = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
-    await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
+    await waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
 
     workingDirectory = WORKSPACE_SECOND;
     rerender();
@@ -373,7 +374,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       firstCommit = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
       secondCommit = result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST);
     });
-    await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
+    await waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
 
     expect(mockedUserConfig.value[CONFIGURED_WORKSPACE]).toBe(
       TrustLevel.TRUST_FOLDER,

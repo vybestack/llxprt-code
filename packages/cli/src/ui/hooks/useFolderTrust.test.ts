@@ -6,6 +6,10 @@
 
 /** @vitest-environment jsdom */
 
+import {
+  advanceTimersByTimeAsync,
+  waitFor,
+} from '@vybestack/llxprt-code-test-utils';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -371,7 +375,7 @@ describe('useFolderTrust', () => {
       // Asserted on the mock rather than on a rejection: the behaviour under
       // test is that the deferred exit calls process.exit with the fatal
       // config code, not how a throw inside a timer callback propagates.
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(mockedExit).toHaveBeenCalledWith(ExitCodes.FATAL_CONFIG_ERROR);
     } finally {
       vi.useRealTimers();
@@ -428,13 +432,13 @@ describe('useFolderTrust', () => {
       const selection = result.current.handleFolderTrustSelect(
         FolderTrustChoice.TRUST_FOLDER,
       );
-      await vi.waitFor(() =>
+      await waitFor(() =>
         expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledOnce(),
       );
       unmount();
       liveUpdate.reject(new Error('late live failure'));
       await selection;
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       expect(addItem).not.toHaveBeenCalled();
       expect(mockedExit).not.toHaveBeenCalled();

@@ -22,6 +22,7 @@
  * (ALLOW / ASK_USER / DENY) across mode transitions — no mock theater.
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
@@ -318,7 +319,7 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
       { name: 'ast_edit', args: {} },
       {},
     );
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(confirmationHandler).toHaveBeenCalledOnce();
     });
     const confirmationRequest = confirmationHandler.mock

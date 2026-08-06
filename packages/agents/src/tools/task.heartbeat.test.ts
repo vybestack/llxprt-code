@@ -13,6 +13,7 @@
  * on every terminal path, and that heartbeats never pollute content/history.
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
 import { TaskTool } from './task.js';
 import {
@@ -275,9 +276,9 @@ describe('TaskTool heartbeat integration', () => {
     );
 
     // Allow launch + opening tag to flush.
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     // Advance well past several heartbeat intervals while still pending.
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 4);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 4);
 
     const statusUpdates = updates.filter((u) => u.mode === 'status');
     expect(statusUpdates.length).toBeGreaterThanOrEqual(3);
@@ -303,8 +304,8 @@ describe('TaskTool heartbeat integration', () => {
       undefined,
     );
 
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+    await advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
 
     resolve();
     await resultPromise;
@@ -326,21 +327,21 @@ describe('TaskTool heartbeat integration', () => {
       (u) => updates.push(u),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     // Nearly at the heartbeat boundary, then push a real message.
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS - 1);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS - 1);
     scope.onMessage?.('real progress text\n');
 
     const statusBefore = updates.filter((u) => u.mode === 'status').length;
     expect(statusBefore).toBe(0);
 
     // Advance less than a full interval from the message; no heartbeat yet.
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS - 1);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS - 1);
     const statusMid = updates.filter((u) => u.mode === 'status').length;
     expect(statusMid).toBe(0);
 
     // Now the quiet window elapses and a heartbeat fires.
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     const statusAfter = updates.filter((u) => u.mode === 'status').length;
     expect(statusAfter).toBe(1);
 
@@ -362,8 +363,8 @@ describe('TaskTool heartbeat integration', () => {
       (u) => updates.push(u),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 2);
+    await advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 2);
     resolve();
     const result = await resultPromise;
 
@@ -372,7 +373,7 @@ describe('TaskTool heartbeat integration', () => {
     ).length;
 
     // Advance further after completion; no additional heartbeats.
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
     const statusCountAfter = updates.filter((u) => u.mode === 'status').length;
     expect(statusCountAfter).toBe(statusCountAtCompletion);
     expect(result.error).toBeUndefined();
@@ -399,11 +400,11 @@ describe('TaskTool heartbeat integration', () => {
       (u) => updates.push(u),
     );
 
-    await vi.advanceTimersByTimeAsync(5);
+    await advanceTimersByTimeAsync(5);
     expect(scope.runInteractive).toHaveBeenCalled();
 
     // Advance past the 50ms task timeout; the timeout controller aborts.
-    await vi.advanceTimersByTimeAsync(60);
+    await advanceTimersByTimeAsync(60);
     const abortError = new Error('Aborted');
     abortError.name = 'AbortError';
     reject(abortError);
@@ -412,7 +413,7 @@ describe('TaskTool heartbeat integration', () => {
     expect(result.error?.type).toBe('timeout');
 
     const statusAtTerminal = updates.filter((u) => u.mode === 'status').length;
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
     const statusAfter = updates.filter((u) => u.mode === 'status').length;
     expect(statusAfter).toBe(statusAtTerminal);
   });
@@ -432,8 +433,8 @@ describe('TaskTool heartbeat integration', () => {
       updates.push(u),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS);
+    await advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS);
     abortController.abort();
     // The scope's abort handler cancels; the pending runInteractive must
     // reject (mirroring the real subagent detecting the cancel).
@@ -446,7 +447,7 @@ describe('TaskTool heartbeat integration', () => {
     expect(scope.cancel).toHaveBeenCalledWith('User aborted task execution.');
 
     const statusAtTerminal = updates.filter((u) => u.mode === 'status').length;
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
     const statusAfter = updates.filter((u) => u.mode === 'status').length;
     expect(statusAfter).toBe(statusAtTerminal);
   });
@@ -478,10 +479,10 @@ describe('TaskTool heartbeat integration', () => {
       },
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     // Inject a real content message and let several heartbeats fire.
     scope.onMessage?.('real content\n');
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
     resolve();
     await resultPromise;
 
@@ -523,9 +524,9 @@ describe('TaskTool heartbeat integration', () => {
       (u) => updates.push(u),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(scope.runNonInteractive).toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 2);
+    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 2);
     resolve();
     await resultPromise;
 

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { delay, createAbortError } from './delay.js';
 
@@ -36,7 +37,7 @@ describe('abortableDelay', () => {
 
   it('resolves after the specified duration without a signal', async () => {
     const promise = delay(100);
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
     await expect(promise).resolves.toBeUndefined();
   });
 
@@ -44,7 +45,7 @@ describe('abortableDelay', () => {
     const controller = new AbortController();
     const promise = delay(200, controller.signal);
 
-    await vi.advanceTimersByTimeAsync(200);
+    await advanceTimersByTimeAsync(200);
 
     await expect(promise).resolves.toBeUndefined();
   });
@@ -66,7 +67,7 @@ describe('abortableDelay', () => {
     const reason = new Error('user cancelled request');
     const promise = delay(500, controller.signal);
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
     controller.abort(reason);
 
     await expect(promise).rejects.toMatchObject({
@@ -90,7 +91,7 @@ describe('abortableDelay', () => {
     } as unknown as AbortSignal & { __listener?: () => void };
 
     const promise = delay(150, mockSignal);
-    await vi.advanceTimersByTimeAsync(150);
+    await advanceTimersByTimeAsync(150);
     await promise;
 
     expect(mockSignal.addEventListener).toHaveBeenCalledTimes(1);
@@ -108,7 +109,7 @@ describe('abortableDelay', () => {
 
     const promise = delay(400, controller.signal);
 
-    await vi.advanceTimersByTimeAsync(50);
+    await advanceTimersByTimeAsync(50);
     controller.abort();
 
     await expect(promise).rejects.toMatchObject({
@@ -122,7 +123,7 @@ describe('abortableDelay', () => {
     const controller = new AbortController();
     const promise = delay(400, controller.signal);
 
-    await vi.advanceTimersByTimeAsync(50);
+    await advanceTimersByTimeAsync(50);
     controller.abort();
 
     await expect(promise).rejects.toMatchObject({

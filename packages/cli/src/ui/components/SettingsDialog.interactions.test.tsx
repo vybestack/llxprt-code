@@ -23,6 +23,7 @@
  *
  */
 
+import { waitFor as waitForCondition } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { waitFor } from '../../test-utils/render.js';
@@ -292,7 +293,7 @@ describe('SettingsDialog', () => {
         stdin.write('\u001B');
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
       });
 

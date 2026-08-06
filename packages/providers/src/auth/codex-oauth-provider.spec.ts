@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
@@ -136,7 +140,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
         (error: unknown) =>
           error instanceof Error ? error.message : String(error),
       );
-      await vi.advanceTimersByTimeAsync(20 * 60 * 1000);
+      await advanceTimersByTimeAsync(20 * 60 * 1000);
       expect(await rejection).toBe('Codex OAuth flow timed out');
 
       const lateToken = {
@@ -146,7 +150,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
         account_id: 'late-account',
       };
       pendingAuth.resolve(lateToken);
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       await expect(provider.initiateAuth()).resolves.toStrictEqual(lateToken);
     });

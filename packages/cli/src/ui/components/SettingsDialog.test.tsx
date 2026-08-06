@@ -23,6 +23,7 @@
  *
  */
 
+import { waitFor as waitForCondition } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import {
   describe,
@@ -250,7 +251,7 @@ describe('SettingsDialog', () => {
         stdin.write(down);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         // Second item is Screen Reader Mode (it should now be highlighted/active)
         expect(lastFrame()).toContain('Screen Reader Mode');
       });
@@ -260,7 +261,7 @@ describe('SettingsDialog', () => {
         stdin.write(up);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).toContain('Enable Loading Phrases');
       });
 
@@ -290,7 +291,7 @@ describe('SettingsDialog', () => {
       // on the list's length or its trailing entry name, assert the round trip:
       // up from the first row must leave it, and a following down must return
       // to it. That only holds if up wrapped to the last row.
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).not.toMatch(
           testRegex('● Enable Loading Phrases', ''),
         );
@@ -300,7 +301,7 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.DOWN_ARROW);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).toMatch(testRegex('● Enable Loading Phrases', ''));
       });
 
@@ -334,7 +335,7 @@ describe('SettingsDialog', () => {
       act(() => {
         stdin.write(TerminalKeys.DOWN_ARROW as string);
       });
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).toContain('Screen Reader Mode');
       });
 
@@ -353,7 +354,7 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.ESCAPE as string);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(
           saveModifiedSettings as Mock<typeof saveModifiedSettings>,
         ).toHaveBeenCalled();
@@ -521,7 +522,7 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.ESCAPE);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(onSelect).toHaveBeenCalledWith(undefined, expect.anything());
       });
 
@@ -698,7 +699,7 @@ describe('SettingsDialog', () => {
       // Since we can't easily target specific settings, we test the general behavior
 
       // Should not show restart prompt initially
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).not.toContain(
           'To see changes, Gemini CLI must be restarted',
         );
@@ -822,7 +823,7 @@ describe('SettingsDialog', () => {
           stdin.write(TerminalKeys.ESCAPE as string);
         });
 
-        await vi.waitFor(() => {
+        await waitForCondition(() => {
           expect(
             (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mock
               .calls.length,

@@ -7,6 +7,10 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
@@ -509,7 +513,7 @@ describe('AnthropicProvider', () => {
         vi.useFakeTimers();
         try {
           const nextPromise = throttledCall.next();
-          await vi.advanceTimersByTimeAsync(0);
+          await advanceTimersByTimeAsync(0);
           expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
 
           controller.abort(reason);
@@ -518,7 +522,7 @@ describe('AnthropicProvider', () => {
             name: 'AbortError',
             cause: reason,
           });
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
           expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
           expect(vi.getTimerCount()).toBe(0);
           await throttledCall.return?.();

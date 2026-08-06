@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
@@ -526,7 +530,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Simulate a paste operation (this should set the paste protection)
@@ -539,7 +543,7 @@ describe('InputPrompt', () => {
         stdin.write('\r');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Verify that onSubmit was NOT called due to recent paste protection
@@ -557,7 +561,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Simulate a paste operation (this sets the protection)
@@ -565,12 +569,12 @@ describe('InputPrompt', () => {
         stdin.write('\x1b[200~pasted text\x1b[201~');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Advance timers past the protection timeout
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(50);
+        await advanceTimersByTimeAsync(50);
       });
 
       // Now Enter should work normally
@@ -578,7 +582,7 @@ describe('InputPrompt', () => {
         stdin.write('\r');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       expect(props.onSubmit).toHaveBeenCalledWith('pasted text');
@@ -607,7 +611,7 @@ describe('InputPrompt', () => {
           { kittyProtocolEnabled: true },
         );
         await act(async () => {
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
         });
 
         // Simulate a paste operation
@@ -615,7 +619,7 @@ describe('InputPrompt', () => {
           stdin.write('\x1b[200~some pasted stuff\x1b[201~');
         });
         await act(async () => {
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
         });
 
         // Simulate an Enter key press immediately after paste
@@ -623,7 +627,7 @@ describe('InputPrompt', () => {
           stdin.write('\r');
         });
         await act(async () => {
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
         });
 
         // Verify that onSubmit was called
@@ -640,7 +644,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Press Enter without any recent paste
@@ -648,7 +652,7 @@ describe('InputPrompt', () => {
         stdin.write('\r');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Verify that onSubmit was called normally
@@ -790,14 +794,14 @@ describe('InputPrompt', () => {
         { kittyProtocolEnabled: false },
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       await act(async () => {
         stdin.write('\x1B');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Passing undefined must be a safe no-op: clearing via replaceRange must

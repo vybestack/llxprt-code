@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  runOnlyPendingTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
@@ -366,7 +370,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       });
 
       await act(async () => {
-        await vi.runOnlyPendingTimersAsync();
+        await runOnlyPendingTimersAsync();
       });
       vi.useRealTimers();
 
@@ -497,7 +501,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       );
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(2);
+        await advanceTimersByTimeAsync(2);
         await Promise.resolve();
       });
 

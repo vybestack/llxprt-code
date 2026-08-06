@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from '../testApi.js';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
@@ -96,7 +97,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       abortController.signal,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.some((c) => c.status === 'executing');
     });
@@ -106,7 +107,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     await schedulePromise;
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -207,7 +208,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       abortController.signal,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
       return calls.filter((c) => c.status === 'executing').length === 2;
     });
@@ -226,7 +227,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     await schedulePromise;
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -345,7 +346,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     // Wait for completion
     await schedulePromise;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 

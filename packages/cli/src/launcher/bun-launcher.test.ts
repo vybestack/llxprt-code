@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { FatalError } from '@vybestack/llxprt-code-core';
@@ -136,7 +137,7 @@ describe('relaunchUnderBunIfNeeded', () => {
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
       ...overrides,
     });
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    await waitFor(() => expect(capturedChild).not.toBeNull());
     emit(capturedChild!);
     const result = await promise;
     return { result, spawnFn };
@@ -338,7 +339,7 @@ describe('relaunchUnderBunIfNeeded', () => {
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
     });
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    await waitFor(() => expect(capturedChild).not.toBeNull());
     const child = capturedChild!;
     expect(child.listenerCount('close')).toBe(1);
     expect(child.listenerCount('error')).toBe(1);
@@ -682,7 +683,7 @@ describe('relaunchUnderBunIfNeeded', () => {
         // Attach the rejection handler immediately so the promise's
         // synchronous rejection does not surface as unhandled.
         const caught = promise.catch((e: unknown) => e);
-        await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+        await waitFor(() => expect(capturedChild).not.toBeNull());
         closeSpy.mockRestore();
         const thrown = await caught;
         expect(thrown).toBeInstanceOf(AggregateError);
@@ -769,7 +770,7 @@ describe('runBunLauncherIfNeeded', () => {
       },
     });
 
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    await waitFor(() => expect(capturedChild).not.toBeNull());
     capturedChild!.emit('close', 9);
     await promise;
 
@@ -816,7 +817,7 @@ describe('runBunLauncherIfNeeded', () => {
       },
     });
 
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    await waitFor(() => expect(capturedChild).not.toBeNull());
     capturedChild!.emit('error', new Error('spawn ENOENT'));
 
     await expect(promise).rejects.toBeInstanceOf(FatalError);

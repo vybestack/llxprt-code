@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -201,7 +202,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       // later. Advance past the retry backoff window and confirm no refresh
       // attempt was made (timer was rescheduled for the new token's expiry).
       vi.advanceTimersByTime(65 * 1000);
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       // No refreshToken call — the timer hasn't fired yet because it was
       // rescheduled based on the externally-refreshed token's 3600s expiry
@@ -246,7 +247,7 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
 
       // Advance timers to trigger retry (backoff starts at ~30s)
       vi.advanceTimersByTime(65 * 1000);
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       // On retry, lock was acquired and refresh was attempted
       expect(provider.refreshToken).toHaveBeenCalledTimes(1);
