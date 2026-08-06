@@ -205,10 +205,12 @@ describe('CLI workspace tarball contents (actual release artifact)', () => {
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string>; bin?: Record<string, string> };
     expect(cliPkg.scripts.postinstall).toContain('install-native-launchers');
-    // #2978: packages/cli no longer declares a bin; the `llxprt` command is
-    // provided by the os-gated platform packages (optionalDependencies) so npm
-    // cannot derive a broken /bin/sh shim on Windows.
-    expect(cliPkg.bin).toBeUndefined();
+    // #2978: packages/cli MUST declare its own bin so a global install links
+    // the `llxprt` command (npm links only the installed package's own bins).
+    // The target is a node-shebang shim (not the POSIX #!/bin/sh launcher) so
+    // npm v12's cmd-shim derivation cannot reproduce the broken Windows .cmd.
+    expect(cliPkg.bin).toBeDefined();
+    expect(cliPkg.bin?.llxprt).toBe('bin/llxprt.mjs');
   });
 
   // npm marks a declared bin target 0o755 only when packing on a POSIX host;

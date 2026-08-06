@@ -949,6 +949,29 @@ export default tseslint.config(
       '@typescript-eslint/no-var-requires': 'off',
     },
   },
+  // packages/cli/bin/llxprt.mjs is a published node-shebang bin (issue #2978):
+  // a standalone ESM shim that runs under plain Node (no TS loader). It needs
+  // Node.js runtime globals (process, console) plus base ESLint recommended.
+  {
+    files: ['./packages/cli/bin/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+    rules: {
+      'no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
   // Examples should have access to standard globals like fetch
   {
     files: ['packages/cli/src/commands/extensions/examples/**/*.js'],

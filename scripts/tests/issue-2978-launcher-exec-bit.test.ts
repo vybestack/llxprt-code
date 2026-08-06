@@ -13,17 +13,20 @@ import { asOptionalRecord, asRecord, asString } from './typed-test-helpers.ts';
 const repoRoot = resolve(__dirname, '..', '..');
 
 describe('platform launcher package invariants (issue #2978)', () => {
-  // The `llxprt` bin was moved out of packages/cli and into two os-gated
-  // platform packages (@vybestack/llxprt-cli-posix and -win32). npm v12 no
-  // longer runs install scripts, so npm derives the Windows cmd-shim from the
-  // bin target's shebang; a POSIX #!/bin/sh shebang produces a broken .cmd
-  // that invokes /bin/sh. Shipping an os-appropriate bin target per platform
-  // fixes this, but ONLY while packages/cli declares no bin of its own
-  // (otherwise npm re-derives the broken shim from packages/cli/bin/llxprt) and
-  // the two platform packages stay in exact lockstep with packages/cli.
+  // packages/cli MUST declare its own `bin` so that `npm i -g
+  // @vybestack/llxprt-code` links the `llxprt` command: npm links ONLY the
+  // installed package's own bin entries on a global install, never a
+  // dependency's bins. The bin target must be a `#!/usr/bin/env node` shim
+  // (bin/llxprt.mjs): npm v12 no longer runs install scripts, so it derives
+  // the Windows cmd-shim from the bin target's shebang, and a POSIX #!/bin/sh
+  // shebang produces a broken .cmd that invokes /bin/sh (which does not exist
+  // on Windows). The two os-gated platform packages remain in exact lockstep
+  // with packages/cli as a fallback install surface for legacy flows.
   const POSIX_PKG = '@vybestack/llxprt-cli-posix';
   const WIN32_PKG = '@vybestack/llxprt-cli-win32';
   const PLATFORM_PKGS = [POSIX_PKG, WIN32_PKG] as const;
+  const CLI_BIN_TARGET = 'bin/llxprt.mjs';
+  const CLI_BIN_PATH = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.mjs');
 
   function readCliManifest(): Record<string, unknown> {
     return asRecord(
@@ -44,10 +47,35 @@ describe('platform launcher package invariants (issue #2978)', () => {
     );
   }
 
-  it('packages/cli declares no bin field', () => {
-    // If packages/cli declared a bin, npm would derive a shim from its
-    // shebang and reproduce the Windows /bin/sh regression.
-    expect(readCliManifest().bin).toBeUndefined();
+  it('packages/cli declares bin.llxprt pointing at the node-shebang shim', () => {
+    // A global install links ONLY the installed package's own bin entries, so
+    // packages/cli must declare bin.llxprt or `npm i -g @vybestack/llxprt-code`
+    // produces no `llxprt` command at all.
+    const bin = asOptionalRecord(readCliManifest().bin);
+    expect(
+      bin?.llxprt,
+      'packages/cli must declare bin.llxprt for global installs to work',
+    ).toBe(CLI_BIN_TARGET);
+    expect(
+      existsSync(CLI_BIN_PATH),
+      `packages/cli bin target "${CLI_BIN_TARGET}" must exist on disk`,
+    ).toBe(true);
+  });
+
+  it('the packages/cli bin target uses a #!/usr/bin/env node shebang (not /bin/sh)', () => {
+    // Regression guard for the original #2978 bug: npm v12 derives the Windows
+    // .cmd/.ps1 shim from the bin target's shebang. A #!/bin/sh shebang yields a
+    // broken .cmd that invokes /bin/sh (absent on Windows). A node shebang is
+    // handled correctly by cmd-shim on Windows and executes directly on POSIX.
+    expect(existsSync(CLI_BIN_PATH)).toBe(true);
+    const shebang = readFileSync(CLI_BIN_PATH, 'utf-8').split('\n', 1)[0];
+    expect(shebang, 'bin/llxprt.mjs must start with a node shebang').toBe(
+      '#!/usr/bin/env node',
+    );
+    expect(
+      shebang,
+      'bin/llxprt.mjs must NOT use a /bin/sh shebang (Windows cmd-shim regression)',
+    ).not.toContain('/bin/sh');
   });
 
   it('packages/cli pins both platform packages as exact optionalDependencies', () => {

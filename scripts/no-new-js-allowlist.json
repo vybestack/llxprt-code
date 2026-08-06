@@ -4,6 +4,7 @@
     "eslint-rules/ink-text-color-required.js",
     "eslint-rules/no-inline-deps.js",
     "eslint-rules/react-render-safety.js",
+    "packages/cli/bin/llxprt.mjs",
     "packages/vscode-ide-companion/eslint.config.mjs",
     "packages/cli/src/commands/extensions/examples/hooks/scripts/on-start.js",
     "packages/cli/src/commands/extensions/examples/mcp-server/example.js",

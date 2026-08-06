@@ -10,6 +10,9 @@
   "type": "module",
   "main": "index.ts",
   "types": "index.ts",
+  "bin": {
+    "llxprt": "bin/llxprt.mjs"
+  },
   "scripts": {
     "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js",
     "start": "bun index.ts",
