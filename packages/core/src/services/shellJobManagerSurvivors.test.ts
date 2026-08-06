@@ -64,21 +64,18 @@ function waitForTerminal(
  * via debugLogger instead of silently swallowing them. Never throws: this is
  * cleanup code, and throwing would mask real test failures / leak processes.
  */
-function reapSurvivor(pid: number): void {
-  const result = spawnSync('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
-    timeout: 5000,
-    encoding: 'utf8',
-  });
-  if (result.error !== undefined || result.status !== 0) {
-    const output = result.stderr || result.stdout || '(no output)';
-    const detail =
-      result.error !== undefined
-        ? result.error.message
-        : `status ${result.status}: ${output}`;
+async function reapSurvivor(pid: number): Promise<void> {
+  const result = await boundedTaskkill(pid);
+  if (!result.ok) {
     debugLogger.warn(
-      `[shellJobManagerSurvivors.test] taskkill cleanup for pid ${pid} failed: ${detail}`,
+      `[shellJobManagerSurvivors.test] taskkill cleanup for pid ${pid} failed: ${result.error?.message ?? 'unknown failure'}`,
     );
   }
+  await waitForPidGoneWindows(pid).catch((error: unknown) => {
+    debugLogger.warn(
+      `[shellJobManagerSurvivors.test] pid ${pid} survived cleanup: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
 }
 
 // These tests are Windows-only: they depend on tasklist/taskkill for process
@@ -143,7 +140,7 @@ describe.skipIf(os.platform() !== 'win32')(
         survivorPid = 0;
       } finally {
         if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
+          await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
         fs.rmSync(h2Dir, {
@@ -194,7 +191,7 @@ describe.skipIf(os.platform() !== 'win32')(
       } finally {
         process.off('unhandledRejection', onRejection);
         if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
+          await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
         fs.rmSync(h3Dir, {
@@ -242,7 +239,7 @@ describe.skipIf(os.platform() !== 'win32')(
       } finally {
         process.off('unhandledRejection', onRejection);
         if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
+          await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
         fs.rmSync(h3Dir, {
@@ -292,7 +289,7 @@ describe.skipIf(os.platform() !== 'win32')(
       } finally {
         for (const pid of survivorPids) {
           if (pid > 0 && isPidAliveWindows(pid)) {
-            reapSurvivor(pid);
+            await reapSurvivor(pid);
           }
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -359,7 +356,7 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(fs.existsSync(survivorLogPath)).toBe(true);
       } finally {
         if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
+          await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
         fs.rmSync(i2Dir, {
@@ -408,7 +405,7 @@ describe.skipIf(os.platform() !== 'win32')(
         survivorPid = 0;
       } finally {
         if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
+          await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
         fs.rmSync(gateDir, {
@@ -479,7 +476,7 @@ describe.skipIf(os.platform() !== 'win32')(
         survivorPid = 0;
       } finally {
         if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
+          await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
         fs.rmSync(microDir, {

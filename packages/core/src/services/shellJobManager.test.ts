@@ -17,7 +17,7 @@ import {
   type SurvivorEntry,
 } from './shellJobManager.js';
 import type { ShellJob } from './shellJobManager.js';
-import type { TaskkillResult } from './shellProcessKill.js';
+import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 /**
@@ -530,6 +530,19 @@ async function waitForPidGoneWindows(
   }
   throw new Error(`PID ${pid} did not exit within ${timeoutMs}ms`);
 }
+async function forceReapWindows(pid: number): Promise<void> {
+  const result = await boundedTaskkill(pid);
+  if (!result.ok) {
+    debugLogger.warn(
+      `[shellJobManager.test] taskkill cleanup for pid ${pid} failed: ${result.error?.message ?? 'unknown failure'}`,
+    );
+  }
+  await waitForPidGoneWindows(pid).catch((error: unknown) => {
+    debugLogger.warn(
+      `[shellJobManager.test] pid ${pid} survived cleanup: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+}
 
 async function waitForPidFile(
   filePath: string,
@@ -751,9 +764,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       expect(terminal?.state).toBe('cancelled');
     } finally {
       if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-        spawnSync('taskkill', ['/pid', survivorPid.toString(), '/f', '/t'], {
-          timeout: 5000,
-        });
+        await forceReapWindows(survivorPid);
       }
       // dispose() rejects with ShellJobDisposalError by design when live
       // survivors remain. Guarantee the temp dir is removed regardless, and
@@ -840,9 +851,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       expect(elapsed).toBeLessThan(20000);
     } finally {
       if (pid > 0 && isPidAliveWindows(pid)) {
-        spawnSync('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
-          timeout: 5000,
-        });
+        await forceReapWindows(pid);
       }
       // Brief delay so the OS releases file handles held by the killed tree.
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -861,12 +870,10 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
     const slowManager = new ShellJobManager({
       baseDir: slowDir,
       logMaxBytes: 256,
-      taskkillImpl: (): Promise<TaskkillResult> => {
+      taskkillImpl: async (targetPid: number): Promise<TaskkillResult> => {
         killCallCount++;
-        return new Promise((resolve) => {
-          const timer = setTimeout(() => resolve({ ok: true }), 3000);
-          timer.unref();
-        });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return boundedTaskkill(targetPid);
       },
     });
     let pid = 0;
@@ -887,9 +894,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       expect(killCallCount).toBe(1);
     } finally {
       if (pid > 0 && isPidAliveWindows(pid)) {
-        spawnSync('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
-          timeout: 5000,
-        });
+        await forceReapWindows(pid);
       }
       await slowManager.dispose();
       await new Promise((resolve) => setTimeout(resolve, 200));

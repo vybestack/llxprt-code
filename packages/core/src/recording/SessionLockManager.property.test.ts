@@ -613,10 +613,9 @@ process.on('message', async (msg) => {
       );
 
       childProcess = fork(helperScript, [lockPath], {
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        execPath: process.env.npm_node_execpath ?? process.execPath,
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
       });
-      // Don't let the child's IPC channel keep the test process alive
-      childProcess.unref();
 
       await waitForMessage(childProcess, 'lock-acquired');
 
