@@ -550,13 +550,35 @@ function volumeDestinations(args: readonly string[]): string[] {
   const dests: string[] = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--volume' && i + 1 < args.length) {
-      const parts = args[i + 1].split(':');
-      // [host, dest] or [host, dest, options]
-      if (parts.length >= 2) dests.push(parts[1]);
+      const volume = args[i + 1];
+      const sourceEnd = volume.indexOf(
+        ':',
+        /^[A-Za-z]:[\\/]/.test(volume) ? 2 : 0,
+      );
+      if (sourceEnd === -1) continue;
+      const destinationAndOptions = volume.slice(sourceEnd + 1);
+      const optionStart = destinationAndOptions.indexOf(':');
+      dests.push(
+        destinationAndOptions.slice(
+          0,
+          optionStart === -1 ? undefined : optionStart,
+        ),
+      );
     }
   }
   return dests;
 }
+
+describe('volumeDestinations', () => {
+  it('extracts the destination from a Windows host path', () => {
+    expect(
+      volumeDestinations([
+        '--volume',
+        'C:\\Users\\me\\config:/c/Users/me/config:z',
+      ]),
+    ).toEqual(['/c/Users/me/config']);
+  });
+});
 
 function envValue(args: readonly string[], name: string): string | undefined {
   for (let i = 0; i < args.length; i++) {
