@@ -8,7 +8,7 @@ import {
   restoreEnv,
   setEnv,
 } from '../../../test-utils/src/env-test-helpers.js';
-import { describe, it, expect, vi, afterEach, beforeEach } from 'bun:test';
+import { describe, it, expect, afterEach, beforeEach } from 'bun:test';
 import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 
 describe('detectIde', () => {

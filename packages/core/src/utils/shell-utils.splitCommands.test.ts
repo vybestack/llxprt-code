@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, vi, mock } from 'bun:test';
+import { expect, describe, it, beforeEach, mock } from 'bun:test';
 import { splitCommands } from './shell-utils.js';
 
 describe('splitCommands', () => {

@@ -47,6 +47,29 @@ async function flushPendingTasks(): Promise<void> {
 }
 
 /**
+ * Arms a sentinel timer at `delay` and reports whether it fired.
+ *
+ * The result is read through a function rather than a boolean: the callback
+ * runs during timer advancement, so control-flow analysis would narrow a plain
+ * flag to its initial value and treat every later check as dead code.
+ */
+function armSentinel(delay: number): {
+  reached: () => boolean;
+  cancel: () => void;
+} {
+  let fired = false;
+  const id = setTimeout(() => {
+    fired = true;
+  }, delay);
+  return {
+    reached: () => fired,
+    cancel: () => {
+      clearTimeout(id);
+    },
+  };
+}
+
+/**
  * Advances at most `ms`, stopping at each scheduled timer so callbacks that
  * schedule further timers are picked up within the same advance.
  */
@@ -61,17 +84,14 @@ async function advanceChunk(ms: number): Promise<void> {
       continue;
     }
 
-    let reachedTarget = false;
-    const sentinel = setTimeout(() => {
-      reachedTarget = true;
-    }, remaining);
+    const sentinel = armSentinel(remaining);
     const before = Date.now();
 
     vi.advanceTimersToNextTimer();
-    clearTimeout(sentinel);
+    sentinel.cancel();
     await flushPendingTasks();
 
-    if (reachedTarget) return;
+    if (sentinel.reached()) return;
     if (Date.now() <= before) {
       // The next timer did not move the clock, so nudge it to guarantee
       // progress and avoid spinning on a zero-delay timer.

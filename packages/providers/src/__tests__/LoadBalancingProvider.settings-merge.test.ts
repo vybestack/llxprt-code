@@ -5,7 +5,7 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

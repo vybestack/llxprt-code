@@ -4,7 +4,7 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';

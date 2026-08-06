@@ -20,7 +20,6 @@ import {
   beforeEach,
   afterEach,
   beforeAll,
-  vi,
 } from 'bun:test';
 
 (() => {

@@ -66,7 +66,7 @@ export function waitFor<T>(
 
     const handleTimeout = (): void => {
       if (timerIds.interval) safeClearInterval(timerIds.interval);
-      reject(lastError || new Error(TIMEOUT_MESSAGE));
+      reject(lastError ?? new Error(TIMEOUT_MESSAGE));
     };
 
     const checkCallback = (): true | undefined => {
@@ -103,6 +103,54 @@ export function waitFor<T>(
 }
 
 /**
+ * The state of a promise the poll is waiting on.
+ *
+ * Read through a getter rather than mutable flags: the settle handlers run
+ * asynchronously, so TypeScript's control-flow analysis would narrow plain
+ * booleans to their initial value and report every later check as dead.
+ */
+type Settled<T> =
+  | { readonly status: 'pending' }
+  | { readonly status: 'fulfilled'; readonly value: T }
+  | { readonly status: 'rejected'; readonly error: unknown };
+
+function trackSettlement<T>(promise: Promise<T>): () => Settled<T> {
+  let state: Settled<T> = { status: 'pending' };
+  void promise.then(
+    (value: T) => {
+      state = { status: 'fulfilled', value };
+    },
+    (error: unknown) => {
+      state = { status: 'rejected', error };
+    },
+  );
+  return () => state;
+}
+
+/**
+ * Runs one callback attempt, reporting whether it produced a value, threw, or
+ * handed back a promise that is still settling.
+ */
+async function startAttempt<T>(
+  callback: () => T | Promise<T>,
+): Promise<
+  | { status: 'fulfilled'; value: T }
+  | { status: 'rejected'; error: unknown }
+  | { status: 'pending'; pending: () => Settled<T> }
+> {
+  try {
+    const result = callback();
+    if (!isPromiseLike(result)) return { status: 'fulfilled', value: result };
+    const pending = trackSettlement(result);
+    // Yield once so an already-resolved promise settles its handlers.
+    await Promise.resolve();
+    return { status: 'pending', pending };
+  } catch (error: unknown) {
+    return { status: 'rejected', error };
+  }
+}
+
+/**
  * Fake-timer polling. Advances the fake clock by `interval` on each attempt
  * and checks the callback. A pending promise pauses further attempts until it
  * settles; a rejection retries after the next advance. Reaching `timeout`
@@ -114,86 +162,40 @@ async function waitForWithFakeTimers<T>(
   timeout: number,
 ): Promise<T> {
   let lastError: unknown;
-  let hasPending = false;
-  let pendingResolved = false;
-  let pendingValue: T | undefined;
-  let pendingRejected = false;
-
   let elapsed = 0;
+  let pending: (() => Settled<T>) | undefined;
+
   for (;;) {
-    if (!hasPending) {
-      // Advance before the first callback, not after it. Under fake timers
-      // nothing else moves the clock, so a callback waiting on a scheduled
-      // effect would otherwise observe t=0 and fail its first attempt.
-      vi.advanceTimersByTime(interval);
-      elapsed += interval;
+    // Advance before each attempt, not after. Under fake timers nothing else
+    // moves the clock, so a callback waiting on a scheduled effect would
+    // otherwise observe t=0 and fail its first attempt.
+    vi.advanceTimersByTime(interval);
+    elapsed += interval;
+    // Advancing only fires timer callbacks; the promise chains they resume
+    // still need a microtask turn before their effect is observable.
+    await Promise.resolve();
 
-      let result: T | Promise<T>;
-      try {
-        result = callback();
-      } catch (error: unknown) {
-        lastError = error;
-        if (elapsed >= timeout) {
-          throw lastError || new Error(TIMEOUT_MESSAGE);
-        }
-        // Advancing the clock only fires timer callbacks; the promise chains
-        // they resume still need a microtask turn before the next assertion
-        // can observe their effect.
-        await Promise.resolve();
-        continue;
-      }
-
-      if (isPromiseLike(result)) {
-        hasPending = true;
-        pendingResolved = false;
-        pendingRejected = false;
-        result.then(
-          (value: T) => {
-            pendingResolved = true;
-            pendingValue = value;
-          },
-          (error: unknown) => {
-            pendingRejected = true;
-            lastError = error;
-          },
-        );
-        // Yield once so an already-resolved promise settles its handlers.
-        await Promise.resolve();
-        if (pendingResolved) {
-          return pendingValue as T;
-        }
-        if (pendingRejected) {
-          hasPending = false;
-          if (elapsed >= timeout) {
-            throw lastError || new Error(TIMEOUT_MESSAGE);
-          }
-        }
+    if (pending === undefined) {
+      const attempt = await startAttempt(callback);
+      if (attempt.status === 'fulfilled') return attempt.value;
+      if (attempt.status === 'rejected') {
+        lastError = attempt.error;
       } else {
-        return result;
+        pending = attempt.pending;
       }
     }
 
-    if (hasPending) {
-      vi.advanceTimersByTime(interval);
-      elapsed += interval;
-      await Promise.resolve();
-      if (pendingResolved) {
-        return pendingValue as T;
-      }
-      if (pendingRejected) {
-        hasPending = false;
-        if (elapsed >= timeout) {
-          throw lastError || new Error(TIMEOUT_MESSAGE);
-        }
-        // The clock already advanced for this cycle; falling through to the
-        // top would advance a second time before the retry, doubling the
-        // effective interval.
-        continue;
+    if (pending !== undefined) {
+      const state = pending();
+      if (state.status === 'fulfilled') return state.value;
+      if (state.status === 'rejected') {
+        lastError = state.error;
+        pending = undefined;
       }
     }
 
     if (elapsed >= timeout) {
-      throw lastError || new Error(TIMEOUT_MESSAGE);
+      throw lastError ?? new Error(TIMEOUT_MESSAGE);
     }
   }
 }

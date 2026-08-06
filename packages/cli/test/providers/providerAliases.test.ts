@@ -4,16 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  mock,
-} from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';

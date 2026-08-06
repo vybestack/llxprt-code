@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'bun:test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';

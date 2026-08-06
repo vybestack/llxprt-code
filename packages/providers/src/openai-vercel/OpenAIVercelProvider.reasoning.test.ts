@@ -16,7 +16,6 @@ import type {
   ThinkingBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type * as Ai from 'ai';
 
 /**
  * Mock the Vercel AI SDK to control streaming responses

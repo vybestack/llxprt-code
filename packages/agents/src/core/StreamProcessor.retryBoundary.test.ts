@@ -19,7 +19,6 @@ import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/ind
 import type { SendMessageParams } from './chatSession.js';
 
 // Import retry utility types
-import type * as retryModule from '@vybestack/llxprt-code-core/utils/retry.js';
 
 // Mock the retry utility
 const realRetryModule = {

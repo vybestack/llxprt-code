@@ -10,7 +10,7 @@ import {
   restoreEnv,
   setEnv,
 } from '../../packages/test-utils/src/env-test-helpers.js';
-import { afterEach, describe, it, expect, vi } from 'bun:test';
+import { afterEach, describe, it, expect } from 'bun:test';
 import { accessSync, constants as fsConstants } from 'node:fs';
 import { quote } from 'shell-quote';
 

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'bun:test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { safeJsonStringify } from '@vybestack/llxprt-code-core/utils/safeJsonStringify.js';
 import {

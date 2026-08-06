@@ -5,7 +5,7 @@
  */
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { createBunPty } from './bunPtyAdapter.js';
 import { isBunPosix } from './runtime.js';
