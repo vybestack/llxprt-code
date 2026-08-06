@@ -345,6 +345,13 @@ export function generateJUnit(results: readonly TestResult[]): string {
   ].join('\n');
 }
 
+export function exitCodeForRun(
+  failedTestFileCount: number,
+  junitWriteFailed: boolean,
+): 0 | 1 {
+  return failedTestFileCount > 0 || junitWriteFailed ? 1 : 0;
+}
+
 async function main(): Promise<void> {
   const root = import.meta.dir;
   const testFiles = discoverTestFiles(root);
@@ -415,17 +422,19 @@ async function main(): Promise<void> {
   );
 
   // A write failure must not replace the run's verdict with an unhandled
-  // exception: CI still needs the exit code even when the artifact is lost.
+  // exception, but losing the required CI artifact is still a failed run.
+  let junitWriteFailed = false;
   try {
     writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
   } catch (error) {
+    junitWriteFailed = true;
     console.error(
       `Failed to write junit.xml: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
   }
-  process.exit(failed.length > 0 ? 1 : 0);
+  process.exit(exitCodeForRun(failed.length, junitWriteFailed));
 }
 
 if (import.meta.main) {

@@ -391,18 +391,43 @@ const { cleanup: cleanupInkRenders } = await import(
   './test-utils/ink-testing-library.js'
 );
 
-afterEach(async () => {
-  cleanupInkRenders();
-  // Code under test (for example the extension commands) signals failure with
-  // `process.exitCode = 1`. Under Vitest that happens inside a worker, but a
-  // Bun test file IS the process, so a leftover exit code would fail the file
-  // even when every test passed. Reset it; Bun sets the real exit status from
-  // the test results after the hooks have run.
-  process.exitCode = 0;
-  for (const eventName of managedProcessEvents) {
-    restoreProcessListeners(eventName);
+async function runCleanupPhases(
+  phases: ReadonlyArray<() => void | Promise<void>>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const phase of phases) {
+    try {
+      await phase();
+    } catch (error) {
+      errors.push(error);
+    }
   }
-  await resetDebugLoggerForTesting();
-  __resetCleanupStateForTesting();
-  clearProviderRuntimeContext();
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'Multiple CLI test cleanup phases failed');
+  }
+}
+
+afterEach(async () => {
+  await runCleanupPhases([
+    () => cleanupInkRenders(),
+    () => {
+      // Code under test (for example the extension commands) signals failure
+      // with `process.exitCode = 1`. Under Vitest that happens inside a worker,
+      // but a Bun test file IS the process, so a leftover exit code would fail
+      // the file even when every test passed. Bun sets the real exit status
+      // from the test results after the hooks have run.
+      process.exitCode = 0;
+    },
+    () => {
+      for (const eventName of managedProcessEvents) {
+        restoreProcessListeners(eventName);
+      }
+    },
+    () => resetDebugLoggerForTesting(),
+    () => __resetCleanupStateForTesting(),
+    () => clearProviderRuntimeContext(),
+  ]);
 });

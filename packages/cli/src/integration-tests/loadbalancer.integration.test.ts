@@ -92,16 +92,26 @@ async function runCli(
 describe('LoadBalancer Integration Tests', () => {
   let tempDir: string;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
     originalHome = process.env.HOME;
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
     process.env.HOME = tempDir;
+    process.env.LLXPRT_CONFIG_HOME = tempDir;
   });
 
   afterEach(async () => {
-    if (originalHome) {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
       process.env.HOME = originalHome;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env.LLXPRT_CONFIG_HOME;
+    } else {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
     }
     await cleanupTempDirectory(tempDir);
   });

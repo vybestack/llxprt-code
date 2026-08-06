@@ -109,18 +109,13 @@ vi.mock('../ui/commands/mcpCommand.js', () => ({
   },
 }));
 
-// isDevelopment is a module-level constant captured at first evaluation of
-// installationInfo.js. Under Vitest, vi.resetModules() forced re-evaluation
-// after changing NODE_ENV; Bun does not support resetting modules. The
-// 'profile' describe block only needs isDevelopment=true to exercise the
-// uiprofile branch (profileCommand itself is always loaded), so mock the
-// constant to true. The 'should always include profile command' test does
-// not depend on isDevelopment (profileCommand is unconditionally included).
+// Default the file to production behavior. The dedicated development case at
+// the end re-registers this module immediately before exercising uiprofile.
 vi.mock('../utils/installationInfo.js', async () => {
   const actual = await vi.importActual('./../utils/installationInfo.js');
   return {
     ...actual,
-    isDevelopment: true,
+    isDevelopment: false,
   };
 });
 
@@ -202,6 +197,14 @@ describe('BuiltinCommandLoader', () => {
     expect(permissionsCmd).toBeDefined();
   });
 
+  it('should exclude development-only commands in production mode', async () => {
+    const loader = new BuiltinCommandLoader(mockConfig);
+    const commands = await loader.loadCommands(new AbortController().signal);
+    expect(
+      commands.find((command) => command.name === 'uiprofile'),
+    ).toBeUndefined();
+  });
+
   // `/help` (Help.tsx) and slash completion both render this loaded list, and
   // Help filters on a non-empty `description`. Asserting the description here
   // is therefore what guarantees `/image` is discoverable in both surfaces.
@@ -263,6 +266,13 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should include uiprofile command when isDevelopment is true', async () => {
+    vi.mock('../utils/installationInfo.js', async () => {
+      const actual = await vi.importActual('./../utils/installationInfo.js');
+      return {
+        ...actual,
+        isDevelopment: true,
+      };
+    });
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
     const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');

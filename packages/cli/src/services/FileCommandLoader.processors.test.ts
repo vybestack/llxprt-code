@@ -28,6 +28,7 @@ import type { CommandContext } from '../ui/commands/types.js';
 
 type PromptPipelineContent = Array<{ text: string }>;
 
+const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
 const mockShellProcess = vi.hoisted(() => vi.fn());
 const mockAtFileProcess = vi.hoisted(() => vi.fn());
 
@@ -68,20 +69,12 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
   },
 }));
 
-// Under Bun, importOriginal inside vi.mock factory returns the MOCKED module
-// (not the real one), causing infinite recursion. Use a direct implementation
-// that replicates DefaultArgumentProcessor's behavior instead.
+// Capture the real constructor before Bun patches the live module namespace.
+// Constructor calls stay observable while processor behavior remains real.
 vi.mock('./prompt-processors/argumentProcessor.js', () => ({
-  DefaultArgumentProcessor: vi.fn().mockImplementation(() => ({
-    process: async (prompt: string, context: CommandContext) => {
-      if (context.invocation?.args) {
-        return `${prompt}
-
-${context.invocation.raw}`;
-      }
-      return prompt;
-    },
-  })),
+  DefaultArgumentProcessor: vi
+    .fn()
+    .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
 
 vi.mock('glob', () => ({

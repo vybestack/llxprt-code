@@ -19,6 +19,8 @@ import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.
 import type { CommandContext } from '../ui/commands/types.js';
 import { FsMockContext } from './__testhelpers__/mockFs.js';
 
+const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
+
 function assert(condition: unknown, message: string): asserts condition {
   if (condition === undefined || condition === null || condition === false) {
     throw new Error(message);
@@ -42,18 +44,13 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
   },
 }));
 
-// Under Bun, importOriginal inside vi.mock factory returns the MOCKED module
-// (not the real one), causing infinite recursion. Use a direct implementation
-// that replicates DefaultArgumentProcessor's behavior instead.
+// Capture the real constructor before Bun patches the live module namespace.
+// The mock keeps constructor-call assertions while executing the production
+// processor, so changes to argument processing cannot drift from this suite.
 vi.mock('./prompt-processors/argumentProcessor.js', () => ({
-  DefaultArgumentProcessor: vi.fn().mockImplementation(() => ({
-    process: async (prompt: string, context: CommandContext) => {
-      if (context.invocation?.args) {
-        return `${prompt}\n\n${context.invocation.raw}`;
-      }
-      return prompt;
-    },
-  })),
+  DefaultArgumentProcessor: vi
+    .fn()
+    .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
 
 // atFileProcessor.js does not exist in the codebase; the hoisted fn is unused.

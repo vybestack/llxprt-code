@@ -294,10 +294,11 @@ export const waitFor = async (
         queueMicrotask(resolve);
       });
 
-      // Under fake timers, setTimeout never fires on its own. Advance
-      // fake timers to flush pending timer-based state updates.
+      // Under fake timers, setTimeout never fires on its own. The async helper
+      // advances the clock and drains microtasks scheduled by timer callbacks,
+      // so the next poll sees the resulting React state update.
       try {
-        vi.advanceTimersByTime(interval);
+        await vi.advanceTimersByTimeAsync(interval);
       } catch {
         // Real timers: use real setTimeout for the polling interval.
         await new Promise((resolve) => setTimeout(resolve, interval));

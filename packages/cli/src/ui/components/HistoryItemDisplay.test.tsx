@@ -16,14 +16,19 @@ import { ToolGroupMessage } from './messages/ToolGroupMessage.js';
 import { renderWithProviders } from '../../test-utils/render.js';
 
 // The real RuntimeContextProvider resolves the CLI runtime scope, which this
-// component test does not establish. Supplying the hook keeps the subject the
-// history item rendering itself.
-vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
-    getEphemeralSetting: () => undefined,
-  }),
-}));
+// component test does not establish. Preserve the complete module shape and
+// replace only the hook so unrelated exports keep their production contract.
+vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../contexts/RuntimeContext.js')>();
+  return {
+    ...actual,
+    useRuntimeApi: () => ({
+      getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+      getEphemeralSetting: () => undefined,
+    }),
+  };
+});
 
 // Mock child components
 vi.mock('./messages/ToolGroupMessage.js', () => ({

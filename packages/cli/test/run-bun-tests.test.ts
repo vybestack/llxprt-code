@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import {
   discoverTestFiles,
   escapeXml,
+  exitCodeForRun,
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
@@ -50,6 +51,14 @@ describe('isTestFile', () => {
     expect(isTestFile('types.d.ts')).toBe(false);
     expect(isTestFile('test-helpers.ts')).toBe(false);
     expect(isTestFile('README.md')).toBe(false);
+  });
+});
+
+describe('exitCodeForRun', () => {
+  it('fails when test files fail or the JUnit artifact cannot be written', () => {
+    expect(exitCodeForRun(0, false)).toBe(0);
+    expect(exitCodeForRun(1, false)).toBe(1);
+    expect(exitCodeForRun(0, true)).toBe(1);
   });
 });
 
