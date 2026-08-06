@@ -957,19 +957,7 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         ...globals.node,
-        process: 'readonly',
-        console: 'readonly',
       },
-    },
-    rules: {
-      'no-unused-vars': [
-        'error',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-        },
-      ],
     },
   },
   // Examples should have access to standard globals like fetch

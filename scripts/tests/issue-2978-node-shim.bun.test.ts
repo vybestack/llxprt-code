@@ -43,6 +43,22 @@ const cliManifestPath = path.join(repoRoot, 'packages', 'cli', 'package.json');
 // on every platform (its postinstall copies the native binary to that name), so
 // it is executable on the current host despite the .exe suffix.
 const stubBun = path.join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
+
+/**
+ * Every fixture copies this binary to stand in for the bundled Bun. Fail with a
+ * clear message rather than an opaque ENOENT from copyFileSync if the `bun`
+ * package is missing or laid out differently.
+ */
+function requireStubBun(): string {
+  if (!existsSync(stubBun)) {
+    throw new Error(
+      `Expected the bun package's native binary at ${stubBun}. ` +
+        'Run `npm install` to restore it before running this suite.',
+    );
+  }
+  return stubBun;
+}
+
 const LAUNCH_TIMEOUT_MS = 30_000;
 const LAUNCHER_FAILURE_EXIT = 43;
 
@@ -79,7 +95,7 @@ function makeLayout(root: string): Layout {
  */
 const defaultEntryBody =
   'console.log(JSON.stringify({exe:process.execPath,argv:process.argv.slice(2)}));' +
-  'var c=Number(process.env.LLXPRT_TEST_EXIT||"0");if(c)process.exit(c);';
+  'let c=Number(process.env.LLXPRT_TEST_EXIT||"0");if(c)process.exit(c);';
 
 function writeSourceEntry(pkgRoot: string, body: string): void {
   writeFileSync(path.join(pkgRoot, 'index.ts'), body);
@@ -95,7 +111,7 @@ function placeBundledBun(nodeModules: string): string {
   const dir = path.join(nodeModules, 'bun', 'bin');
   mkdirSync(dir, { recursive: true });
   const exe = path.join(dir, bunExeName);
-  copyFileSync(stubBun, exe);
+  copyFileSync(requireStubBun(), exe);
   return exe;
 }
 
@@ -133,7 +149,7 @@ function placeOvenBun(nodeModules: string, variant: string): string {
     JSON.stringify({ name: `@oven/${variant}`, version: '1.3.14' }),
   );
   const exe = path.join(binDir, bunExeName);
-  copyFileSync(stubBun, exe);
+  copyFileSync(requireStubBun(), exe);
   return exe;
 }
 

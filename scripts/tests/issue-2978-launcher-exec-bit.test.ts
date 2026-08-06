@@ -68,7 +68,9 @@ describe('platform launcher package invariants (issue #2978)', () => {
     // broken .cmd that invokes /bin/sh (absent on Windows). A node shebang is
     // handled correctly by cmd-shim on Windows and executes directly on POSIX.
     expect(existsSync(CLI_BIN_PATH)).toBe(true);
-    const shebang = readFileSync(CLI_BIN_PATH, 'utf-8').split('\n', 1)[0];
+    const shebang = readFileSync(CLI_BIN_PATH, 'utf-8')
+      .split('\n', 1)[0]
+      .trimEnd();
     expect(shebang, 'bin/llxprt.mjs must start with a node shebang').toBe(
       '#!/usr/bin/env node',
     );
