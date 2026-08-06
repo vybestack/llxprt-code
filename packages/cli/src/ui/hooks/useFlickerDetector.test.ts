@@ -13,8 +13,10 @@ import { measureElement, type DOMElement } from 'ink';
 import { appEvents, AppEvent } from '../../utils/events.js';
 
 // Mock ink's measureElement
-vi.mock('ink', async () => {
-  const actualInk = await vi.importActual('ink');
+const realInkModule = { ...(await import('ink')) };
+
+vi.mock('ink', () => {
+  const actualInk = realInkModule;
   return {
     ...actualInk,
     measureElement: vi.fn(),

@@ -17,6 +17,10 @@ import * as vscode from 'vscode';
 import { activate } from './extension.js';
 import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-ide-integration';
 
+const realLlxprtCodeIdeIntegrationModule = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+
 vi.mock('vscode', () => ({
   window: {
     createOutputChannel: vi.fn(() => ({
@@ -73,10 +77,8 @@ const { mockDetectIdeFromEnv } = (() => {
   return { mockDetectIdeFromEnv: mock };
 })();
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-ide-integration')
-  >('@vybestack/llxprt-code-ide-integration');
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+  const actual = realLlxprtCodeIdeIntegrationModule;
   return {
     ...actual,
     detectIdeFromEnv: mockDetectIdeFromEnv,

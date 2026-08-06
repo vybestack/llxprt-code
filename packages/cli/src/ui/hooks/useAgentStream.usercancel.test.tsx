@@ -563,13 +563,11 @@ describe('useAgentStream', () => {
             name: 'tool1',
             description: 'desc1',
             build: vi.fn().mockImplementation((_) => ({
-              getDescription: () =>
-                `Mock<(...args: never[]) => unknown> description`,
+              getDescription: () => `Mock description`,
             })),
           } as unknown as AnyDeclarativeTool,
           invocation: {
-            getDescription: () =>
-              `Mock<(...args: never[]) => unknown> description`,
+            getDescription: () => `Mock description`,
           },
           startTime: Date.now(),
           liveOutput: '...',
@@ -605,13 +603,11 @@ describe('useAgentStream', () => {
             name: 'some_tool',
             description: 'a tool',
             build: vi.fn().mockImplementation((_) => ({
-              getDescription: () =>
-                `Mock<(...args: never[]) => unknown> description`,
+              getDescription: () => `Mock description`,
             })),
           } as unknown as AnyDeclarativeTool,
           invocation: {
-            getDescription: () =>
-              `Mock<(...args: never[]) => unknown> description`,
+            getDescription: () => `Mock description`,
           } as unknown as AnyToolInvocation,
           confirmationDetails: {
             type: 'edit',

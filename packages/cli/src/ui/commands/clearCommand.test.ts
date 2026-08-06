@@ -10,8 +10,15 @@ import { clearCommand } from './clearCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 // Mock the telemetry service
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+const realLlxprtCodeTelemetryModule = {
+  ...(await import('@vybestack/llxprt-code-telemetry')),
+};
+
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
@@ -19,8 +26,8 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-telemetry', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-telemetry');
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
+  const actual = realLlxprtCodeTelemetryModule;
   return {
     ...actual,
     uiTelemetryService: {

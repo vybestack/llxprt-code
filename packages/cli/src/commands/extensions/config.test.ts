@@ -15,6 +15,12 @@ import type * as settingsModule from './settings.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import type { ExtensionSetting } from '../../config/extensions/extensionSettings.js';
 
+const realSettingsIntegrationModule = {
+  ...(await import('../../config/extensions/settingsIntegration.js')),
+};
+const realExtensionModule = { ...(await import('../../config/extension.js')) };
+const realConfigModule = { ...(await import('./config.js')) };
+
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
   vi.fn();
 const mockGetScopedEnvContents: Mock<
@@ -62,10 +68,8 @@ function resolvePromptType(prompt: string): string {
   return 'unknown';
 }
 
-vi.mock('../../config/extensions/settingsIntegration.js', async () => {
-  const actual = await vi.importActual<typeof settingsIntegrationModule>(
-    '../../config/extensions/settingsIntegration.js',
-  );
+vi.mock('../../config/extensions/settingsIntegration.js', () => {
+  const actual = realSettingsIntegrationModule;
   return {
     updateSetting: mockUpdateSetting,
     getScopedEnvContents: mockGetScopedEnvContents,
@@ -78,10 +82,8 @@ vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../../config/extension.js', async () => {
-  const actual = await vi.importActual<typeof extensionModule>(
-    '../../config/extension.js',
-  );
+vi.mock('../../config/extension.js', () => {
+  const actual = realExtensionModule;
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -101,10 +103,8 @@ vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../../config/extension.js', async () => {
-  const actual = await vi.importActual<typeof extensionModule>(
-    '../../config/extension.js',
-  );
+vi.mock('../../config/extension.js', () => {
+  const actual = realExtensionModule;
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -125,8 +125,8 @@ vi.mock('../../config/settings.js', () => ({
 }));
 
 // Mock confirmOverwrite in the config module
-vi.mock('./config.js', async () => {
-  const actual = await vi.importActual('./config.js');
+vi.mock('./config.js', () => {
+  const actual = realConfigModule;
   return {
     ...actual,
     confirmOverwrite: mockConfirmOverwrite,

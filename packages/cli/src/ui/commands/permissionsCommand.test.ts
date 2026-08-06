@@ -22,6 +22,10 @@ import * as trustedFolders from '../../config/trustedFolders.js';
 import { createMockCommandContext as createBaseMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+
 const mockedCwd = vi.fn();
 const mockedHomedir = vi.fn(() => '/mock/home/user');
 const mockSetValue = vi.fn();
@@ -49,8 +53,8 @@ vi.mock('node:os', () => {
   };
 });
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({

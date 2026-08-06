@@ -9,6 +9,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 
+const realLlxprtCodeTelemetryModule = {
+  ...(await import('@vybestack/llxprt-code-telemetry')),
+};
+
 const useRuntimeApiMock = vi.fn();
 const setTokenTrackingMetricsMock = vi.fn();
 
@@ -16,10 +20,8 @@ vi.mock('../../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-telemetry')
-  >('@vybestack/llxprt-code-telemetry');
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
+  const actual = realLlxprtCodeTelemetryModule;
 
   class DebugLoggerStub {
     debug(..._args: unknown[]): void {

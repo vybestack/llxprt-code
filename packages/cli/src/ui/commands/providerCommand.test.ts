@@ -27,6 +27,12 @@ import type { Mock } from 'bun:test';
  * cast to `Agent` via the established `as unknown as Agent` idiom at the
  * CommandContext boundary (see mockCommandContext.ts).
  */
+const realProviderAliasesModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-providers/composition/providerAliases.js'
+  )),
+};
+
 interface AgentDouble {
   setProvider: Mock<(...args: never[]) => unknown>;
 }
@@ -54,14 +60,12 @@ const mocks = (() => {
 // composition.js mock that providerCommand.ts imports from.
 vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
 
-vi.mock('@vybestack/llxprt-code-providers/composition.js', async () => {
+vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
   // vi.importActual resolves the genuine module on both runners: Vitest
   // bypasses its own mock registry, and the Bun shim returns the snapshot it
   // captured before the preload registered its stub. It must be read inside
   // the factory because Vitest hoists this call above the module body.
-  const real = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js')
-  >('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+  const real = realProviderAliasesModule;
   return {
     getProviderManager: mocks.getProviderManagerMock,
     refreshAliasProviders: mocks.refreshAliasProvidersMock,

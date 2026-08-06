@@ -15,6 +15,10 @@ import {
   type ResolvedTrustRule,
 } from '../../config/trustedFolders.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+
 const mockedSetValue = vi.fn();
 const mockedDeleteValue = vi.fn();
 const mockedUserConfig = vi.hoisted<{
@@ -34,10 +38,8 @@ const mockedIdeTrust = vi.hoisted<{ value: boolean | undefined }>(() => ({
   value: undefined,
 }));
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../config/trustedFolders.js')
-  >('../../config/trustedFolders.js');
+vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({

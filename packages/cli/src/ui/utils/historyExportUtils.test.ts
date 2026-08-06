@@ -11,6 +11,8 @@ import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const realNodeCryptoModule = { ...(await import('node:crypto')) };
+
 const { mockRandomBytes } = {
   mockRandomBytes: vi.fn(),
 };
@@ -339,8 +341,7 @@ describe('historyExportUtils', () => {
     );
 
     it('should retry when the exporter candidate path already exists', async () => {
-      const actualCrypto =
-        await vi.importActual<typeof import('node:crypto')>('node:crypto');
+      const actualCrypto = realNodeCryptoModule;
       const fixedTime = '2026-07-28T12:34:56.789Z';
       const firstRandom = Buffer.alloc(8, 1);
       const secondRandom = Buffer.alloc(8, 2);

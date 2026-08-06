@@ -36,14 +36,18 @@ import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorForm
 import { testRegex } from '../../../../test-utils/regex.js';
 
 /** Part element type accepted by splitPartsByRole. */
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 type TestPart = Parameters<typeof splitPartsByRole>[0][number];
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
 const mockGetCodeAssistServer = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getCodeAssistServer: mockGetCodeAssistServer,
@@ -52,7 +56,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('../../../utils/markdownUtilities.js', async () => ({
+vi.mock('../../../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((text: string) => text.length),
 }));
 

@@ -371,8 +371,7 @@ describe('useAgentStream', () => {
             build: vi.fn(),
           },
           invocation: {
-            getDescription: () =>
-              'Mock<(...args: never[]) => unknown> description',
+            getDescription: () => 'Mock description',
           },
         } as unknown as TrackedExecutingToolCall,
       ];

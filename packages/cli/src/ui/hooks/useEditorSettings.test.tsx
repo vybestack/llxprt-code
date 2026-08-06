@@ -30,8 +30,12 @@ import { type AppState, type AppAction } from '../reducers/appReducer.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     checkHasEditorType: vi.fn(() => true),

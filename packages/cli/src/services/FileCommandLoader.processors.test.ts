@@ -9,6 +9,9 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { FileCommandLoader } from './FileCommandLoader.js';
 import { vi, type Mock } from 'bun:test';
 
+const realMockFsModule = { ...(await import('./__testhelpers__/mockFs.js')) };
+const realGlobModule = { ...(await import('glob')) };
+
 function assert(condition: unknown, message: string): asserts condition {
   if (condition === undefined || condition === null || condition === false) {
     throw new Error(message);
@@ -42,13 +45,11 @@ const settingsMockHoisted: {
   >;
 } = {};
 
-vi.mock('@vybestack/llxprt-code-settings', async () => {
+vi.mock('@vybestack/llxprt-code-settings', () => {
   // Resolved with vi.importActual inside the factory: it returns the genuine
   // module on both runners, and the factory is the earliest point at which the
   // helper can be loaded on Vitest (which hoists this call above the imports).
-  const { FsMockContext } = await vi.importActual<
-    typeof import('./__testhelpers__/mockFs.js')
-  >('./__testhelpers__/mockFs.js');
+  const { FsMockContext } = realMockFsModule;
   const ctx = new FsMockContext();
   settingsMockHoisted.ctx = ctx;
   return ctx.settingsMock();
@@ -107,8 +108,7 @@ describe('FileCommandLoader (processors)', () => {
     // real module snapshot captured at mock-registration time, but
     // vi.clearAllMocks() resets the mock function's implementation, so we
     // restore it here.
-    const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
-      .glob;
+    const actualGlob = realGlobModule.glob;
     (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {

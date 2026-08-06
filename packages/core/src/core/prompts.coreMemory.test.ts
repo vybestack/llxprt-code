@@ -34,6 +34,10 @@ import path from 'node:path';
 import os from 'node:os';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 const PROJECT_DIR = path.resolve('/my/project');
 
 const actual = { ...(await import('node:fs/promises')) };
@@ -52,10 +56,8 @@ const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
 }));
 

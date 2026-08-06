@@ -58,7 +58,7 @@ describe('fileUtils', () => {
     tempRootDir = actualNodeFs.mkdtempSync(
       path.join(os.tmpdir(), 'fileUtils-test-'),
     );
-    process.cwd = vi.fn(() => tempRootDir); // Mock<(...args: never[]) => unknown> cwd if necessary for relative path logic within tests
+    process.cwd = vi.fn(() => tempRootDir); // Mock cwd if necessary for relative path logic within tests
 
     testTextFilePath = path.join(tempRootDir, 'test.txt');
     testImageFilePath = path.join(tempRootDir, 'image.png');

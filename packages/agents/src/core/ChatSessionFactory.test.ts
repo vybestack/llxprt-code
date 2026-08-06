@@ -6,6 +6,12 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 
+const realHistoryServiceModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+  )),
+};
+
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
 }));
@@ -381,9 +387,7 @@ describe('createChatSession', () => {
     // exercised — the component under test is setupHistoryService's folding of
     // extraHistory into a stored service, and a real service proves the
     // restored turn is actually retained (not silently dropped).
-    const { HistoryService: RealHistoryService } = await vi.importActual<
-      typeof import('@vybestack/llxprt-code-core/services/history/HistoryService.js')
-    >('@vybestack/llxprt-code-core/services/history/HistoryService.js');
+    const { HistoryService: RealHistoryService } = realHistoryServiceModule;
     const storedHistoryService = new RealHistoryService();
     expect(storedHistoryService.isEmpty()).toBe(true);
 
@@ -426,9 +430,7 @@ describe('createChatSession', () => {
     // setupHistoryService must reuse it as-is and NOT also load extraHistory,
     // or the conversation would be duplicated. This pins the isEmpty()
     // discriminator's other branch.
-    const { HistoryService: RealHistoryService } = await vi.importActual<
-      typeof import('@vybestack/llxprt-code-core/services/history/HistoryService.js')
-    >('@vybestack/llxprt-code-core/services/history/HistoryService.js');
+    const { HistoryService: RealHistoryService } = realHistoryServiceModule;
     const storedHistoryService = new RealHistoryService();
     // Pre-seed the stored service so it is non-empty (simulating a live conv).
     storedHistoryService.add(

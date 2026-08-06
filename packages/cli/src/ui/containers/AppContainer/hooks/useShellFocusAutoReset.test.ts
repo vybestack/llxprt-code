@@ -11,13 +11,15 @@ import { ToolCallStatus } from '../../../types.js';
 import { SHELL_COMMAND_NAME } from '../../../constants.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const isActivePtyMock = vi.fn();
 const getLastActivePtyIdMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   return {
     ...actual,

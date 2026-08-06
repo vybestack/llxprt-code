@@ -13,12 +13,13 @@ import { act, StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
+const realNodeProcessModule = { ...(await import('node:process')) };
+
 const mockedExit = vi.fn();
 const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
-vi.mock('node:process', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:process')>('node:process');
+vi.mock('node:process', () => {
+  const actual = realNodeProcessModule;
   return {
     ...actual,
     exit: mockedExit,

@@ -25,6 +25,8 @@ import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 import { createDeferred } from '../../test-utils/async.js';
 
+const realNodeProcessModule = { ...(await import('node:process')) };
+
 const mockedCwd = vi.fn();
 // Records the requested exit code instead of throwing. The hook schedules its
 // exit from a timer callback, and throwing from there escapes as an unhandled
@@ -33,9 +35,8 @@ const mockedCwd = vi.fn();
 const mockedExit = vi.fn((_code: number) => undefined);
 const temporaryDirectories: string[] = [];
 
-vi.mock('node:process', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:process')>('node:process');
+vi.mock('node:process', () => {
+  const actual = realNodeProcessModule;
   const mockedProcess = {
     ...actual,
     cwd: mockedCwd,

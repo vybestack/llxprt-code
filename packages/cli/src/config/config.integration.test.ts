@@ -18,6 +18,13 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 
+const realLlxprtCodeStorageModule = {
+  ...(await import('@vybestack/llxprt-code-storage')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
   apiKey: 'test-key',
   model: 'test-model',
@@ -25,8 +32,8 @@ const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
 };
 
 // Mock file discovery service and tool registry
-vi.mock('@vybestack/llxprt-code-storage', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-storage');
+vi.mock('@vybestack/llxprt-code-storage', () => {
+  const actual = realLlxprtCodeStorageModule;
   return {
     ...actual,
     FileDiscoveryService: vi.fn().mockImplementation(() => ({
@@ -34,8 +41,8 @@ vi.mock('@vybestack/llxprt-code-storage', async () => {
     })),
   };
 });
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     createToolRegistry: vi.fn().mockResolvedValue({}),

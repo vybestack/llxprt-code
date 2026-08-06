@@ -18,8 +18,10 @@ import { ModelRegistry } from '../../src/models/registry.js';
 import { mockApiResponse } from './__fixtures__/mock-data.js';
 
 // Mock fs module
-vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof fs>('node:fs');
+const realNodeFsModule = { ...(await import('node:fs')) };
+
+vi.mock('node:fs', () => {
+  const actual = realNodeFsModule;
   return {
     ...actual,
     existsSync: vi.fn(),

@@ -9,9 +9,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { TrustLevel } from '../../config/trustedFolders.js';
 
 // Mock the trustedFolders module
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const mockSetValue = vi.fn();
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -26,8 +33,8 @@ vi.mock('../../config/trustedFolders.js', async () => {
 });
 
 // Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getIdeTrust: vi.fn(() => undefined),

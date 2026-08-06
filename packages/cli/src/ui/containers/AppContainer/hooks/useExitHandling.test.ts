@@ -11,10 +11,12 @@ import { renderHook } from '../../../../test-utils/render.js';
 import { SessionEndReason } from '@vybestack/llxprt-code-core';
 import { useExitHandling } from './useExitHandling.js';
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   return {
     ...actual,

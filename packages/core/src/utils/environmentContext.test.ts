@@ -39,7 +39,7 @@ describe('getDirectoryContextString', () => {
       getEnvironmentMemory: vi.fn().mockReturnValue(''),
     };
     (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
-      'Mock<(...args: never[]) => unknown> Folder Structure',
+      'Mock Folder Structure',
     );
   });
 
@@ -101,7 +101,7 @@ describe('getEnvironmentContext', () => {
     };
 
     (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
-      'Mock<(...args: never[]) => unknown> Folder Structure',
+      'Mock Folder Structure',
     );
   });
 

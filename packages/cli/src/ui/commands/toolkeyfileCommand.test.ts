@@ -23,6 +23,8 @@ import { assertDefined } from '../../test-utils/assertions.js';
 
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
 
+const realNodeOsModule = { ...(await import('node:os')) };
+
 const mockKeyfileStore = new Map<string, string>();
 const mockedHomedir = vi.fn();
 
@@ -55,7 +57,7 @@ describe('toolkeyfileCommand', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const actualOs = await vi.importActual<typeof import('node:os')>('node:os');
+    const actualOs = realNodeOsModule;
     mockedHomedir.mockReturnValue(actualOs.homedir());
     mockKeyfileStore.clear();
     context = createMockCommandContext();

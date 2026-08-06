@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-vi.mock('../ui/commands/profileCommand.js', async () => {
+const realInstallationInfoModule = {
+  ...(await import('./../utils/installationInfo.js')),
+};
+
+vi.mock('../ui/commands/profileCommand.js', () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     profileCommand: {
@@ -15,7 +19,7 @@ vi.mock('../ui/commands/profileCommand.js', async () => {
   };
 });
 
-vi.mock('../ui/commands/uiprofileCommand.js', async () => {
+vi.mock('../ui/commands/uiprofileCommand.js', () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     uiprofileCommand: {
@@ -26,7 +30,7 @@ vi.mock('../ui/commands/uiprofileCommand.js', async () => {
   };
 });
 
-vi.mock('../ui/commands/aboutCommand.js', async () => {
+vi.mock('../ui/commands/aboutCommand.js', () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     aboutCommand: {
@@ -37,7 +41,7 @@ vi.mock('../ui/commands/aboutCommand.js', async () => {
   };
 });
 
-vi.mock('../ui/commands/ideCommand.js', async () => {
+vi.mock('../ui/commands/ideCommand.js', () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     ideCommand: vi.fn().mockReturnValue({
@@ -50,7 +54,7 @@ vi.mock('../ui/commands/ideCommand.js', async () => {
 vi.mock('../ui/commands/restoreCommand.js', () => ({
   restoreCommand: vi.fn(),
 }));
-vi.mock('../ui/commands/permissionsCommand.js', async () => {
+vi.mock('../ui/commands/permissionsCommand.js', () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     permissionsCommand: {
@@ -85,7 +89,7 @@ vi.mock('../ui/commands/modelCommand.js', () => ({
 }));
 vi.mock('../ui/commands/privacyCommand.js', () => ({ privacyCommand: {} }));
 vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-vi.mock('../ui/commands/quotaCommand.js', async () => {
+vi.mock('../ui/commands/quotaCommand.js', () => {
   const { CommandKind } = await import('../ui/commands/types.js');
   return {
     quotaCommand: {
@@ -111,8 +115,8 @@ vi.mock('../ui/commands/mcpCommand.js', () => ({
 
 // Default the file to production behavior. The dedicated development case at
 // the end re-registers this module immediately before exercising uiprofile.
-vi.mock('../utils/installationInfo.js', async () => {
-  const actual = await vi.importActual('./../utils/installationInfo.js');
+vi.mock('../utils/installationInfo.js', () => {
+  const actual = realInstallationInfoModule;
   return {
     ...actual,
     isDevelopment: false,
@@ -268,8 +272,8 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should include uiprofile command when isDevelopment is true', async () => {
-    vi.mock('../utils/installationInfo.js', async () => {
-      const actual = await vi.importActual('./../utils/installationInfo.js');
+    vi.mock('../utils/installationInfo.js', () => {
+      const actual = realInstallationInfoModule;
       return {
         ...actual,
         isDevelopment: true,

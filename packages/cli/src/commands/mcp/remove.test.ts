@@ -22,8 +22,10 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('fs/promises', async () => {
-  const actual = await vi.importActual('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+vi.mock('fs/promises', () => {
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),

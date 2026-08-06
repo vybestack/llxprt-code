@@ -352,8 +352,7 @@ describe('useAgentStream', () => {
           build: vi.fn(),
         } as unknown as AnyDeclarativeTool,
         invocation: {
-          getDescription: () =>
-            `Mock<(...args: never[]) => unknown> description`,
+          getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
         startTime: Date.now(),
         endTime: Date.now(),
@@ -374,8 +373,7 @@ describe('useAgentStream', () => {
           build: vi.fn(),
         } as unknown as AnyDeclarativeTool,
         invocation: {
-          getDescription: () =>
-            `Mock<(...args: never[]) => unknown> description`,
+          getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
         startTime: Date.now(),
         liveOutput: '...',
@@ -419,8 +417,7 @@ describe('useAgentStream', () => {
           displayName: 'MockTool',
         },
         invocation: {
-          getDescription: () =>
-            `Mock<(...args: never[]) => unknown> description`,
+          getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
       } as TrackedCompletedToolCall,
       {
@@ -531,8 +528,7 @@ describe('useAgentStream', () => {
           displayName: 'MockTool',
         },
         invocation: {
-          getDescription: () =>
-            `Mock<(...args: never[]) => unknown> description`,
+          getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
       } as TrackedCompletedToolCall,
     ];

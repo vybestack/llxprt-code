@@ -335,7 +335,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
+        getDescription: () => `Mock description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'task',
@@ -386,7 +386,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
+        getDescription: () => `Mock description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'task',
@@ -457,7 +457,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
+        getDescription: () => `Mock description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'task',
@@ -575,7 +575,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
+        getDescription: () => `Mock description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'list_directory',

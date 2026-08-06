@@ -31,10 +31,13 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('./trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('./trustedFolders.js')>(
-    './trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+vi.mock('./trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
@@ -245,10 +248,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actualServer = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actualServer = realLlxprtCodeCoreModule;
   return {
     ...actualServer,
     IdeClient: {

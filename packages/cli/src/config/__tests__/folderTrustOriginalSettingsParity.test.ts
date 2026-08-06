@@ -50,10 +50,19 @@ import { isWorkspaceTrusted } from '../trustedFolders.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock('../trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('../trustedFolders.js')>(
-    '../trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
+const realProfileBootstrapModule = {
+  ...(await import('../profileBootstrap.js')),
+};
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+vi.mock('../trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return { ...actual, isWorkspaceTrusted: vi.fn() };
 });
 
@@ -95,13 +104,9 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
-vi.mock('../profileBootstrap.js', async () => {
-  const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
-    '../profileBootstrap.js',
-  );
-  const { SettingsService: RealSettingsService } = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+vi.mock('../profileBootstrap.js', () => {
+  const actual = realProfileBootstrapModule;
+  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => ({
@@ -266,10 +271,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     IdeClient: {

@@ -23,11 +23,10 @@ import {
 } from './types.js';
 import type { Config } from '../config/config.js';
 
-vi.mock('node:child_process', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:child_process')>(
-      'node:child_process',
-    );
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
+
+vi.mock('node:child_process', () => {
+  const actual = realNodeChildProcessModule;
   return { ...actual, spawn: vi.fn() };
 });
 

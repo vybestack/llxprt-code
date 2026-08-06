@@ -37,6 +37,8 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 // is an unmocked OS keychain call. SecureStore already accepts an injectable
 // keyring, so the real storage class is kept and only the keychain is swapped
 // for the in-memory adapter that test-bun/settingsStorage.bun.ts uses.
+const realGitUtilsModule = { ...(await import('../../utils/gitUtils.js')) };
+
 const actual = { ...(await import('./settingsStorage.js')) };
 vi.mock('./settingsStorage.js', () => {
   const entries = new Map<string, string>();
@@ -80,9 +82,7 @@ vi.mock('../../utils/gitUtils.js', () => {
   };
 });
 
-const actualGitUtils = await vi.importActual<
-  typeof import('../../utils/gitUtils.js')
->('../../utils/gitUtils.js');
+const actualGitUtils = realGitUtilsModule;
 
 describe('settingsIntegration', () => {
   let tempDir: string;

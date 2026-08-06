@@ -14,6 +14,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // Mock heavy dependencies first before importing component
+const realSettingsModule = { ...(await import('../../config/settings.js')) };
+
 vi.mock('../hooks/agentStream/index.js', () => ({
   useAgentStream: vi.fn(() => ({
     streamingState: 'Idle',
@@ -326,8 +328,8 @@ vi.mock('../../config/config.js', () => ({
   }),
 }));
 
-vi.mock('../../config/settings.js', async () => {
-  const actual = await vi.importActual('../../config/settings.js');
+vi.mock('../../config/settings.js', () => {
+  const actual = realSettingsModule;
   return {
     ...actual,
     SettingScope: { User: 'user', Workspace: 'workspace', System: 'system' },

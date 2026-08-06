@@ -20,8 +20,10 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { type CommandContext } from './types.js';
 
 // Mock the 'fs' module
-vi.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('fs')>('fs');
+const realFsModule = { ...(await import('fs')) };
+
+vi.mock('fs', () => {
+  const actual = realFsModule;
   return {
     ...actual,
     default: actual,

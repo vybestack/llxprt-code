@@ -10,6 +10,13 @@ import { renderHook } from '../../../../test-utils/render.js';
 import type { Key } from '../../../hooks/useKeypress.js';
 import { useKeybindings } from './useKeybindings.js';
 
+const realUseKeypressModule = {
+  ...(await import('../../../hooks/useKeypress.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const useKeypressMock = vi.fn();
 const isMouseEventsActiveMock = vi.fn();
 const setMouseEventsActiveMock = vi.fn();
@@ -18,10 +25,8 @@ const enableMouseEventsMock = vi.fn();
 const getLastActivePtyIdMock = vi.fn();
 const isActivePtyMock = vi.fn();
 
-vi.mock('../../../hooks/useKeypress.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../../hooks/useKeypress.js')
-  >('../../../hooks/useKeypress.js');
+vi.mock('../../../hooks/useKeypress.js', () => {
+  const actual = realUseKeypressModule;
 
   return {
     ...actual,
@@ -36,10 +41,8 @@ vi.mock('../../../utils/mouse.js', () => ({
   enableMouseEvents: enableMouseEventsMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   return {
     ...actual,

@@ -16,6 +16,10 @@ import { TrustFormAction } from '../trustDialogHelpers.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 import { usePermissionsTrustDialogFlow } from './usePermissionsTrustDialogFlow.js';
 
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+
 const mockedSetValue = vi.fn();
 const mockedDeleteRuleByKey = vi.fn();
 const mockedSnapshotValue = vi.fn();
@@ -25,10 +29,8 @@ const mockedTrustedConfig = vi.hoisted<{
   value: Record<string, TrustLevel>;
 }>(() => ({ value: {} }));
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../config/trustedFolders.js')
-  >('../../config/trustedFolders.js');
+vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({

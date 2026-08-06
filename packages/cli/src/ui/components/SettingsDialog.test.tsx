@@ -48,6 +48,13 @@ import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js
 import { testRegex } from '../../test-utils/regex.js';
 
 // Mock useUIState since we don't wrap in UIStateProvider
+const realVimModeContextModule = {
+  ...(await import('../contexts/VimModeContext.js')),
+};
+const realSettingsUtilsModule = {
+  ...(await import('../../utils/settingsUtils.js')),
+};
+
 vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: () => ({ mainAreaWidth: 120 }),
 }));
@@ -103,8 +110,8 @@ const createMockSettings = (
 // We use the real SETTINGS_SCHEMA from settingsSchema.js
 // Tests that need a custom schema can override it by mocking the module
 
-vi.mock('../contexts/VimModeContext.js', async () => {
-  const actual = await vi.importActual('../contexts/VimModeContext.js');
+vi.mock('../contexts/VimModeContext.js', () => {
+  const actual = realVimModeContextModule;
   return {
     ...actual,
     useVimMode: () => ({
@@ -116,8 +123,8 @@ vi.mock('../contexts/VimModeContext.js', async () => {
   };
 });
 
-vi.mock('../../utils/settingsUtils.js', async () => {
-  const actual = await vi.importActual('../../utils/settingsUtils.js');
+vi.mock('../../utils/settingsUtils.js', () => {
+  const actual = realSettingsUtilsModule;
   return {
     ...actual,
     saveModifiedSettings: vi.fn(),

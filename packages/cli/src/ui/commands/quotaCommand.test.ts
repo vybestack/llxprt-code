@@ -10,6 +10,10 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
+const realLlxprtCodeProvidersModule = {
+  ...(await import('@vybestack/llxprt-code-providers')),
+};
+
 const { mockConsumeCodexRateLimitResetCredit } = {
   mockConsumeCodexRateLimitResetCredit: vi.fn(),
 };
@@ -34,10 +38,8 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-providers')
-  >('@vybestack/llxprt-code-providers');
+vi.mock('@vybestack/llxprt-code-providers', () => {
+  const actual = realLlxprtCodeProvidersModule;
   return {
     ...actual,
     consumeCodexRateLimitResetCredit: mockConsumeCodexRateLimitResetCredit,

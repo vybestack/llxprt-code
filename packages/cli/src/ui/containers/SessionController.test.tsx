@@ -24,6 +24,10 @@ import {
 // SessionController reads the runtime bridge both as a hook and via the
 // module-level accessor. The real provider resolves the CLI runtime scope,
 // which this container test does not establish.
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 vi.mock('../contexts/RuntimeContext.js', () => {
   // resolveModelIdentity formats from status.providerName + status.modelName.
   // Without modelName the identity collapses to the bare provider name, which
@@ -120,8 +124,8 @@ vi.mock('../../config/settings.js', () => ({
   loadSettings,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
   };

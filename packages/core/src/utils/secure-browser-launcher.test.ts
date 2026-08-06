@@ -17,6 +17,8 @@ import {
   shouldLaunchBrowser,
 } from './secure-browser-launcher.js';
 
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
+
 const mockExecFile = secureBrowserMocks.execFile;
 const mockStat = secureBrowserMocks.stat;
 const mockPlatform = secureBrowserMocks.platform;
@@ -161,10 +163,7 @@ describe('secure-browser-launcher', () => {
           join(tmpdir(), 'llxprt-browser-launch-'),
         );
         const sentinelPath = join(directory, 'parent-sentinel.txt');
-        const { execFile: executeFile } =
-          await vi.importActual<typeof import('node:child_process')>(
-            'node:child_process',
-          );
+        const { execFile: executeFile } = realNodeChildProcessModule;
 
         mockExecFile.mockImplementationOnce(async (command, args, options) => {
           await new Promise<void>((resolve, reject) => {

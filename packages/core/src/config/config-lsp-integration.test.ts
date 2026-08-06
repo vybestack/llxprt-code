@@ -23,6 +23,10 @@ import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxp
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 function containsAllSubstrings(value: string, parts: string[]): boolean {
   return parts.every((p) => value.includes(p));
 }
@@ -190,10 +194,8 @@ vi.mock('../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),

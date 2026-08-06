@@ -430,12 +430,12 @@ const mockConfig = {
 
 const mockTool = new MockTool({
   name: 'mockTool',
-  displayName: 'Mock<(...args: never[]) => unknown> Tool',
+  displayName: 'Mock Tool',
   shouldConfirmExecute: vi.fn(),
 });
 const mockToolRequiresConfirmation = new MockTool({
   name: 'mockToolRequiresConfirmation',
-  displayName: 'Mock<(...args: never[]) => unknown> Tool Requires Confirmation',
+  displayName: 'Mock Tool Requires Confirmation',
   shouldConfirmExecute: vi.fn(),
 });
 

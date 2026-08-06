@@ -43,6 +43,8 @@ import {
   SessionLockedError,
 } from './SessionLockManager.js';
 
+const realPromisesModule = { ...(await import('node:fs/promises')) };
+
 const actual = { ...(await import('node:fs/promises')) };
 vi.mock('node:fs/promises', () => {
   return {
@@ -113,10 +115,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
   });
 
   afterEach(async () => {
-    const actualFs =
-      await vi.importActual<typeof import('node:fs/promises')>(
-        'node:fs/promises',
-      );
+    const actualFs = realPromisesModule;
     (fs.writeFile as Mock<typeof fs.writeFile>).mockReset();
     (fs.writeFile as Mock<typeof fs.writeFile>).mockImplementation(
       actualFs.writeFile,

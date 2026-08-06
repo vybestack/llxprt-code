@@ -18,6 +18,14 @@ import { ideContext } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
 
+const realNodeProcessModule = { ...(await import('node:process')) };
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const mockedExit = vi.fn();
 const mockedCwd = vi.fn();
 const mockedSetValue = vi.fn();
@@ -28,8 +36,8 @@ const mockedRestoreSnapshot = vi.fn();
 const mockedResolvePathTrust = vi.fn();
 const mockedTrustedConfig = vi.hoisted<Record<string, TrustLevel>>(() => ({}));
 
-vi.mock('node:process', async () => {
-  const actual = await vi.importActual('node:process');
+vi.mock('node:process', () => {
+  const actual = realNodeProcessModule;
   return {
     ...actual,
     exit: mockedExit,
@@ -38,8 +46,8 @@ vi.mock('node:process', async () => {
 });
 
 // Mock the trustedFolders module
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -58,8 +66,8 @@ vi.mock('../../config/trustedFolders.js', async () => {
 });
 
 // Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getIdeTrust: vi.fn(() => undefined),

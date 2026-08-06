@@ -21,6 +21,9 @@ import {
 import { loadSettings, USER_SETTINGS_PATH } from './settings.js';
 import { resetTrustedFoldersForTesting, TrustLevel } from './trustedFolders.js';
 
+const realFsModule = { ...(await import('fs')) };
+const realOsModule = { ...(await import('os')) };
+
 const actualOs = { ...(await import('os')) };
 vi.mock('os', () => {
   return {
@@ -42,8 +45,8 @@ vi.mock('fs', () => {
   };
 });
 
-const realFs = await vi.importActual<typeof import('fs')>('fs');
-const realOs = await vi.importActual<typeof import('os')>('os');
+const realFs = realFsModule;
+const realOs = realOsModule;
 
 const mockCoreEvents = {
   emitFeedback: vi.fn(),

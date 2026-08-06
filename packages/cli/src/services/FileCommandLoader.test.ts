@@ -27,6 +27,8 @@ import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.
 import type { CommandContext } from '../ui/commands/types.js';
 import { FsMockContext } from './__testhelpers__/mockFs.js';
 
+const realGlobModule = { ...(await import('glob')) };
+
 const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -85,8 +87,7 @@ describe('FileCommandLoader', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     fsMock.clear();
-    const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
-      .glob;
+    const actualGlob = realGlobModule.glob;
     (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {

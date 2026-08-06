@@ -9,8 +9,14 @@ import yargs, { type Argv } from 'yargs';
 import { addCommand } from './add.js';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 
-vi.mock('fs/promises', async () => {
-  const actual = await vi.importActual('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+const realSettingsModule = { ...(await import('../../config/settings.js')) };
+const realLlxprtCodeTelemetryModule = {
+  ...(await import('@vybestack/llxprt-code-telemetry')),
+};
+
+vi.mock('fs/promises', () => {
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),
@@ -28,8 +34,8 @@ vi.mock('os', () => {
   };
 });
 
-vi.mock('../../config/settings.js', async () => {
-  const actual = await vi.importActual('../../config/settings.js');
+vi.mock('../../config/settings.js', () => {
+  const actual = realSettingsModule;
   return {
     ...actual,
     loadSettings: vi.fn(),
@@ -52,10 +58,8 @@ const mockDebugLogger = {
   debug: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-telemetry', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-telemetry')
-  >('@vybestack/llxprt-code-telemetry');
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
+  const actual = realLlxprtCodeTelemetryModule;
   return {
     ...actual,
     debugLogger: mockDebugLogger,

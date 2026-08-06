@@ -430,12 +430,12 @@ const mockConfig = {
 
 const mockTool = new MockTool({
   name: 'mockTool',
-  displayName: 'Mock<(...args: never[]) => unknown> Tool',
+  displayName: 'Mock Tool',
   shouldConfirmExecute: vi.fn(),
 });
 const mockToolWithLiveOutput = new MockTool({
   name: 'mockToolWithLiveOutput',
-  displayName: 'Mock<(...args: never[]) => unknown> Tool With Live Output',
+  displayName: 'Mock Tool With Live Output',
   description: 'A mock tool for testing',
   params: {},
   isOutputMarkdown: true,
@@ -445,7 +445,7 @@ const mockToolWithLiveOutput = new MockTool({
 let mockOnUserConfirmForToolConfirmation: Mock<(...args: never[]) => unknown>;
 const mockToolRequiresConfirmation = new MockTool({
   name: 'mockToolRequiresConfirmation',
-  displayName: 'Mock<(...args: never[]) => unknown> Tool Requires Confirmation',
+  displayName: 'Mock Tool Requires Confirmation',
   shouldConfirmExecute: vi.fn(),
 });
 
@@ -496,12 +496,11 @@ describe('useReactToolScheduler (split)', () => {
       onConfirm: mockOnUserConfirmForToolConfirmation,
       fileName: 'mockToolRequiresConfirmation.ts',
       filePath: 'mockToolRequiresConfirmation.ts',
-      fileDiff:
-        'Mock<(...args: never[]) => unknown> tool requires confirmation',
+      fileDiff: 'Mock tool requires confirmation',
       originalContent: 'original',
       newContent: 'updated',
       type: 'edit',
-      title: 'Mock<(...args: never[]) => unknown> Tool Requires Confirmation',
+      title: 'Mock Tool Requires Confirmation',
     };
     (
       mockToolRequiresConfirmation.shouldConfirmExecute as Mock<

@@ -22,6 +22,10 @@ import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 // Mock file system operations
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),
@@ -32,10 +36,8 @@ vi.mock('node:fs', () => ({
 }));
 
 // Mock Storage module
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   Storage: {
     getMcpOAuthTokensPath: vi.fn().mockReturnValue('/test/path/tokens.json'),
   },

@@ -25,16 +25,23 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('./installationInfo.js', async () => {
-  const actual = await vi.importActual('./installationInfo.js');
+const realInstallationInfoModule = {
+  ...(await import('./installationInfo.js')),
+};
+const realUpdateEventEmitterModule = {
+  ...(await import('./updateEventEmitter.js')),
+};
+
+vi.mock('./installationInfo.js', () => {
+  const actual = realInstallationInfoModule;
   return {
     ...actual,
     getInstallationInfo: vi.fn(),
   };
 });
 
-vi.mock('./updateEventEmitter.js', async () => {
-  const actual = await vi.importActual('./updateEventEmitter.js');
+vi.mock('./updateEventEmitter.js', () => {
+  const actual = realUpdateEventEmitterModule;
   return {
     ...actual,
     updateEventEmitter: {
@@ -139,7 +146,7 @@ describe('handleAutoUpdate', () => {
     delete process.env['LLXPRT_DATA_HOME'];
     mockExistsSync.mockReturnValue(false);
     mockReaddirSync.mockReturnValue([]);
-    mockOpenSync.mockReturnValue(42); // Mock<(...args: never[]) => unknown> file descriptor
+    mockOpenSync.mockReturnValue(42); // Mock file descriptor
   });
 
   afterEach(() => {
