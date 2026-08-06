@@ -120,6 +120,13 @@ describe('startInteractiveUI', () => {
     __resetInteractiveUIStateForTesting();
   });
 
+  afterEach(async () => {
+    const { __setRenderForTesting } = await import(
+      './session/interactiveUI.js'
+    );
+    __setRenderForTesting(null);
+  });
+
   // Mock dependencies
   const mockConfig = {
     getProjectRoot: () => '/root',

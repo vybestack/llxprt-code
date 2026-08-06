@@ -171,15 +171,14 @@ export class FsMockContext {
     // EEXIST even after rmSync in some edge cases, so wrap in try-catch.
     rmSync(this.userCommandsDir, { recursive: true, force: true });
     rmSync(this.projectCommandsDir, { recursive: true, force: true });
-    try {
-      mkdirSync(this.userCommandsDir, { recursive: true });
-    } catch {
-      /* already removed above, ignore */
-    }
-    try {
-      mkdirSync(this.projectCommandsDir, { recursive: true });
-    } catch {
-      /* already removed above, ignore */
+    for (const directory of [this.userCommandsDir, this.projectCommandsDir]) {
+      try {
+        mkdirSync(directory, { recursive: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+          throw error;
+        }
+      }
     }
   }
 

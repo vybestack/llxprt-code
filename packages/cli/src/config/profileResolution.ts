@@ -149,6 +149,15 @@ export function resolveProfileToLoad(
 
 // ─── Sub-functions ────────────────────────────────────────────────────────────
 
+function isTemporaryDebugMode(argv: CliArgs): boolean {
+  return (
+    argv.debug === true ||
+    [process.env.DEBUG, process.env.DEBUG_MODE].some(
+      (value) => value === 'true' || value === '1',
+    )
+  );
+}
+
 function applyInlineProfile(
   profileJson: string,
   argv: CliArgs,
@@ -167,9 +176,11 @@ function applyInlineProfile(
   );
   // Mirrors applyFileProfile: an inline profile is just as worth tracing, and
   // without this the two paths disagree about what --profile did.
-  debugLogger.debug(
-    `Loaded profile 'inline': provider=${profile.provider}, model=${profile.model}`,
-  );
+  if (isTemporaryDebugMode(argv)) {
+    debugLogger.debug(
+      `Loaded profile 'inline': provider=${profile.provider}, model=${profile.model}`,
+    );
+  }
   return {
     profileMergedSettings: prepared.profileMergedSettings,
     profileModel: prepared.profileModel,
@@ -200,14 +211,7 @@ async function applyFileProfile(
       settings,
     );
 
-    const tempDebugMode =
-      argv.debug === true ||
-      [process.env.DEBUG, process.env.DEBUG_MODE].some(
-        (v) => v === 'true' || v === '1',
-      ) ||
-      false;
-
-    if (tempDebugMode) {
+    if (isTemporaryDebugMode(argv)) {
       debugLogger.debug(
         `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
       );

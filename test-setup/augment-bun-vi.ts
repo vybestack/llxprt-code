@@ -660,9 +660,26 @@ const registerModuleMock = (
   // draining the microtask queue settles the promise immediately and lets the
   // mock be registered before the module body continues.
   drainMicrotasks();
-  const settled = Bun.peek(factoryResult);
-  if (settled !== factoryResult) {
-    return applyModuleMock(mockId, resolvedId, toNamespace(settled));
+  const factoryStatus = Bun.peek.status(factoryResult);
+  if (factoryStatus === 'fulfilled') {
+    return applyModuleMock(
+      mockId,
+      resolvedId,
+      toNamespace(Bun.peek(factoryResult)),
+    );
+  }
+  if (factoryStatus === 'rejected') {
+    const rejection = Bun.peek(factoryResult);
+    void factoryResult.catch(() => {});
+    throw rejection;
+  }
+  if (loadError !== undefined) {
+    void factoryResult.catch(() => {});
+    throw new Error(
+      `vi.mock factory for "${mockId}" remained pending while its original ` +
+        'module could not be loaded synchronously',
+      { cause: loadError },
+    );
   }
 
   // Genuinely pending factory (real async work). Register a placeholder with

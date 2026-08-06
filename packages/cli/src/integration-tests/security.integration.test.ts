@@ -386,7 +386,7 @@ describe('API Key Security Integration Tests', () => {
 
       // Valid keyfile should be readable. Awaited directly: resolves.not.toThrow
       // does not work under Bun's expect.
-      await fs.access(validKeyfile);
+      await fs.access(validKeyfile, fs.constants.R_OK);
 
       // Invalid keyfile should not exist
       await expect(fs.access(invalidKeyfile)).rejects.toThrow(/ENOENT/);

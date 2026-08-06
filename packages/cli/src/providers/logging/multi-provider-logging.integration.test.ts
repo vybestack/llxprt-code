@@ -502,7 +502,13 @@ describe('Multi-Provider Conversation Logging Integration', () => {
           {
             name: 'search_web',
             description: 'Search the web',
-            parameters: { query: 'string' },
+            parametersJsonSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' },
+              },
+              required: ['query'],
+            },
           },
         ],
       },

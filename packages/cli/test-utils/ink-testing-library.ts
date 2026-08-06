@@ -94,7 +94,15 @@ export interface InkRenderResult {
   lastFrame: () => string | undefined;
 }
 
-const activeInstances = new Set<InkInstance>();
+const activeInstances = new Map<InkInstance, Stdin>();
+
+function restoreMostRecentStdin(): void {
+  const remaining = Array.from(activeInstances.values());
+  const stdin = remaining.at(-1);
+  setActiveStdin(
+    stdin === undefined ? null : (stdin as unknown as NodeJS.ReadStream),
+  );
+}
 
 export const render = (
   tree: Parameters<typeof inkRender>[0],
@@ -114,14 +122,14 @@ export const render = (
     patchConsole: false,
   });
 
-  activeInstances.add(instance);
+  activeInstances.set(instance, stdin);
 
   const originalUnmount = instance.unmount.bind(instance);
   const originalCleanup = instance.cleanup.bind(instance);
 
   const removeActiveInstance = () => {
     activeInstances.delete(instance);
-    setActiveStdin(null);
+    restoreMostRecentStdin();
   };
 
   return {
@@ -143,7 +151,7 @@ export const render = (
 };
 
 export const cleanup = () => {
-  for (const instance of Array.from(activeInstances)) {
+  for (const instance of Array.from(activeInstances.keys())) {
     activeInstances.delete(instance);
 
     try {
@@ -158,4 +166,5 @@ export const cleanup = () => {
       // Ignore teardown failures in test cleanup.
     }
   }
+  setActiveStdin(null);
 };

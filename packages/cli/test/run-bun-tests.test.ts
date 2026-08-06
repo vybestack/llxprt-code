@@ -271,7 +271,11 @@ describe('discoverTestFiles symlink safety', () => {
       mkdirSync(nested, { recursive: true });
       writeFileSync(join(nested, 'thing.test.ts'), 'export {};');
       // nested/loop -> src, so a naive walk would recurse forever.
-      symlinkSync(src, join(nested, 'loop'), 'dir');
+      symlinkSync(
+        src,
+        join(nested, 'loop'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
 
       const found = discoverTestFiles(root);
 

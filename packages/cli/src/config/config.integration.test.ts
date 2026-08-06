@@ -364,7 +364,7 @@ describe('Configuration Integration Tests', () => {
      */
     async function parseArgumentsWithExitAsThrow(): Promise<unknown> {
       const realExit = process.exit;
-      const realStdoutWrite = process.stdout.write.bind(process.stdout);
+      const realStdoutWrite = process.stdout.write;
       process.exit = ((code?: number) => {
         throw new Error(`process.exit(${code ?? 0}) during argument parsing`);
       }) as typeof process.exit;
