@@ -430,7 +430,6 @@ export class ShellJobManager {
           error: new Error('Windows kill timed out'),
         });
       }, this.windowsKillTimeoutMs);
-      timer.unref();
 
       // Normalise via an async trampoline so a SYNCHRONOUS throw from the
       // injected implementation (or a synchronously-rejected promise) can
@@ -496,7 +495,6 @@ export class ShellJobManager {
         ctx.record.terminalPromise.then((): 'done' => 'done'),
         new Promise<'timeout'>((resolve) => {
           timer = setTimeout(() => resolve('timeout'), CANCEL_TIMEOUT_MS);
-          timer.unref();
         }),
       ]);
       if (result === 'timeout' && ctx.record.state === 'running') {
@@ -770,8 +768,7 @@ export class ShellJobManager {
       if (!stillLive) return [];
 
       await new Promise<void>((resolve) => {
-        const verifyTimer = setTimeout(resolve, VERIFY_DELAY_MS);
-        verifyTimer.unref();
+        setTimeout(resolve, VERIFY_DELAY_MS);
       });
 
       for (const [id, entry] of Array.from(this.survivors.entries())) {

@@ -76,8 +76,11 @@ function isValidIso8601(ts: string): boolean {
 }
 
 function waitForExit(child: ChildProcess): Promise<number | null> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(child.exitCode);
+  }
   return new Promise((resolve) => {
-    child.on('exit', (code) => resolve(code));
+    child.once('exit', (code) => resolve(code));
   });
 }
 

@@ -59,7 +59,9 @@ const MIN_CONCURRENCY = 1;
  * that work starves individual tests past the 30s budget, which surfaces as a
  * different file failing on each run rather than as an honestly slow run.
  * Leaving headroom matters most on small CI runners, where the core count is
- * roughly the concurrency an unclamped default would pick.
+ * roughly the concurrency an unclamped default would pick. macOS CI runs one
+ * file at a time because its virtual cores repeatedly starve one process past
+ * the test budget even at half-concurrency.
  *
  * `LLXPRT_AGENTS_TEST_CONCURRENCY` overrides this.
  */
@@ -72,6 +74,9 @@ function resolveConcurrency(): number {
       );
     }
     return Number.parseInt(override.trim(), 10);
+  }
+  if (process.platform === 'darwin' && process.env.CI === 'true') {
+    return MIN_CONCURRENCY;
   }
   const half = Math.floor(availableParallelism() / 2);
   return Math.min(MAX_CONCURRENCY, Math.max(MIN_CONCURRENCY, half));

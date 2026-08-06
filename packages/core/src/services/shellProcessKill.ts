@@ -30,9 +30,9 @@ export const TASKKILL_TIMEOUT_MS = 5000;
 /**
  * Bounded, never-rejecting Windows taskkill. Races the taskkill subprocess
  * against a timer, kills the subprocess on timeout, and always resolves with
- * a {@link TaskkillResult}. The timer is unref'd and cleared on settle so it
- * never keeps the event loop alive. Callers can await this without fear of
- * hanging or unhandled rejections.
+ * a {@link TaskkillResult}. The timer stays referenced while callers await this
+ * operation and is cleared on settle, guaranteeing forward progress even though
+ * the taskkill child itself is unref'd.
  */
 export function boundedTaskkill(pid: number): Promise<TaskkillResult> {
   return new Promise((resolve) => {
@@ -60,7 +60,6 @@ export function boundedTaskkill(pid: number): Promise<TaskkillResult> {
         error: new Error(`taskkill timed out after ${TASKKILL_TIMEOUT_MS}ms`),
       });
     }, TASKKILL_TIMEOUT_MS);
-    timer.unref();
 
     // cpSpawn can throw synchronously (e.g. EMFILE/ENOMEM under resource
     // pressure). Catch it so the never-rejecting contract is preserved: route
