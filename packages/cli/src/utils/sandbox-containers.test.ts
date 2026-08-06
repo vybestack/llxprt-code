@@ -18,6 +18,13 @@ import {
   addContainerEnvVars,
   addContainerVolumeMounts,
 } from './sandbox-containers.js';
+import { runContainerSandbox } from './sandbox-exec.js';
+import {
+  getContainerPath,
+  resolveSandboxContainerHome,
+} from './sandbox-env.js';
+import { entrypoint } from './sandbox-entrypoint.js';
+import { Storage } from '@vybestack/llxprt-code-storage';
 
 // Explicit factory mock: Bun's automock walks every export of
 // node:child_process and hits getters that access private fields
@@ -533,5 +540,300 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
     const userIdx = proxyArgs.indexOf('--user');
     expect(userIdx).toBeGreaterThanOrEqual(0);
     expect(proxyArgs[userIdx + 1]).toBe('501:20');
+  });
+});
+
+// Parsing helpers that operate on the produced docker argv. They look only at
+// the real buildContainerRunArgs output — no mocks — so the assertions pin the
+// observable container behaviour, not a stub's call arguments.
+function volumeDestinations(args: readonly string[]): string[] {
+  const dests: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--volume' && i + 1 < args.length) {
+      const volume = args[i + 1];
+      const sourceEnd = volume.indexOf(
+        ':',
+        /^[A-Za-z]:[\\/]/.test(volume) ? 2 : 0,
+      );
+      if (sourceEnd === -1) continue;
+      const destinationAndOptions = volume.slice(sourceEnd + 1);
+      const optionStart = destinationAndOptions.indexOf(':');
+      dests.push(
+        destinationAndOptions.slice(
+          0,
+          optionStart === -1 ? undefined : optionStart,
+        ),
+      );
+    }
+  }
+  return dests;
+}
+
+describe('volumeDestinations', () => {
+  it('extracts the destination from a Windows host path', () => {
+    expect(
+      volumeDestinations([
+        '--volume',
+        'C:\\Users\\me\\config:/c/Users/me/config:z',
+      ]),
+    ).toStrictEqual(['/c/Users/me/config']);
+  });
+});
+
+function envValue(args: readonly string[], name: string): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--env' && i + 1 < args.length) {
+      const pair = args[i + 1];
+      if (pair.startsWith(`${name}=`)) return pair.slice(name.length + 1);
+    }
+  }
+  return undefined;
+}
+
+function entrypointScript(workdir: string): string {
+  // The final element of entrypoint()'s returned argv is the shell script the
+  // container runs. cliArgs is [cli, subcommand, ...userArgs].
+  return String(entrypoint(workdir, ['llxprt', 'chat']).at(-1));
+}
+
+function xdgDefaultFromScript(script: string, name: string): string {
+  // Extracts the value from `export NAME="VALUE"`. Uses string indexOf so the
+  // $/${} metacharacters need no escaping.
+  const prefix = 'export ' + name + '="';
+  const start = script.indexOf(prefix);
+  if (start === -1) {
+    throw new Error(`${name} export not found in entrypoint script`);
+  }
+  const valueStart = start + prefix.length;
+  const end = script.indexOf('"', valueStart);
+  if (end === -1) {
+    throw new Error(`${name} export not found in entrypoint script`);
+  }
+  return script.slice(valueStart, end);
+}
+
+const CANONICAL_CONFIG_MOUNT_ENV_KEYS = [
+  'SANDBOX_SET_UID_GID',
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+
+describe.sequential('#3081 canonical config mount + env pinning', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let fixturePath = '';
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-3081-'));
+    vi.resetAllMocks();
+    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    // Force the non-current-user path deterministically: the Debian/Ubuntu
+    // auto-detect makes shouldUseCurrentUserInSandbox return true on some
+    // CI hosts. containerHome is then /home/node regardless of host.
+    process.env.SANDBOX_SET_UID_GID = 'false';
+    for (const key of CANONICAL_CONFIG_MOUNT_ENV_KEYS) {
+      if (key !== 'SANDBOX_SET_UID_GID') delete process.env[key];
+    }
+    delete process.env.SANDBOX_ENV;
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    vi.restoreAllMocks();
+    if (fixturePath !== '') {
+      fs.rmSync(fixturePath, { recursive: true, force: true });
+    }
+  });
+
+  it('mounts the config dir at path parity and emits no legacy dot-llxprt destination', () => {
+    const args = buildArgs(fixturePath);
+    const hostConfigDir = Storage.getGlobalConfigDir();
+    const containerConfigDir = getContainerPath(hostConfigDir);
+
+    // The canonical mount is present at path parity...
+    expect(args).toContain('--volume');
+    expect(args).toContain(`${hostConfigDir}:${containerConfigDir}`);
+    // ...and the legacy destination is gone from every volume destination.
+    const dests = volumeDestinations(args);
+    expect(dests.every((d) => !d.endsWith('/.llxprt'))).toBe(true);
+  });
+
+  it('pins LLXPRT_CONFIG_HOME to the config mount destination', () => {
+    const args = buildArgs(fixturePath);
+    const containerConfigDir = getContainerPath(Storage.getGlobalConfigDir());
+
+    expect(envValue(args, 'LLXPRT_CONFIG_HOME')).toBe(containerConfigDir);
+  });
+
+  it('pins DATA/CACHE/LOG homes from the container HOME inside the entrypoint', () => {
+    // After fix #4 the three ephemeral roots are exported from $HOME inside
+    // the entrypoint (not passed as --env from the host), so they follow the
+    // image's real container HOME. Verify the entrypoint script carries all
+    // three exports with the correct distinct $HOME-relative suffixes.
+    const script = entrypointScript(fixturePath);
+    const data = xdgDefaultFromScript(script, 'LLXPRT_DATA_HOME');
+    const cache = xdgDefaultFromScript(script, 'LLXPRT_CACHE_HOME');
+    const log = xdgDefaultFromScript(script, 'LLXPRT_LOG_HOME');
+
+    expect(data).toBe('$HOME/.local/share/llxprt-code');
+    expect(cache).toBe('$HOME/.cache/llxprt-code');
+    expect(log).toBe('$HOME/.local/state/llxprt-code');
+    // Pairwise distinct, so data/cache/log never collapse into one directory.
+    expect(new Set([data, cache, log]).size).toBe(3);
+  });
+
+  it('does not emit DATA/CACHE/LOG homes as --env from the host', () => {
+    // They moved to the entrypoint; none may appear in the host-built argv.
+    const args = buildArgs(fixturePath);
+    expect(envValue(args, 'LLXPRT_DATA_HOME')).toBeUndefined();
+    expect(envValue(args, 'LLXPRT_CACHE_HOME')).toBeUndefined();
+    expect(envValue(args, 'LLXPRT_LOG_HOME')).toBeUndefined();
+  });
+
+  it('drives the config mount from LLXPRT_CONFIG_HOME at call time (regression for frozen constant)', () => {
+    // Fix #3 made the config dir read dynamically; setting the env var must
+    // actually change the emitted mount (it was inert against the frozen
+    // module-load-time constant before). Use a DISTINCT temp dir so the value
+    // is absolute, valid and provably different from the workdir/tmpdir mount.
+    const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cfg-3081-'));
+    process.env.LLXPRT_CONFIG_HOME = configHome;
+    try {
+      const args = buildArgs(fixturePath);
+      const expectedContainer = getContainerPath(configHome);
+
+      expect(args).toContain(`${configHome}:${expectedContainer}`);
+      expect(envValue(args, 'LLXPRT_CONFIG_HOME')).toBe(expectedContainer);
+    } finally {
+      delete process.env.LLXPRT_CONFIG_HOME;
+      fs.rmSync(configHome, { recursive: true, force: true });
+    }
+  });
+
+  it('covers the resolved config dir with an emitted --volume destination', () => {
+    // The original bug: the destination the CLI resolved inside the container
+    // was NOT covered by any --volume mount. Compute the expectation via the
+    // REAL resolver (independent of the argv the function just produced), then
+    // assert the resolver's answer is present among the volume destinations.
+    const args = buildArgs(fixturePath);
+    const emitted = envValue(args, 'LLXPRT_CONFIG_HOME');
+    expect(emitted).toBeDefined();
+    process.env.LLXPRT_CONFIG_HOME = emitted;
+    const resolved = Storage.getGlobalConfigDir();
+    expect(volumeDestinations(args)).toContain(resolved);
+  });
+
+  it('emitted LLXPRT_CONFIG_HOME satisfies Storage.isNonEmptyAbsoluteOverride', () => {
+    // That override check is what short-circuits the phantom in-container
+    // startup migration. Pin it so a non-absolute / relative value would fail.
+    const args = buildArgs(fixturePath);
+    const emitted = envValue(args, 'LLXPRT_CONFIG_HOME');
+    expect(emitted).toBeDefined();
+    expect(Storage.isNonEmptyAbsoluteOverride(emitted)).toBe(true);
+  });
+
+  it.each([
+    'LLXPRT_CONFIG_HOME',
+    'LLXPRT_DATA_HOME',
+    'LLXPRT_CACHE_HOME',
+    'LLXPRT_LOG_HOME',
+  ])('rejects a SANDBOX_ENV override of pinned %s', (reservedKey) => {
+    process.env.SANDBOX_ENV = `FOO=bar,${reservedKey}=/evil/override,BAZ=qux`;
+    const args = buildArgs(fixturePath);
+
+    // addContainerEnvVars runs after buildContainerRunArgs in the real flow.
+    expect(() =>
+      addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace'),
+    ).toThrowError(FatalSandboxError);
+    expect(() =>
+      addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace'),
+    ).toThrowError(
+      new RegExp(`may not override reserved key '${reservedKey}'`),
+    );
+  });
+
+  it('rejects reserved SANDBOX_ENV before image or network side effects', async () => {
+    process.env.SANDBOX_ENV = 'LLXPRT_CONFIG_HOME=/evil/override';
+
+    await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
+      /may not override reserved key 'LLXPRT_CONFIG_HOME'/,
+    );
+    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+  });
+
+  it('translates Windows host paths: no backslash in emitted config home or entrypoint roots', () => {
+    // With the host platform stubbed to win32, every emitted LLXPRT_*_HOME
+    // value must be POSIX (no backslashes); the /c/... translation form is
+    // pinned directly against getContainerPath in sandbox-env.bun.ts.
+    vi.spyOn(os, 'platform').mockReturnValue('win32');
+    const args = buildArgs(fixturePath);
+
+    const configHome = envValue(args, 'LLXPRT_CONFIG_HOME');
+    expect(configHome).toBeDefined();
+    expect(configHome).not.toMatch(/\\/);
+    const script = entrypointScript(fixturePath);
+    for (const name of [
+      'LLXPRT_DATA_HOME',
+      'LLXPRT_CACHE_HOME',
+      'LLXPRT_LOG_HOME',
+    ]) {
+      expect(xdgDefaultFromScript(script, name)).not.toMatch(/\\/);
+    }
+  });
+});
+
+describe.sequential('#3081 current-user container-home agreement', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let fixturePath = '';
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-3081-cu-'));
+    vi.resetAllMocks();
+    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    process.env.SANDBOX_SET_UID_GID = '1';
+    for (const key of CANONICAL_CONFIG_MOUNT_ENV_KEYS) {
+      if (key !== 'SANDBOX_SET_UID_GID') delete process.env[key];
+    }
+    delete process.env.SANDBOX_ENV;
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    vi.restoreAllMocks();
+    if (fixturePath !== '') {
+      fs.rmSync(fixturePath, { recursive: true, force: true });
+    }
+  });
+
+  it('pins HOME and the entrypoint ephemeral roots to the host home, keeping CONFIG_HOME on the mount', async () => {
+    const args = buildArgs(fixturePath);
+    // Capture the clean entrypoint script before setupContainerUser wraps it
+    // in `su -p`; its $HOME-relative exports are what the exec'd CLI inherits.
+    const finalEntrypoint = entrypoint(fixturePath, ['llxprt', 'chat']);
+    const cleanScript = String(finalEntrypoint.at(-1));
+    await setupContainerUser(args, finalEntrypoint);
+
+    const home = envValue(args, 'HOME');
+    const expectedHome = resolveSandboxContainerHome();
+    expect(home).toBe(expectedHome);
+    expect(expectedHome).toBe(getContainerPath(os.homedir()));
+
+    // The three ephemeral roots are derived from that HOME, so the HOME pinned
+    // here and the entrypoint's $HOME-relative defaults can never disagree.
+    expect(cleanScript).toContain('$HOME/.local/share/llxprt-code');
+    expect(cleanScript).toContain('$HOME/.cache/llxprt-code');
+    expect(cleanScript).toContain('$HOME/.local/state/llxprt-code');
+
+    // LLXPRT_CONFIG_HOME still points at the config bind mount, not the home.
+    const configHome = envValue(args, 'LLXPRT_CONFIG_HOME');
+    expect(configHome).toBe(getContainerPath(Storage.getGlobalConfigDir()));
+    expect(volumeDestinations(args)).toContain(configHome);
+
+    // The current-user branch was actually taken (the other branch is covered
+    // by the #3081 canonical config mount describe above).
+    expect(args).toContain('--user');
+    expect(args[args.indexOf('--user') + 1]).toBe('root');
   });
 });

@@ -138,11 +138,12 @@ If keys appear, SSH passthrough is working.
 
 ### Podman on macOS: reliable socket setup
 
-If forwarding fails with launchd socket paths, switch to a dedicated socket:
+If forwarding fails with launchd socket paths, switch to a dedicated socket
+under a non-legacy location (such as `~/.ssh/` or `$XDG_RUNTIME_DIR`):
 
 ```bash
-ssh-agent -a ~/.llxprt/ssh-agent.sock
-export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
+ssh-agent -a ~/.ssh/ssh-agent.sock
+export SSH_AUTH_SOCK=~/.ssh/ssh-agent.sock
 ssh-add ~/.ssh/id_ed25519
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 ```

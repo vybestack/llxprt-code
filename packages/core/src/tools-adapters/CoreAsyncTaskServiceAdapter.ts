@@ -47,6 +47,7 @@ function toShellJobInfo(info: FacadeWorkInfo): ShellJobInfo {
     command: info.command ?? '',
     cwd: info.cwd ?? '',
     status: info.status,
+    ...(info.pid !== undefined ? { pid: info.pid } : {}),
     ...(info.launchedAt !== undefined ? { launchedAt: info.launchedAt } : {}),
     ...(info.completedAt !== undefined
       ? { completedAt: info.completedAt }

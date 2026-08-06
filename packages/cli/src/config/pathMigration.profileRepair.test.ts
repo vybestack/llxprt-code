@@ -12,6 +12,7 @@ import {
   isMigrationComplete,
   repairProfiles,
   runStartupMigrationWithPath,
+  MIGRATION_MARKER_VERSION,
   type MigrationDestinations,
 } from './pathMigration.js';
 import {
@@ -530,7 +531,7 @@ describe('runStartupMigrationWithPath — marker orchestration', () => {
     fs.mkdirSync(env.destinations.dataDir, { recursive: true });
     fs.writeFileSync(
       path.join(env.destinations.dataDir, '.migration-complete.json'),
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: MIGRATION_MARKER_VERSION }),
     );
     setupRepairCase(env, corruptCanonicalProfile(), validLegacyProfile());
     const result = runStartupMigrationWithPath(env.legacyDir, env.destinations);
@@ -701,7 +702,7 @@ describe('runStartupMigrationWithPath — logging', () => {
     fs.mkdirSync(env.destinations.dataDir, { recursive: true });
     fs.writeFileSync(
       path.join(env.destinations.dataDir, '.migration-complete.json'),
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: MIGRATION_MARKER_VERSION }),
     );
     setupRepairCase(env, corruptCanonicalProfile(), validLegacyProfile());
     const writes: string[] = [];
@@ -727,7 +728,7 @@ describe('runStartupMigrationWithPath — logging', () => {
     fs.mkdirSync(env.destinations.dataDir, { recursive: true });
     fs.writeFileSync(
       path.join(env.destinations.dataDir, '.migration-complete.json'),
-      JSON.stringify({ version: 1 }),
+      JSON.stringify({ version: MIGRATION_MARKER_VERSION }),
     );
     setupRepairCase(env, corruptCanonicalProfile(), validLegacyProfile());
     const result = runStartupMigrationWithPath(env.legacyDir, env.destinations);

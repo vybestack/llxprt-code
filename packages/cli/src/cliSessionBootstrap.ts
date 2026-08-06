@@ -212,11 +212,11 @@ export function setupObservation(
   selection: BootstrapSelection | null,
 ): void {
   const projectRoot = config.getProjectRoot();
-  // loadBootstrap fails fast (FatalConfigError, exit 52) on an explicitly
-  // misconfigured observation bootstrap. This is intentional: the non-blocking
-  // guarantee covers the post-startup path, while startup configuration
-  // validation is deliberately fail-fast. Recording cleanup is already
-  // registered above, so the process exits cleanly on the way out.
+  // loadBootstrap disables observation (one stderr warning, startup continues)
+  // when the bootstrap file cannot be read, but still fails fast
+  // (FatalConfigError, exit 52) on a file that reads but is malformed,
+  // insecure, or version-mismatched. Recording cleanup is registered above,
+  // so the process exits cleanly on either path.
   initializeObservationProducer(
     {
       repository: basename(projectRoot),

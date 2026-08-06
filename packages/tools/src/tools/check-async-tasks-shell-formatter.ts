@@ -4,11 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import os from 'node:os';
+
 import type { ShellJobInfo } from '../interfaces/index.js';
 import {
   formatDuration,
   statusIcon,
 } from './check-async-tasks-subagent-formatter.js';
+
+function windowsTerminateLine(task: ShellJobInfo): string | undefined {
+  if (os.platform() !== 'win32' || task.status !== 'running') {
+    return undefined;
+  }
+  if (task.pid === undefined || task.pid <= 0) {
+    return undefined;
+  }
+  return `taskkill /T /F /PID ${task.pid}`;
+}
 
 export function formatShellDetails(
   task: ShellJobInfo,
@@ -46,6 +58,11 @@ export function formatShellDetails(
     details.failureReason = task.failureReason;
   }
 
+  const terminate = windowsTerminateLine(task);
+  if (terminate !== undefined) {
+    details.terminate = terminate;
+  }
+
   if (tailOutput !== undefined && tailOutput !== '') {
     details.outputTail = tailOutput;
     if (tailTruncated === true) {
@@ -76,6 +93,11 @@ export function formatShellDisplay(
   }
   if (task.failureReason !== undefined && task.failureReason !== '') {
     lines.push(`Failure: ${task.failureReason}`);
+  }
+
+  const terminate = windowsTerminateLine(task);
+  if (terminate !== undefined) {
+    lines.push(`Terminate: ${terminate}`);
   }
 
   lines.push(`Duration: ${formatDuration(task.launchedAt, task.completedAt)}`);
