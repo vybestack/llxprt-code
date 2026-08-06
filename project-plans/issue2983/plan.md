@@ -166,6 +166,18 @@ Updated existing tests:
 - `packages/cli/src/integration-tests/{cli-args-test-helpers,loadbalancer.integration.test}.ts`
   — spawn `packages/cli/index.ts` under Bun instead of `node dist/index.js`.
 
+## Review triage
+
+| Finding                                                            | Class        | Action                                                                                                                              |
+| ------------------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Full build still runs on the `agents`/`scripts` legs                 | Defer        | The remedy is repointing cross-workspace mappings at source, which the issue lists under **Out of scope**. Owned by #2618.            |
+| `build:types` still emitted LSP JavaScript                           | In-scope-Fix | `packages/lsp` skipped in declaration mode; nothing imports it or maps it in any tsconfig, so no declarations are lost.               |
+| `copy_files.ts` stages two example-extension `.js` assets            | Reject       | Copied verbatim, not compiler output. Staging must stay so `dist`-mapped JSON imports resolve. Wording tightened to say "transpiled". |
+| New tests only exercised a compiler fixture, not the real pipeline   | In-scope-Fix | Added an end-to-end `build_package.ts` run against a throwaway workspace, asserting emitted files in both modes.                      |
+| Deleting auth's on-disk artifact assertions loses release coverage    | In-scope-Fix | Replaced by the end-to-end pipeline test, which proves the full build writes `index.js`, `index.d.ts`, assets and `.last_build`.      |
+| Comments overstate that nothing consumes `dist/*.js`                 | In-scope-Fix | Corrected: published library packages do consume it through `main`/`import`; only the PR path does not.                              |
+| `scripts/build.ts` builds a shell command string                     | Reject       | Names come from repo-owned manifests and are validated against npm's package-name grammar; matches the file's existing `execSync` use. |
+
 ## Verification
 
 `npm run test`, `npm run lint:ci`, `npm run lint:eslint-guard`,

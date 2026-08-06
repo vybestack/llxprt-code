@@ -28,15 +28,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
 /**
- * Workspaces whose `build` bundles instead of emitting declarations.
+ * Workspaces the declaration-only build (issue #2983) skips, because no
+ * tsconfig `paths` entry and no source import resolves their declarations, so
+ * building them produces nothing that type-aware lint or `tsc --noEmit` reads.
+ * Both still build normally on the release path.
  *
- * The VS Code companion's build ends in esbuild, which resolves its workspace
- * dependencies at `dist/*.js` — exactly what the declaration-only build
- * (issue #2983) deliberately does not emit. It publishes no declarations that
- * any tsconfig maps, and both CI and the release workflow build it on their
- * own track through `npm run build:vscode`, so the declaration build skips it.
+ *  - `llxprt-code-vscode-ide-companion` ends its build in esbuild, which
+ *    resolves its workspace dependencies at `dist/*.js` — exactly what
+ *    declaration-only emit does not produce. CI and the release workflow build
+ *    it on their own track through `npm run build:vscode`.
+ *  - `@vybestack/llxprt-code-lsp` builds with a bare `tsc -p tsconfig.json`
+ *    that never sees `--emitDeclarationOnly`, so including it would emit
+ *    JavaScript into a build whose whole point is not to. It is reached at
+ *    runtime by module resolution from a spawned process, never imported, so
+ *    nothing type-checks against its declarations.
  */
-const BUNDLE_ONLY_WORKSPACES = new Set(['llxprt-code-vscode-ide-companion']);
+const NON_DECLARATION_WORKSPACES = new Set([
+  'llxprt-code-vscode-ide-companion',
+  '@vybestack/llxprt-code-lsp',
+]);
 
 /**
  * npm's package-name grammar. Names reach a shell command line below, so a
@@ -71,32 +81,18 @@ function readWorkspacePackageNames(): string[] {
   });
 }
 
+export function declarationBuildWorkspaces(names: string[]): string[] {
+  return names.filter((name) => !NON_DECLARATION_WORKSPACES.has(name));
+}
+
 function workspaceBuildSelector(): string {
   if (!isDeclarationsOnly()) {
     return '--workspaces';
   }
-  return readWorkspacePackageNames()
-    .filter((name) => !BUNDLE_ONLY_WORKSPACES.has(name))
+  return declarationBuildWorkspaces(readWorkspacePackageNames())
     .map((name) => `--workspace=${name}`)
     .join(' ');
 }
-
-// npm install if node_modules was removed (e.g. via npm run clean or scripts/clean.ts)
-if (!existsSync(join(root, 'node_modules'))) {
-  execSync('npm install', { stdio: 'inherit', cwd: root });
-}
-
-// build all workspaces/packages
-execSync('npm run generate', { stdio: 'inherit', cwd: root });
-execSync(`npm run build ${workspaceBuildSelector()}`, {
-  stdio: 'inherit',
-  cwd: root,
-});
-
-// also build container image if sandboxing is enabled
-// skip (-s) npm install + build since we did that above
-const buildSandboxRequested =
-  process.env.BUILD_SANDBOX === '1' || process.env.BUILD_SANDBOX === 'true';
 
 function sandboxAvailable(): boolean {
   try {
@@ -110,14 +106,38 @@ function sandboxAvailable(): boolean {
   }
 }
 
-if (buildSandboxRequested && sandboxAvailable()) {
-  try {
-    execSync('bun scripts/build_sandbox.ts -s', {
-      stdio: 'inherit',
-      cwd: root,
-    });
-  } catch (error) {
-    console.error(`Sandbox image build failed: ${messageOf(error)}`);
-    throw error;
+function main(): void {
+  // npm install if node_modules was removed (e.g. via npm run clean or
+  // scripts/clean.ts)
+  if (!existsSync(join(root, 'node_modules'))) {
+    execSync('npm install', { stdio: 'inherit', cwd: root });
   }
+
+  // build all workspaces/packages
+  execSync('npm run generate', { stdio: 'inherit', cwd: root });
+  execSync(`npm run build ${workspaceBuildSelector()}`, {
+    stdio: 'inherit',
+    cwd: root,
+  });
+
+  // also build container image if sandboxing is enabled
+  // skip (-s) npm install + build since we did that above
+  const buildSandboxRequested =
+    process.env.BUILD_SANDBOX === '1' || process.env.BUILD_SANDBOX === 'true';
+
+  if (buildSandboxRequested && sandboxAvailable()) {
+    try {
+      execSync('bun scripts/build_sandbox.ts -s', {
+        stdio: 'inherit',
+        cwd: root,
+      });
+    } catch (error) {
+      console.error(`Sandbox image build failed: ${messageOf(error)}`);
+      throw error;
+    }
+  }
+}
+
+if (import.meta.main) {
+  main();
 }

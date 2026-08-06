@@ -28,16 +28,18 @@ import { describe, it, expect } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
+  copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DECLARATIONS_ONLY_ENV,
@@ -45,11 +47,13 @@ import {
   isDeclarationsOnly,
   resolveTsconfigName,
 } from '../build_package.ts';
+import { declarationBuildWorkspaces } from '../build.ts';
 import { parseWorkflowYaml } from './typed-test-helpers.ts';
 import type { WorkflowJob, WorkflowStep } from './typed-test-helpers.ts';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const TSC_CLI = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+const NEWLINE = '\n';
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(join(REPO_ROOT, relativePath), 'utf-8');
@@ -127,6 +131,125 @@ function compileFixture(declarationsOnly: boolean): {
   }
 }
 
+/**
+ * Runs the real `scripts/build_package.ts` against a throwaway package laid
+ * out exactly as a workspace is — `<root>/packages/<name>` next to a
+ * `<root>/scripts/copy_files.ts` — so the whole pipeline executes: clean,
+ * build, asset staging, `.last_build`. Returns every file the run left in
+ * `dist`.
+ */
+function runBuildPackage(declarationsOnly: boolean): {
+  status: number | null;
+  output: string;
+  distFiles: string[];
+} {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'issue-2983-pipeline-'));
+  const packageDir = join(fixtureRoot, 'packages', 'fixture');
+  try {
+    mkdirSync(join(packageDir, 'src'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'scripts'), { recursive: true });
+    copyFileSync(
+      join(REPO_ROOT, 'scripts', 'copy_files.ts'),
+      join(fixtureRoot, 'scripts', 'copy_files.ts'),
+    );
+
+    writeFileSync(
+      join(packageDir, 'src', 'index.ts'),
+      `export const answer: number = 42;${NEWLINE}`,
+    );
+    // A staged non-code asset: declaration builds must keep these, because
+    // `dist`-mapped JSON imports resolve against them.
+    writeFileSync(
+      join(packageDir, 'src', 'data.json'),
+      `{"ok":true}${NEWLINE}`,
+    );
+    writeFileSync(
+      join(packageDir, 'tsconfig.json'),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            target: 'es2022',
+            module: 'NodeNext',
+            moduleResolution: 'nodenext',
+            rootDir: 'src',
+            outDir: 'dist',
+            declaration: true,
+            composite: true,
+            strict: true,
+            types: [],
+          },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const env = { ...process.env };
+    if (declarationsOnly) {
+      env[DECLARATIONS_ONLY_ENV] = '1';
+    } else {
+      delete env[DECLARATIONS_ONLY_ENV];
+    }
+    // `build_package.ts` shells out to a bare `tsc`, so the repository's
+    // TypeScript binary has to be reachable from the fixture's PATH.
+    env['PATH'] =
+      `${join(REPO_ROOT, 'node_modules', '.bin')}${delimiter}${env['PATH'] ?? ''}`;
+
+    const result = spawnSync(
+      process.execPath,
+      [join(REPO_ROOT, 'scripts', 'build_package.ts')],
+      { cwd: packageDir, encoding: 'utf8', env, timeout: 180_000 },
+    );
+
+    const distDir = join(packageDir, 'dist');
+    const distFiles = existsSync(distDir)
+      ? readdirSync(distDir, { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile())
+          .map((entry) => relative(distDir, join(entry.parentPath, entry.name)))
+      : [];
+
+    return {
+      status: result.status,
+      output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
+      distFiles,
+    };
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+}
+
+describe('issue #2983 — build_package pipeline', () => {
+  it('writes declarations and no JavaScript in declaration-only mode', () => {
+    const result = runBuildPackage(true);
+    expect(result.status, result.output).toBe(0);
+    expect(result.distFiles).toContain('index.d.ts');
+    expect(
+      result.distFiles.filter((file) => file.endsWith('.js')),
+      result.output,
+    ).toEqual([]);
+    expect(result.distFiles.filter((file) => file.endsWith('.js.map'))).toEqual(
+      [],
+    );
+  }, 240_000);
+
+  it('still stages non-code assets and the build stamp in declaration-only mode', () => {
+    const result = runBuildPackage(true);
+    expect(result.status, result.output).toBe(0);
+    expect(result.distFiles).toContain(join('src', 'data.json'));
+    expect(result.distFiles).toContain('.last_build');
+  }, 240_000);
+
+  it('writes JavaScript for the default (release) build', () => {
+    const result = runBuildPackage(false);
+    expect(result.status, result.output).toBe(0);
+    expect(result.distFiles).toContain('index.d.ts');
+    expect(result.distFiles).toContain('index.js');
+    expect(result.distFiles).toContain(join('src', 'data.json'));
+    expect(result.distFiles).toContain('.last_build');
+  }, 240_000);
+});
+
 describe('issue #2983 — declaration-only emit', () => {
   it('emits declarations and no JavaScript when declaration-only', () => {
     const result = compileFixture(true);
@@ -182,6 +305,33 @@ describe('issue #2983 — build scripts', () => {
     expect(readRepoFile('.github/workflows/release.yml')).toContain(
       'npm run build:packages',
     );
+  });
+
+  it('skips workspaces whose build cannot honour declaration-only emit', () => {
+    // packages/lsp builds with a bare `tsc -p`, which never sees
+    // --emitDeclarationOnly, and the VS Code companion ends in esbuild.
+    // Nothing type-checks against either package's declarations.
+    const selected = declarationBuildWorkspaces([
+      '@vybestack/llxprt-code-tools',
+      '@vybestack/llxprt-code-lsp',
+      'llxprt-code-vscode-ide-companion',
+    ]);
+    expect(selected).toEqual(['@vybestack/llxprt-code-tools']);
+  });
+
+  it('has no source importer or tsconfig mapping for the skipped lsp package', () => {
+    // The skip above is only safe while nothing type-resolves against
+    // @vybestack/llxprt-code-lsp. It is spawned as a process, not imported.
+    for (const configPath of [
+      'tsconfig.json',
+      'packages/core/tsconfig.json',
+      'packages/cli/tsconfig.json',
+      'packages/agents/tsconfig.json',
+      'packages/ide-integration/tsconfig.json',
+      'packages/a2a-server/tsconfig.json',
+    ]) {
+      expect(readRepoFile(configPath)).not.toContain('llxprt-code-lsp');
+    }
   });
 
   it('keeps the publish-time CLI bundle out of the declaration build', () => {

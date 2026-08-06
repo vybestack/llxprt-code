@@ -427,7 +427,9 @@ jobs:
       # declaration-only `dist` makes cross-package imports resolve to a
       # `.d.ts` with no JavaScript behind it. The release path
       # (release.yml -> `npm run build:packages`) still does a full emit,
-      # because every published workspace declares `main: dist/index.js`.
+      # because every published library workspace declares `main:
+      # dist/index.js` and ships `dist`, so npm consumers resolving without the
+      # `bun` export condition load that JavaScript.
       - name: 'Build declarations for type-aware lint'
         run: |-
           npm run build:types

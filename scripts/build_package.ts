@@ -24,21 +24,27 @@ import { join } from 'node:path';
 /**
  * Environment switch that selects declaration-only emit (issue #2983).
  *
- * The compiled JavaScript under `packages/*\/dist` has exactly one consumer
- * class: nothing at runtime. Tests resolve TypeScript source through each
- * workspace's `bun` export condition, and the published CLI ships either raw
- * TypeScript or the separate publish-time bundle at
- * `packages/cli/bundle/llxprt.js` (issues #2999/#3013). What *does* read
- * `dist` is type resolution: three workspace tsconfigs map cross-workspace
- * imports at `dist/*.d.ts` (cli -> tools, core -> mcp, and a2a-server ->
- * settings/storage/tools), so type-aware lint and `tsc --noEmit` need those
- * declarations on disk.
+ * Who reads `packages/*\/dist`:
+ *
+ *  - **Type resolution does.** Three workspace tsconfigs map cross-workspace
+ *    imports at `dist/*.d.ts` (cli -> tools, core -> mcp, and a2a-server ->
+ *    settings/storage/tools), so type-aware lint and `tsc --noEmit` need those
+ *    declarations on disk.
+ *  - **npm consumers of the published library packages do.** Every workspace
+ *    except the CLI declares `main: dist/index.js` and ships `dist`, so a Node
+ *    consumer that resolves without the `bun` export condition loads compiled
+ *    JavaScript. The release build must keep emitting it.
+ *  - **The PR path does not.** Tests resolve TypeScript source through each
+ *    workspace's `bun` condition, and the published CLI runs raw TypeScript or
+ *    the separate publish-time bundle at `packages/cli/bundle/llxprt.js`
+ *    (issues #2999/#3013), which `prepack` builds and this script never
+ *    touches.
  *
  * When this variable is set to `1`, `tsc --build` runs with
  * `--emitDeclarationOnly`: declarations are still written, transpilation and
- * JavaScript file writes are skipped. The release path deliberately leaves it
- * unset, because every published workspace still declares
- * `main: dist/index.js` and ships `dist` in its `files` array.
+ * JavaScript emit are skipped. Non-code assets are still staged by
+ * `copy_files.ts` so `dist`-mapped JSON imports keep resolving. The release
+ * path deliberately leaves the variable unset.
  */
 export const DECLARATIONS_ONLY_ENV = 'LLXPRT_EMIT_DECLARATIONS_ONLY';
 
