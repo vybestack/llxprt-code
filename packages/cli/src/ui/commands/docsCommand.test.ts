@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import open from 'open';
 import { docsCommand } from './docsCommand.js';
 import { type CommandContext } from './types.js';
@@ -23,7 +31,7 @@ describe('docsCommand', () => {
     // Create a fresh mock context before each test
     mockContext = createMockCommandContext();
     // Reset the `open` mock
-    vi.mocked(open).mockClear();
+    (open as Mock<typeof open>).mockClear();
   });
 
   afterEach(() => {

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as vscode from 'vscode';
 import { OpenFilesManager, MAX_FILES } from './open-files-manager.js';
 
@@ -57,36 +65,46 @@ describe('OpenFilesManager', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
-    vi.mocked(vscode.window.onDidChangeActiveTextEditor).mockImplementation(
-      (listener) => {
-        onDidChangeActiveTextEditorListener = listener;
-        return { dispose: vi.fn() };
-      },
-    );
-    vi.mocked(vscode.window.onDidChangeTextEditorSelection).mockImplementation(
-      (listener) => {
-        onDidChangeTextEditorSelectionListener = listener;
-        return { dispose: vi.fn() };
-      },
-    );
-    vi.mocked(vscode.workspace.onDidDeleteFiles).mockImplementation(
-      (listener) => {
-        onDidDeleteFilesListener = listener;
-        return { dispose: vi.fn() };
-      },
-    );
-    vi.mocked(vscode.workspace.onDidCloseTextDocument).mockImplementation(
-      (listener) => {
-        onDidCloseTextDocumentListener = listener;
-        return { dispose: vi.fn() };
-      },
-    );
-    vi.mocked(vscode.workspace.onDidRenameFiles).mockImplementation(
-      (listener) => {
-        onDidRenameFilesListener = listener;
-        return { dispose: vi.fn() };
-      },
-    );
+    (
+      vscode.window.onDidChangeActiveTextEditor as Mock<
+        typeof vscode.window.onDidChangeActiveTextEditor
+      >
+    ).mockImplementation((listener) => {
+      onDidChangeActiveTextEditorListener = listener;
+      return { dispose: vi.fn() };
+    });
+    (
+      vscode.window.onDidChangeTextEditorSelection as Mock<
+        typeof vscode.window.onDidChangeTextEditorSelection
+      >
+    ).mockImplementation((listener) => {
+      onDidChangeTextEditorSelectionListener = listener;
+      return { dispose: vi.fn() };
+    });
+    (
+      vscode.workspace.onDidDeleteFiles as Mock<
+        typeof vscode.workspace.onDidDeleteFiles
+      >
+    ).mockImplementation((listener) => {
+      onDidDeleteFilesListener = listener;
+      return { dispose: vi.fn() };
+    });
+    (
+      vscode.workspace.onDidCloseTextDocument as Mock<
+        typeof vscode.workspace.onDidCloseTextDocument
+      >
+    ).mockImplementation((listener) => {
+      onDidCloseTextDocumentListener = listener;
+      return { dispose: vi.fn() };
+    });
+    (
+      vscode.workspace.onDidRenameFiles as Mock<
+        typeof vscode.workspace.onDidRenameFiles
+      >
+    ).mockImplementation((listener) => {
+      onDidRenameFilesListener = listener;
+      return { dispose: vi.fn() };
+    });
 
     context = {
       subscriptions: [],

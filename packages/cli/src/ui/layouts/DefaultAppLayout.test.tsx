@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 // Unmock ink to use real Ink with ink-testing-library
 // The global mock in test-setup.ts conflicts with renderer behavior here.
@@ -121,8 +121,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   }),
 }));
 
-const mockUseUIState = vi.mocked(useUIState);
-const mockUseUIActions = vi.mocked(useUIActions);
+const mockUseUIState = useUIState as Mock<typeof useUIState>;
+const mockUseUIActions = useUIActions as Mock<typeof useUIActions>;
 
 function createConfigStub() {
   return {

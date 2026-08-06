@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderWithProviders } from '../../../test-utils/render.js';
 import type React from 'react';
 import {
@@ -28,9 +28,9 @@ vi.mock('../../semantic-colors.js', () => ({
   },
 }));
 
-const MockedBaseSelectionList = vi.mocked(
-  BaseSelectionList,
-) as unknown as ReturnType<typeof vi.fn>;
+const MockedBaseSelectionList = BaseSelectionList as unknown as Mock<
+  (...args: never[]) => unknown
+> as unknown as ReturnType<typeof vi.fn>;
 
 type RadioRenderItemFn = (
   item: RadioSelectItem<string>,

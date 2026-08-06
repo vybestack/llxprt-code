@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '@google/genai';
@@ -57,7 +65,9 @@ describe('GeminiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.get.mockReset();
-    vi.mocked(getSettingsService).mockImplementation(() => mockSettingsService);
+    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
+      () => mockSettingsService,
+    );
     generateContentStreamMock.mockReset();
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -68,9 +78,11 @@ describe('GeminiProvider', () => {
   });
 
   it('uses the constructor fallback when the global settings service is unavailable', () => {
-    vi.mocked(getSettingsService).mockImplementation(() => {
-      throw new Error('SettingsService not registered');
-    });
+    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
+      () => {
+        throw new Error('SettingsService not registered');
+      },
+    );
     const provider = new GeminiProvider();
 
     expect(() => provider.isPaidMode()).not.toThrow();

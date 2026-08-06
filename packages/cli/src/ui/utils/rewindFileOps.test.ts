@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import {
   calculateTurnStats,
   calculateRewindImpact,
@@ -288,7 +296,7 @@ describe('rewindFileOps', () => {
 
       mockConversation.messages = [userMsg, toolMsg];
 
-      vi.mocked(fs.readFile).mockResolvedValue('new');
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('new');
 
       await revertFileChanges(mockConversation, '1');
 
@@ -333,7 +341,7 @@ describe('rewindFileOps', () => {
 
       mockConversation.messages = [userMsg, toolMsg];
 
-      vi.mocked(fs.readFile).mockResolvedValue('content');
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('content');
 
       await revertFileChanges(mockConversation, '1');
 
@@ -390,7 +398,7 @@ describe('rewindFileOps', () => {
         },
         toolMsg,
       ];
-      vi.mocked(fs.readFile).mockResolvedValue(userModified);
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue(userModified);
 
       await revertFileChanges(mockConversation, '1');
 
@@ -446,7 +454,7 @@ describe('rewindFileOps', () => {
         },
         toolMsg,
       ];
-      vi.mocked(fs.readFile).mockResolvedValue(userModified);
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue(userModified);
 
       await revertFileChanges(mockConversation, '1');
 
@@ -494,7 +502,9 @@ describe('rewindFileOps', () => {
         toolMsg,
       ];
       // Simulate a generic file read error
-      vi.mocked(fs.readFile).mockRejectedValue(new Error('Permission denied'));
+      (fs.readFile as Mock<typeof fs.readFile>).mockRejectedValue(
+        new Error('Permission denied'),
+      );
 
       await revertFileChanges(mockConversation, '1');
       expect(fs.writeFile).not.toHaveBeenCalled();

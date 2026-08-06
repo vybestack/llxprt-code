@@ -7,7 +7,7 @@
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 
 const mockOpenBrowserSecurely = vi.fn();
 const mockHttpServer = {
@@ -280,10 +280,12 @@ describe('MCPOAuthProvider', () => {
       // Test is implicit in the authenticate flow tests, but we can verify
       // the crypto mocks are called correctly
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -329,10 +331,12 @@ describe('MCPOAuthProvider', () => {
       });
 
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -385,10 +389,12 @@ describe('MCPOAuthProvider', () => {
       });
 
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -438,10 +444,12 @@ describe('MCPOAuthProvider', () => {
       });
 
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -530,10 +538,12 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -618,10 +628,12 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -699,7 +711,11 @@ describe('MCPOAuthProvider', () => {
         );
 
       expect(
-        vi.mocked(OAuthUtils.discoverAuthorizationServerMetadata).mock.calls,
+        (
+          OAuthUtils.discoverAuthorizationServerMetadata as Mock<
+            typeof OAuthUtils.discoverAuthorizationServerMetadata
+          >
+        ).mock.calls,
       ).toStrictEqual([
         ['http://localhost:8888'],
         ['http://localhost:8888/realms/my-realm'],

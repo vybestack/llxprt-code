@@ -16,7 +16,7 @@
  *    available, not just config.getModel.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
@@ -282,7 +282,7 @@ async function collectModelInfos(
 describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(tokenLimit).mockImplementation(
+    (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );
@@ -382,8 +382,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     ];
     const { orchestrator } = buildOrchestrator();
     const deps = orchestrator['deps'];
-    vi.mocked(deps.hasChat).mockReturnValue(false);
-    vi.mocked(deps.getPreviousHistory).mockReturnValue(previousHistory);
+    (deps.hasChat as Mock<typeof deps.hasChat>).mockReturnValue(false);
+    (
+      deps.getPreviousHistory as Mock<typeof deps.getPreviousHistory>
+    ).mockReturnValue(previousHistory);
 
     await collectModelInfos(orchestrator, 'prompt-restore-history');
 

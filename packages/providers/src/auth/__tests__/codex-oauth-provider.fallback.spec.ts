@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 
 vi.mock('../local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
@@ -15,7 +23,9 @@ import type { TokenStore } from '@vybestack/llxprt-code-auth';
 import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 
-const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
+const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
+  typeof startLocalOAuthCallback
+>;
 
 /**
  * Tests for Codex OAuth provider fallback behavior (Issue #828)

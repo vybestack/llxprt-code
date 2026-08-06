@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
@@ -488,17 +488,22 @@ describe('Server Config (config.ts)', () => {
       await initializeTestConfig(config);
 
       // The ToolRegistry class is mocked, so inspect the created instance method.
-      const registerToolMock = vi.mocked(config.getToolRegistry().registerTool);
+      const registerToolMock = config.getToolRegistry()
+        .registerTool as unknown as Mock<(...args: never[]) => unknown>;
 
       // Check that registerTool was called for ShellTool
       const wasShellToolRegistered = registerToolMock.mock.calls.some(
-        (call) => call[0] instanceof vi.mocked(ShellTool),
+        (call) =>
+          call[0] instanceof
+          (ShellTool as unknown as Mock<(...args: never[]) => unknown>),
       );
       expect(wasShellToolRegistered).toBe(true);
 
       // Check that registerTool was NOT called for ReadFileTool
       const wasReadFileToolRegistered = registerToolMock.mock.calls.some(
-        (call) => call[0] instanceof vi.mocked(ReadFileTool),
+        (call) =>
+          call[0] instanceof
+          (ReadFileTool as unknown as Mock<(...args: never[]) => unknown>),
       );
       expect(wasReadFileToolRegistered).toBe(false);
     });

@@ -7,7 +7,7 @@
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 
@@ -168,9 +168,11 @@ describe('mcp-client', () => {
           quotaProjectId: 'myproject',
         };
 
-        vi.mocked(MockGoogleAuth.prototype.getClient).mockResolvedValue(
-          mockClient,
-        );
+        (
+          MockGoogleAuth.prototype.getClient as Mock<
+            typeof MockGoogleAuth.prototype.getClient
+          >
+        ).mockResolvedValue(mockClient);
       });
 
       it('should use GoogleCredentialProvider when specified', async () => {

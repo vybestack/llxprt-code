@@ -9,7 +9,15 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import type {
   ContentBlock,
   AgentMessageInput,
@@ -290,12 +298,16 @@ describe('Agent Client (client.ts)', () => {
       const reminderService = new TodoReminderService();
       const followUpReminderText =
         '---\nSystem Note: You still have unfinished todos. Continue the required work.\n---';
-      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
-        followUpReminderText,
-      );
-      vi.mocked(reminderService.getEscalatedActiveTodoReminder).mockReturnValue(
-        followUpReminderText,
-      );
+      (
+        reminderService.getUpdateActiveTodoReminder as Mock<
+          typeof reminderService.getUpdateActiveTodoReminder
+        >
+      ).mockReturnValue(followUpReminderText);
+      (
+        reminderService.getEscalatedActiveTodoReminder as Mock<
+          typeof reminderService.getEscalatedActiveTodoReminder
+        >
+      ).mockReturnValue(followUpReminderText);
       const svcForRetry = (
         client as unknown as {
           todoContinuationService: {
@@ -462,7 +474,11 @@ describe('Agent Client (client.ts)', () => {
 
     it('does not retry after todo_pause', async () => {
       const reminderService = new TodoReminderService();
-      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+      (
+        reminderService.getUpdateActiveTodoReminder as Mock<
+          typeof reminderService.getUpdateActiveTodoReminder
+        >
+      ).mockReturnValue(
         '---\nSystem Note: Update the active todo before replying.\n---',
       );
       const svcForPause = (
@@ -553,7 +569,9 @@ describe('Agent Client (client.ts)', () => {
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {
       // Arrange
-      vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      (
+        ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+      ).mockReturnValue({
         workspaceState: {
           openFiles: [
             {
@@ -603,7 +621,9 @@ describe('Agent Client (client.ts)', () => {
       }
 
       // Verify that the IDE context was included correctly for files without active file
-      const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+      const addHistoryCalls = (
+        mockChat.addHistory as Mock<typeof mockChat.addHistory>
+      ).mock.calls;
       const contextCall = addHistoryCalls.find((call) =>
         JSON.stringify(call[0]).includes('editor context'),
       );

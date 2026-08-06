@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -97,7 +105,7 @@ describe('IDEServer', () => {
 
   describe('R1: Port file consolidation', () => {
     it('should create port directory with recursive flag', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/foo/bar' } } as unknown as vscode.WorkspaceFolder,
       ];
 
@@ -110,15 +118,16 @@ describe('IDEServer', () => {
     });
 
     it('should write single port file with ppid and port in filename', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 
       await ideServer.start(mockContext);
 
-      const replaceMock = vi.mocked(
-        mockContext.environmentVariableCollection.replace,
-      );
+      const replaceMock = mockContext.environmentVariableCollection
+        .replace as Mock<
+        typeof mockContext.environmentVariableCollection.replace
+      >;
       const portCall = replaceMock.mock.calls.find(
         (call) => call[0] === 'LLXPRT_CODE_IDE_SERVER_PORT',
       );
@@ -140,13 +149,13 @@ describe('IDEServer', () => {
     });
 
     it('should write port file with correct JSON content (no ppid field)', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 
       await ideServer.start(mockContext);
 
-      const writeFileMock = vi.mocked(fs.writeFile);
+      const writeFileMock = fs.writeFile as Mock<typeof fs.writeFile>;
       expect(writeFileMock).toHaveBeenCalled();
 
       const writeCall = writeFileMock.mock.calls[0];
@@ -161,14 +170,14 @@ describe('IDEServer', () => {
 
     it('should handle multiple workspace folders with delimiter', async () => {
       const delimiter = process.platform === 'win32' ? ';' : ':';
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/foo/bar' } } as unknown as vscode.WorkspaceFolder,
         { uri: { fsPath: '/baz/qux' } } as unknown as vscode.WorkspaceFolder,
       ];
 
       await ideServer.start(mockContext);
 
-      const writeFileMock = vi.mocked(fs.writeFile);
+      const writeFileMock = fs.writeFile as Mock<typeof fs.writeFile>;
       const jsonContent = writeFileMock.mock.calls[0][1] as string;
       const parsed = JSON.parse(jsonContent);
 
@@ -176,11 +185,12 @@ describe('IDEServer', () => {
     });
 
     it('should handle empty workspace folders', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = undefined;
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders =
+        undefined;
 
       await ideServer.start(mockContext);
 
-      const writeFileMock = vi.mocked(fs.writeFile);
+      const writeFileMock = fs.writeFile as Mock<typeof fs.writeFile>;
       const jsonContent = writeFileMock.mock.calls[0][1] as string;
       const parsed = JSON.parse(jsonContent);
 
@@ -188,8 +198,10 @@ describe('IDEServer', () => {
     });
 
     it('should log error and continue if directory creation fails', async () => {
-      vi.mocked(fs.mkdir).mockRejectedValueOnce(new Error('Permission denied'));
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (fs.mkdir as Mock<typeof fs.mkdir>).mockRejectedValueOnce(
+        new Error('Permission denied'),
+      );
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 
@@ -204,15 +216,16 @@ describe('IDEServer', () => {
     });
 
     it('should delete only single port file on stop', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 
       await ideServer.start(mockContext);
 
-      const replaceMock = vi.mocked(
-        mockContext.environmentVariableCollection.replace,
-      );
+      const replaceMock = mockContext.environmentVariableCollection
+        .replace as Mock<
+        typeof mockContext.environmentVariableCollection.replace
+      >;
       const portCall = replaceMock.mock.calls.find(
         (call) => call[0] === 'LLXPRT_CODE_IDE_SERVER_PORT',
       );
@@ -233,7 +246,7 @@ describe('IDEServer', () => {
     });
 
     it('should clear environment variables on stop', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 
@@ -248,7 +261,7 @@ describe('IDEServer', () => {
 
   describe('R1: syncEnvVars behavior', () => {
     it('should sync without ppidPortFile parameter', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 
@@ -258,14 +271,15 @@ describe('IDEServer', () => {
       await ideServer.syncEnvVars();
 
       expect(fs.writeFile).toHaveBeenCalledOnce();
-      const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
+      const writeCall = (fs.writeFile as Mock<typeof fs.writeFile>).mock
+        .calls[0];
       const writtenPath = String(writeCall[0]);
       expect(writtenPath.endsWith('.json')).toBe(true);
       expect(writtenPath).toContain('llxprt-ide-server-');
     });
 
     it('should not require ppidPortFile in condition check', async () => {
-      vi.mocked(vscode.workspace).workspaceFolders = [
+      (vscode.workspace as Mock<typeof vscode.workspace>).workspaceFolders = [
         { uri: { fsPath: '/workspace' } } as unknown as vscode.WorkspaceFolder,
       ];
 

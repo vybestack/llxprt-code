@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   DEFAULT_RUNTIME_ID,
   parseBootstrapArgs,
@@ -233,7 +241,9 @@ describe('profileBootstrap helpers', () => {
 });
 
 describe('prepareRuntimeForProfile delegates assembly to the providers boundary (#2378, issue #2300)', () => {
-  const mockedAssemble = vi.mocked(assembleCliProviderRuntime);
+  const mockedAssemble = assembleCliProviderRuntime as Mock<
+    typeof assembleCliProviderRuntime
+  >;
 
   beforeEach(() => {
     mockedAssemble.mockClear();

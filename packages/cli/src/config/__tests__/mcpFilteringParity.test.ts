@@ -19,7 +19,15 @@
  *   - argv.allowedMcpServerNames (overrides settings-level filtering)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -362,7 +370,7 @@ describe('mcpFilteringParity: MCP server filtering', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');

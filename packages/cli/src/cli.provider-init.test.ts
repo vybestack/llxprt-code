@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -275,8 +283,10 @@ describe('cli main provider initialization', () => {
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],
@@ -378,13 +388,17 @@ describe('cli main provider initialization', () => {
     >;
 
     const coreModule = await import('@vybestack/llxprt-code-core');
-    const resumeSessionMock = vi.mocked(coreModule.resumeSession);
+    const resumeSessionMock = coreModule.resumeSession as Mock<
+      typeof coreModule.resumeSession
+    >;
     resumeSessionMock.mockResolvedValueOnce(resumeResult);
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],
@@ -506,13 +520,17 @@ describe('cli main provider initialization', () => {
     >;
 
     const coreModule = await import('@vybestack/llxprt-code-core');
-    const resumeSessionMock = vi.mocked(coreModule.resumeSession);
+    const resumeSessionMock = coreModule.resumeSession as Mock<
+      typeof coreModule.resumeSession
+    >;
     resumeSessionMock.mockResolvedValueOnce(resumeResult);
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],

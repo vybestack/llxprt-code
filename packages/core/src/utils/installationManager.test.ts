@@ -5,7 +5,15 @@
  */
 
 import type { Mock } from 'bun:test';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { InstallationManager } from './installationManager.js';
 import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
@@ -90,8 +98,8 @@ describe('InstallationManager', () => {
     });
 
     it('should handle read errors and return a fallback ID', () => {
-      vi.mocked(fs.existsSync).mockReturnValueOnce(true);
-      const readSpy = vi.mocked(fs.readFileSync);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValueOnce(true);
+      const readSpy = fs.readFileSync as Mock<typeof fs.readFileSync>;
       readSpy.mockImplementationOnce(() => {
         throw new Error('Read error');
       });

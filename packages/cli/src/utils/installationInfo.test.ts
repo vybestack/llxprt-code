@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getInstallationInfo, PackageManager } from './installationInfo.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -51,10 +59,12 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-const mockedIsGitRepository = vi.mocked(isGitRepository);
-const mockedRealPathSync = vi.mocked(fs.realpathSync);
-const mockedExistsSync = vi.mocked(fs.existsSync);
-const mockedExecSync = vi.mocked(childProcess.execSync);
+const mockedIsGitRepository = isGitRepository as Mock<typeof isGitRepository>;
+const mockedRealPathSync = fs.realpathSync as Mock<typeof fs.realpathSync>;
+const mockedExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+const mockedExecSync = childProcess.execSync as Mock<
+  typeof childProcess.execSync
+>;
 
 describe('getInstallationInfo', () => {
   const projectRoot = '/path/to/project';

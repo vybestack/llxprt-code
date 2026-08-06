@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { execSync } from 'child_process';
 import * as os from 'os';
 import { detect as chardetDetect } from 'chardet';
@@ -49,9 +57,9 @@ describe('Shell Command Processor - Encoding Functions', () => {
 
   beforeEach(() => {
     consoleWarnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
-    mockedExecSync = vi.mocked(execSync);
-    mockedOsPlatform = vi.mocked(os.platform);
-    mockedChardetDetect = vi.mocked(chardetDetect);
+    mockedExecSync = execSync as Mock<typeof execSync>;
+    mockedOsPlatform = os.platform as Mock<typeof os.platform>;
+    mockedChardetDetect = chardetDetect as Mock<typeof chardetDetect>;
 
     // Clear mock call history and implementations from previous tests
     vi.clearAllMocks();

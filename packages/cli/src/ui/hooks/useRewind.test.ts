@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useRewind } from './useRewind.js';
@@ -62,7 +62,11 @@ describe('useRewindLogic', () => {
       addedLines: 5,
       removedLines: 0,
     };
-    vi.mocked(rewindFileOps.calculateRewindImpact).mockReturnValue(mockStats);
+    (
+      rewindFileOps.calculateRewindImpact as Mock<
+        typeof rewindFileOps.calculateRewindImpact
+      >
+    ).mockReturnValue(mockStats);
 
     const { result } = renderHook(() => useRewind(mockConversation));
 
@@ -95,7 +99,11 @@ describe('useRewindLogic', () => {
       addedLines: 5,
       removedLines: 0,
     };
-    vi.mocked(rewindFileOps.calculateRewindImpact).mockReturnValue(mockStats);
+    (
+      rewindFileOps.calculateRewindImpact as Mock<
+        typeof rewindFileOps.calculateRewindImpact
+      >
+    ).mockReturnValue(mockStats);
 
     const { result } = renderHook(() => useRewind(mockConversation));
 
@@ -120,7 +128,11 @@ describe('useRewindLogic', () => {
       addedLines: 10,
       removedLines: 2,
     };
-    vi.mocked(rewindFileOps.calculateTurnStats).mockReturnValue(mockStats);
+    (
+      rewindFileOps.calculateTurnStats as Mock<
+        typeof rewindFileOps.calculateTurnStats
+      >
+    ).mockReturnValue(mockStats);
 
     const { result } = renderHook(() => useRewind(mockConversation));
 

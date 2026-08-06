@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -227,7 +235,7 @@ describe('cli.tsx main function', () => {
     // module graph), so vi.fn() call counts persist across tests. Clear them
     // to replicate Vitest's per-test isolation.
     vi.clearAllMocks();
-    loadSettingsMock = vi.mocked(loadSettings);
+    loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-main-'));
     dynamicSettingsRegistry.reset();
     // Re-establish the default resolved value after afterEach's
@@ -292,7 +300,7 @@ describe('cli.tsx main function', () => {
       throw new FatalConfigError('Invalid config');
     });
 
-    const parseArgumentsMock = vi.mocked(parseArguments);
+    const parseArgumentsMock = parseArguments as Mock<typeof parseArguments>;
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new MockProcessExitError(code);
     });
@@ -319,7 +327,7 @@ describe('cli.tsx main function', () => {
       throw new FatalConfigError('Invalid config');
     });
 
-    const parseArgumentsMock = vi.mocked(parseArguments);
+    const parseArgumentsMock = parseArguments as Mock<typeof parseArguments>;
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new MockProcessExitError(code);
     });
@@ -340,7 +348,7 @@ describe('cli.tsx main function', () => {
     const originalArgv = process.argv;
     process.argv = ['node', 'llxprt', '--version'];
 
-    const getCliVersionMock = vi.mocked(getCliVersion);
+    const getCliVersionMock = getCliVersion as Mock<typeof getCliVersion>;
     getCliVersionMock.mockResolvedValue('1.2.3');
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
@@ -366,7 +374,7 @@ describe('cli.tsx main function', () => {
     const originalArgv = process.argv;
     process.argv = ['node', 'llxprt', '-v'];
 
-    const getCliVersionMock = vi.mocked(getCliVersion);
+    const getCliVersionMock = getCliVersion as Mock<typeof getCliVersion>;
     getCliVersionMock.mockResolvedValue('1.2.3');
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
@@ -390,7 +398,7 @@ describe('cli.tsx main function', () => {
 
   it('should preserve shared sibling objects when stringifying rejection reasons', async () => {
     __resetUnhandledRejectionStateForTesting();
-    const appEventsMock = vi.mocked(appEvents);
+    const appEventsMock = appEvents as Mock<typeof appEvents>;
     const shared = { value: 'shared object' };
 
     const removeHandler = setupUnhandledRejectionHandler();
@@ -415,7 +423,7 @@ describe('cli.tsx main function', () => {
 
   it('should log unhandled promise rejections and open debug console on first error', async () => {
     __resetUnhandledRejectionStateForTesting();
-    const appEventsMock = vi.mocked(appEvents);
+    const appEventsMock = appEvents as Mock<typeof appEvents>;
     const rejectionError = new Error('Test unhandled rejection');
 
     // Use the returned disposer so the test-installed listener is removed
@@ -517,7 +525,7 @@ describe('cli.tsx main function', () => {
       getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
 
-    const loadSettingsMock = vi.mocked(loadSettings);
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     loadSettingsMock.mockReturnValue({
       merged: {
         ui: { autoConfigureMaxOldSpaceSize: false },
@@ -527,8 +535,10 @@ describe('cli.tsx main function', () => {
       errors: [],
     } as unknown as LoadedSettings);
 
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
       sandbox: undefined,
       sandboxImage: undefined,
@@ -608,10 +618,12 @@ describe('cli.tsx main function', () => {
 
     // The interactive path creates exactly one Agent at the composition root,
     // adopting the existing Config.
-    expect(vi.mocked(createForegroundAgent)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(createForegroundAgent)).toHaveBeenCalledWith(
-      expect.objectContaining({ config: mockConfig }),
-    );
+    expect(
+      createForegroundAgent as Mock<typeof createForegroundAgent>,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      createForegroundAgent as Mock<typeof createForegroundAgent>,
+    ).toHaveBeenCalledWith(expect.objectContaining({ config: mockConfig }));
 
     // Avoid the process.exit error from being thrown in later tests.
     processExitSpy.mockRestore();
@@ -675,7 +687,7 @@ describe('cli.tsx main function', () => {
       getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
 
-    const loadSettingsMock = vi.mocked(loadSettings);
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     loadSettingsMock.mockReturnValue({
       merged: {
         ui: { autoConfigureMaxOldSpaceSize: false },
@@ -685,8 +697,10 @@ describe('cli.tsx main function', () => {
       errors: [],
     } as unknown as LoadedSettings);
 
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
       sandbox: undefined,
       sandboxImage: undefined,
@@ -794,10 +808,14 @@ describe('cli.tsx deferred initialization', () => {
   });
 
   it('should check for memory relaunch BEFORE loading settings when relaunch needed', async () => {
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const relaunchMock = vi.mocked(relaunchAppInChildProcess);
-    const loadSettingsMock = vi.mocked(loadSettings);
-    const loadCliConfigMock = vi.mocked(loadCliConfig);
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const relaunchMock = relaunchAppInChildProcess as Mock<
+      typeof relaunchAppInChildProcess
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
+    const loadCliConfigMock = loadCliConfig as Mock<typeof loadCliConfig>;
 
     // Simulate need for relaunch
     shouldRelaunchMock.mockReturnValue(['--max-old-space-size=4096']);
@@ -838,9 +856,13 @@ describe('cli.tsx deferred initialization', () => {
   it('should NOT relaunch when already in sandbox environment', async () => {
     process.env.SANDBOX = 'true';
 
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const relaunchMock = vi.mocked(relaunchAppInChildProcess);
-    const loadSettingsMock = vi.mocked(loadSettings);
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const relaunchMock = relaunchAppInChildProcess as Mock<
+      typeof relaunchAppInChildProcess
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
 
     // Even if memory check says relaunch needed
     shouldRelaunchMock.mockReturnValue(['--max-old-space-size=4096']);
@@ -867,9 +889,13 @@ describe('cli.tsx deferred initialization', () => {
   });
 
   it('should proceed with normal initialization when no relaunch needed', async () => {
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const relaunchMock = vi.mocked(relaunchAppInChildProcess);
-    const loadSettingsMock = vi.mocked(loadSettings);
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const relaunchMock = relaunchAppInChildProcess as Mock<
+      typeof relaunchAppInChildProcess
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
 
     // No relaunch needed
     shouldRelaunchMock.mockReturnValue([]);
@@ -895,9 +921,11 @@ describe('cli.tsx deferred initialization', () => {
   });
 
   it('should use isDebugMode for early debug detection and pass maxHeapSizeMB', async () => {
-    const isDebugModeMock = vi.mocked(isDebugMode);
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const loadSettingsMock = vi.mocked(loadSettings);
+    const isDebugModeMock = isDebugMode as Mock<typeof isDebugMode>;
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
 
     isDebugModeMock.mockReturnValue(true);
     shouldRelaunchMock.mockReturnValue([]);
@@ -924,9 +952,11 @@ describe('cli.tsx deferred initialization', () => {
   });
 
   it('should pass non-default maxHeapSizeMB to shouldRelaunchForMemory', async () => {
-    const isDebugModeMock = vi.mocked(isDebugMode);
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const loadSettingsMock = vi.mocked(loadSettings);
+    const isDebugModeMock = isDebugMode as Mock<typeof isDebugMode>;
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
 
     isDebugModeMock.mockReturnValue(false);
     shouldRelaunchMock.mockReturnValue([]);

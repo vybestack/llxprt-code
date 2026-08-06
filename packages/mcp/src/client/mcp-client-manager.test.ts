@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { vi, describe, it, expect, afterEach, type Mock } from 'bun:test';
 import {
   McpClientManager,
   DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
@@ -32,7 +32,7 @@ vi.mock('./mcp-client.js', () => ({
 
 describe('McpClientManager', () => {
   afterEach(() => {
-    vi.mocked(McpClient).mockReset();
+    (McpClient as unknown as Mock<(...args: never[]) => unknown>).mockReset();
   });
   it('should discover tools from all configured servers', async () => {
     const mockedMcpClient = {
@@ -42,9 +42,9 @@ describe('McpClientManager', () => {
       getStatus: vi.fn(),
       getServerConfig: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    (
+      McpClient as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedMcpClient as unknown as McpClient);
     const mockConfig = {
       isTrustedFolder: () => true,
       getMcpServers: () => ({
@@ -83,9 +83,9 @@ describe('McpClientManager', () => {
       getStatus: vi.fn(),
       getServerConfig: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    (
+      McpClient as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedMcpClient as unknown as McpClient);
     const refreshMcpContext = vi.fn();
     const mockConfig = {
       isTrustedFolder: () => true,
@@ -136,7 +136,9 @@ describe('McpClientManager', () => {
         getServerConfig: vi.fn().mockReturnValue({}),
       };
       let onToolsUpdated: ConstructorParameters<typeof McpClient>[9];
-      vi.mocked(McpClient).mockImplementation(
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         (
           _serverName,
           _serverConfig,
@@ -200,7 +202,9 @@ describe('McpClientManager', () => {
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({}),
       };
-      vi.mocked(McpClient).mockImplementation(
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         (
           _serverName,
           _serverConfig,
@@ -274,9 +278,9 @@ describe('McpClientManager', () => {
       getStatus: vi.fn(),
       getServerConfig: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    (
+      McpClient as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedMcpClient as unknown as McpClient);
     const mockConfig = {
       isTrustedFolder: () => false,
       getMcpServers: () => ({
@@ -313,9 +317,9 @@ describe('McpClientManager', () => {
       getStatus: vi.fn(),
       getServerConfig: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(McpClient).mockReturnValue(
-      mockedMcpClient as unknown as McpClient,
-    );
+    (
+      McpClient as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedMcpClient as unknown as McpClient);
     // Simulate the real initialization order: agentClient is created AFTER
     // Promise.all([startConfiguredMcpServers(), extensionLoader.start()]),
     // so getAgentClient() returns undefined during MCP discovery.
@@ -369,7 +373,9 @@ describe('McpClientManager', () => {
       };
 
       let callCount = 0;
-      vi.mocked(McpClient).mockImplementation(() => {
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(() => {
         const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
         callCount++;
         return client as unknown as McpClient;
@@ -426,9 +432,9 @@ describe('McpClientManager', () => {
         getInstructions: vi.fn().mockReturnValue(''),
       };
 
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedMcpClient as unknown as McpClient);
 
       const mockConfig = {
         isTrustedFolder: () => true,
@@ -482,7 +488,9 @@ describe('McpClientManager', () => {
       };
 
       let callCount = 0;
-      vi.mocked(McpClient).mockImplementation(() => {
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(() => {
         const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
         callCount++;
         return client as unknown as McpClient;
@@ -540,9 +548,9 @@ describe('McpClientManager', () => {
         getServerConfig: vi.fn().mockReturnValue({}),
         getInstructions: vi.fn().mockReturnValue(''),
       };
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedMcpClient as unknown as McpClient);
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => servers,
@@ -631,9 +639,9 @@ describe('McpClientManager', () => {
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({}),
       };
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedMcpClient as unknown as McpClient);
       const mockConfig = {
         isTrustedFolder: () => false,
         getMcpServers: () => ({ 'test-server': {} }),
@@ -671,9 +679,9 @@ describe('McpClientManager', () => {
     servers: Record<string, unknown> = {},
   ) => {
     if (mockedMcpClient !== undefined) {
-      vi.mocked(McpClient).mockReturnValue(
-        mockedMcpClient as unknown as McpClient,
-      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedMcpClient as unknown as McpClient);
     }
     const promptRegistry = {
       removePromptsByServer: vi.fn(),

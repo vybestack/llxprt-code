@@ -89,24 +89,27 @@ describe('Trusted Folders Loading', () => {
   beforeEach(() => {
     resetTrustedFoldersForTesting();
     vi.resetAllMocks();
-    mockFsExistsSync = vi.mocked(fs.existsSync);
-    mockStripJsonComments = vi.mocked(stripJsonComments);
-    mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
-    mockFsChmodSync = vi.mocked(fs.chmodSync);
-    mockFsStatSync = vi.mocked(fs.statSync);
-    mockFsRenameSync = vi.mocked(fs.renameSync);
-    mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
+    mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+    mockStripJsonComments = stripJsonComments as Mock<typeof stripJsonComments>;
+    mockFsWriteFileSync = fs.writeFileSync as Mock<typeof fs.writeFileSync>;
+    mockFsChmodSync = fs.chmodSync as Mock<typeof fs.chmodSync>;
+    mockFsStatSync = fs.statSync as Mock<typeof fs.statSync>;
+    mockFsRenameSync = fs.renameSync as Mock<typeof fs.renameSync>;
+    mockFsUnlinkSync = fs.unlinkSync as Mock<typeof fs.unlinkSync>;
     mockFsStatSync.mockReturnValue({
       mode: TRUSTED_FOLDERS_FILE_MODE,
     } as fs.Stats);
-    vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
+    (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
+      '/mock/home/user',
+    );
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
     (fs.readFileSync as Mock).mockReturnValue('{}');
-    vi.mocked(fs.realpathSync).mockImplementation((location) =>
-      typeof location === 'string' ? location : location.toString(),
+    (fs.realpathSync as Mock<typeof fs.realpathSync>).mockImplementation(
+      (location) =>
+        typeof location === 'string' ? location : location.toString(),
     );
   });
 
@@ -198,13 +201,15 @@ describe('Trusted Folders Loading', () => {
       const { folders } = setup({
         config: { '/secret': TrustLevel.DO_NOT_TRUST },
       });
-      vi.mocked(fs.realpathSync).mockImplementation((location) => {
-        const resolved = location.toString();
-        if (resolved === '/secret') {
-          throw new Error('permission denied');
-        }
-        return resolved;
-      });
+      (fs.realpathSync as Mock<typeof fs.realpathSync>).mockImplementation(
+        (location) => {
+          const resolved = location.toString();
+          if (resolved === '/secret') {
+            throw new Error('permission denied');
+          }
+          return resolved;
+        },
+      );
 
       expect(folders.isPathTrusted('/secret/file')).toBe(false);
     });
@@ -287,7 +292,8 @@ describe('Trusted Folders Loading', () => {
       ),
       { encoding: 'utf-8', mode: TRUSTED_FOLDERS_FILE_MODE, flag: 'wx' },
     );
-    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    const temporaryPath = (fs.writeFileSync as Mock<typeof fs.writeFileSync>)
+      .mock.calls[0][0];
     expect(mockFsChmodSync).toHaveBeenCalledWith(
       temporaryPath,
       TRUSTED_FOLDERS_FILE_MODE,
@@ -298,10 +304,12 @@ describe('Trusted Folders Loading', () => {
       getTrustedFoldersPath(),
     );
     expect(
-      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mock
+        .invocationCallOrder[0],
     ).toBeLessThan(mockFsChmodSync.mock.invocationCallOrder[0]);
     expect(
-      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mock
+        .invocationCallOrder[0],
     ).toBeLessThan(mockFsStatSync.mock.invocationCallOrder[0]);
     expect(mockFsChmodSync.mock.invocationCallOrder[0]).toBeLessThan(
       mockFsRenameSync.mock.invocationCallOrder[0],
@@ -433,7 +441,8 @@ describe('Trusted Folders Loading', () => {
       loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER),
     ).toThrow('rename denied');
 
-    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    const temporaryPath = (fs.writeFileSync as Mock<typeof fs.writeFileSync>)
+      .mock.calls[0][0];
     expect(mockFsUnlinkSync).toHaveBeenCalledWith(temporaryPath);
     expect(loadedFolders.user.config[CANONICAL_NEW_PATH]).toBeUndefined();
   });
@@ -468,7 +477,8 @@ describe('Trusted Folders Loading', () => {
 
     loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
-    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    const temporaryPath = (fs.writeFileSync as Mock<typeof fs.writeFileSync>)
+      .mock.calls[0][0];
     expect(mockFsChmodSync).not.toHaveBeenCalled();
     expect(mockFsStatSync).not.toHaveBeenCalled();
     expect(mockFsRenameSync).toHaveBeenCalledWith(
@@ -619,7 +629,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
   });
 
   it('should return true when ideTrust is true, ignoring config', () => {
-    vi.mocked(getIdeTrust).mockReturnValue(true);
+    (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(true);
     // Even if config says don't trust, ideTrust should win.
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
       JSON.stringify({ [process.cwd()]: TrustLevel.DO_NOT_TRUST }),
@@ -629,7 +639,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
   });
 
   it('should return false when ideTrust is false, ignoring config', () => {
-    vi.mocked(getIdeTrust).mockReturnValue(false);
+    (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(false);
     // Even if config says trust, ideTrust should win.
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
       JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
@@ -639,7 +649,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
   });
 
   it('should fall back to config when ideTrust is undefined', () => {
-    vi.mocked(getIdeTrust).mockReturnValue(undefined);
+    (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(undefined);
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
       JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
@@ -651,7 +661,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
     const settings: Settings = {
       folderTrust: false,
     } as Settings;
-    vi.mocked(getIdeTrust).mockReturnValue(false);
+    (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(false);
     expect(isWorkspaceTrusted(settings)).toBe(true);
   });
 });
@@ -659,8 +669,8 @@ describe('isWorkspaceTrusted with IDE override', () => {
 describe('Trusted Folders Caching', () => {
   beforeEach(() => {
     resetTrustedFoldersForTesting();
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue('{}');
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+    (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue('{}');
   });
 
   afterEach(() => {
@@ -696,7 +706,7 @@ describe('invalid trust levels', () => {
     // Stated explicitly: these cases exercise the configuration path, which is
     // only reached when the IDE expresses no opinion. An earlier describe
     // configures getIdeTrust, and that mock is shared across the whole file.
-    vi.mocked(getIdeTrust).mockReturnValue(undefined);
+    (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(undefined);
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
     vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {

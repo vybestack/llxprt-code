@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -93,7 +93,7 @@ describe('update tests', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
     for (const key of ENV_KEYS) {
       SAVED_ENV[key] = process.env[key];
       process.env[key] = tempHomeDir;
@@ -103,7 +103,9 @@ describe('update tests', () => {
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
     Object.values(mockGit).forEach((fn) => fn.mockReset());
   });

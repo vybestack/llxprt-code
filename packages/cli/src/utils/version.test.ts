@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getCliVersion, __resetVersionCacheForTesting } from './version.js';
 import { getPackageJson } from '@vybestack/llxprt-code-core';
 
@@ -19,7 +27,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-const mockGetPackageJson = vi.mocked(getPackageJson);
+const mockGetPackageJson = getPackageJson as Mock<typeof getPackageJson>;
 
 describe('getCliVersion', () => {
   beforeEach(() => {

@@ -8,7 +8,15 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -138,14 +146,18 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should apply keyfile auth to SettingsService BEFORE switching provider', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-file');
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockResolvedValue(
+      'test-api-key-from-file',
+    );
 
     const operationOrder: string[] = [];
 
-    vi.mocked(mockFs.readFile).mockImplementation(async (filePath) => {
-      operationOrder.push(`readFile:${filePath}`);
-      return 'test-api-key-from-file';
-    });
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockImplementation(
+      async (filePath) => {
+        operationOrder.push(`readFile:${filePath}`);
+        return 'test-api-key-from-file';
+      },
+    );
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
       if (key === 'auth-key') {
@@ -377,7 +389,9 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should NOT trigger OAuth when profile has keyfile and provider switch calls getModels', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-keyfile');
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockResolvedValue(
+      'test-api-key-from-keyfile',
+    );
 
     const oauthCalls: string[] = [];
 
@@ -485,7 +499,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should handle keyfile loading failure gracefully without blocking provider switch', async () => {
-    vi.mocked(mockFs.readFile).mockRejectedValue(
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockRejectedValue(
       new Error('ENOENT: file not found'),
     );
 

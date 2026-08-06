@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import type { Mock } from '../testApi.js';
 import { SubagentInvocation } from './invocation.js';
 import { AgentExecutor } from './executor.js';
@@ -22,7 +22,9 @@ import { type z } from 'zod';
 
 vi.mock('./executor.js');
 
-const MockAgentExecutor = vi.mocked(AgentExecutor);
+const MockAgentExecutor = AgentExecutor as unknown as Mock<
+  (...args: never[]) => unknown
+>;
 
 // Local mapped-type stand-in for a deep-mocked object: maps each method to a Mock<F>
 // while preserving non-method properties unchanged. Used for type annotations

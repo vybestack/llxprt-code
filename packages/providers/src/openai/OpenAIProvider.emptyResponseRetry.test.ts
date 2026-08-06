@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import type { IMessage } from '../IMessage.js';
@@ -151,7 +151,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Mock fetch to return first response, then second response
     let callCount = 0;
-    vi.mocked(global.fetch).mockImplementation(async () => {
+    (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
       callCount++;
       if (callCount === 1) {
         return createStreamingResponse(firstResponseChunks);
@@ -239,7 +239,8 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(callCount).toBe(2);
 
     // Verify the continuation request structure (CodeRabbit review #764)
-    const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
+    const secondFetchCall = (global.fetch as Mock<typeof global.fetch>).mock
+      .calls[1];
     expect(secondFetchCall).toBeDefined();
     const secondRequestBody = JSON.parse(
       secondFetchCall[1]?.body as string,
@@ -418,7 +419,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     ];
 
     let callCount = 0;
-    vi.mocked(global.fetch).mockImplementation(async () => {
+    (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
       callCount++;
       if (callCount === 1) {
         return createStreamingResponse(firstResponseChunks);
@@ -464,7 +465,8 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     expect(callCount).toBe(2);
 
-    const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
+    const secondFetchCall = (global.fetch as Mock<typeof global.fetch>).mock
+      .calls[1];
     expect(secondFetchCall).toBeDefined();
 
     const secondRequestBody = JSON.parse(
@@ -574,7 +576,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     ];
 
     let callCount = 0;
-    vi.mocked(global.fetch).mockImplementation(async () => {
+    (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
       callCount++;
       return createStreamingResponse(
         callCount === 1 ? firstResponseChunks : secondResponseChunks,
@@ -625,7 +627,8 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     expect(callCount).toBe(2);
 
-    const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
+    const secondFetchCall = (global.fetch as Mock<typeof global.fetch>).mock
+      .calls[1];
     const secondRequestBody = JSON.parse(
       secondFetchCall[1]?.body as string,
     ) as {

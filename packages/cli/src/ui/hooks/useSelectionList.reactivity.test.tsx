@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import {
@@ -34,7 +42,7 @@ describe('useSelectionList', () => {
 
   beforeEach(() => {
     activeKeypressHandler = null;
-    vi.mocked(useKeypress).mockImplementation(
+    (useKeypress as Mock<typeof useKeypress>).mockImplementation(
       (handler: KeypressHandler, options?: UseKeypressMockOptions) => {
         if (options?.isActive === true) {
           activeKeypressHandler = handler;

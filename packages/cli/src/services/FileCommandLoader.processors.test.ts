@@ -7,7 +7,7 @@
 import * as glob from 'glob';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FileCommandLoader } from './FileCommandLoader.js';
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (condition === undefined || condition === null || condition === false) {
@@ -109,7 +109,7 @@ describe('FileCommandLoader (processors)', () => {
     // restore it here.
     const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
       .glob;
-    vi.mocked(glob.glob).mockImplementation(actualGlob);
+    (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context.invocation?.args ?? '';
@@ -287,7 +287,11 @@ describe('FileCommandLoader (processors)', () => {
         Promise.resolve(`${p}-shell-processed`),
       );
 
-      vi.mocked(DefaultArgumentProcessor).mockImplementation(
+      (
+        DefaultArgumentProcessor as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockImplementation(
         () =>
           ({
             process: defaultProcessMock,
@@ -353,7 +357,11 @@ describe('FileCommandLoader (processors)', () => {
       );
 
       // Prevent default processor from interfering
-      vi.mocked(DefaultArgumentProcessor).mockImplementation(
+      (
+        DefaultArgumentProcessor as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockImplementation(
         () =>
           ({
             process: (p: PromptPipelineContent) => Promise.resolve(p),
@@ -446,7 +454,7 @@ describe('FileCommandLoader (processors)', () => {
 
       // Mock glob to throw an AbortError
       const abortError = new DOMException('Aborted', 'AbortError');
-      vi.mocked(glob.glob).mockImplementation(async () => {
+      (glob.glob as Mock<typeof glob.glob>).mockImplementation(async () => {
         controller.abort(); // Ensure the signal is aborted when the service checks
         throw abortError;
       });

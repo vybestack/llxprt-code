@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { createPolicyUpdater } from './config.js';
 import { PolicyEngine } from './policy-engine.js';
@@ -128,10 +136,12 @@ describe('createPolicyUpdater', () => {
 
   it('should persist multiple rules correctly to TOML', async () => {
     createPolicyUpdater(policyEngine, messageBus);
-    vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
-    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-    vi.mocked(fs.rename).mockResolvedValue(undefined);
+    (fs.readFile as Mock<typeof fs.readFile>).mockRejectedValue({
+      code: 'ENOENT',
+    });
+    (fs.mkdir as Mock<typeof fs.mkdir>).mockResolvedValue(undefined);
+    (fs.writeFile as Mock<typeof fs.writeFile>).mockResolvedValue(undefined);
+    (fs.rename as Mock<typeof fs.rename>).mockResolvedValue(undefined);
 
     messageBus.publish({
       type: MessageBusType.UPDATE_POLICY,
@@ -144,10 +154,8 @@ describe('createPolicyUpdater', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(fs.writeFile).toHaveBeenCalled();
-    const [_path, content] = vi.mocked(fs.writeFile).mock.calls[0] as [
-      string,
-      string,
-    ];
+    const [_path, content] = (fs.writeFile as Mock<typeof fs.writeFile>).mock
+      .calls[0] as [string, string];
     const parsed = toml.parse(content) as unknown as ParsedPolicy;
 
     expect(parsed.rule).toHaveLength(1);
@@ -168,13 +176,15 @@ describe('ShellToolInvocation Policy Update', () => {
     } as IShellToolHost;
     mockMessageBus = {} as MessageBus;
 
-    vi.mocked(shellUtils.stripShellWrapper).mockImplementation(
-      (c: string) => c,
-    );
+    (
+      shellUtils.stripShellWrapper as Mock<typeof shellUtils.stripShellWrapper>
+    ).mockImplementation((c: string) => c);
   });
 
   it('should extract multiple root commands for chained commands', () => {
-    vi.mocked(shellUtils.getCommandRoots).mockReturnValue(['git', 'npm']);
+    (
+      shellUtils.getCommandRoots as Mock<typeof shellUtils.getCommandRoots>
+    ).mockReturnValue(['git', 'npm']);
 
     const invocation = new ShellToolInvocation(
       mockHost,
@@ -194,7 +204,9 @@ describe('ShellToolInvocation Policy Update', () => {
   });
 
   it('should extract a single root command', () => {
-    vi.mocked(shellUtils.getCommandRoots).mockReturnValue(['ls']);
+    (
+      shellUtils.getCommandRoots as Mock<typeof shellUtils.getCommandRoots>
+    ).mockReturnValue(['ls']);
 
     const invocation = new ShellToolInvocation(
       mockHost,

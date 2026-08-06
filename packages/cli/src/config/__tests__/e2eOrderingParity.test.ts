@@ -27,7 +27,15 @@
  *   - Full provider and model precedence chain is honored end-to-end
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -458,7 +466,7 @@ describe('e2eOrderingParity: step ordering constraints', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     callLog.entries.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -531,7 +539,7 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     callLog.entries.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');

@@ -21,7 +21,15 @@
  *     (only when --provider is NOT explicit)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -461,7 +469,7 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     vi.clearAllMocks();
     profileSnapshotCalls.length = 0;
     switchProviderCalls.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -524,7 +532,7 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     vi.clearAllMocks();
     profileSnapshotCalls.length = 0;
     switchProviderCalls.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -626,7 +634,7 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     vi.clearAllMocks();
     profileSnapshotCalls.length = 0;
     switchProviderCalls.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');

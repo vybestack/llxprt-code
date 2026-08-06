@@ -121,11 +121,13 @@ describe('Settings Loading and Merging', () => {
     process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
       '/mock/system/system-defaults.json';
 
-    mockFsExistsSync = vi.mocked(fs.existsSync);
-    mockFsMkdirSync = vi.mocked(fs.mkdirSync);
-    mockStripJsonComments = vi.mocked(stripJsonComments);
+    mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+    mockFsMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+    mockStripJsonComments = stripJsonComments as Mock<typeof stripJsonComments>;
 
-    vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
+    (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
+      '/mock/home/user',
+    );
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
     );
@@ -153,8 +155,12 @@ describe('Settings Loading and Merging', () => {
         return dir; // Return the created directory path for verification
       },
     );
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
-    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
+    (isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>).mockReturnValue(
+      false,
+    );
   });
 
   afterEach(() => {
@@ -169,7 +175,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false);
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
       // mkdirSync is mocked in beforeEach to return undefined, which is fine for void usage
 
       loadedSettings.setValue(SettingScope.User, 'ui.theme', 'matrix');
@@ -217,7 +225,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false);
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(
         SettingScope.User,
@@ -244,7 +254,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false);
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(SettingScope.User, 'checkpointing.enabled', true);
       expect(loadedSettings.user.settings.checkpointing).toBeUndefined();
@@ -271,7 +283,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false);
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(
         SettingScope.User,
@@ -320,7 +334,9 @@ describe('Settings Loading and Merging', () => {
       );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(
         SettingScope.User,
@@ -379,7 +395,9 @@ describe('Settings Loading and Merging', () => {
       );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(SettingScope.User, 'model', 'updated-model');
 
@@ -410,7 +428,9 @@ describe('Settings Loading and Merging', () => {
       );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(SettingScope.User, 'model', {
         name: 'replacement-model',
@@ -444,7 +464,9 @@ describe('Settings Loading and Merging', () => {
       );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(
         SettingScope.User,
@@ -479,7 +501,9 @@ describe('Settings Loading and Merging', () => {
       );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       loadedSettings.setValue(SettingScope.User, 'model.name', 'updated-model');
 
@@ -637,8 +661,12 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should NOT merge workspace settings when workspace is not trusted', () => {
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
-      vi.mocked(isFolderTrustEnabled).mockReturnValue(true); // Enable the feature for this test
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        false,
+      );
+      (
+        isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>
+      ).mockReturnValue(true); // Enable the feature for this test
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         enableAutoUpdate: true,

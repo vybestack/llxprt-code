@@ -37,6 +37,7 @@ import {
   it,
   expect,
   setSystemTime,
+  type Mock,
 } from 'bun:test';
 
 // Mock ClearcutLogger to avoid import errors
@@ -305,7 +306,11 @@ describe('loggers', () => {
 
     it('should not log if OTEL SDK is not initialized', () => {
       mockLogger.emit.mockClear();
-      vi.mocked(metrics.recordModelRoutingMetrics).mockClear();
+      (
+        metrics.recordModelRoutingMetrics as Mock<
+          typeof metrics.recordModelRoutingMetrics
+        >
+      ).mockClear();
       mockIsTelemetrySdkInitialized.mockReturnValue(false);
       const event = new ModelRoutingEvent(
         'gemini-pro',

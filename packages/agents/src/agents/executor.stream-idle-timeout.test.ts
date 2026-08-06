@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from '../testApi.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,
@@ -35,7 +43,9 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
-const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+const mockedGetDirectoryContextString = getDirectoryContextString as Mock<
+  typeof getDirectoryContextString
+>;
 
 describe('stream idle timeout behavioral tests', () => {
   let fixture: ExecutorTestFixture;

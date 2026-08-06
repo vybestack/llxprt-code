@@ -9,7 +9,15 @@
  * DI-refactored: SettingsService → ISettingsService local test double
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
+import {
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   AuthPrecedenceResolver,
   flushRuntimeAuthScope,
@@ -100,7 +108,9 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     const tokenAccountA = 'oauth-token-account-a';
     const tokenAccountB = 'oauth-token-account-b';
 
-    vi.mocked(mockOAuthManager.getToken).mockResolvedValue(tokenAccountA);
+    (
+      mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+    ).mockResolvedValue(tokenAccountA);
 
     // First authentication - token A gets cached
     const firstAuth = await resolver.resolveAuthentication({
@@ -113,7 +123,9 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     resolver.invalidateCache();
 
     // Login with different account - token B
-    vi.mocked(mockOAuthManager.getToken).mockResolvedValue(tokenAccountB);
+    (
+      mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+    ).mockResolvedValue(tokenAccountB);
 
     // When: Resolve authentication again WITHOUT switching providers
     const secondAuth = await resolver.resolveAuthentication({
@@ -136,7 +148,9 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     const staleToken = 'stale-cached-token';
 
     // First: Get and cache a token
-    vi.mocked(mockOAuthManager.getToken).mockResolvedValue(staleToken);
+    (
+      mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+    ).mockResolvedValue(staleToken);
     const cachedResult = await resolver.resolveAuthentication({
       settingsService: mockSettingsService,
       includeOAuth: true,
@@ -147,7 +161,9 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     resolver.invalidateCache();
 
     // OAuth manager now returns fresh token
-    vi.mocked(mockOAuthManager.getToken).mockResolvedValue(freshToken);
+    (
+      mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+    ).mockResolvedValue(freshToken);
 
     // Resolve again - should get fresh token, not stale cached one
     const freshResult = await resolver.resolveAuthentication({

@@ -20,7 +20,15 @@
  * verifies that a profile's ephemeral settings cannot change the trust evaluation.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -313,7 +321,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     vi.resetAllMocks();
     capturedTrustCheckSettings = undefined;
     capturedTrustCheckWorkingDirectory = undefined;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -324,7 +332,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     runtimeSettingsState.oauthManager = null;
 
     // Capture the settings object passed to isWorkspaceTrusted
-    vi.mocked(isWorkspaceTrusted).mockImplementation(
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockImplementation(
       (s: Settings, workingDirectory?: string) => {
         capturedTrustCheckSettings = s;
         capturedTrustCheckWorkingDirectory = workingDirectory;
@@ -355,7 +363,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     vi.spyOn(process, 'cwd').mockReturnValue(
       path.resolve(path.sep, 'home', 'user', 'untrusted-process-cwd'),
     );
-    vi.mocked(isWorkspaceTrusted).mockImplementation(
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockImplementation(
       (_settings, workingDirectory) => {
         capturedTrustCheckWorkingDirectory = workingDirectory;
         return workingDirectory === configuredCwd;
@@ -374,10 +382,12 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   });
 
   it('folder untrusted (via isWorkspaceTrusted returning false) → approval forced to DEFAULT', async () => {
-    vi.mocked(isWorkspaceTrusted).mockImplementation((s: Settings) => {
-      capturedTrustCheckSettings = s;
-      return false; // always untrusted
-    });
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockImplementation(
+      (s: Settings) => {
+        capturedTrustCheckSettings = s;
+        return false; // always untrusted
+      },
+    );
 
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
     const config = await runConfig({});
@@ -386,10 +396,12 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   });
 
   it('folder trusted (via isWorkspaceTrusted returning true) → YOLO mode is honored', async () => {
-    vi.mocked(isWorkspaceTrusted).mockImplementation((s: Settings) => {
-      capturedTrustCheckSettings = s;
-      return true; // always trusted
-    });
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockImplementation(
+      (s: Settings) => {
+        capturedTrustCheckSettings = s;
+        return true; // always trusted
+      },
+    );
 
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
     const config = await runConfig({});
@@ -406,12 +418,14 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     // The critical point is: isWorkspaceTrusted must be called with the ORIGINAL settings object.
 
     const callsWithTrustedFalse: boolean[] = [];
-    vi.mocked(isWorkspaceTrusted).mockImplementation((s: Settings) => {
-      capturedTrustCheckSettings = s;
-      // Track what folderTrust value was seen during trust check
-      callsWithTrustedFalse.push(s.folderTrust === false);
-      return false; // untrusted
-    });
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockImplementation(
+      (s: Settings) => {
+        capturedTrustCheckSettings = s;
+        // Track what folderTrust value was seen during trust check
+        callsWithTrustedFalse.push(s.folderTrust === false);
+        return false; // untrusted
+      },
+    );
 
     // Original settings: folderTrust explicitly false
     const originalSettings: Settings = { folderTrust: false };
@@ -429,7 +443,9 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   });
 
   it('isWorkspaceTrusted is called exactly once for trust determination', async () => {
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     process.argv = ['node', 'script.js'];
     await runConfig({});
 

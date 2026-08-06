@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -288,7 +296,9 @@ function resetRuntimeSettingsState(): void {
 describe('when folder is NOT trusted', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      false,
+    );
   });
 
   it('should override --approval-mode=yolo to DEFAULT', async () => {
@@ -782,7 +792,7 @@ describe('loadCliConfig', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.clearAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -835,7 +845,9 @@ describe('loadCliConfig', () => {
       path.resolve(path.sep, 'cli', 'path1'),
       path.join(mockCwd, 'cli', 'path2'),
     ];
-    const loadMemoryMock = vi.mocked(ServerConfig.loadServerHierarchicalMemory);
+    const loadMemoryMock = ServerConfig.loadServerHierarchicalMemory as Mock<
+      typeof ServerConfig.loadServerHierarchicalMemory
+    >;
     expect(loadMemoryMock).toHaveBeenCalled();
     expect(loadMemoryMock.mock.calls.at(-1)?.[0]).toBe(process.cwd());
     expect(loadMemoryMock.mock.calls.at(-1)?.[1]).toStrictEqual(

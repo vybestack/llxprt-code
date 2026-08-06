@@ -7,7 +7,15 @@
 import { installNonInteractiveSigintHandler } from './cli.js';
 import { runExitCleanup } from './utils/cleanup.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 
 vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(async () => {}),
@@ -19,7 +27,7 @@ describe('installNonInteractiveSigintHandler', () => {
 
   beforeEach(() => {
     capturedSigintListeners = [];
-    vi.mocked(runExitCleanup).mockClear();
+    (runExitCleanup as Mock<typeof runExitCleanup>).mockClear();
     stderrWriteSpy = vi
       .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
@@ -83,8 +91,8 @@ describe('installNonInteractiveSigintHandler', () => {
       expect(exitProcess).toHaveBeenCalledWith(130);
     });
 
-    vi.mocked(exitProcess).mockClear();
-    vi.mocked(runExitCleanup).mockClear();
+    (exitProcess as Mock<typeof exitProcess>).mockClear();
+    (runExitCleanup as Mock<typeof runExitCleanup>).mockClear();
     stderrWriteSpy.mockClear();
 
     handler();

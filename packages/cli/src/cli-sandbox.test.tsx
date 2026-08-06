@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { main } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { loadSettings } from './config/settings.js';
@@ -173,11 +181,15 @@ describe('cli sandbox maxHeapSizeMB integration', () => {
   });
 
   it('passes settings maxHeapSizeMB to computeSandboxMemoryArgs and start_sandbox', async () => {
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const loadSettingsMock = vi.mocked(loadSettings);
-    const loadCliConfigMock = vi.mocked(loadCliConfig);
-    const startSandboxMock = vi.mocked(start_sandbox);
-    const computeMock = vi.mocked(computeSandboxMemoryArgs);
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
+    const loadCliConfigMock = loadCliConfig as Mock<typeof loadCliConfig>;
+    const startSandboxMock = start_sandbox as Mock<typeof start_sandbox>;
+    const computeMock = computeSandboxMemoryArgs as Mock<
+      typeof computeSandboxMemoryArgs
+    >;
 
     shouldRelaunchMock.mockReturnValue([]);
     const customMaxHeap = 4096;
@@ -195,7 +207,9 @@ describe('cli sandbox maxHeapSizeMB integration', () => {
 
     const mockConfig = buildSandboxConfig();
     loadCliConfigMock.mockResolvedValue(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce(buildArgv('test prompt'));
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
+      buildArgv('test prompt'),
+    );
 
     const originalIsTTY = process.stdin.isTTY;
     const originalSetRawMode = process.stdin.setRawMode;

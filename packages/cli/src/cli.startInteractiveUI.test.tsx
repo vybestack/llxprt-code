@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -201,7 +209,8 @@ describe('startInteractiveUI', () => {
     expect(registerCleanup).toHaveBeenCalledTimes(1);
 
     // Verify cleanup handler is registered with unmount function
-    const cleanupFn = vi.mocked(registerCleanup).mock.calls[0][0];
+    const cleanupFn = (registerCleanup as Mock<typeof registerCleanup>).mock
+      .calls[0][0];
     expect(typeof cleanupFn).toBe('function');
 
     // checkForUpdates should be called asynchronously (not waited for)

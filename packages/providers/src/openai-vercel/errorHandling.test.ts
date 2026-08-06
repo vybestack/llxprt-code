@@ -19,7 +19,15 @@
  * @requirement REQ-OAV-009 - Error Handling
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -72,8 +80,12 @@ describe('OpenAIVercelProvider - Error Handling', () => {
     settingsService.set('activeProvider', 'openaivercel');
     config = createRuntimeConfigStub(settingsService);
 
-    mockStreamText = vi.mocked((await import('ai')).streamText);
-    mockGenerateText = vi.mocked((await import('ai')).generateText);
+    mockStreamText = (await import('ai')).streamText as unknown as Mock<
+      (...args: never[]) => unknown
+    >;
+    mockGenerateText = (await import('ai')).generateText as unknown as Mock<
+      (...args: never[]) => unknown
+    >;
 
     provider = new OpenAIVercelProvider('test-api-key', undefined, {
       settingsService,

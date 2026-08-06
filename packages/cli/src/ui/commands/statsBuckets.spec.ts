@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { statsCommand } from './statsCommand.js';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -50,7 +58,8 @@ function getBucketResultItem(context: CommandContext): {
   type: MessageType;
   text?: string;
 } {
-  const calls = vi.mocked(context.ui.addItem).mock.calls;
+  const calls = (context.ui.addItem as Mock<typeof context.ui.addItem>).mock
+    .calls;
   const items = calls.map((call) => call[0]) as Array<{
     type: MessageType;
     text?: string;

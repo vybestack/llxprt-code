@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, setSystemTime } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  setSystemTime,
+  type Mock,
+} from 'bun:test';
 import { statsCommand } from './statsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -137,7 +145,9 @@ describe('statsCommand', () => {
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const infoItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -197,7 +207,9 @@ describe('statsCommand', () => {
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const infoItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -251,7 +263,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -275,7 +289,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -343,7 +359,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -381,7 +399,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -433,7 +453,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -468,7 +490,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -535,7 +559,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -580,7 +606,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -625,7 +653,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -670,7 +700,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -714,7 +746,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -759,7 +793,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -817,7 +853,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -861,7 +899,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;

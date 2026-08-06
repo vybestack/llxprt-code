@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { relaunchAppInChildProcess } from './relaunch.js';
@@ -12,7 +20,7 @@ import { RELAUNCH_EXIT_CODE } from './bootstrap.js';
 
 vi.mock('node:child_process');
 
-const mockedChildProcess = vi.mocked(childProcess);
+const mockedChildProcess = childProcess as Mock<typeof childProcess>;
 
 describe('relaunchAppInChildProcess', () => {
   let mockChildProcess: EventEmitter;

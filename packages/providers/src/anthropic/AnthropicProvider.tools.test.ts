@@ -7,7 +7,15 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -147,7 +155,11 @@ describe('AnthropicProvider', () => {
       const retryModule = await import(
         '@vybestack/llxprt-code-core/utils/retry.js'
       );
-      vi.mocked(retryModule.isNetworkTransientError).mockReturnValueOnce(true);
+      (
+        retryModule.isNetworkTransientError as Mock<
+          typeof retryModule.isNetworkTransientError
+        >
+      ).mockReturnValueOnce(true);
 
       const mockStream = {
         async *[Symbol.asyncIterator]() {

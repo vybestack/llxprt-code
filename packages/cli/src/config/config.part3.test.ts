@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -292,7 +300,7 @@ describe('loadCliConfig interactive', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
@@ -554,7 +562,7 @@ describe('loadCliConfig fileFiltering', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
     setActiveProviderRuntimeContext(createProviderRuntimeContext());

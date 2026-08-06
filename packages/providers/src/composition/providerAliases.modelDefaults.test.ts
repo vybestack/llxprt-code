@@ -7,7 +7,15 @@
  * Phase 01 & Phase 02 of the modeldefaults plan
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -50,7 +58,9 @@ async function loadWithTempConfig(
   try {
     return loadProviderAliasEntries();
   } finally {
-    vi.mocked(Storage.getGlobalDataDir).mockRestore();
+    (
+      Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
+    ).mockRestore();
   }
 }
 
@@ -730,7 +740,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         ],
       ).toBe(true);
     } finally {
-      vi.mocked(Storage.getGlobalDataDir).mockRestore();
+      (
+        Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
+      ).mockRestore();
     }
   });
 });

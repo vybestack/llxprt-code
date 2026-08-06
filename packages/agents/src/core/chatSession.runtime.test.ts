@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import type { ChatSessionConfig } from './chatSession.js';
 import type {
   ToolDeclaration,
@@ -54,11 +54,11 @@ vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
 
-const retryWithBackoff = vi.mocked(
-  await import('@vybestack/llxprt-code-core/utils/retry.js').then(
-    (m) => m.retryWithBackoff,
-  ),
-);
+const retryWithBackoff = (await import(
+  '@vybestack/llxprt-code-core/utils/retry.js'
+).then((m) => m.retryWithBackoff)) as unknown as Mock<
+  (...args: never[]) => unknown
+>;
 
 describe('ChatSession runtime context', () => {
   let settingsService: SettingsService;

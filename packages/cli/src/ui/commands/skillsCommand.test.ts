@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { skillsCommand } from './skillsCommand.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -346,7 +354,9 @@ describe('skillsCommand', () => {
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         const skillManager = context.services.config!.getSkillManager();
-        vi.mocked(skillManager.getSkills).mockReturnValue([
+        (
+          skillManager.getSkills as Mock<typeof skillManager.getSkills>
+        ).mockReturnValue([
           { name: 'skill1' },
           { name: 'skill2' },
           { name: 'skill3' },
@@ -371,9 +381,9 @@ describe('skillsCommand', () => {
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         const skillManager = context.services.config!.getSkillManager();
-        vi.mocked(skillManager.getSkills).mockReturnValue([
-          { name: 'skill1' },
-        ] as SkillDefinition[]);
+        (
+          skillManager.getSkills as Mock<typeof skillManager.getSkills>
+        ).mockReturnValue([{ name: 'skill1' }] as SkillDefinition[]);
       });
       getConfig(context).reloadSkills = reloadSkillsMock;
 
@@ -394,7 +404,9 @@ describe('skillsCommand', () => {
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         const skillManager = context.services.config!.getSkillManager();
-        vi.mocked(skillManager.getSkills).mockReturnValue([
+        (
+          skillManager.getSkills as Mock<typeof skillManager.getSkills>
+        ).mockReturnValue([
           { name: 'skill2' }, // skill1 removed, skill3 added
           { name: 'skill3' },
         ] as SkillDefinition[]);
@@ -477,8 +489,12 @@ describe('skillsCommand', () => {
           body: 'body2',
         },
       ];
-      vi.mocked(skillManager.getAllSkills).mockReturnValue(mockSkills);
-      vi.mocked(skillManager.getSkill).mockImplementation(
+      (
+        skillManager.getAllSkills as Mock<typeof skillManager.getAllSkills>
+      ).mockReturnValue(mockSkills);
+      (
+        skillManager.getSkill as Mock<typeof skillManager.getSkill>
+      ).mockImplementation(
         (name: string) => mockSkills.find((s) => s.name === name) ?? null,
       );
 
@@ -507,8 +523,12 @@ describe('skillsCommand', () => {
           body: 'body2',
         },
       ];
-      vi.mocked(skillManager.getAllSkills).mockReturnValue(mockSkills);
-      vi.mocked(skillManager.getSkill).mockImplementation(
+      (
+        skillManager.getAllSkills as Mock<typeof skillManager.getAllSkills>
+      ).mockReturnValue(mockSkills);
+      (
+        skillManager.getSkill as Mock<typeof skillManager.getSkill>
+      ).mockImplementation(
         (name: string) => mockSkills.find((s) => s.name === name) ?? null,
       );
 

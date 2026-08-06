@@ -5,14 +5,14 @@
  */
 
 import { render } from 'ink-testing-library';
-import { vi, describe, beforeEach, it, expect } from 'bun:test';
+import { vi, describe, beforeEach, it, expect, type Mock } from 'bun:test';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { ExtensionsList } from './ExtensionsList.js';
 
 vi.mock('../../contexts/UIStateContext.js');
 
-const mockUseUIState = vi.mocked(useUIState);
+const mockUseUIState = useUIState as Mock<typeof useUIState>;
 
 const mockExtensions = [
   {

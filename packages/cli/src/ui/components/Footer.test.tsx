@@ -5,7 +5,7 @@
  */
 
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { Footer } from './Footer.js';
 
 // Mock the responsive hooks and utilities
@@ -61,7 +61,7 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 import { useResponsive } from '../hooks/useResponsive.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-const mockUseResponsive = vi.mocked(useResponsive);
+const mockUseResponsive = useResponsive as Mock<typeof useResponsive>;
 
 describe('Footer', () => {
   const defaultProps = {

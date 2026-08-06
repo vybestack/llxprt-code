@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 
@@ -210,9 +210,11 @@ describe('generateAutoPrompt', () => {
 
   it('disposes detached clients when generation fails', async () => {
     const detachedClient = makeClient('unused');
-    vi.mocked(detachedClient.generateDirectMessage).mockRejectedValueOnce(
-      new Error('network failed'),
-    );
+    (
+      detachedClient.generateDirectMessage as Mock<
+        typeof detachedClient.generateDirectMessage
+      >
+    ).mockRejectedValueOnce(new Error('network failed'));
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as child_process from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -51,20 +59,22 @@ function mockSshAdd(outcome: SshAddOutcome): void {
   const stderr = new PassThrough();
   Object.assign(child, { stdout, stderr });
 
-  vi.mocked(child_process.spawn).mockImplementation(() => {
-    setImmediate(() => {
-      if (outcome.spawnError) {
-        child.emit('error', outcome.spawnError);
-        return;
-      }
-      stdout.end(outcome.stdout ?? '');
-      stderr.end(outcome.stderr ?? '');
-      stdout.on('end', () => {
-        child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
+  (child_process.spawn as Mock<typeof child_process.spawn>).mockImplementation(
+    () => {
+      setImmediate(() => {
+        if (outcome.spawnError) {
+          child.emit('error', outcome.spawnError);
+          return;
+        }
+        stdout.end(outcome.stdout ?? '');
+        stderr.end(outcome.stderr ?? '');
+        stdout.on('end', () => {
+          child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
+        });
       });
-    });
-    return child as unknown as child_process.ChildProcess;
-  });
+      return child as unknown as child_process.ChildProcess;
+    },
+  );
 }
 
 /**

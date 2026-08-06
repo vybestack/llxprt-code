@@ -8,7 +8,7 @@
  * Unit tests for streamUtils.ts pure utilities and config-bound helpers.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   UnauthorizedError,
   parseAndFormatApiError,
@@ -496,7 +496,9 @@ describe('getActiveProviderNameForApiError', () => {
 describe('handleSubmissionError', () => {
   const mockAddItem = vi.fn();
   const mockOnAuthError = vi.fn();
-  const mockParseAndFormatApiError = vi.mocked(parseAndFormatApiError);
+  const mockParseAndFormatApiError = parseAndFormatApiError as Mock<
+    typeof parseAndFormatApiError
+  >;
   const makeConfig = (activeProvider: unknown, providerManagerName?: string) =>
     createStreamRuntimeForTest({
       getModel: vi.fn(() => 'test-model'),

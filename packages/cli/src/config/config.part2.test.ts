@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -293,7 +301,7 @@ describe('loadCliConfig chatCompression', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
@@ -352,11 +360,13 @@ describe('loadCliConfig useRipgrep', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     // Default: ripgrep is available
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      true,
+    );
   });
 
   afterEach(() => {
@@ -370,7 +380,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      true,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -388,7 +400,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(false);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      false,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -406,7 +420,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { useRipgrep: false };
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      true,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -424,7 +440,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { useRipgrep: true };
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(false);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      false,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -445,7 +463,7 @@ describe('screenReader configuration', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
@@ -539,10 +557,12 @@ describe('loadCliConfig tool exclusions', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 

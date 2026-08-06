@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { format } from 'node:util';
 import { handleEnable, enableCommand } from './enable.js';
 import {
@@ -44,7 +52,7 @@ vi.mock('../utils.js', () => ({
 }));
 
 describe('skills enable command', () => {
-  const mockLoadSettings = vi.mocked(loadSettings);
+  const mockLoadSettings = loadSettings as Mock<typeof loadSettings>;
 
   beforeEach(() => {
     vi.clearAllMocks();

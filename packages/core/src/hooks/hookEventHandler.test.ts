@@ -10,7 +10,7 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { HookEventHandler } from './hookEventHandler.js';
 import type { Config } from '../config/config.js';
 import type { HookRegistry } from './hookRegistry.js';
@@ -176,7 +176,11 @@ describe('HookEventHandler', () => {
     it('should handle errors gracefully and return failure envelope', async () => {
       // @requirement:HOOK-147 - Wraps in try/catch, never propagates exceptions
       // @requirement:DELTA-HFAIL-001 - Errors surface via failure envelope, not masked
-      vi.mocked(mockPlanner.createExecutionPlan).mockImplementation(() => {
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockImplementation(() => {
         throw new Error('Planner error');
       });
 
@@ -208,7 +212,11 @@ describe('HookEventHandler', () => {
     it('should handle errors gracefully and return failure envelope', async () => {
       // @requirement:HOOK-147
       // @requirement:DELTA-HFAIL-001 - Errors surface via failure envelope, not masked
-      vi.mocked(mockPlanner.createExecutionPlan).mockImplementation(() => {
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockImplementation(() => {
         throw new Error('Unexpected error');
       });
 
@@ -242,7 +250,11 @@ describe('HookEventHandler', () => {
     it('should handle errors gracefully and return failure envelope', async () => {
       // @requirement:HOOK-147
       // @requirement:DELTA-HFAIL-001 - Errors surface via failure envelope, not masked
-      vi.mocked(mockPlanner.createExecutionPlan).mockImplementation(() => {
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockImplementation(() => {
         throw new Error('Tool selection error');
       });
 
@@ -263,7 +275,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       await eventHandler.fireBeforeModelEvent({ messages: [] });
 
@@ -286,7 +302,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       await eventHandler.fireBeforeModelEvent({ messages: [] });
 
@@ -310,7 +330,11 @@ describe('HookEventHandler', () => {
         ],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       await eventHandler.fireBeforeModelEvent({ messages: [] });
 
@@ -323,7 +347,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'hook1' }],
         sequential: true,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       await eventHandler.fireBeforeModelEvent({ messages: [] });
 
@@ -339,10 +367,16 @@ describe('HookEventHandler', () => {
       const executionResults = [
         { success: true, output: { decision: 'allow' } },
       ];
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
-      vi.mocked(mockRunner.executeHooksParallel).mockResolvedValue(
-        executionResults,
-      );
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mockResolvedValue(executionResults);
 
       await eventHandler.fireBeforeModelEvent({ messages: [] });
 
@@ -360,7 +394,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'test-hook' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       // The debug logger is mocked, so we just verify no errors
       await expect(
@@ -388,16 +426,26 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'test-hook' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
-      vi.mocked(mockRunner.executeHooksParallel).mockResolvedValue([
-        { success: true, output: {} },
-      ]);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mockResolvedValue([{ success: true, output: {} }]);
 
       await eventHandler.firePreCompressEvent({ trigger: 'manual' as const });
 
       // The trigger is passed in the input context, not to the planner
       expect(mockRunner.executeHooksParallel).toHaveBeenCalled();
-      const callArgs = vi.mocked(mockRunner.executeHooksParallel).mock.calls[0];
+      const callArgs = (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mock.calls[0];
       const input = callArgs[2]; // third arg is the input
       expect(input).toMatchObject({ trigger: 'manual' });
     });
@@ -407,15 +455,25 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'test-hook' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
-      vi.mocked(mockRunner.executeHooksParallel).mockResolvedValue([
-        { success: true, output: {} },
-      ]);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mockResolvedValue([{ success: true, output: {} }]);
 
       await eventHandler.firePreCompressEvent({ trigger: 'auto' as const });
 
       expect(mockRunner.executeHooksParallel).toHaveBeenCalled();
-      const callArgs = vi.mocked(mockRunner.executeHooksParallel).mock.calls[0];
+      const callArgs = (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mock.calls[0];
       const input = callArgs[2];
       expect(input).toMatchObject({ trigger: 'auto' });
     });
@@ -425,10 +483,16 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'test-hook' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
-      vi.mocked(mockRunner.executeHooksParallel).mockRejectedValue(
-        new Error('Hook runner error'),
-      );
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mockRejectedValue(new Error('Hook runner error'));
 
       const result = await eventHandler.firePreCompressEvent({
         trigger: 'auto' as const,
@@ -451,7 +515,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       // ACT
       await eventHandler.fireBeforeModelEvent({ messages: [] });
@@ -473,10 +541,16 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
-      vi.mocked(mockConfig.getSessionRecordingService).mockReturnValue(
-        undefined,
-      );
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      (
+        mockConfig.getSessionRecordingService as Mock<
+          typeof mockConfig.getSessionRecordingService
+        >
+      ).mockReturnValue(undefined);
 
       // ACT
       await eventHandler.fireBeforeModelEvent({ messages: [] });
@@ -497,8 +571,16 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
-      vi.mocked(mockConfig.getSessionRecordingService).mockReturnValue({
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      (
+        mockConfig.getSessionRecordingService as Mock<
+          typeof mockConfig.getSessionRecordingService
+        >
+      ).mockReturnValue({
         getFilePath: vi.fn().mockReturnValue(null),
       } as unknown as SessionRecordingService);
 
@@ -521,7 +603,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       // ACT
       await eventHandler.fireBeforeToolEvent('read_file', {
@@ -547,7 +633,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       // ACT
       await eventHandler.fireAfterToolEvent(
@@ -574,7 +664,11 @@ describe('HookEventHandler', () => {
         hookConfigs: [{ type: 'command', command: 'echo test' }],
         sequential: false,
       };
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(plan);
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
 
       // ACT
       await eventHandler.fireSessionStartEvent({ source: 'startup' as const });
@@ -596,7 +690,9 @@ describe('HookEventHandler', () => {
     it('should emit user-facing feedback when hooks fail', async () => {
       // Mock coreEvents.emitFeedback
       const mockEmitFeedback = vi.fn();
-      vi.mocked(coreEvents.emitFeedback).mockImplementation(mockEmitFeedback);
+      (
+        coreEvents.emitFeedback as Mock<typeof coreEvents.emitFeedback>
+      ).mockImplementation(mockEmitFeedback);
 
       const mockPlan = {
         eventName: HookEventName.BeforeTool,
@@ -629,11 +725,21 @@ describe('HookEventHandler', () => {
         totalDuration: 50,
       };
 
-      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(mockPlan);
-      vi.mocked(mockRunner.executeHooksParallel).mockResolvedValue(mockResults);
-      vi.mocked(mockAggregator.aggregateResults).mockReturnValue(
-        mockAggregated,
-      );
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(mockPlan);
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mockResolvedValue(mockResults);
+      (
+        mockAggregator.aggregateResults as Mock<
+          typeof mockAggregator.aggregateResults
+        >
+      ).mockReturnValue(mockAggregated);
 
       await eventHandler.fireBeforeToolEvent('EditTool', {});
 

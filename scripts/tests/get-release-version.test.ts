@@ -12,6 +12,7 @@ import {
   beforeEach,
   afterEach,
   setSystemTime,
+  type Mock,
 } from 'bun:test';
 import { getReleaseVersion } from '../get-release-version.ts';
 import { execSync, spawnSync as realSpawnSync } from 'node:child_process';
@@ -54,10 +55,10 @@ describe('getReleaseVersion', () => {
     delete process.env.IS_PREVIEW;
     delete process.env.MANUAL_VERSION;
     vi.useFakeTimers();
-    vi.mocked(fs.readFileSync).mockReturnValue(
+    (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
       JSON.stringify({ version: '0.1.0' }),
     );
-    vi.mocked(execSync).mockReturnValue('abcdef');
+    (execSync as Mock<typeof execSync>).mockReturnValue('abcdef');
   });
 
   afterEach(() => {

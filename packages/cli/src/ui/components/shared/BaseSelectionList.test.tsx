@@ -6,7 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
 import {
   BaseSelectionList,
@@ -54,7 +54,7 @@ describe('BaseSelectionList', () => {
     > = {},
     activeIndex: number = 0,
   ) => {
-    vi.mocked(useSelectionList).mockReturnValue({
+    (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
       activeIndex,
       setActiveIndex: vi.fn(),
     });
@@ -278,7 +278,7 @@ describe('BaseSelectionList', () => {
         renderItem: mockRenderItem,
       };
 
-      vi.mocked(useSelectionList).mockReturnValue({
+      (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
         activeIndex: initialActiveIndex,
         setActiveIndex: vi.fn(),
       });
@@ -295,7 +295,7 @@ describe('BaseSelectionList', () => {
 
       // Function to simulate the activeIndex changing over time
       const updateActiveIndex = async (newIndex: number) => {
-        vi.mocked(useSelectionList).mockReturnValue({
+        (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
           activeIndex: newIndex,
           setActiveIndex: vi.fn(),
         });

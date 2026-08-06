@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
@@ -55,7 +55,7 @@ function createLoadedSettings(
   return createFakeOAuthSettings(overrides);
 }
 
-const mockFs = vi.mocked(fs);
+const mockFs = fs as Mock<typeof fs>;
 
 describe('OAuth Provider Premature Initialization', () => {
   let tokenStore: KeyringTokenStore;

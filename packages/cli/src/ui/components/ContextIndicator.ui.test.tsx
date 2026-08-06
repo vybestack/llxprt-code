@@ -11,7 +11,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
@@ -56,7 +56,9 @@ describe('ContextIndicator UI', () => {
       name: 'openai',
     } as unknown as IProvider);
 
-    vi.mocked(getProviderManager).mockReturnValue(mockProviderManager);
+    (getProviderManager as Mock<typeof getProviderManager>).mockReturnValue(
+      mockProviderManager,
+    );
   });
 
   it('should display context percentage without remote tokens', () => {
@@ -133,7 +135,11 @@ describe('ContextIndicator UI', () => {
 
   it('should handle non-OpenAI providers', () => {
     // Mock a non-OpenAI provider
-    vi.mocked(mockProviderManager.getActiveProvider).mockReturnValue({
+    (
+      mockProviderManager.getActiveProvider as Mock<
+        typeof mockProviderManager.getActiveProvider
+      >
+    ).mockReturnValue({
       name: 'anthropic',
     } as unknown as IProvider);
 

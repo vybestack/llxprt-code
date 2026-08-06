@@ -15,7 +15,7 @@
  * it can wire them into the shared Config/GoogleGenAI mock.
  */
 
-import { vi } from '../testApi.js';
+import { vi, type Mock } from '../testApi.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';
@@ -72,13 +72,19 @@ export interface ClientMockFns {
 /** Reset all mocks and re-apply the shared service mocks. */
 function resetAndApplyServiceMocks(): void {
   vi.resetAllMocks();
-  vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
+  (
+    uiTelemetryService.setLastPromptTokenCount as Mock<
+      typeof uiTelemetryService.setLastPromptTokenCount
+    >
+  ).mockClear();
 
-  vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
-    'Test system instruction',
-  );
+  (
+    getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+  ).mockResolvedValue('Test system instruction');
 
-  vi.mocked(ComplexityAnalyzer).mockImplementation(
+  (
+    ComplexityAnalyzer as unknown as Mock<(...args: never[]) => unknown>
+  ).mockImplementation(
     () =>
       ({
         analyzeComplexity: vi.fn().mockReturnValue({
@@ -92,7 +98,9 @@ function resetAndApplyServiceMocks(): void {
       }) as unknown as ComplexityAnalyzer,
   );
 
-  vi.mocked(TodoReminderService).mockImplementation(
+  (
+    TodoReminderService as unknown as Mock<(...args: never[]) => unknown>
+  ).mockImplementation(
     () =>
       ({
         getComplexTaskSuggestion: vi.fn(),
@@ -123,7 +131,8 @@ function setupConfigMock(): ContentGeneratorConfig {
     getAllTools: vi.fn().mockReturnValue([]),
   };
   const fileService = new FileDiscoveryService('/test/dir');
-  const MockedConfig = vi.mocked(Config, true);
+  const MockedConfig =
+    (Config, true as unknown as Mock<(...args: never[]) => unknown>);
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: 'test-model',
     apiKey: 'test-key',

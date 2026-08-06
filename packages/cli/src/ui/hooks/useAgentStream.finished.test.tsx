@@ -13,7 +13,7 @@ import {
   mockStartChat,
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
@@ -387,7 +387,7 @@ describe('useAgentStream', () => {
 
     describe('ContextWindowWillOverflow event', () => {
       beforeEach(() => {
-        vi.mocked(tokenLimit).mockReturnValue(100);
+        (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(100);
       });
 
       it.each([

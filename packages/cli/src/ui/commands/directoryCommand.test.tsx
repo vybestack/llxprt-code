@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { directoryCommand, expandHomeDir } from './directoryCommand.js';
 import {
   loadServerHierarchicalMemory,
@@ -32,9 +32,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-const mockLoadServerHierarchicalMemory = vi.mocked(
-  loadServerHierarchicalMemory,
-);
+const mockLoadServerHierarchicalMemory = loadServerHierarchicalMemory as Mock<
+  typeof loadServerHierarchicalMemory
+>;
 
 describe('directoryCommand', () => {
   let mockContext: CommandContext;
@@ -157,7 +157,11 @@ describe('directoryCommand', () => {
 
     it('should show an error if addDirectory throws an exception', async () => {
       const error = new Error('Directory does not exist');
-      vi.mocked(mockWorkspaceContext.addDirectory).mockImplementation(() => {
+      (
+        mockWorkspaceContext.addDirectory as Mock<
+          typeof mockWorkspaceContext.addDirectory
+        >
+      ).mockImplementation(() => {
         throw error;
       });
       const newPath = path.normalize('/home/user/invalid-project');
@@ -175,13 +179,15 @@ describe('directoryCommand', () => {
       const validPath = path.normalize('/home/user/valid-project');
       const invalidPath = path.normalize('/home/user/invalid-project');
       const error = new Error('Directory does not exist');
-      vi.mocked(mockWorkspaceContext.addDirectory).mockImplementation(
-        (p: string) => {
-          if (p === invalidPath) {
-            throw error;
-          }
-        },
-      );
+      (
+        mockWorkspaceContext.addDirectory as Mock<
+          typeof mockWorkspaceContext.addDirectory
+        >
+      ).mockImplementation((p: string) => {
+        if (p === invalidPath) {
+          throw error;
+        }
+      });
 
       await addCommand.action!(mockContext, `${validPath},${invalidPath}`);
 
@@ -217,9 +223,11 @@ describe('directoryCommand', () => {
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
         isPathTrusted: vi.fn().mockReturnValue(false),
       };
-      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
-        mockLoadedTrustedFolders as LoadedTrustedFolders,
-      );
+      (
+        trustedFoldersModule.loadTrustedFolders as Mock<
+          typeof trustedFoldersModule.loadTrustedFolders
+        >
+      ).mockReturnValue(mockLoadedTrustedFolders as LoadedTrustedFolders);
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
@@ -260,9 +268,11 @@ describe('directoryCommand', () => {
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
         isPathTrusted: vi.fn().mockReturnValue(undefined),
       };
-      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
-        mockLoadedTrustedFolders as LoadedTrustedFolders,
-      );
+      (
+        trustedFoldersModule.loadTrustedFolders as Mock<
+          typeof trustedFoldersModule.loadTrustedFolders
+        >
+      ).mockReturnValue(mockLoadedTrustedFolders as LoadedTrustedFolders);
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true),
@@ -292,9 +302,11 @@ describe('directoryCommand', () => {
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
         isPathTrusted: vi.fn().mockReturnValue(true),
       };
-      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
-        mockLoadedTrustedFolders as LoadedTrustedFolders,
-      );
+      (
+        trustedFoldersModule.loadTrustedFolders as Mock<
+          typeof trustedFoldersModule.loadTrustedFolders
+        >
+      ).mockReturnValue(mockLoadedTrustedFolders as LoadedTrustedFolders);
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
@@ -330,9 +342,11 @@ describe('directoryCommand', () => {
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
         isPathTrusted: vi.fn((p: string) => p === trustedPath),
       };
-      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
-        mockLoadedTrustedFolders as LoadedTrustedFolders,
-      );
+      (
+        trustedFoldersModule.loadTrustedFolders as Mock<
+          typeof trustedFoldersModule.loadTrustedFolders
+        >
+      ).mockReturnValue(mockLoadedTrustedFolders as LoadedTrustedFolders);
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
@@ -386,9 +400,11 @@ describe('directoryCommand', () => {
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
         isPathTrusted: vi.fn().mockReturnValue(true),
       };
-      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
-        mockLoadedTrustedFolders as LoadedTrustedFolders,
-      );
+      (
+        trustedFoldersModule.loadTrustedFolders as Mock<
+          typeof trustedFoldersModule.loadTrustedFolders
+        >
+      ).mockReturnValue(mockLoadedTrustedFolders as LoadedTrustedFolders);
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
@@ -426,9 +442,11 @@ describe('directoryCommand', () => {
           .fn()
           .mockImplementation((p: string) => p === trustedPath),
       };
-      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
-        mockLoadedTrustedFolders as LoadedTrustedFolders,
-      );
+      (
+        trustedFoldersModule.loadTrustedFolders as Mock<
+          typeof trustedFoldersModule.loadTrustedFolders
+        >
+      ).mockReturnValue(mockLoadedTrustedFolders as LoadedTrustedFolders);
 
       mockConfig = {
         ...mockConfig,

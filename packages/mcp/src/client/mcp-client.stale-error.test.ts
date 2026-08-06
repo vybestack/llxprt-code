@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -50,10 +50,14 @@ describe('McpClient stale error handling', () => {
     Object.assign(sdkClient, {
       getInstructions: vi.fn().mockReturnValue('stale instructions'),
     });
-    vi.mocked(ClientLib.Client).mockReturnValue(sdkClient as unknown as Client);
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as Client);
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
     const client = new McpClient(
       'test-server',
       { command: 'test-command' },
@@ -78,12 +82,14 @@ describe('McpClient stale error handling', () => {
   it('ignores errors emitted by a stale SDK client after reconnect', async () => {
     const staleSdkClient = createSdkClient();
     const activeSdkClient = createSdkClient();
-    vi.mocked(ClientLib.Client)
+    (ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>)
       .mockReturnValueOnce(staleSdkClient as unknown as Client)
       .mockReturnValueOnce(activeSdkClient as unknown as Client);
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
     const client = new McpClient(
       'test-server',
       { command: 'test-command' },

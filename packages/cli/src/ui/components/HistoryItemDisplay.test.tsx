@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import { type HistoryItem, MessageType, ToolCallStatus } from '../types.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
@@ -201,7 +201,9 @@ describe('<HistoryItemDisplay />', () => {
       />,
     );
 
-    const passedProps = vi.mocked(ToolGroupMessage).mock.calls[0][0];
+    const passedProps = (
+      ToolGroupMessage as unknown as Mock<(...args: never[]) => unknown>
+    ).mock.calls[0][0];
     const confirmationDetails = passedProps.toolCalls[0]
       .confirmationDetails as ToolExecuteConfirmationDetails;
 

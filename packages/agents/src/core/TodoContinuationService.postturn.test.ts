@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import {
   TodoContinuationService,
   PostTurnAction,
@@ -141,7 +141,9 @@ describe('TodoContinuationService', () => {
       writePausedState: todoStoreWritePausedMock,
     }));
 
-    vi.mocked(TodoReminderService).mockImplementation(
+    (
+      TodoReminderService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi

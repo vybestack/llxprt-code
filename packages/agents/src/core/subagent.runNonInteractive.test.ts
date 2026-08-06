@@ -10,7 +10,15 @@
  */
 
 import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -127,7 +135,9 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream = vi.fn();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
-      vi.mocked(ChatSession).mockImplementation(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
@@ -173,7 +183,9 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream = vi.fn();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
-      vi.mocked(ChatSession).mockImplementation(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
@@ -210,15 +222,19 @@ describe('subagent.ts', () => {
       mockReadTodos.mockResolvedValue([]);
       TodoStoreMock.mockClear();
 
-      vi.mocked(getEnvironmentContext).mockResolvedValue([
-        { text: 'Env Context' },
-      ]);
-      vi.mocked(createContentGenerator).mockResolvedValue({
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue([{ text: 'Env Context' }]);
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockResolvedValue({
         getGenerativeModel: vi.fn(),
       } as unknown as ContentGenerator);
 
       mockSendMessageStream = vi.fn();
-      vi.mocked(ChatSession).mockImplementation(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
@@ -239,7 +255,9 @@ describe('subagent.ts', () => {
     });
 
     const getGenerationConfigFromMock = (callIndex = 0): ChatSessionConfig => {
-      const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
+      const callArgs = (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
       if (generationConfig === undefined)
@@ -274,7 +292,9 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(context);
 
-      expect(vi.mocked(ChatSession)).toHaveBeenCalledTimes(1);
+      expect(
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>,
+      ).toHaveBeenCalledTimes(1);
       const generationConfig = getGenerationConfigFromMock();
       expect(generationConfig.systemInstruction).toContain('Env Context');
       expect(generationConfig.systemInstruction).toContain(
@@ -329,8 +349,12 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      expect(vi.mocked(ChatSession)).toHaveBeenCalledTimes(1);
-      const callArgs = vi.mocked(ChatSession).mock.calls[0];
+      expect(
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>,
+      ).toHaveBeenCalledTimes(1);
+      const callArgs = (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const history = callArgs[3];
       expect(history).toStrictEqual([]);
     });
@@ -455,7 +479,9 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      expect(vi.mocked(ChatSession)).toHaveBeenCalledTimes(1);
+      expect(
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>,
+      ).toHaveBeenCalledTimes(1);
       const generationConfig = getGenerationConfigFromMock();
       expect(generationConfig.systemInstruction).toBeDefined();
     });

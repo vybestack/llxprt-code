@@ -12,7 +12,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
@@ -27,7 +27,9 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   };
 });
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 
 // Deterministic counter for unique prompt IDs so test events are
 // distinguishable without relying on Math.random().

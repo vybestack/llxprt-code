@@ -9,7 +9,15 @@
  */
 
 import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -116,15 +124,19 @@ describe('subagent.ts', () => {
     mockReadTodos.mockResolvedValue([]);
     TodoStoreMock.mockClear();
 
-    vi.mocked(getEnvironmentContext).mockResolvedValue([
-      { text: 'Env Context' },
-    ]);
-    vi.mocked(createContentGenerator).mockResolvedValue({
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([{ text: 'Env Context' }]);
+    (
+      createContentGenerator as Mock<typeof createContentGenerator>
+    ).mockResolvedValue({
       getGenerativeModel: vi.fn(),
     } as unknown as ContentGenerator);
 
     mockSendMessageStream = vi.fn();
-    vi.mocked(ChatSession).mockImplementation(
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           sendMessageStream: mockSendMessageStream,
@@ -661,7 +673,7 @@ describe('subagent.ts', () => {
       );
 
       // Mock the tool execution result
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_hook_test',
           responseParts: [{ text: 'file contents' }],
@@ -703,7 +715,9 @@ describe('subagent.ts', () => {
 
       // Verify the config passed to executeToolCall has hook methods
       // The bug is that createSchedulerConfig() doesn't delegate these
-      const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
+      const [toolExecutorConfig] = (
+        executeToolCall as Mock<typeof executeToolCall>
+      ).mock.calls[0];
 
       // These assertions will FAIL until the bug is fixed:
       // createSchedulerConfig() must delegate hook methods to this.config

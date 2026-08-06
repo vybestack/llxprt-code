@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { AgentEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
@@ -103,7 +103,9 @@ describe('TodoContinuationService', () => {
       writePausedState: todoStoreWritePausedMock,
     }));
 
-    vi.mocked(TodoReminderService).mockImplementation(
+    (
+      TodoReminderService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi
@@ -310,7 +312,9 @@ describe('TodoContinuationService', () => {
       );
       expect(result).toBeDefined();
       expect(
-        vi.mocked(reminderService.getEscalatedComplexTaskSuggestion),
+        reminderService.getEscalatedComplexTaskSuggestion as Mock<
+          typeof reminderService.getEscalatedComplexTaskSuggestion
+        >,
       ).toHaveBeenCalled();
     });
   });

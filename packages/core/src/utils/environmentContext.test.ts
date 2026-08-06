@@ -38,7 +38,9 @@ describe('getDirectoryContextString', () => {
       getFileService: vi.fn(),
       getEnvironmentMemory: vi.fn().mockReturnValue(''),
     };
-    vi.mocked(getFolderStructure).mockResolvedValue('Mock Folder Structure');
+    (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
+      'Mock Folder Structure',
+    );
   });
 
   afterEach(() => {
@@ -57,9 +59,13 @@ describe('getDirectoryContextString', () => {
 
   it('should return context string for multiple directories', async () => {
     (
-      vi.mocked(mockConfig.getWorkspaceContext!)().getDirectories as Mock
+      (
+        mockConfig.getWorkspaceContext! as Mock<
+          typeof mockConfig.getWorkspaceContext
+        >
+      )().getDirectories as Mock
     ).mockReturnValue(['/test/dir1', '/test/dir2']);
-    vi.mocked(getFolderStructure)
+    (getFolderStructure as Mock<typeof getFolderStructure>)
       .mockResolvedValueOnce('Structure 1')
       .mockResolvedValueOnce('Structure 2');
 
@@ -94,7 +100,9 @@ describe('getEnvironmentContext', () => {
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
     };
 
-    vi.mocked(getFolderStructure).mockResolvedValue('Mock Folder Structure');
+    (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
+      'Mock Folder Structure',
+    );
   });
 
   afterEach(() => {
@@ -124,9 +132,13 @@ describe('getEnvironmentContext', () => {
 
   it('should return basic environment context for multiple directories', async () => {
     (
-      vi.mocked(mockConfig.getWorkspaceContext!)().getDirectories as Mock
+      (
+        mockConfig.getWorkspaceContext! as Mock<
+          typeof mockConfig.getWorkspaceContext
+        >
+      )().getDirectories as Mock
     ).mockReturnValue(['/test/dir1', '/test/dir2']);
-    vi.mocked(getFolderStructure)
+    (getFolderStructure as Mock<typeof getFolderStructure>)
       .mockResolvedValueOnce('Structure 1')
       .mockResolvedValueOnce('Structure 2');
 

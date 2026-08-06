@@ -6,6 +6,7 @@ import {
   beforeEach,
   afterEach,
   type MockInstance,
+  type Mock,
 } from 'bun:test';
 
 vi.mock('./local-oauth-callback.js', () => ({
@@ -26,7 +27,9 @@ import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 
-const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
+const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
+  typeof startLocalOAuthCallback
+>;
 const openBrowserArgs: string[] = [];
 
 describe('AnthropicOAuthProvider local callback flow', () => {

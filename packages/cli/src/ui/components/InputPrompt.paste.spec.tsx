@@ -468,13 +468,19 @@ describe('InputPrompt paste functionality', () => {
     const mockDispatch = vi.fn();
 
     // Mock clipboardUtils to return false for image check
-    vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(false);
+    (
+      clipboardUtils.clipboardHasImage as Mock<
+        typeof clipboardUtils.clipboardHasImage
+      >
+    ).mockResolvedValue(false);
     // Mock clipboardy to return test text
-    vi.mocked(clipboardy.read).mockResolvedValue('pasted text from mouse');
+    (clipboardy.read as Mock<typeof clipboardy.read>).mockResolvedValue(
+      'pasted text from mouse',
+    );
 
     // Set up useMouse to capture the handler and allow us to trigger it
     let mouseHandler: ((event: MouseEvent) => void) | null = null;
-    vi.mocked(useMouse).mockImplementation((handler) => {
+    (useMouse as Mock<typeof useMouse>).mockImplementation((handler) => {
       mouseHandler = handler;
     });
 

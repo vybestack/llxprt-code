@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { format } from 'node:util';
 import { handleList, listCommand } from './list.js';
 import { loadSettings, type LoadedSettings } from '../../config/settings.js';
@@ -69,9 +77,11 @@ function skill(overrides: Partial<SkillDefinition>): SkillDefinition {
 }
 
 describe('skills list command', () => {
-  const mockLoadSettings = vi.mocked(loadSettings);
-  const mockLoadCliConfig = vi.mocked(loadCliConfig);
-  const mockDiscoverSkills = vi.mocked(discoverSkillsForConfig);
+  const mockLoadSettings = loadSettings as Mock<typeof loadSettings>;
+  const mockLoadCliConfig = loadCliConfig as Mock<typeof loadCliConfig>;
+  const mockDiscoverSkills = discoverSkillsForConfig as Mock<
+    typeof discoverSkillsForConfig
+  >;
   const mockConfig = {} as unknown as Config;
 
   beforeEach(async () => {

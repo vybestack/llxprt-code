@@ -12,7 +12,15 @@
  * were silently skipped instead of being refreshed.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 
@@ -93,7 +101,9 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const tokenWithTenMinutes = createMockToken(expiryInTenMinutes);
 
     // Mock getToken to return our token
-    vi.mocked(tokenStore.getToken).mockResolvedValue(tokenWithTenMinutes);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      tokenWithTenMinutes,
+    );
 
     // Call getOAuthToken which should trigger scheduleProactiveRenewal
     await manager.getOAuthToken('test-provider');
@@ -132,7 +142,9 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const expiryInFourMinutes = nowSec + 240;
     const tokenWithFourMinutes = createMockToken(expiryInFourMinutes);
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(tokenWithFourMinutes);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      tokenWithFourMinutes,
+    );
 
     await manager.getOAuthToken('test-provider');
 
@@ -162,7 +174,9 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const nowSec = Date.now() / 1000;
     const shortLivedToken = createMockToken(nowSec + 120); // 2 minutes
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(shortLivedToken);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      shortLivedToken,
+    );
 
     // Call getOAuthToken to trigger scheduleProactiveRenewal internally
     const result = await manager.getOAuthToken('test-provider');
@@ -197,12 +211,14 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const refreshedToken = createMockToken(nowSec + 1200);
 
     // Setup mocks — use persistent mock for last value to avoid fragile Once chain
-    vi.mocked(tokenStore.getToken)
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>)
       .mockResolvedValueOnce(initialToken) // First getOAuthToken call
       .mockResolvedValueOnce(initialToken) // Token check during first renewal
       .mockResolvedValue(refreshedToken); // All subsequent calls (including second renewal)
 
-    vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
+    (
+      provider.refreshToken as Mock<typeof provider.refreshToken>
+    ).mockResolvedValue(refreshedToken);
 
     // Get initial token - schedules first renewal
     await manager.getOAuthToken('test-provider');
@@ -214,7 +230,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
     // Reset the mock to track second renewal
-    vi.mocked(provider.refreshToken).mockClear();
+    (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
     // Advance to second renewal time: lead = max(300, 0.1*remaining) = 300s
     // Second renewal fires ~900s from start; we're at ~305s, advance ~800s
@@ -238,9 +254,13 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const nowSec = Date.now() / 1000;
     const token = createMockToken(nowSec + 600);
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(token);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      token,
+    );
     // Make refreshToken fail
-    vi.mocked(provider.refreshToken).mockResolvedValue(null);
+    (
+      provider.refreshToken as Mock<typeof provider.refreshToken>
+    ).mockResolvedValue(null);
 
     // Get initial token
     await manager.getOAuthToken('test-provider');
@@ -258,7 +278,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     expect(provider.refreshToken).toHaveBeenCalledTimes(3);
 
     // Clear the mock to verify no more retries
-    vi.mocked(provider.refreshToken).mockClear();
+    (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
     // Advance time significantly
     await vi.advanceTimersByTimeAsync(600 * 1000);
@@ -281,7 +301,9 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const nowSec = Date.now() / 1000;
     const token = createMockToken(nowSec + 600);
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(token);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      token,
+    );
 
     // Schedule initial renewal
     await manager.getOAuthToken('test-provider');
@@ -291,7 +313,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
     // Clear the mock
-    vi.mocked(provider.refreshToken).mockClear();
+    (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
     // Configure with empty profile - should cancel existing timers
     await manager.configureProactiveRenewalsForProfile({
@@ -320,13 +342,13 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const tokenBucket2 = createMockToken(nowSec + 600);
 
     // Mock getToken to return tokens for different buckets
-    vi.mocked(tokenStore.getToken).mockImplementation(
-      async (providerName, bucket) => {
-        if (bucket === 'bucket1') return tokenBucket1;
-        if (bucket === 'bucket2') return tokenBucket2;
-        return null;
-      },
-    );
+    (
+      tokenStore.getToken as Mock<typeof tokenStore.getToken>
+    ).mockImplementation(async (providerName, bucket) => {
+      if (bucket === 'bucket1') return tokenBucket1;
+      if (bucket === 'bucket2') return tokenBucket2;
+      return null;
+    });
 
     // Configure proactive renewals for profile with multiple buckets
     await manager.configureProactiveRenewalsForProfile({
@@ -360,8 +382,12 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const expiredToken = createMockToken(nowSec - 300, true);
     const refreshedToken = createMockToken(nowSec + 600, true);
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(expiredToken);
-    vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      expiredToken,
+    );
+    (
+      provider.refreshToken as Mock<typeof provider.refreshToken>
+    ).mockResolvedValue(refreshedToken);
 
     // Configure proactive renewals - should detect expired token and schedule immediate refresh
     await manager.configureProactiveRenewalsForProfile({
@@ -402,13 +428,13 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const token1 = createMockToken(nowSec + 600);
     const token2 = createMockToken(nowSec + 600);
 
-    vi.mocked(tokenStore.getToken).mockImplementation(
-      async (providerName, _bucket) => {
-        if (providerName === 'provider1') return token1;
-        if (providerName === 'provider2') return token2;
-        return null;
-      },
-    );
+    (
+      tokenStore.getToken as Mock<typeof tokenStore.getToken>
+    ).mockImplementation(async (providerName, _bucket) => {
+      if (providerName === 'provider1') return token1;
+      if (providerName === 'provider2') return token2;
+      return null;
+    });
 
     // Configure first profile
     await manager.configureProactiveRenewalsForProfile({
@@ -445,13 +471,13 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const token = createMockToken(nowSec + 600);
     const refreshedToken = createMockToken(nowSec + 1200);
 
-    vi.mocked(tokenStore.getToken)
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>)
       .mockResolvedValueOnce(token)
       .mockResolvedValueOnce(token)
       .mockResolvedValue(refreshedToken);
 
     // First call fails, second succeeds
-    vi.mocked(provider.refreshToken)
+    (provider.refreshToken as Mock<typeof provider.refreshToken>)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(refreshedToken)
       .mockResolvedValue(refreshedToken);
@@ -467,7 +493,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     expect(provider.refreshToken).toHaveBeenCalledTimes(2);
 
     // Clear mock to track next renewal
-    vi.mocked(provider.refreshToken).mockClear();
+    (provider.refreshToken as Mock<typeof provider.refreshToken>).mockClear();
 
     // If failure counter was properly reset, next renewal should happen at normal interval
     // not exponential backoff
@@ -491,7 +517,9 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const nowSec = Date.now() / 1000;
     const tokenWithoutRefresh = createMockToken(nowSec + 600, false);
 
-    vi.mocked(tokenStore.getToken).mockResolvedValue(tokenWithoutRefresh);
+    (tokenStore.getToken as Mock<typeof tokenStore.getToken>).mockResolvedValue(
+      tokenWithoutRefresh,
+    );
 
     await manager.getOAuthToken('test-provider');
 

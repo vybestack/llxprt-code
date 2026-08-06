@@ -17,7 +17,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import type { UseCommandCompletionReturn } from '../hooks/useCommandCompletion.js';
@@ -110,13 +110,17 @@ describe('InputPrompt', () => {
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
 
-  const mockedUseShellHistory = vi.mocked(useShellHistory);
-  const mockedUseCommandCompletion = vi.mocked(useCommandCompletion);
-  const mockedUseInputHistory = vi.mocked(useInputHistory);
-  const mockedUseReverseSearchCompletion = vi.mocked(
-    useReverseSearchCompletion,
-  );
-  const mockedUseKittyKeyboardProtocol = vi.mocked(useKittyKeyboardProtocol);
+  const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
+  const mockedUseCommandCompletion = useCommandCompletion as Mock<
+    typeof useCommandCompletion
+  >;
+  const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
+  const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
+    typeof useReverseSearchCompletion
+  >;
+  const mockedUseKittyKeyboardProtocol = useKittyKeyboardProtocol as Mock<
+    typeof useKittyKeyboardProtocol
+  >;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -291,9 +295,11 @@ describe('InputPrompt', () => {
 
   it('should set the buffer text when a shell history command is retrieved', async () => {
     props.shellModeActive = true;
-    vi.mocked(mockShellHistory.getPreviousCommand).mockReturnValue(
-      'previous command',
-    );
+    (
+      mockShellHistory.getPreviousCommand as Mock<
+        typeof mockShellHistory.getPreviousCommand
+      >
+    ).mockReturnValue('previous command');
     const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
     await act(async () => {
@@ -447,18 +453,34 @@ describe('InputPrompt', () => {
 
   describe('clipboard image paste', () => {
     beforeEach(() => {
-      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(false);
-      vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(null);
-      vi.mocked(clipboardUtils.cleanupOldClipboardImages).mockResolvedValue(
-        undefined,
-      );
+      (
+        clipboardUtils.clipboardHasImage as Mock<
+          typeof clipboardUtils.clipboardHasImage
+        >
+      ).mockResolvedValue(false);
+      (
+        clipboardUtils.saveClipboardImage as Mock<
+          typeof clipboardUtils.saveClipboardImage
+        >
+      ).mockResolvedValue(null);
+      (
+        clipboardUtils.cleanupOldClipboardImages as Mock<
+          typeof clipboardUtils.cleanupOldClipboardImages
+        >
+      ).mockResolvedValue(undefined);
     });
 
     it('should handle Ctrl+V when clipboard has an image', async () => {
-      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
-      vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(
-        '/test/.gemini-clipboard/clipboard-123.png',
-      );
+      (
+        clipboardUtils.clipboardHasImage as Mock<
+          typeof clipboardUtils.clipboardHasImage
+        >
+      ).mockResolvedValue(true);
+      (
+        clipboardUtils.saveClipboardImage as Mock<
+          typeof clipboardUtils.saveClipboardImage
+        >
+      ).mockResolvedValue('/test/.gemini-clipboard/clipboard-123.png');
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -482,7 +504,11 @@ describe('InputPrompt', () => {
     });
 
     it('should not insert anything when clipboard has no image', async () => {
-      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(false);
+      (
+        clipboardUtils.clipboardHasImage as Mock<
+          typeof clipboardUtils.clipboardHasImage
+        >
+      ).mockResolvedValue(false);
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -500,8 +526,16 @@ describe('InputPrompt', () => {
     });
 
     it('should handle image save failure gracefully', async () => {
-      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
-      vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(null);
+      (
+        clipboardUtils.clipboardHasImage as Mock<
+          typeof clipboardUtils.clipboardHasImage
+        >
+      ).mockResolvedValue(true);
+      (
+        clipboardUtils.saveClipboardImage as Mock<
+          typeof clipboardUtils.saveClipboardImage
+        >
+      ).mockResolvedValue(null);
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -523,8 +557,16 @@ describe('InputPrompt', () => {
         '.gemini-clipboard',
         'clipboard-456.png',
       );
-      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
-      vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(imagePath);
+      (
+        clipboardUtils.clipboardHasImage as Mock<
+          typeof clipboardUtils.clipboardHasImage
+        >
+      ).mockResolvedValue(true);
+      (
+        clipboardUtils.saveClipboardImage as Mock<
+          typeof clipboardUtils.saveClipboardImage
+        >
+      ).mockResolvedValue(imagePath);
 
       // Set initial text and cursor position
       mockBuffer.text = 'Hello world';
@@ -545,8 +587,11 @@ describe('InputPrompt', () => {
       });
 
       // Get the actual call to see what path was used
-      const actualCall = vi.mocked(mockBuffer.replaceRangeByOffset).mock
-        .calls[0];
+      const actualCall = (
+        mockBuffer.replaceRangeByOffset as Mock<
+          typeof mockBuffer.replaceRangeByOffset
+        >
+      ).mock.calls[0];
       expect(actualCall[0]).toBe(5); // start offset
       expect(actualCall[1]).toBe(5); // end offset
       expect(actualCall[2]).toBe(
@@ -560,9 +605,11 @@ describe('InputPrompt', () => {
       const debugErrorSpy = vi
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
-      vi.mocked(clipboardUtils.clipboardHasImage).mockRejectedValue(
-        new Error('Clipboard error'),
-      );
+      (
+        clipboardUtils.clipboardHasImage as Mock<
+          typeof clipboardUtils.clipboardHasImage
+        >
+      ).mockRejectedValue(new Error('Clipboard error'));
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,

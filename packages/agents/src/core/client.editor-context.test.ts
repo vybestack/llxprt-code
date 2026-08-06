@@ -9,7 +9,15 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -392,7 +400,9 @@ describe('Agent Client (client.ts)', () => {
           };
 
           // Setup current context
-          vi.mocked(ideContext.getIdeContext).mockReturnValue({
+          (
+            ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+          ).mockReturnValue({
             workspaceState: {
               openFiles: [
                 { ...currentActiveFile, isActive: true, timestamp: Date.now() },
@@ -413,7 +423,9 @@ describe('Agent Client (client.ts)', () => {
             addHistory: (typeof vi)['fn'];
           };
 
-          const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+          const addHistoryCalls = (
+            mockChat.addHistory as Mock<typeof mockChat.addHistory>
+          ).mock.calls;
 
           // Check for the appropriate context based on shouldSendContext flag
           const summaryCall = addHistoryCalls.find((call) =>
@@ -455,7 +467,9 @@ describe('Agent Client (client.ts)', () => {
         };
 
         // Setup current context (same as previous)
-        vi.mocked(ideContext.getIdeContext).mockReturnValue({
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue({
           workspaceState: {
             openFiles: [
               { ...activeFile, isActive: true, timestamp: Date.now() },
@@ -482,7 +496,9 @@ describe('Agent Client (client.ts)', () => {
           // consume stream
         }
 
-        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+        const addHistoryCalls = (
+          mockChat.addHistory as Mock<typeof mockChat.addHistory>
+        ).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );

@@ -16,7 +16,14 @@
  * performCompression() to use the strategy pattern via the factory.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type Mock,
+} from '../../testApi.js';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -526,7 +533,9 @@ describe('Compression Dispatcher Integration (P13)', () => {
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
       // Mock the compression to return valid history
-      vi.mocked(mockContentGenerator).mockResolvedValueOnce({
+      (
+        mockContentGenerator as Mock<typeof mockContentGenerator>
+      ).mockResolvedValueOnce({
         content: 'Compressed summary',
         usage: {},
       } as never);
@@ -568,9 +577,9 @@ describe('Compression Dispatcher Integration (P13)', () => {
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
       // Mock triggerPreCompressHook to throw
-      vi.mocked(triggerPreCompressHook).mockRejectedValueOnce(
-        new Error('Hook failed'),
-      );
+      (
+        triggerPreCompressHook as Mock<typeof triggerPreCompressHook>
+      ).mockRejectedValueOnce(new Error('Hook failed'));
 
       // Compression should still succeed despite hook failure
       await expect(chat.performCompression('test-prompt-id')).resolves.toBe(

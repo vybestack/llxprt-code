@@ -19,7 +19,15 @@
  *   - Profile-allowed vs explicit-allowed tool interactions
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -329,11 +337,13 @@ describe('toolGovernanceParity: interactive mode', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     process.stdin.isTTY = true;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -393,11 +403,13 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     process.stdin.isTTY = false;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -500,11 +512,13 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     process.stdin.isTTY = false;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;

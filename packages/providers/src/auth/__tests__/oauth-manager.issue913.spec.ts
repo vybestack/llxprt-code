@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -304,7 +312,9 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         value: vi.fn(),
       });
 
-      const setRawModeSpy = vi.mocked(process.stdin.setRawMode);
+      const setRawModeSpy = process.stdin.setRawMode as Mock<
+        typeof process.stdin.setRawMode
+      >;
       const pauseSpy = vi
         .spyOn(process.stdin, 'pause')
         .mockImplementation(() => process.stdin);

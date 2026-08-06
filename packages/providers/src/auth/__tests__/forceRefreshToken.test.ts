@@ -12,7 +12,15 @@
  * 3. Handles TOCTOU race conditions correctly
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
@@ -372,7 +380,11 @@ describe('TokenAccessCoordinator forceRefreshToken', () => {
     });
 
     // Make lock acquisition fail
-    vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(false);
+    (
+      tokenStore.acquireRefreshLock as Mock<
+        typeof tokenStore.acquireRefreshLock
+      >
+    ).mockResolvedValue(false);
 
     const result = await coordinator.forceRefreshToken(
       'anthropic',

@@ -45,7 +45,7 @@ describe('useAutoAcceptIndicator', () => {
       setApprovalMode: setApprovalModeMock,
     };
 
-    vi.mocked(useKeypress).mockImplementation(
+    (useKeypress as Mock<typeof useKeypress>).mockImplementation(
       (handler: UseKeypressHandler, _options) => {
         capturedUseKeypressHandler = handler;
         return { refresh: () => {} };

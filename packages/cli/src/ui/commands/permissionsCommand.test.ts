@@ -7,7 +7,15 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { permissionsCommand } from './permissionsCommand.js';
 import { CommandKind } from './types.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
@@ -409,7 +417,7 @@ describe('permissionsCommand', () => {
         setTrustedFolderLive,
         getWorkingDir: () => path.join(testRoot, 'config', 'workspace'),
       });
-      vi.mocked(mockedProcess.cwd).mockReturnValue(
+      (mockedProcess.cwd as Mock<typeof mockedProcess.cwd>).mockReturnValue(
         path.join(testRoot, 'process', 'workspace'),
       );
 
@@ -474,11 +482,13 @@ describe('permissionsCommand', () => {
     });
 
     it('returns a user-facing error when trusted-folder loading fails', async () => {
-      vi.mocked(trustedFolders.loadTrustedFolders).mockImplementationOnce(
-        () => {
-          throw new Error('load failed');
-        },
-      );
+      (
+        trustedFolders.loadTrustedFolders as Mock<
+          typeof trustedFolders.loadTrustedFolders
+        >
+      ).mockImplementationOnce(() => {
+        throw new Error('load failed');
+      });
       const mockContext = createMockContext();
 
       const result = await permissionsCommand.action?.(

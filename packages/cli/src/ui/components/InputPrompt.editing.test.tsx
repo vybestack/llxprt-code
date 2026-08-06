@@ -15,7 +15,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import type { UseCommandCompletionReturn } from '../hooks/useCommandCompletion.js';
@@ -93,13 +93,17 @@ describe('InputPrompt', () => {
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
 
-  const mockedUseShellHistory = vi.mocked(useShellHistory);
-  const mockedUseCommandCompletion = vi.mocked(useCommandCompletion);
-  const mockedUseInputHistory = vi.mocked(useInputHistory);
-  const mockedUseReverseSearchCompletion = vi.mocked(
-    useReverseSearchCompletion,
-  );
-  const mockedUseKittyKeyboardProtocol = vi.mocked(useKittyKeyboardProtocol);
+  const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
+  const mockedUseCommandCompletion = useCommandCompletion as Mock<
+    typeof useCommandCompletion
+  >;
+  const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
+  const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
+    typeof useReverseSearchCompletion
+  >;
+  const mockedUseKittyKeyboardProtocol = useKittyKeyboardProtocol as Mock<
+    typeof useKittyKeyboardProtocol
+  >;
 
   beforeEach(() => {
     vi.resetAllMocks();

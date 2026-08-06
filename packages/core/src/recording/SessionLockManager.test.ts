@@ -27,7 +27,15 @@
  * the Phase 09 stub — that is correct TDD.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as path from 'path';
 import * as os from 'os';
 import {
@@ -109,8 +117,10 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       await vi.importActual<typeof import('node:fs/promises')>(
         'node:fs/promises',
       );
-    vi.mocked(fs.writeFile).mockReset();
-    vi.mocked(fs.writeFile).mockImplementation(actualFs.writeFile);
+    (fs.writeFile as Mock<typeof fs.writeFile>).mockReset();
+    (fs.writeFile as Mock<typeof fs.writeFile>).mockImplementation(
+      actualFs.writeFile,
+    );
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -542,7 +552,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
   it('acquire maps ENOENT then EEXIST race to in-use error', async () => {
     const sessionId = 'test-session-enoent-race';
     const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-    const writeFileMock = vi.mocked(fs.writeFile);
+    const writeFileMock = fs.writeFile as Mock<typeof fs.writeFile>;
 
     writeFileMock.mockClear();
     writeFileMock

@@ -9,7 +9,7 @@
  * re-estimates all history tokens with the new provider's tokenizer.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
@@ -216,7 +216,9 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       getTotalTokens: vi.fn().mockReturnValue(0),
       waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
     };
-    vi.mocked(HistoryService).mockImplementationOnce(
+    (
+      HistoryService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementationOnce(
       () => newHistoryInstance as unknown as HistoryService,
     );
 

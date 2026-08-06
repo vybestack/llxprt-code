@@ -12,6 +12,7 @@ import {
   beforeEach,
   afterEach,
   setSystemTime,
+  type Mock,
 } from 'bun:test';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
@@ -221,7 +222,7 @@ describe('DebugProfiler', () => {
 
 describe('DebugProfiler Component', () => {
   beforeEach(() => {
-    vi.mocked(useUIState).mockReturnValue({
+    (useUIState as Mock<typeof useUIState>).mockReturnValue({
       showDebugProfiler: true,
       constrainHeight: false,
     } as unknown as UIState);

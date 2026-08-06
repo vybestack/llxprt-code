@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { vi, describe, it, expect, afterEach, type Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -31,7 +31,7 @@ vi.mock('./mcp-client.js', () => ({
 
 describe('McpClientManager restart lifecycle with disconnect aggregation', () => {
   afterEach(() => {
-    vi.mocked(McpClient).mockReset();
+    (McpClient as unknown as Mock<(...args: never[]) => unknown>).mockReset();
   });
 
   const createRegistries = () => ({
@@ -98,7 +98,9 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   const useClientsByServer = (
     clientsByServer: Record<string, MockMcpClient[]>,
   ): void => {
-    vi.mocked(McpClient).mockImplementation((serverName) => {
+    (
+      McpClient as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((serverName) => {
       const client = clientsByServer[serverName].shift();
       if (client === undefined) {
         throw new Error(`No queued MCP client for '${serverName}'`);
@@ -564,7 +566,9 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   });
 
   it('does not evaluate server resolution in an untrusted folder during startConfiguredMcpServers', async () => {
-    vi.mocked(populateMcpServerCommand).mockClear();
+    (
+      populateMcpServerCommand as Mock<typeof populateMcpServerCommand>
+    ).mockClear();
     const registries = createRegistries();
     const liveServers: Record<string, MCPServerConfig> = {
       added: { command: 'added' },

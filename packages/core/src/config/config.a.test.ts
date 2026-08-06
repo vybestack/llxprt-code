@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
@@ -94,7 +94,9 @@ describe('Server Config (config.ts)', () => {
   beforeEach(() => {
     resetAgentClientMock();
     initializeShellParser.mockClear();
-    vi.mocked(ToolRegistry).mockClear();
+    (
+      ToolRegistry as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
   });
 
   describe('initialize', () => {
@@ -118,7 +120,8 @@ describe('Server Config (config.ts)', () => {
 
       expect(ToolRegistry).toHaveBeenCalledOnce();
       expect(initializeShellParser.mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(ToolRegistry).mock.invocationCallOrder[0],
+        (ToolRegistry as unknown as Mock<(...args: never[]) => unknown>).mock
+          .invocationCallOrder[0],
       );
     });
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -48,10 +48,14 @@ async function createRollbackHarness(failingCleanup: CleanupName) {
     }),
     request: vi.fn().mockResolvedValue({ resources: [{ uri: 'file:///r' }] }),
   };
-  vi.mocked(ClientLib.Client).mockReturnValue(sdkClient as unknown as Client);
-  vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-    {} as SdkClientStdioLib.StdioClientTransport,
-  );
+  (
+    ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+  ).mockReturnValue(sdkClient as unknown as Client);
+  (
+    SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+      (...args: never[]) => unknown
+    >
+  ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
 
   const createCleanup = (name: CleanupName) =>
     name === failingCleanup

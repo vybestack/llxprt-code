@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { renderWithProviders } from '../../test-utils/render.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
@@ -97,7 +97,9 @@ const mockSessionStats: SessionStatsState = {
   },
 };
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 useSessionStatsMock.mockReturnValue({
   stats: mockSessionStats,
   getPromptCount: () => 0,

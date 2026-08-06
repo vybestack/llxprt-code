@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as child_process from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -62,7 +70,9 @@ describe('setupSshAgentDockerMacOS', () => {
     await setupSshAgentDockerMacOS([], '/tmp/auth.sock').then((r) =>
       r.cleanup?.(),
     );
-    const execCalls = vi.mocked(child_process.execSync).mock.calls;
+    const execCalls = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls;
     const dockerInfoCalls = execCalls.filter((c) =>
       String(c[0]).includes('docker info'),
     );
@@ -80,7 +90,9 @@ describe('getPodmanMachineConnection', () => {
   });
 
   it('parses default connection (R7.2)', () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockReturnValue(
       Buffer.from(
         JSON.stringify([
           {
@@ -102,7 +114,9 @@ describe('getPodmanMachineConnection', () => {
   });
 
   it('falls back to sole connection when no default (R7.2)', () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockReturnValue(
       Buffer.from(
         JSON.stringify([
           {
@@ -120,16 +134,18 @@ describe('getPodmanMachineConnection', () => {
   });
 
   it('throws on empty connection list (R7.2)', () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
-      Buffer.from(JSON.stringify([])),
-    );
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockReturnValue(Buffer.from(JSON.stringify([])));
     expect(() => getPodmanMachineConnection()).toThrow(
       /No Podman machine connections found/,
     );
   });
 
   it('throws on multiple non-default connections (R7.2)', () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockReturnValue(
       Buffer.from(
         JSON.stringify([
           {
@@ -153,14 +169,18 @@ describe('getPodmanMachineConnection', () => {
   });
 
   it('throws on malformed JSON (R7.6)', () => {
-    vi.mocked(child_process.execSync).mockReturnValue(Buffer.from('not json'));
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockReturnValue(Buffer.from('not json'));
     expect(() => getPodmanMachineConnection()).toThrow(
       /Failed to parse Podman connection list JSON/,
     );
   });
 
   it('throws on command failure with guidance', () => {
-    vi.mocked(child_process.execSync).mockImplementation(() => {
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(() => {
       throw new Error('podman not found');
     });
     expect(() => getPodmanMachineConnection()).toThrow(
@@ -230,7 +250,9 @@ describe('setupSshAgentForwarding', () => {
 });
 
 function mockValidPodmanConnection() {
-  vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+  (
+    child_process.execSync as Mock<typeof child_process.execSync>
+  ).mockImplementation((cmd: string) => {
     const cmdStr = String(cmd);
     if (cmdStr.includes('connection list')) {
       return Buffer.from(
@@ -262,7 +284,7 @@ function mockTunnelProcess(exitCode: number | null = null) {
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
   };
-  vi.mocked(child_process.spawn).mockReturnValue(
+  (child_process.spawn as Mock<typeof child_process.spawn>).mockReturnValue(
     fakeProcess as unknown as child_process.ChildProcess,
   );
   return fakeProcess;
@@ -283,7 +305,8 @@ describe('setupSshAgentPodmanMacOS', () => {
 
     await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
 
-    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
+      .mock.calls[0];
     expect(spawnCall[0]).toBe('ssh');
     const sshArgs = spawnCall[1] as string[];
     expect(sshArgs).toContain('-R');
@@ -378,7 +401,9 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('throws when poll timeout expires and TCP port never ready (R7.4)', async () => {
-    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
         return Buffer.from(
@@ -424,7 +449,8 @@ describe('setupSshAgentPodmanMacOS', () => {
       },
     });
 
-    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
+      .mock.calls[0];
     const sshArgs = spawnCall[1] as string[];
     const rIdx = sshArgs.indexOf('-R');
     const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
@@ -434,7 +460,9 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('kills tunnel process when poll timeout expires (R7.8)', async () => {
-    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
         return Buffer.from(
@@ -479,7 +507,8 @@ describe('setupCredentialProxyPodmanMacOS', () => {
 
     await setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock');
 
-    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
+      .mock.calls[0];
     expect(spawnCall[0]).toBe('ssh');
     const sshArgs = spawnCall[1] as string[];
     expect(sshArgs).toContain('-R');
@@ -570,7 +599,9 @@ describe('setupCredentialProxyPodmanMacOS', () => {
   }, 10000);
 
   it('throws when bridge port never becomes ready and kills tunnel', async () => {
-    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
         return Buffer.from(
@@ -617,7 +648,8 @@ describe('setupCredentialProxyPodmanMacOS', () => {
       },
     });
 
-    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    const spawnCall = (child_process.spawn as Mock<typeof child_process.spawn>)
+      .mock.calls[0];
     const sshArgs = spawnCall[1] as string[];
     const rIdx = sshArgs.indexOf('-R');
     const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
@@ -651,7 +683,8 @@ describe('setupCredentialProxyPodmanMacOS', () => {
       excludedTunnelPorts: reservedTunnelPorts,
     });
 
-    const spawnCalls = vi.mocked(child_process.spawn).mock.calls;
+    const spawnCalls = (child_process.spawn as Mock<typeof child_process.spawn>)
+      .mock.calls;
     const sshArgs = spawnCalls[0][1] as string[];
     const proxyArgs = spawnCalls[1][1] as string[];
 

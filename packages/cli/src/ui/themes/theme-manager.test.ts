@@ -9,7 +9,15 @@ if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { themeManager, DEFAULT_THEME } from './theme-manager.js';
 import type { CustomTheme } from './theme.js';
 import type { SemanticColors } from './semantic-tokens.js';
@@ -218,7 +226,7 @@ describe('ThemeManager', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(os.homedir).mockReturnValue('/home/user');
+      (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/home/user');
       vi.spyOn(fs, 'realpathSync').mockImplementation((p) => p as string);
     });
 

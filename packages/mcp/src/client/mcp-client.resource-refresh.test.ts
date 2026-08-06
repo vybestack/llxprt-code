@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -103,10 +103,14 @@ describe('McpClient resource refresh', () => {
     let refreshSignal: AbortSignal | undefined;
     const requestStarted = Promise.withResolvers<void>();
     const { mockedClient, getResourceListHandler } = createMockSdkClient();
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      mockedClient as unknown as Client,
-    );
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue({
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedClient as unknown as Client);
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
     const trustedConfig = { isTrustedFolder: () => true } as Config;
@@ -142,12 +146,14 @@ describe('McpClient resource refresh', () => {
     const { mockedClient, getResourceListHandler } = createMockSdkClient(
       vi.fn().mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
     );
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      mockedClient as unknown as Client,
-    );
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as unknown as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedClient as unknown as Client);
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as unknown as SdkClientStdioLib.StdioClientTransport);
     const resourceRegistry = new ResourceRegistry();
     const removeResources = vi.spyOn(
       resourceRegistry,
@@ -183,12 +189,14 @@ describe('McpClient resource refresh', () => {
         resources: [{ uri: 'file:///resource' }],
       }),
     );
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      mockedClient as unknown as Client,
-    );
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as unknown as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedClient as unknown as Client);
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as unknown as SdkClientStdioLib.StdioClientTransport);
     const resourceRegistry = new ResourceRegistry();
     const trustedConfig = { isTrustedFolder: () => true } as Config;
     const client = createTestMcpClient(trustedConfig, resourceRegistry);
@@ -215,12 +223,14 @@ describe('McpClient resource refresh', () => {
     const { mockedClient, getResourceListHandler } = createMockSdkClient(
       vi.fn().mockResolvedValue({ resources: [{ uri: 'file:///new' }] }),
     );
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      mockedClient as unknown as Client,
-    );
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as unknown as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(mockedClient as unknown as Client);
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as unknown as SdkClientStdioLib.StdioClientTransport);
     const resourceRegistry = new ResourceRegistry();
     const config = { isTrustedFolder: () => false } as Config;
     const client = createTestMcpClient(config, resourceRegistry);

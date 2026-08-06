@@ -12,6 +12,7 @@ import {
   it,
   vi,
   type MockedFunction,
+  type Mock,
 } from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
@@ -39,8 +40,12 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-const mockCheckHasEditorType = vi.mocked(checkHasEditorType);
-const mockAllowEditorTypeInSandbox = vi.mocked(allowEditorTypeInSandbox);
+const mockCheckHasEditorType = checkHasEditorType as Mock<
+  typeof checkHasEditorType
+>;
+const mockAllowEditorTypeInSandbox = allowEditorTypeInSandbox as Mock<
+  typeof allowEditorTypeInSandbox
+>;
 
 describe('useEditorSettings', () => {
   let mockLoadedSettings: LoadedSettings;

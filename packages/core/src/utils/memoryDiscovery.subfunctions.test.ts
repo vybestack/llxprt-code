@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -84,7 +92,7 @@ describe('memoryDiscovery subfunctions', () => {
     process.env['LLXPRT_CONFIG_HOME'] = configDir;
     process.env['LLXPRT_DATA_HOME'] = dataDir;
 
-    vi.mocked(os.homedir).mockReturnValue(homedir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(homedir);
   });
 
   afterEach(async () => {

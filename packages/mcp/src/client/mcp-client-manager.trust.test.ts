@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -84,7 +92,7 @@ const CLIENT_VERSION = '0.0.1';
 
 describe('McpClientManager trust transitions', () => {
   beforeEach(() => {
-    vi.mocked(McpClient).mockReset();
+    (McpClient as unknown as Mock<(...args: never[]) => unknown>).mockReset();
   });
 
   afterEach(() => {
@@ -94,7 +102,9 @@ describe('McpClientManager trust transitions', () => {
   describe('onFolderTrustGained', () => {
     it('discovers all configured MCP servers after gaining trust', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       const config = createMockConfig();
       const manager = new McpClientManager(
@@ -111,7 +121,9 @@ describe('McpClientManager trust transitions', () => {
 
     it('does not restart discovery after the manager has stopped', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       const refreshMcpContext = vi.fn();
       const config = createMockConfig({ refreshMcpContext });
@@ -131,7 +143,9 @@ describe('McpClientManager trust transitions', () => {
 
     it('does nothing if there are no configured servers', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       const config = createMockConfig({
         getMcpServers: () => ({}),
@@ -153,7 +167,7 @@ describe('McpClientManager trust transitions', () => {
     it('disconnects all connected MCP servers', async () => {
       const clientA = createMockMcpClient();
       const clientB = createMockMcpClient();
-      vi.mocked(McpClient)
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
 
@@ -192,7 +206,7 @@ describe('McpClientManager trust transitions', () => {
     it('invalidates every client capability generation synchronously during quarantine', async () => {
       const clientA = createMockMcpClient();
       const clientB = createMockMcpClient();
-      vi.mocked(McpClient)
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
       const config = createMockConfig();
@@ -217,24 +231,36 @@ describe('McpClientManager trust transitions', () => {
       const events: string[] = [];
       const clientA = createMockMcpClient();
       const clientB = createMockMcpClient();
-      vi.mocked(clientA.invalidateCapabilities).mockImplementationOnce(() => {
+      (
+        clientA.invalidateCapabilities as Mock<
+          typeof clientA.invalidateCapabilities
+        >
+      ).mockImplementationOnce(() => {
         events.push('invalidate-a');
         throw new AggregateError([
           new Error('capability invalidation failed'),
           new Error('generation invalidation failed'),
         ]);
       });
-      vi.mocked(clientA.abortDiscovery).mockImplementationOnce(() => {
+      (
+        clientA.abortDiscovery as Mock<typeof clientA.abortDiscovery>
+      ).mockImplementationOnce(() => {
         events.push('abort-a');
         throw new Error('abort failed');
       });
-      vi.mocked(clientB.invalidateCapabilities).mockImplementationOnce(() => {
+      (
+        clientB.invalidateCapabilities as Mock<
+          typeof clientB.invalidateCapabilities
+        >
+      ).mockImplementationOnce(() => {
         events.push('invalidate-b');
       });
-      vi.mocked(clientB.abortDiscovery).mockImplementationOnce(() => {
+      (
+        clientB.abortDiscovery as Mock<typeof clientB.abortDiscovery>
+      ).mockImplementationOnce(() => {
         events.push('abort-b');
       });
-      vi.mocked(McpClient)
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
       const promptRegistry = new PromptRegistry();
@@ -281,7 +307,9 @@ describe('McpClientManager trust transitions', () => {
 
     it('removes all clients from the internal map after revocation', async () => {
       const clientA = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(clientA);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(clientA);
 
       const config = createMockConfig();
       const manager = new McpClientManager(
@@ -300,7 +328,9 @@ describe('McpClientManager trust transitions', () => {
 
     it('does nothing when no servers are connected', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       const config = createMockConfig();
       const manager = new McpClientManager(
@@ -318,14 +348,18 @@ describe('McpClientManager trust transitions', () => {
       const events: string[] = [];
       const clientA = createMockMcpClient();
       const clientB = createMockMcpClient();
-      vi.mocked(clientA.disconnect).mockImplementation(async () => {
+      (
+        clientA.disconnect as Mock<typeof clientA.disconnect>
+      ).mockImplementation(async () => {
         events.push('disconnect-a');
         throw new Error('disconnect failed');
       });
-      vi.mocked(clientB.disconnect).mockImplementation(async () => {
+      (
+        clientB.disconnect as Mock<typeof clientB.disconnect>
+      ).mockImplementation(async () => {
         events.push('disconnect-b');
       });
-      vi.mocked(McpClient)
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
       let failRefresh = false;
@@ -363,7 +397,9 @@ describe('McpClientManager trust transitions', () => {
   describe('stop cleanup', () => {
     it('disconnects clients already quarantined by synchronous revocation', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
@@ -384,7 +420,9 @@ describe('McpClientManager trust transitions', () => {
       'disconnects all clients when %s artifact cleanup fails during stop',
       async (failingRegistry) => {
         const client = createMockMcpClient();
-        vi.mocked(McpClient).mockReturnValue(client);
+        (
+          McpClient as unknown as Mock<(...args: never[]) => unknown>
+        ).mockReturnValue(client);
         const promptRegistry = new PromptRegistry();
         const resourceRegistry = new ResourceRegistry();
         const config = createMockConfig({
@@ -428,10 +466,12 @@ describe('McpClientManager trust transitions', () => {
 
     it('retries clients whose first stop disconnect failed', async () => {
       const client = createMockMcpClient();
-      vi.mocked(client.disconnect)
+      (client.disconnect as Mock<typeof client.disconnect>)
         .mockRejectedValueOnce(new Error('transient close failure'))
         .mockResolvedValueOnce(undefined);
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
@@ -454,7 +494,9 @@ describe('McpClientManager trust transitions', () => {
 
     it('removes artifacts for every server name while disconnecting a shared client once', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const config = createMockConfig();
       const toolRegistry = createToolRegistry(config);
       const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
@@ -478,8 +520,12 @@ describe('McpClientManager trust transitions', () => {
     it('disconnects an in-flight client exactly once when stop races connect completion', async () => {
       const connectReleased = createDeferred<void>();
       const client = createMockMcpClient();
-      vi.mocked(client.connect).mockReturnValueOnce(connectReleased.promise);
-      vi.mocked(McpClient).mockReturnValue(client);
+      (client.connect as Mock<typeof client.connect>).mockReturnValueOnce(
+        connectReleased.promise,
+      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
@@ -506,20 +552,26 @@ describe('McpClientManager trust transitions', () => {
       const events: string[] = [];
       const clientA = createMockMcpClient();
       const clientB = createMockMcpClient();
-      vi.mocked(clientA.discover).mockImplementationOnce(async () => {
+      (
+        clientA.discover as Mock<typeof clientA.discover>
+      ).mockImplementationOnce(async () => {
         events.push('discover-a');
         await discoveryReleased.promise;
         events.push('discovery-settled');
       });
-      vi.mocked(clientA.disconnect).mockImplementationOnce(async () => {
+      (
+        clientA.disconnect as Mock<typeof clientA.disconnect>
+      ).mockImplementationOnce(async () => {
         events.push('disconnect-a');
         throw new Error('disconnect-a failed');
       });
-      vi.mocked(clientB.disconnect).mockImplementationOnce(async () => {
+      (
+        clientB.disconnect as Mock<typeof clientB.disconnect>
+      ).mockImplementationOnce(async () => {
         events.push('disconnect-b');
         throw new Error('disconnect-b failed');
       });
-      vi.mocked(McpClient)
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
       const promptRegistry = new PromptRegistry();
@@ -564,10 +616,12 @@ describe('McpClientManager trust transitions', () => {
   describe('race: CONNECTING/discovery vs revoke', () => {
     it('disconnects a failed discovery when artifact cleanup also fails', async () => {
       const client = createMockMcpClient();
-      vi.mocked(client.discover).mockRejectedValueOnce(
+      (client.discover as Mock<typeof client.discover>).mockRejectedValueOnce(
         new Error('discovery failed'),
       );
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const promptRegistry = new PromptRegistry();
       const resourceRegistry = new ResourceRegistry();
       const config = createMockConfig({
@@ -595,13 +649,15 @@ describe('McpClientManager trust transitions', () => {
 
     it('retries a failed discovery disconnect during stop even when the client was never quarantined', async () => {
       const client = createMockMcpClient();
-      vi.mocked(client.discover).mockRejectedValueOnce(
+      (client.discover as Mock<typeof client.discover>).mockRejectedValueOnce(
         new Error('discovery failed'),
       );
-      vi.mocked(client.disconnect)
+      (client.disconnect as Mock<typeof client.disconnect>)
         .mockRejectedValueOnce(new Error('transient close failure'))
         .mockResolvedValueOnce(undefined);
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
@@ -627,7 +683,9 @@ describe('McpClientManager trust transitions', () => {
           }),
       );
 
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
@@ -667,7 +725,9 @@ describe('McpClientManager trust transitions', () => {
           }),
       );
 
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       let trusted = true;
       const config = createMockConfig({
@@ -708,7 +768,9 @@ describe('McpClientManager trust transitions', () => {
               resolveReconnect = resolve;
             }),
         );
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const promptRegistry = new PromptRegistry();
       const resourceRegistry = new ResourceRegistry();
       const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
@@ -750,7 +812,9 @@ describe('McpClientManager trust transitions', () => {
   describe('extension MCP servers start on trust gain', () => {
     it('discovers extension servers that were skipped while untrusted', async () => {
       const client = createMockMcpClient();
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       let trusted = false;
       const extension = { name: 'ext', isActive: true };
@@ -801,7 +865,9 @@ describe('McpClientManager trust transitions', () => {
           }),
       );
 
-      vi.mocked(McpClient).mockReturnValue(client);
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
 
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
@@ -837,11 +903,15 @@ describe('McpClientManager trust transitions', () => {
       const discoveryStarted = createDeferred<void>();
       const discoveryReleased = createDeferred<void>();
       const client = createMockMcpClient();
-      vi.mocked(client.discover).mockImplementationOnce(() => {
-        discoveryStarted.resolve(undefined);
-        return discoveryReleased.promise;
-      });
-      vi.mocked(McpClient).mockReturnValue(client);
+      (client.discover as Mock<typeof client.discover>).mockImplementationOnce(
+        () => {
+          discoveryStarted.resolve(undefined);
+          return discoveryReleased.promise;
+        },
+      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const promptRegistry = new PromptRegistry();
       const resourceRegistry = new ResourceRegistry();
       const config = createMockConfig({
@@ -885,11 +955,15 @@ describe('McpClientManager trust transitions', () => {
       const discoveryStarted = createDeferred<void>();
       const discoveryReleased = createDeferred<void>();
       const client = createMockMcpClient();
-      vi.mocked(client.discover).mockImplementationOnce(() => {
-        discoveryStarted.resolve(undefined);
-        return discoveryReleased.promise;
-      });
-      vi.mocked(McpClient).mockReturnValue(client);
+      (client.discover as Mock<typeof client.discover>).mockImplementationOnce(
+        () => {
+          discoveryStarted.resolve(undefined);
+          return discoveryReleased.promise;
+        },
+      );
+      (
+        McpClient as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(client);
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });

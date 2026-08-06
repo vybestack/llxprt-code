@@ -10,7 +10,15 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, expect, it, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  expect,
+  it,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   upsertRuntimeEntry,
   resetCliRuntimeRegistryForTesting,
@@ -214,9 +222,17 @@ describe('runtimeAccessors', () => {
 
   describe('getUnallowedParametersForActiveModel', () => {
     const useProviderModel = (provider: string, model: string) => {
-      vi.mocked(mockConfig.getProvider).mockReturnValue(provider);
-      vi.mocked(mockConfig.getModel).mockReturnValue(model);
-      vi.mocked(mockSettingsService.getProviderSettings).mockReturnValue({
+      (
+        mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
+      ).mockReturnValue(provider);
+      (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
+        model,
+      );
+      (
+        mockSettingsService.getProviderSettings as Mock<
+          typeof mockSettingsService.getProviderSettings
+        >
+      ).mockReturnValue({
         model,
       });
     };
@@ -252,8 +268,12 @@ describe('runtimeAccessors', () => {
     });
 
     it('returns an empty array when there is no active provider', () => {
-      vi.mocked(mockConfig.getProvider).mockReturnValue('');
-      vi.mocked(mockSettingsService.get).mockReturnValue(undefined);
+      (
+        mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
+      ).mockReturnValue('');
+      (
+        mockSettingsService.get as Mock<typeof mockSettingsService.get>
+      ).mockReturnValue(undefined);
       setupCompleteRuntime();
 
       expect(getUnallowedParametersForActiveModel()).toStrictEqual([]);
@@ -326,16 +346,24 @@ describe('runtimeAccessors', () => {
       model?: string;
       providerSettingsModel?: string;
     }): void => {
-      vi.mocked(mockConfig.getProvider).mockReturnValue(
-        opts.providerName ?? '',
+      (
+        mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
+      ).mockReturnValue(opts.providerName ?? '');
+      (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
+        opts.model ?? '',
       );
-      vi.mocked(mockConfig.getModel).mockReturnValue(opts.model ?? '');
-      vi.mocked(mockSettingsService.get).mockImplementation((key: string) =>
+      (
+        mockSettingsService.get as Mock<typeof mockSettingsService.get>
+      ).mockImplementation((key: string) =>
         key === 'activeProvider'
           ? (opts.activeProvider ?? opts.providerName)
           : undefined,
       );
-      vi.mocked(mockSettingsService.getProviderSettings).mockReturnValue(
+      (
+        mockSettingsService.getProviderSettings as Mock<
+          typeof mockSettingsService.getProviderSettings
+        >
+      ).mockReturnValue(
         opts.providerSettingsModel !== undefined
           ? { model: opts.providerSettingsModel }
           : {},
@@ -344,7 +372,11 @@ describe('runtimeAccessors', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(mockRuntimeProviderManager.getActiveProvider).mockReturnValue(
+      (
+        mockRuntimeProviderManager.getActiveProvider as Mock<
+          typeof mockRuntimeProviderManager.getActiveProvider
+        >
+      ).mockReturnValue(
         makeProvider({
           name: 'gemini',
           defaultModel: 'gemini-2.5-pro',
@@ -352,11 +384,15 @@ describe('runtimeAccessors', () => {
           baseURL: 'https://gemini.example/v1',
         }),
       );
-      vi.mocked(
-        mockRuntimeProviderManager.getActiveProviderName,
+      (
+        mockRuntimeProviderManager.getActiveProviderName as Mock<
+          typeof mockRuntimeProviderManager.getActiveProviderName
+        >
       ).mockReturnValue('gemini');
-      vi.mocked(
-        mockRuntimeProviderManager.getProviderByName,
+      (
+        mockRuntimeProviderManager.getProviderByName as Mock<
+          typeof mockRuntimeProviderManager.getProviderByName
+        >
       ).mockImplementation((name: string) => {
         if (name === 'codex') {
           return makeProvider({
@@ -398,8 +434,10 @@ describe('runtimeAccessors', () => {
     });
 
     it('keeps the resolved name but omits metadata when the named provider lookup fails', () => {
-      vi.mocked(
-        mockRuntimeProviderManager.getProviderByName,
+      (
+        mockRuntimeProviderManager.getProviderByName as Mock<
+          typeof mockRuntimeProviderManager.getProviderByName
+        >
       ).mockImplementation(() => {
         throw new Error('boom');
       });
@@ -433,8 +471,10 @@ describe('runtimeAccessors', () => {
     });
 
     it('degrades to null identity when manager lookups throw or the active provider is missing', () => {
-      vi.mocked(
-        mockRuntimeProviderManager.getActiveProvider,
+      (
+        mockRuntimeProviderManager.getActiveProvider as Mock<
+          typeof mockRuntimeProviderManager.getActiveProvider
+        >
       ).mockImplementation(() => {
         throw new Error('boom');
       });
@@ -450,7 +490,11 @@ describe('runtimeAccessors', () => {
     });
 
     it('isolates the resolved name from a throwing resolved-provider metadata method', () => {
-      vi.mocked(mockRuntimeProviderManager.getProviderByName).mockReturnValue(
+      (
+        mockRuntimeProviderManager.getProviderByName as Mock<
+          typeof mockRuntimeProviderManager.getProviderByName
+        >
+      ).mockReturnValue(
         makeProvider({
           name: 'codex',
           defaultModel: 'gpt-5.6-sol',
@@ -473,7 +517,11 @@ describe('runtimeAccessors', () => {
     });
 
     it('omits baseURL when the active provider base URL accessor throws', () => {
-      vi.mocked(mockRuntimeProviderManager.getActiveProvider).mockReturnValue(
+      (
+        mockRuntimeProviderManager.getActiveProvider as Mock<
+          typeof mockRuntimeProviderManager.getActiveProvider
+        >
+      ).mockReturnValue(
         makeProvider({
           name: 'gemini',
           defaultModel: 'gemini-2.5-pro',

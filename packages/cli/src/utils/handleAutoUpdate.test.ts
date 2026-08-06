@@ -5,7 +5,15 @@
  */
 
 import type { Mock } from 'bun:test';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getInstallationInfo, PackageManager } from './installationInfo.js';
 import { updateEventEmitter } from './updateEventEmitter.js';
 import type { UpdateObject } from '../ui/utils/updateCheck.js';
@@ -62,19 +70,23 @@ vi.mock('node:os', async (importOriginal) => {
   };
 });
 
-const mockGetInstallationInfo = vi.mocked(getInstallationInfo);
-const mockUpdateEventEmitter = vi.mocked(updateEventEmitter);
-const mockExistsSync = vi.mocked(fs.existsSync);
-const mockReadFileSync = vi.mocked(fs.readFileSync);
-const _mockWriteFileSync = vi.mocked(fs.writeFileSync);
-const mockWriteSync = vi.mocked(fs.writeSync);
-const mockOpenSync = vi.mocked(fs.openSync);
-const mockCloseSync = vi.mocked(fs.closeSync);
-const mockMkdirSync = vi.mocked(fs.mkdirSync);
-const mockUnlinkSync = vi.mocked(fs.unlinkSync);
-const mockReaddirSync = vi.mocked(fs.readdirSync);
-const mockRealpathSync = vi.mocked(fs.realpathSync);
-const mockHomedir = vi.mocked(os.homedir);
+const mockGetInstallationInfo = getInstallationInfo as Mock<
+  typeof getInstallationInfo
+>;
+const mockUpdateEventEmitter = updateEventEmitter as Mock<
+  typeof updateEventEmitter
+>;
+const mockExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+const mockReadFileSync = fs.readFileSync as Mock<typeof fs.readFileSync>;
+const _mockWriteFileSync = fs.writeFileSync as Mock<typeof fs.writeFileSync>;
+const mockWriteSync = fs.writeSync as Mock<typeof fs.writeSync>;
+const mockOpenSync = fs.openSync as Mock<typeof fs.openSync>;
+const mockCloseSync = fs.closeSync as Mock<typeof fs.closeSync>;
+const mockMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+const mockUnlinkSync = fs.unlinkSync as Mock<typeof fs.unlinkSync>;
+const mockReaddirSync = fs.readdirSync as Mock<typeof fs.readdirSync>;
+const mockRealpathSync = fs.realpathSync as Mock<typeof fs.realpathSync>;
+const mockHomedir = os.homedir as Mock<typeof os.homedir>;
 const TEST_CONFIG_HOME = path.resolve('/tmp/llxprt-test-config-home');
 
 describe('handleAutoUpdate', () => {

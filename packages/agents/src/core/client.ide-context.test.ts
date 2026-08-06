@@ -9,7 +9,15 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -253,7 +261,9 @@ describe('AgentClient (client.ts)', () => {
         client['contentGenerator'] = mockGenerator as ContentGenerator;
 
         vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-        vi.mocked(ideContext.getIdeContext).mockReturnValue({
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue({
           workspaceState: {
             openFiles: [{ path: '/path/to/file.ts', timestamp: Date.now() }],
           },
@@ -279,7 +289,9 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         ];
-        vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue(historyWithPendingCall);
         // Also spy on the client's getHistory to ensure it returns the right value
         vi.spyOn(client, 'getHistory').mockResolvedValue(
           historyWithPendingCall,
@@ -303,7 +315,9 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: The IDE context message should NOT have been added to the history.
-        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+        const addHistoryCalls = (
+          mockChat.addHistory as Mock<typeof mockChat.addHistory>
+        ).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -322,7 +336,9 @@ describe('AgentClient (client.ts)', () => {
             blocks: [{ type: 'text', text: 'A normal response.' }],
           },
         ];
-        vi.mocked(mockChat.getHistory!).mockReturnValue(normalHistory);
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue(normalHistory);
         vi.spyOn(client, 'getHistory').mockResolvedValue(normalHistory);
 
         // Act
@@ -336,7 +352,9 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: The IDE context message SHOULD have been added.
-        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+        const addHistoryCalls = (
+          mockChat.addHistory as Mock<typeof mockChat.addHistory>
+        ).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -364,7 +382,9 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         ];
-        vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue(historyWithPendingCall);
         vi.spyOn(client, 'getHistory').mockResolvedValue(
           historyWithPendingCall,
         );
@@ -375,7 +395,9 @@ describe('AgentClient (client.ts)', () => {
             openFiles: [{ path: '/path/to/fileA.ts', timestamp: Date.now() }],
           },
         };
-        vi.mocked(ideContext.getIdeContext).mockReturnValue(initialIdeContext);
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue(initialIdeContext);
 
         // Act: Send the tool response
         let stream = client.sendMessageStream(
@@ -395,7 +417,9 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: The initial context was NOT sent
-        const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+        const addHistoryCalls = (
+          mockChat.addHistory as Mock<typeof mockChat.addHistory>
+        ).mock.calls;
         const contextCall = addHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -422,14 +446,14 @@ describe('AgentClient (client.ts)', () => {
             blocks: [{ type: 'text', text: 'The tool ran successfully.' }],
           },
         ];
-        vi.mocked(mockChat.getHistory!).mockReturnValue(
-          historyAfterToolResponse,
-        );
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue(historyAfterToolResponse);
         // Also update the client's getHistory spy
-        vi.mocked(client.getHistory).mockResolvedValue(
+        (client.getHistory as Mock<typeof client.getHistory>).mockResolvedValue(
           historyAfterToolResponse,
         );
-        vi.mocked(mockChat.addHistory!).mockClear(); // Clear previous calls for the next assertion
+        (mockChat.addHistory! as Mock<typeof mockChat.addHistory>).mockClear(); // Clear previous calls for the next assertion
 
         // Arrange: The IDE context has now changed
         const newIdeContext = {
@@ -437,7 +461,9 @@ describe('AgentClient (client.ts)', () => {
             openFiles: [{ path: '/path/to/fileB.ts', timestamp: Date.now() }],
           },
         };
-        vi.mocked(ideContext.getIdeContext).mockReturnValue(newIdeContext);
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue(newIdeContext);
 
         // Act: Send a new, regular user message
         stream = client.sendMessageStream(
@@ -450,7 +476,9 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: The NEW context was sent as a FULL context because there was no previously sent context.
-        const finalAddHistoryCalls = vi.mocked(mockChat.addHistory!).mock.calls;
+        const finalAddHistoryCalls = (
+          mockChat.addHistory! as Mock<typeof mockChat.addHistory>
+        ).mock.calls;
         const finalContextCall = finalAddHistoryCalls.find((call) =>
           JSON.stringify(call[0]).includes("user's editor context"),
         );
@@ -466,7 +494,9 @@ describe('AgentClient (client.ts)', () => {
 
       it('should send a context DELTA on the next message after a skipped context', async () => {
         // --- Step 0: Establish an initial context ---
-        vi.mocked(mockChat.getHistory!).mockReturnValue([]); // Start with empty history
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue([]); // Start with empty history
         vi.spyOn(client, 'getHistory').mockResolvedValue([]);
         const contextA = {
           workspaceState: {
@@ -479,7 +509,9 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         };
-        vi.mocked(ideContext.getIdeContext).mockReturnValue(contextA);
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue(contextA);
 
         // Act: Send a regular message to establish the initial context
         let stream = client.sendMessageStream(
@@ -492,13 +524,15 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: Full context for fileA.ts was sent and stored.
-        const initialCall = vi.mocked(mockChat.addHistory!).mock.calls[0][0];
+        const initialCall = (
+          mockChat.addHistory! as Mock<typeof mockChat.addHistory>
+        ).mock.calls[0][0];
         expect(JSON.stringify(initialCall)).toContain(
           "user's editor context as a JSON object",
         );
         expect(JSON.stringify(initialCall)).toContain('fileA.ts');
         // This implicitly tests that `lastSentIdeContext` is now set internally by the client.
-        vi.mocked(mockChat.addHistory!).mockClear();
+        (mockChat.addHistory! as Mock<typeof mockChat.addHistory>).mockClear();
 
         // --- Step 1: A tool call is pending, context should be skipped ---
         const historyWithPendingCall: IContent[] = [
@@ -518,7 +552,9 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         ];
-        vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue(historyWithPendingCall);
         vi.spyOn(client, 'getHistory').mockResolvedValue(
           historyWithPendingCall,
         );
@@ -535,7 +571,9 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         };
-        vi.mocked(ideContext.getIdeContext).mockReturnValue(contextB);
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue(contextB);
 
         // Act: Send the tool response
         stream = client.sendMessageStream(
@@ -555,7 +593,9 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: No context was sent
-        expect(vi.mocked(mockChat.addHistory).mock.calls).toHaveLength(0);
+        expect(
+          (mockChat.addHistory as Mock<typeof mockChat.addHistory>).mock.calls,
+        ).toHaveLength(0);
 
         // --- Step 2: A new message is sent, latest context DELTA should be included ---
         const historyAfterToolResponse: IContent[] = [
@@ -576,11 +616,11 @@ describe('AgentClient (client.ts)', () => {
             blocks: [{ type: 'text', text: 'The tool ran successfully.' }],
           },
         ];
-        vi.mocked(mockChat.getHistory!).mockReturnValue(
-          historyAfterToolResponse,
-        );
+        (
+          mockChat.getHistory! as Mock<typeof mockChat.getHistory>
+        ).mockReturnValue(historyAfterToolResponse);
         // Also update the client's getHistory spy
-        vi.mocked(client.getHistory).mockResolvedValue(
+        (client.getHistory as Mock<typeof client.getHistory>).mockResolvedValue(
           historyAfterToolResponse,
         );
 
@@ -597,7 +637,9 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         };
-        vi.mocked(ideContext.getIdeContext).mockReturnValue(contextC);
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue(contextC);
 
         // Act: Send a new, regular user message
         stream = client.sendMessageStream(
@@ -610,7 +652,9 @@ describe('AgentClient (client.ts)', () => {
         }
 
         // Assert: The DELTA context was sent
-        const finalCall = vi.mocked(mockChat.addHistory!).mock.calls[0][0];
+        const finalCall = (
+          mockChat.addHistory! as Mock<typeof mockChat.addHistory>
+        ).mock.calls[0][0];
         expect(JSON.stringify(finalCall)).toContain('summary of changes');
         // The delta should reflect fileA being closed and fileC being opened.
         expect(JSON.stringify(finalCall)).toContain('filesClosed');

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -149,8 +157,10 @@ describe('setupTerminalAndTheme', () => {
     });
 
     it('should pick default theme based on background color if no theme set', async () => {
-      vi.mocked(
-        terminalCapabilityManager.getTerminalBackgroundColor,
+      (
+        terminalCapabilityManager.getTerminalBackgroundColor as Mock<
+          typeof terminalCapabilityManager.getTerminalBackgroundColor
+        >
       ).mockReturnValue('#1E1E2E');
 
       await setupTerminalAndTheme(config, mockSettings);
@@ -159,8 +169,10 @@ describe('setupTerminalAndTheme', () => {
 
     it('should store background color in config', async () => {
       const bgColor = '#1E1E2E';
-      vi.mocked(
-        terminalCapabilityManager.getTerminalBackgroundColor,
+      (
+        terminalCapabilityManager.getTerminalBackgroundColor as Mock<
+          typeof terminalCapabilityManager.getTerminalBackgroundColor
+        >
       ).mockReturnValue(bgColor);
 
       await setupTerminalAndTheme(config, mockSettings);
@@ -169,8 +181,10 @@ describe('setupTerminalAndTheme', () => {
 
     it('should return the detected background color', async () => {
       const bgColor = '#1E1E2E';
-      vi.mocked(
-        terminalCapabilityManager.getTerminalBackgroundColor,
+      (
+        terminalCapabilityManager.getTerminalBackgroundColor as Mock<
+          typeof terminalCapabilityManager.getTerminalBackgroundColor
+        >
       ).mockReturnValue(bgColor);
 
       const result = await setupTerminalAndTheme(config, mockSettings);
@@ -181,12 +195,16 @@ describe('setupTerminalAndTheme', () => {
       const feedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
 
       // Set a light background color
-      vi.mocked(
-        terminalCapabilityManager.getTerminalBackgroundColor,
+      (
+        terminalCapabilityManager.getTerminalBackgroundColor as Mock<
+          typeof terminalCapabilityManager.getTerminalBackgroundColor
+        >
       ).mockReturnValue('#FFFFFF');
 
       // Set a dark theme (return value must match Theme class structure)
-      vi.mocked(themeManager.getActiveTheme).mockReturnValue({
+      (
+        themeManager.getActiveTheme as Mock<typeof themeManager.getActiveTheme>
+      ).mockReturnValue({
         name: 'Green Screen',
         type: 'dark',
         colors: {
@@ -226,7 +244,9 @@ describe('setupTerminalAndTheme', () => {
       mockSettings.merged.ui = { theme: nonExistentTheme };
 
       // Make setActiveTheme return false to indicate theme not found
-      vi.mocked(themeManager.setActiveTheme).mockReturnValue(false);
+      (
+        themeManager.setActiveTheme as Mock<typeof themeManager.setActiveTheme>
+      ).mockReturnValue(false);
 
       // Spy on DebugLogger.warn to capture the warning log
       const debugLoggerWarnSpy = vi.spyOn(DebugLogger.prototype, 'warn');

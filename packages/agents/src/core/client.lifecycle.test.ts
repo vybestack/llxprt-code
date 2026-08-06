@@ -9,7 +9,15 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -444,12 +452,20 @@ describe('AgentClient (client.ts)', () => {
       vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt');
 
       await client.updateSystemInstruction();
 
@@ -490,12 +506,20 @@ describe('AgentClient (client.ts)', () => {
       vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(false);
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt');
 
       await client.updateSystemInstruction();
 

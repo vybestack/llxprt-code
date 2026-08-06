@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -87,10 +87,14 @@ function createHarness(options: {
     request:
       options.requestResources ?? vi.fn().mockResolvedValue({ resources: [] }),
   } as unknown as Client;
-  vi.mocked(ClientLib.Client).mockReturnValue(sdkClient);
-  vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-    {} as SdkClientStdioLib.StdioClientTransport,
-  );
+  (
+    ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+  ).mockReturnValue(sdkClient);
+  (
+    SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+      (...args: never[]) => unknown
+    >
+  ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
   const promptRegistry = {
     registerPrompt: (prompt: { name: string }) => {
       publishedPrompts.add(prompt.name);

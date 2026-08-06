@@ -8,7 +8,7 @@
 
 import { type MutableRefObject, act } from 'react';
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   OpenAIProviderContextProvider,
   useOpenAIProviderContext,
@@ -74,9 +74,9 @@ function populateStats(
 describe('OpenAIProviderContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useOpenAIProviderInfo).mockReturnValue(
-      makeProviderInfo(providerA),
-    );
+    (
+      useOpenAIProviderInfo as Mock<typeof useOpenAIProviderInfo>
+    ).mockReturnValue(makeProviderInfo(providerA));
   });
 
   it('resets remoteTokenStats to zeros when provider changes from A to B', () => {
@@ -93,9 +93,9 @@ describe('OpenAIProviderContext', () => {
     populateStats(contextRef, 500, 200, 700);
     expect(contextRef.current?.remoteTokenStats.totalTokenCount).toBe(700);
 
-    vi.mocked(useOpenAIProviderInfo).mockReturnValue(
-      makeProviderInfo(providerB),
-    );
+    (
+      useOpenAIProviderInfo as Mock<typeof useOpenAIProviderInfo>
+    ).mockReturnValue(makeProviderInfo(providerB));
 
     rerender(
       <OpenAIProviderContextProvider>
@@ -123,9 +123,9 @@ describe('OpenAIProviderContext', () => {
 
     populateStats(contextRef, 500, 200, 700);
 
-    vi.mocked(useOpenAIProviderInfo).mockReturnValue(
-      makeProviderInfo(providerA),
-    );
+    (
+      useOpenAIProviderInfo as Mock<typeof useOpenAIProviderInfo>
+    ).mockReturnValue(makeProviderInfo(providerA));
 
     rerender(
       <OpenAIProviderContextProvider>
@@ -149,7 +149,9 @@ describe('OpenAIProviderContext', () => {
 
     populateStats(contextRef, 500, 200, 700);
 
-    vi.mocked(useOpenAIProviderInfo).mockReturnValue(makeProviderInfo(null));
+    (
+      useOpenAIProviderInfo as Mock<typeof useOpenAIProviderInfo>
+    ).mockReturnValue(makeProviderInfo(null));
 
     rerender(
       <OpenAIProviderContextProvider>

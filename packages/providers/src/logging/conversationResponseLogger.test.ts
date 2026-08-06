@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   writeResponseLog,
   logRequestEntry,
@@ -148,9 +148,9 @@ describe('writeResponseLog', () => {
 
   it('swallows errors from writeConversationLog (fail-open)', async () => {
     const debug = createDebug();
-    vi.mocked(writeConversationLog).mockRejectedValueOnce(
-      new Error('disk write failed'),
-    );
+    (
+      writeConversationLog as Mock<typeof writeConversationLog>
+    ).mockRejectedValueOnce(new Error('disk write failed'));
 
     // Should NOT throw
     await expect(
@@ -210,9 +210,9 @@ describe('logRequestEntry', () => {
 
   it('swallows errors from logConversationRequestEntry (fail-open)', async () => {
     const debug = createDebug();
-    vi.mocked(logConversationRequestEntry).mockRejectedValueOnce(
-      new Error('request log failed'),
-    );
+    (
+      logConversationRequestEntry as Mock<typeof logConversationRequestEntry>
+    ).mockRejectedValueOnce(new Error('request log failed'));
 
     await expect(
       logRequestEntry(mockConfig, [], undefined, 'prompt-2', {

@@ -20,7 +20,15 @@
  * - Case-sensitive source paths match exactly
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -73,7 +81,7 @@ describe('exact-case uninstall identity', () => {
     compatExtensionsDir = path.join(tempHomeDir, COMPAT_EXT_SUBDIR);
     fs.mkdirSync(llxprtExtensionsDir, { recursive: true });
     fs.mkdirSync(compatExtensionsDir, { recursive: true });
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
   });
 

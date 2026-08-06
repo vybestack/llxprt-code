@@ -9,7 +9,7 @@
  * unknown fields with HTTP 400.
  */
 
-import { vi, describe, it, expect } from 'bun:test';
+import { vi, describe, it, expect, type Mock } from 'bun:test';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -82,9 +82,9 @@ function contextWithTrace(): CommandContext {
 // Declared as a const arrow (not a hoisted function declaration) so the
 // assertDefined narrowing of dumpcontextAction above applies inside the body.
 const dumpAndCaptureCall = async (): Promise<unknown[]> => {
-  vi.mocked(dumpRequestContext).mockClear();
+  (dumpRequestContext as Mock<typeof dumpRequestContext>).mockClear();
   await dumpcontextAction(contextWithTrace(), 'now');
-  return vi.mocked(dumpRequestContext).mock.calls[0];
+  return (dumpRequestContext as Mock<typeof dumpRequestContext>).mock.calls[0];
 };
 
 describe('dumpcontext now chronology sidecar (#1721)', () => {

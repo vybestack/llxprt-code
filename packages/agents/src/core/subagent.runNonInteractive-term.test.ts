@@ -9,7 +9,15 @@
  */
 
 import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { SubAgentScope } from './subagent.js';
 import {
@@ -116,15 +124,19 @@ describe('subagent.ts', () => {
     mockReadTodos.mockResolvedValue([]);
     TodoStoreMock.mockClear();
 
-    vi.mocked(getEnvironmentContext).mockResolvedValue([
-      { text: 'Env Context' },
-    ]);
-    vi.mocked(createContentGenerator).mockResolvedValue({
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([{ text: 'Env Context' }]);
+    (
+      createContentGenerator as Mock<typeof createContentGenerator>
+    ).mockResolvedValue({
       getGenerativeModel: vi.fn(),
     } as unknown as ContentGenerator);
 
     mockSendMessageStream = vi.fn();
-    vi.mocked(ChatSession).mockImplementation(
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           sendMessageStream: mockSendMessageStream,
@@ -513,7 +525,9 @@ describe('subagent.ts', () => {
     const recordCompletedToolCalls = vi.fn(() => {
       throw new Error('history write failed');
     });
-    vi.mocked(ChatSession).mockImplementationOnce(
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementationOnce(
       () =>
         ({
           sendMessageStream: mockSendMessageStream,

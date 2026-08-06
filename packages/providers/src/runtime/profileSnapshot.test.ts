@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -299,7 +307,9 @@ describe('buildRuntimeProfileSnapshot', () => {
   });
 
   it('excludes internal settings from persisted ephemeralSettings', () => {
-    vi.mocked(getCliRuntimeServices).mockReturnValue({
+    (
+      getCliRuntimeServices as Mock<typeof getCliRuntimeServices>
+    ).mockReturnValue({
       config: {
         getEphemeralSettings: () => ({
           activeProvider: 'gemini',
@@ -311,11 +321,15 @@ describe('buildRuntimeProfileSnapshot', () => {
       settingsService: { setCurrentProfileName: vi.fn() },
       providerManager: {},
     } as ReturnType<typeof getCliRuntimeServices>);
-    vi.mocked(
-      runtimeAccessorsInternal.resolveActiveProviderName,
+    (
+      runtimeAccessorsInternal.resolveActiveProviderName as Mock<
+        typeof runtimeAccessorsInternal.resolveActiveProviderName
+      >
     ).mockReturnValue('openai');
-    vi.mocked(
-      runtimeAccessorsInternal.getProviderSettingsSnapshot,
+    (
+      runtimeAccessorsInternal.getProviderSettingsSnapshot as Mock<
+        typeof runtimeAccessorsInternal.getProviderSettingsSnapshot
+      >
     ).mockReturnValue({
       model: 'gpt-4o',
     });

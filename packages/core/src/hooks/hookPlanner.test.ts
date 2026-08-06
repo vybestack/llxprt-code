@@ -9,7 +9,7 @@
  * @requirement:HOOK-087,HOOK-088,HOOK-089,HOOK-090,HOOK-091
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { HookRegistry, HookRegistryEntry } from './hookRegistry.js';
 import { HookEventName, HookType } from './types.js';
 
@@ -49,7 +49,11 @@ describe('HookPlanner', () => {
 
   describe('createExecutionPlan', () => {
     it('should return empty plan when no hooks registered', () => {
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue([]);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue([]);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
 
@@ -75,7 +79,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
 
@@ -102,7 +110,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       // Test with EditTool context
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool, {
@@ -131,7 +143,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       // Test with EditTool - should match first hook
       const editPlan = hookPlanner.createExecutionPlan(
@@ -179,7 +195,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool, {
         toolName: 'AnyTool',
@@ -203,7 +223,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool, {
         toolName: 'AnyTool',
@@ -227,7 +251,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       // Should match when toolName exactly equals the invalid regex pattern
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool, {
@@ -282,7 +310,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
 
@@ -311,7 +343,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       // Test startup trigger
       const startupPlan = hookPlanner.createExecutionPlan(
@@ -388,7 +424,11 @@ describe('HookPlanner', () => {
         }, // No name, same command -> deduplicate
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
 
@@ -421,7 +461,11 @@ describe('HookPlanner', () => {
         },
       ];
 
-      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+      (
+        mockHookRegistry.getHooksForEvent as Mock<
+          typeof mockHookRegistry.getHooksForEvent
+        >
+      ).mockReturnValue(mockEntries);
 
       const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
 

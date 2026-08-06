@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 
@@ -121,7 +129,11 @@ describe('AnthropicOAuthProvider', () => {
     (global as Record<string, unknown>).__oauth_needs_code = false;
 
     // Mock ClipboardService - make sure to clear any previous calls
-    vi.mocked(ClipboardService.copyToClipboard).mockResolvedValue(undefined);
+    (
+      ClipboardService.copyToClipboard as Mock<
+        typeof ClipboardService.copyToClipboard
+      >
+    ).mockResolvedValue(undefined);
   });
 
   afterEach(() => {

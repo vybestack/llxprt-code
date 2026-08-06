@@ -8,7 +8,15 @@
  * SubAgentScope stream idle timeout behavioral tests.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -243,7 +251,9 @@ describe('subagent.ts', () => {
       );
 
       // Mock a slow stream that yields after the timeout
-      vi.mocked(ChatSession).mockImplementationOnce(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -272,8 +282,12 @@ describe('subagent.ts', () => {
           }) as unknown as ChatSession,
       );
 
-      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
-      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockReturnValue({} as ContentGenerator);
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue('');
 
       const runPromise = scope.runNonInteractive(new ContextState());
 
@@ -328,7 +342,9 @@ describe('subagent.ts', () => {
         resolveIterator = resolve;
       });
 
-      vi.mocked(ChatSession).mockImplementationOnce(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -358,8 +374,12 @@ describe('subagent.ts', () => {
           }) as unknown as ChatSession,
       );
 
-      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
-      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockReturnValue({} as ContentGenerator);
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue('');
 
       let runSettled = false;
       const runPromise = scope
@@ -446,7 +466,9 @@ describe('subagent.ts', () => {
       const gapPromise = new Promise<void>((resolve) => {
         releaseGap = resolve;
       });
-      vi.mocked(ChatSession).mockImplementationOnce(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -481,8 +503,12 @@ describe('subagent.ts', () => {
           }) as unknown as ChatSession,
       );
 
-      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
-      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockReturnValue({} as ContentGenerator);
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue('');
 
       const runPromise = scope.runNonInteractive(new ContextState());
 

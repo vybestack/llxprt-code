@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
@@ -19,7 +19,9 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   };
 });
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 
 const renderWithMockedStats = (metrics: SessionMetrics) => {
   useSessionStatsMock.mockReturnValue({

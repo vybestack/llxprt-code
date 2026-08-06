@@ -13,7 +13,15 @@
  * 3. model.allMemoriesAreCore merges user memory into core memory
  */
 
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  beforeAll,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   getCoreSystemPromptAsync,
   loadCoreMemoryContent,
@@ -69,8 +77,8 @@ describe('Core (System) Memory', () => {
   });
 
   beforeEach(() => {
-    vi.mocked(fsPromises.readFile).mockReset();
-    vi.mocked(fsPromises.readFile).mockRejectedValue(
+    (fsPromises.readFile as Mock<typeof fsPromises.readFile>).mockReset();
+    (fsPromises.readFile as Mock<typeof fsPromises.readFile>).mockRejectedValue(
       Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
     );
     mockSettingsService.get.mockReturnValue(undefined);
@@ -87,7 +95,9 @@ describe('Core (System) Memory', () => {
         Storage.getGlobalMemoryDir(),
         '.LLXPRT_SYSTEM',
       );
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
@@ -104,7 +114,9 @@ describe('Core (System) Memory', () => {
     });
 
     it('should load project .LLXPRT_SYSTEM content', async () => {
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
@@ -127,7 +139,9 @@ describe('Core (System) Memory', () => {
         Storage.getGlobalMemoryDir(),
         '.LLXPRT_SYSTEM',
       );
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
@@ -154,7 +168,9 @@ describe('Core (System) Memory', () => {
         Storage.getGlobalMemoryDir(),
         '.LLXPRT_SYSTEM',
       );
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();

@@ -8,7 +8,7 @@
  * the mock setup without exceeding max-lines.
  */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import type { MockInstance } from 'bun:test';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
@@ -119,17 +119,19 @@ export function setupOAuthTestSpies(
   vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'debug').mockImplementation(() => {});
 
-  vi.mocked(crypto.randomBytes).mockImplementation((size: number) => {
-    if (size === 32) {
-      return Buffer.from('mock_code_verifier_32_bytes_long_string');
-    }
-    if (size === 16) {
-      return Buffer.from('mock_state_16_bytes');
-    }
-    return Buffer.alloc(size);
-  });
+  (crypto.randomBytes as Mock<typeof crypto.randomBytes>).mockImplementation(
+    (size: number) => {
+      if (size === 32) {
+        return Buffer.from('mock_code_verifier_32_bytes_long_string');
+      }
+      if (size === 16) {
+        return Buffer.from('mock_state_16_bytes');
+      }
+      return Buffer.alloc(size);
+    },
+  );
 
-  vi.mocked(crypto.createHash).mockReturnValue({
+  (crypto.createHash as Mock<typeof crypto.createHash>).mockReturnValue({
     update: vi.fn().mockReturnThis(),
     digest: vi.fn().mockReturnValue('code_challenge_mock'),
   } as unknown as crypto.Hash);

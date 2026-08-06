@@ -10,7 +10,15 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';
@@ -139,7 +147,7 @@ describe('HookRunner', () => {
       mockProcessOn,
     } as unknown as MockChildProcessWithoutNullStreams;
 
-    vi.mocked(spawn).mockReturnValue(mockSpawn);
+    (spawn as Mock<typeof spawn>).mockReturnValue(mockSpawn);
   });
 
   afterEach(() => {
@@ -270,7 +278,7 @@ describe('HookRunner', () => {
         };
 
         // Mock error during spawn
-        vi.mocked(spawn).mockImplementationOnce(() => {
+        (spawn as Mock<typeof spawn>).mockImplementationOnce(() => {
           throw new Error('Spawn error');
         });
 
@@ -417,7 +425,7 @@ describe('HookRunner', () => {
         );
 
         // SECURITY: Verify spawn is called with shell executable and expanded path
-        const spawnCall = vi.mocked(spawn).mock.calls[0];
+        const spawnCall = (spawn as Mock<typeof spawn>).mock.calls[0];
         expect(spawnCall[0]).toMatch(/bash|powershell/i);
         expect(spawnCall[2]).toStrictEqual(
           expect.objectContaining({
@@ -479,7 +487,7 @@ describe('HookRunner', () => {
         );
 
         // Verify the decoded command contains the escaped malicious path.
-        const commandArgs = vi.mocked(spawn).mock.calls[0][1];
+        const commandArgs = (spawn as Mock<typeof spawn>).mock.calls[0][1];
         expect(isMaliciousPathEscaped(decodeSpawnCommand(commandArgs))).toBe(
           true,
         );
@@ -556,7 +564,7 @@ describe('HookRunner', () => {
         (event: string, callback: (code: number) => void) => {
           if (event === 'close') {
             // Extract command from shell args instead of command directly
-            const args = vi.mocked(spawn).mock.calls[
+            const args = (spawn as Mock<typeof spawn>).mock.calls[
               executionOrder.length
             ][1] as string[];
             executionOrder.push(decodeSpawnCommand(args));
@@ -668,7 +676,8 @@ describe('HookRunner', () => {
 
       // Verify that the second hook received modified input
       const secondHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[1][0],
       );
       expect(secondHookInput.prompt).toContain('Original prompt');
       expect(secondHookInput.prompt).toContain('Context from hook 1');
@@ -729,7 +738,8 @@ describe('HookRunner', () => {
 
       // Verify that the second hook received modified input
       const secondHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[1][0],
       );
       expect(secondHookInput.llm_request.model).toBe('gemini-1.5-pro');
       expect(secondHookInput.llm_request.temperature).toBe(0.7);
@@ -768,10 +778,12 @@ describe('HookRunner', () => {
 
       // Verify that both hooks received the same original input
       const firstHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[0][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[0][0],
       );
       const secondHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[1][0],
       );
       expect(firstHookInput).toStrictEqual(secondHookInput);
     });

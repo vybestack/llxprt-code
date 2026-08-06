@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import type { Mock } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useShellHistory } from './useShellHistory.js';
@@ -73,9 +74,17 @@ const MOCKED_HISTORY_DIR = path.join(
 const MOCKED_HISTORY_FILE = path.join(MOCKED_HISTORY_DIR, 'shell_history');
 
 describe('useShellHistory', () => {
-  const mockedFs = vi.mocked(fs);
-  const mockedOs = vi.mocked(os);
-  const mockedCrypto = vi.mocked(crypto);
+  // The module mocks above replace these exports with Bun mock functions, so
+  // each namespace is narrowed to the mocked members the tests drive.
+  const mockedFs = fs as unknown as {
+    readFile: Mock<typeof fs.readFile>;
+    writeFile: Mock<typeof fs.writeFile>;
+    mkdir: Mock<typeof fs.mkdir>;
+  };
+  const mockedOs = os as unknown as { homedir: Mock<typeof os.homedir> };
+  const mockedCrypto = crypto as unknown as {
+    createHash: Mock<typeof crypto.createHash>;
+  };
 
   beforeEach(() => {
     vi.resetAllMocks();

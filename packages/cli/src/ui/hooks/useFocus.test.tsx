@@ -8,7 +8,7 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { EventEmitter } from 'events';
 import { useFocus } from './useFocus.js';
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import { useStdin, useStdout } from 'ink';
 
 // Mock the ink hooks
@@ -21,8 +21,8 @@ vi.mock('ink', async (importOriginal) => {
   };
 });
 
-const mockedUseStdin = vi.mocked(useStdin);
-const mockedUseStdout = vi.mocked(useStdout);
+const mockedUseStdin = useStdin as Mock<typeof useStdin>;
+const mockedUseStdout = useStdout as Mock<typeof useStdout>;
 
 describe('useFocus', () => {
   let stdin: EventEmitter;

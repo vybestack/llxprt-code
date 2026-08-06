@@ -9,7 +9,15 @@
  */
 
 import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -123,15 +131,19 @@ describe('subagent.ts', () => {
       TodoStoreMock.mockClear();
       TodoStoreMock.mockImplementation(() => ({ readTodos: mockReadTodos }));
 
-      vi.mocked(getEnvironmentContext).mockResolvedValue([
-        { text: 'Env Context' },
-      ]);
-      vi.mocked(createContentGenerator).mockResolvedValue({
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue([{ text: 'Env Context' }]);
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockResolvedValue({
         getGenerativeModel: vi.fn(),
       } as unknown as ContentGenerator);
 
       mockSendMessageStream = vi.fn();
-      vi.mocked(ChatSession).mockImplementation(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
@@ -311,7 +323,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_1',
           responseParts: [{ type: 'text', text: 'file1.txt\nfile2.ts' }],
@@ -354,8 +366,9 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      const [toolExecutorConfig, toolRequest, abortSignal] =
-        vi.mocked(executeToolCall).mock.calls[0];
+      const [toolExecutorConfig, toolRequest, abortSignal] = (
+        executeToolCall as Mock<typeof executeToolCall>
+      ).mock.calls[0];
       expect(toolRequest).toMatchObject({
         name: 'list_files',
         args: { path: '.' },
@@ -389,7 +402,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_fail',
           responseParts: [
@@ -456,7 +469,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_err',
           responseParts: [
@@ -573,7 +586,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_write',
           responseParts: [

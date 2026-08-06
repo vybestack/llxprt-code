@@ -5,7 +5,7 @@
  */
 
 import type { Mock } from 'bun:test';
-import { vi, describe, it, expect, beforeEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { clearCommand } from './clearCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -155,9 +155,9 @@ describe('clearCommand', () => {
     vi.clearAllMocks();
 
     // Mock triggerSessionEndHook to throw
-    vi.mocked(triggerSessionEndHook).mockRejectedValueOnce(
-      new Error('Hook failed'),
-    );
+    (
+      triggerSessionEndHook as Mock<typeof triggerSessionEndHook>
+    ).mockRejectedValueOnce(new Error('Hook failed'));
 
     // Execute clear and ensure it doesn't throw
     await clearAction(mockContext, '');
@@ -171,9 +171,9 @@ describe('clearCommand', () => {
     vi.clearAllMocks();
 
     // Mock triggerSessionStartHook to throw
-    vi.mocked(triggerSessionStartHook).mockRejectedValueOnce(
-      new Error('Hook failed'),
-    );
+    (
+      triggerSessionStartHook as Mock<typeof triggerSessionStartHook>
+    ).mockRejectedValueOnce(new Error('Hook failed'));
 
     // Execute clear and ensure it doesn't throw
     await clearAction(mockContext, '');

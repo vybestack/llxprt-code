@@ -10,7 +10,15 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
@@ -347,14 +355,20 @@ describe('AgentClient (client.ts)', () => {
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue(['tool_a']);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        true,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue(['tool_a']);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(true);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
-        'prompt body with new memory',
-      );
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt body with new memory');
 
       await client.updateSystemInstruction();
 
@@ -409,14 +423,20 @@ describe('AgentClient (client.ts)', () => {
         'Always respond in JSON',
       );
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
-        'prompt with core directives',
-      );
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt with core directives');
 
       await client.updateSystemInstruction();
 
@@ -461,12 +481,20 @@ sub memory
       );
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt with jit');
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt with jit');
 
       await client.updateSystemInstruction();
 
@@ -513,12 +541,20 @@ sub memory
       vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue('');
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt no jit');
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt no jit');
 
       await client.updateSystemInstruction();
 
@@ -635,7 +671,7 @@ sub memory
 
       mockGenerateContentFn.mockRejectedValue(error429);
 
-      const retrySpy = vi.mocked(retryWithBackoff);
+      const retrySpy = retryWithBackoff as Mock<typeof retryWithBackoff>;
       const originalImpl = retrySpy.getMockImplementation();
 
       retrySpy.mockImplementation(async (apiCall) => {
@@ -690,8 +726,8 @@ sub memory
     it('should create a new chat session, clearing the old history', async () => {
       // Setup: Mock getHistory to track history state
       let historyState: IContent[] = [];
-      vi.mocked(client.getHistory).mockImplementation(() =>
-        Promise.resolve([...historyState]),
+      (client.getHistory as Mock<typeof client.getHistory>).mockImplementation(
+        () => Promise.resolve([...historyState]),
       );
 
       // Mock addHistory to update the state

@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { render } from 'ink-testing-library';
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import { useTerminalSize } from '../ui/hooks/useTerminalSize.js';
 
 type RenderResult = ReturnType<typeof render>;
@@ -22,7 +22,7 @@ export function renderAtWidth(
   width: number,
 ): RenderResult {
   // Mock the useTerminalSize hook to return the specified width
-  const mockUseTerminalSize = vi.mocked(useTerminalSize);
+  const mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
   mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
 
   return render(component);

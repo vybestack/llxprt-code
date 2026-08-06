@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { activate } from './extension.js';
@@ -78,12 +86,14 @@ describe('activate with multiple folders', () => {
       },
     } as unknown as vscode.ExtensionContext;
 
-    vi.mocked(vscode.workspace.onDidChangeWorkspaceFolders).mockImplementation(
-      (callback) => {
-        onDidChangeWorkspaceFoldersCallback = callback;
-        return { dispose: vi.fn() };
-      },
-    );
+    (
+      vscode.workspace.onDidChangeWorkspaceFolders as Mock<
+        typeof vscode.workspace.onDidChangeWorkspaceFolders
+      >
+    ).mockImplementation((callback) => {
+      onDidChangeWorkspaceFoldersCallback = callback;
+      return { dispose: vi.fn() };
+    });
   });
 
   afterEach(() => {

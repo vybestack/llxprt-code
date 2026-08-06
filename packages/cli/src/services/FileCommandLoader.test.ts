@@ -11,7 +11,15 @@ import {
   FILE_COMMANDS_UNTRUSTED_MESSAGE,
   type FileCommandRuntime,
 } from './FileCommandLoader.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
@@ -79,7 +87,7 @@ describe('FileCommandLoader', () => {
     fsMock.clear();
     const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
       .glob;
-    vi.mocked(glob.glob).mockImplementation(actualGlob);
+    (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context.invocation?.args ?? '';

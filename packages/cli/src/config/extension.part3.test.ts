@@ -6,7 +6,15 @@
 
 /** @vitest-environment jsdom */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -139,19 +147,29 @@ describe('extension tests', () => {
       userExtensionsDir = path.join(tempHomeDir, EXTENSIONS_DIRECTORY_NAME);
       fs.mkdirSync(userExtensionsDir, { recursive: true });
 
-      vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+      (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        true,
+      );
       vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
       __setLoadSettingsForTesting(mockLoadSettings);
-      vi.mocked(execSync).mockClear();
+      (execSync as Mock<typeof execSync>).mockClear();
       Object.values(mockGit).forEach((fn) => fn.mockReset());
       mockLogExtensionInstallEvent.mockReset();
       mockLogExtensionUninstall.mockReset();
       mockLogExtensionEnable.mockReset();
       mockLogExtensionDisable.mockReset();
-      vi.mocked(ExtensionUninstallEvent).mockClear();
-      vi.mocked(ExtensionDisableEvent).mockClear();
-      vi.mocked(ExtensionEnableEvent).mockClear();
+      (
+        ExtensionUninstallEvent as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockClear();
+      (
+        ExtensionDisableEvent as unknown as Mock<(...args: never[]) => unknown>
+      ).mockClear();
+      (
+        ExtensionEnableEvent as unknown as Mock<(...args: never[]) => unknown>
+      ).mockClear();
       // Default: extensions are enabled with extensionConfig enabled for tests
       mockLoadSettings.mockReturnValue({
         merged: {

@@ -12,7 +12,15 @@
  * Tests for lifecycle hook trigger functions (SessionStart, SessionEnd, BeforeAgent, AfterAgent)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import {
   triggerSessionStartHook,
   triggerSessionEndHook,
@@ -92,9 +100,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireSessionStartEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireSessionStartEvent as Mock<
+          typeof mockHookSystem.fireSessionStartEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerSessionStartHook(
         mockConfig,
@@ -111,7 +121,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hooks are disabled', async () => {
-      vi.mocked(mockConfig.getEnableHooks).mockReturnValue(false);
+      (
+        mockConfig.getEnableHooks as Mock<typeof mockConfig.getEnableHooks>
+      ).mockReturnValue(false);
 
       const result = await triggerSessionStartHook(
         mockConfig,
@@ -123,7 +135,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hook system is not available', async () => {
-      vi.mocked(mockConfig.getHookSystem).mockReturnValue(undefined);
+      (
+        mockConfig.getHookSystem as Mock<typeof mockConfig.getHookSystem>
+      ).mockReturnValue(undefined);
 
       const result = await triggerSessionStartHook(
         mockConfig,
@@ -134,9 +148,11 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockHookSystem.fireSessionStartEvent).mockRejectedValue(
-        new Error('Hook failed'),
-      );
+      (
+        mockHookSystem.fireSessionStartEvent as Mock<
+          typeof mockHookSystem.fireSessionStartEvent
+        >
+      ).mockRejectedValue(new Error('Hook failed'));
 
       const result = await triggerSessionStartHook(
         mockConfig,
@@ -161,9 +177,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireSessionEndEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireSessionEndEvent as Mock<
+          typeof mockHookSystem.fireSessionEndEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerSessionEndHook(
         mockConfig,
@@ -180,7 +198,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hooks are disabled', async () => {
-      vi.mocked(mockConfig.getEnableHooks).mockReturnValue(false);
+      (
+        mockConfig.getEnableHooks as Mock<typeof mockConfig.getEnableHooks>
+      ).mockReturnValue(false);
 
       const result = await triggerSessionEndHook(
         mockConfig,
@@ -192,7 +212,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hook system is not available', async () => {
-      vi.mocked(mockConfig.getHookSystem).mockReturnValue(undefined);
+      (
+        mockConfig.getHookSystem as Mock<typeof mockConfig.getHookSystem>
+      ).mockReturnValue(undefined);
 
       const result = await triggerSessionEndHook(
         mockConfig,
@@ -203,9 +225,11 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockHookSystem.fireSessionEndEvent).mockRejectedValue(
-        new Error('Hook failed'),
-      );
+      (
+        mockHookSystem.fireSessionEndEvent as Mock<
+          typeof mockHookSystem.fireSessionEndEvent
+        >
+      ).mockRejectedValue(new Error('Hook failed'));
 
       const result = await triggerSessionEndHook(
         mockConfig,
@@ -231,9 +255,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireBeforeAgentEvent as Mock<
+          typeof mockHookSystem.fireBeforeAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerBeforeAgentHook(
         mockConfig,
@@ -250,7 +276,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hooks are disabled', async () => {
-      vi.mocked(mockConfig.getEnableHooks).mockReturnValue(false);
+      (
+        mockConfig.getEnableHooks as Mock<typeof mockConfig.getEnableHooks>
+      ).mockReturnValue(false);
 
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
@@ -259,7 +287,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hook system is not available', async () => {
-      vi.mocked(mockConfig.getHookSystem).mockReturnValue(undefined);
+      (
+        mockConfig.getHookSystem as Mock<typeof mockConfig.getHookSystem>
+      ).mockReturnValue(undefined);
 
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
@@ -267,9 +297,11 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockRejectedValue(
-        new Error('Hook failed'),
-      );
+      (
+        mockHookSystem.fireBeforeAgentEvent as Mock<
+          typeof mockHookSystem.fireBeforeAgentEvent
+        >
+      ).mockRejectedValue(new Error('Hook failed'));
 
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
@@ -291,9 +323,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireAfterAgentEvent as Mock<
+          typeof mockHookSystem.fireAfterAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -314,7 +348,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hooks are disabled', async () => {
-      vi.mocked(mockConfig.getEnableHooks).mockReturnValue(false);
+      (
+        mockConfig.getEnableHooks as Mock<typeof mockConfig.getEnableHooks>
+      ).mockReturnValue(false);
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -328,7 +364,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hook system is not available', async () => {
-      vi.mocked(mockConfig.getHookSystem).mockReturnValue(undefined);
+      (
+        mockConfig.getHookSystem as Mock<typeof mockConfig.getHookSystem>
+      ).mockReturnValue(undefined);
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -341,9 +379,11 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockRejectedValue(
-        new Error('Hook failed'),
-      );
+      (
+        mockHookSystem.fireAfterAgentEvent as Mock<
+          typeof mockHookSystem.fireAfterAgentEvent
+        >
+      ).mockRejectedValue(new Error('Hook failed'));
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -371,9 +411,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireBeforeAgentEvent as Mock<
+          typeof mockHookSystem.fireBeforeAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
@@ -396,9 +438,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireBeforeAgentEvent as Mock<
+          typeof mockHookSystem.fireBeforeAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
@@ -421,9 +465,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireBeforeAgentEvent as Mock<
+          typeof mockHookSystem.fireBeforeAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
@@ -447,9 +493,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireAfterAgentEvent as Mock<
+          typeof mockHookSystem.fireAfterAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -477,9 +525,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireAfterAgentEvent as Mock<
+          typeof mockHookSystem.fireAfterAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -507,9 +557,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.fireAfterAgentEvent as Mock<
+          typeof mockHookSystem.fireAfterAgentEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       const result = await triggerAfterAgentHook(
         mockConfig,
@@ -529,7 +581,9 @@ describe('Lifecycle Hook Triggers', () => {
    */
   describe('triggerPreCompressHook', () => {
     it('should return undefined when hooks are disabled', async () => {
-      vi.mocked(mockConfig.getEnableHooks).mockReturnValue(false);
+      (
+        mockConfig.getEnableHooks as Mock<typeof mockConfig.getEnableHooks>
+      ).mockReturnValue(false);
 
       const result = await triggerPreCompressHook(
         mockConfig,
@@ -541,7 +595,9 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined when hook system is not available', async () => {
-      vi.mocked(mockConfig.getHookSystem).mockReturnValue(undefined);
+      (
+        mockConfig.getHookSystem as Mock<typeof mockConfig.getHookSystem>
+      ).mockReturnValue(undefined);
 
       const result = await triggerPreCompressHook(
         mockConfig,
@@ -564,9 +620,11 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockHookSystem.firePreCompressEvent).mockResolvedValue(
-        mockResult,
-      );
+      (
+        mockHookSystem.firePreCompressEvent as Mock<
+          typeof mockHookSystem.firePreCompressEvent
+        >
+      ).mockResolvedValue(mockResult);
 
       await triggerPreCompressHook(mockConfig, PreCompressTrigger.Manual);
 
@@ -579,9 +637,11 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error (fail-open)', async () => {
-      vi.mocked(mockHookSystem.firePreCompressEvent).mockRejectedValue(
-        new Error('Hook failed'),
-      );
+      (
+        mockHookSystem.firePreCompressEvent as Mock<
+          typeof mockHookSystem.firePreCompressEvent
+        >
+      ).mockRejectedValue(new Error('Hook failed'));
 
       const result = await triggerPreCompressHook(
         mockConfig,

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
@@ -52,12 +60,16 @@ describe('Agent Skills Backward Compatibility', () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.mocked(loadServerHierarchicalMemory).mockResolvedValue({
+    (
+      loadServerHierarchicalMemory as Mock<typeof loadServerHierarchicalMemory>
+    ).mockResolvedValue({
       memoryContent: '',
       fileCount: 0,
       filePaths: [],
     });
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
   });
 
   afterEach(() => {

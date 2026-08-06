@@ -9,7 +9,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -76,9 +84,9 @@ describe('mcp-client', () => {
           .mockReturnValue({ tools: { listChanged: true } }),
         listTools: vi.fn(),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
         close: vi.fn().mockResolvedValue(undefined),
       } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -138,9 +146,9 @@ describe('mcp-client', () => {
         request: vi.fn().mockResolvedValue({}),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -175,9 +183,9 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn().mockResolvedValue({}),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -212,9 +220,9 @@ describe('mcp-client', () => {
         request: vi.fn().mockResolvedValue({ resources: [] }),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -261,9 +269,9 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn().mockResolvedValue({}),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -337,9 +345,9 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn().mockResolvedValue({}),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -403,7 +411,7 @@ describe('mcp-client', () => {
       const mockClientA = createMockSdkClient('tool-from-A');
       const mockClientB = createMockSdkClient('tool-from-B');
 
-      vi.mocked(ClientLib.Client)
+      (ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(mockClientA as unknown as ClientLib.Client)
         .mockReturnValueOnce(mockClientB as unknown as ClientLib.Client);
 
@@ -502,9 +510,9 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn().mockResolvedValue({}),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -566,9 +574,9 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn().mockResolvedValue({}),
       };
 
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -624,9 +632,9 @@ describe('mcp-client', () => {
           registerCapabilities: vi.fn(),
           setRequestHandler: vi.fn(),
         };
-        vi.mocked(ClientLib.Client).mockReturnValue(
-          mockedClient as unknown as ClientLib.Client,
-        );
+        (
+          ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+        ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
         vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
           {} as SdkClientStdioLib.StdioClientTransport,
         );
@@ -691,7 +699,7 @@ describe('mcp-client', () => {
           tools: [{ name: 'replacementTool', inputSchema: { type: 'object' } }],
         }),
       };
-      vi.mocked(ClientLib.Client)
+      (ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>)
         .mockReturnValueOnce(firstSdkClient as unknown as ClientLib.Client)
         .mockReturnValueOnce(
           replacementSdkClient as unknown as ClientLib.Client,
@@ -728,8 +736,10 @@ describe('mcp-client', () => {
       await client.disconnect();
       await client.connect();
       await client.discover(createTrustedConfig());
-      const removalsBeforeOldFailure = vi.mocked(
-        toolRegistry.removeMcpToolsByServer,
+      const removalsBeforeOldFailure = (
+        toolRegistry.removeMcpToolsByServer as Mock<
+          typeof toolRegistry.removeMcpToolsByServer
+        >
       ).mock.calls.length;
 
       rejectUpdate?.(new Error('old update failed'));
@@ -757,9 +767,9 @@ describe('mcp-client', () => {
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -807,9 +817,9 @@ describe('mcp-client', () => {
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );

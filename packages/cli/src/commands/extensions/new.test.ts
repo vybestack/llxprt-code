@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 import { newCommand } from './new.js';
 import yargs from 'yargs';
@@ -16,7 +16,7 @@ vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-const mockedFs = vi.mocked(fsPromises);
+const mockedFs = fsPromises as Mock<typeof fsPromises>;
 
 describe('extensions new command', () => {
   beforeEach(() => {

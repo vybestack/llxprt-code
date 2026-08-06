@@ -122,11 +122,11 @@ describe('useShellCommandProcessor', () => {
 
     // os functions are already mocked in the vi.mock call above
     // No need to re-mock them here
-    (vi.mocked(crypto.randomBytes) as Mock).mockReturnValue(
-      Buffer.from('abcdef', 'hex'),
-    );
+    (
+      crypto.randomBytes as Mock<typeof crypto.randomBytes> as Mock
+    ).mockReturnValue(Buffer.from('abcdef', 'hex'));
     mockIsBinary.mockReturnValue(false);
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
     mockIsActivePty.mockReturnValue(false);
     mockGetLastActivePtyId.mockReturnValue(null);
 
@@ -572,7 +572,7 @@ describe('useShellCommandProcessor', () => {
       throw testError;
     });
     // Mock that the temp file was created before the error was thrown
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
 
     const { result } = renderProcessorHook();
 
@@ -593,7 +593,7 @@ describe('useShellCommandProcessor', () => {
       text: 'An unexpected error occurred: Synchronous spawn error',
     });
     // Verify that the temporary file was cleaned up
-    expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(
+    expect(fs.unlinkSync as Mock<typeof fs.unlinkSync>).toHaveBeenCalledWith(
       expect.stringMatching(testRegex('.*shell_pwd_abcdef\\.tmp$', '')),
     );
   });
@@ -603,8 +603,10 @@ describe('useShellCommandProcessor', () => {
       const tmpFile = expect.stringMatching(
         testRegex('.*shell_pwd_abcdef\\.tmp$', ''),
       );
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
+        '/test/dir/new',
+      ); // A different directory
 
       const { result } = renderProcessorHook();
       act(() => {
@@ -624,12 +626,16 @@ describe('useShellCommandProcessor', () => {
       expect(finalHistoryItem.tools[0].resultDisplay).toContain(
         "WARNING: shell mode is stateless; the directory change to '/test/dir/new' will not persist.",
       );
-      expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
+      expect(fs.unlinkSync as Mock<typeof fs.unlinkSync>).toHaveBeenCalledWith(
+        tmpFile,
+      );
     });
 
     it('should NOT show a warning if the directory does not change', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue('/test/dir'); // The same directory
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
+        '/test/dir',
+      ); // The same directory
 
       const { result } = renderProcessorHook();
       act(() => {

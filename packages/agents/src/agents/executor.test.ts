@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from '../testApi.js';
 import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
@@ -49,7 +57,9 @@ vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
 
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 
-const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+const mockedGetDirectoryContextString = getDirectoryContextString as Mock<
+  typeof getDirectoryContextString
+>;
 
 describe('AgentExecutor', () => {
   let fixture: ExecutorTestFixture;

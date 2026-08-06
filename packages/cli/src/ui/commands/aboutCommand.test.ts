@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { aboutCommand } from './aboutCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -76,7 +84,9 @@ describe('aboutCommand', () => {
       },
     } as unknown as CommandContext);
 
-    vi.mocked(versionUtils.getCliVersion).mockResolvedValue('test-version');
+    (
+      versionUtils.getCliVersion as Mock<typeof versionUtils.getCliVersion>
+    ).mockResolvedValue('test-version');
     vi.spyOn(mockContext.services.config!, 'getModel').mockReturnValue(
       'test-model',
     );

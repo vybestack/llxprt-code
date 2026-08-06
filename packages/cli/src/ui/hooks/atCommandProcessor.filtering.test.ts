@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { handleAtCommand } from './atCommandProcessor.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -183,7 +191,11 @@ describe('handleAtCommand (filtering)', () => {
 
   describe('when recursive file search is disabled', () => {
     beforeEach(() => {
-      vi.mocked(mockConfig.getEnableRecursiveFileSearch).mockReturnValue(false);
+      (
+        mockConfig.getEnableRecursiveFileSearch as Mock<
+          typeof mockConfig.getEnableRecursiveFileSearch
+        >
+      ).mockReturnValue(false);
     });
 
     it('should not use glob search for a nonexistent file', async () => {

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getUserStartupWarnings } from './userStartupWarnings.js';
 import * as os from 'node:os';
 import fs from 'node:fs/promises';
@@ -50,8 +58,12 @@ describe('getUserStartupWarnings', () => {
     homeDir = path.join(testRootDir, 'home');
     await fs.mkdir(homeDir, { recursive: true });
     mockHomedir.mockReturnValue(homeDir);
-    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+    (isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>).mockReturnValue(
+      false,
+    );
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      false,
+    );
   });
 
   afterEach(async () => {
@@ -92,8 +104,12 @@ describe('getUserStartupWarnings', () => {
     });
 
     it('should not return a warning when folder trust is enabled and workspace is trusted', async () => {
-      vi.mocked(isFolderTrustEnabled).mockReturnValue(true);
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+      (
+        isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>
+      ).mockReturnValue(true);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        true,
+      );
 
       const warnings = await getUserStartupWarnings({}, homeDir);
       expect(warnings).not.toContainEqual(

@@ -9,7 +9,7 @@
  */
 
 import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach } from '../testApi.js';
+import { vi, describe, it, expect, beforeEach, type Mock } from '../testApi.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -290,7 +290,9 @@ describe('subagent.ts', () => {
 
   describe('stateless runtime enforcement', () => {
     const getGenerationConfigFromMock = (callIndex = 0): ChatSessionConfig => {
-      const callArgs = vi.mocked(ChatSession).mock.calls[callIndex];
+      const callArgs = (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[callIndex];
       const generationConfig = callArgs[2];
       expect(generationConfig).toBeDefined();
       if (generationConfig === undefined)
@@ -304,15 +306,19 @@ describe('subagent.ts', () => {
       mockReadTodos.mockResolvedValue([]);
       TodoStoreMock.mockClear();
 
-      vi.mocked(getEnvironmentContext).mockResolvedValue([
-        { text: 'Env Context' },
-      ]);
-      vi.mocked(createContentGenerator).mockResolvedValue({
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue([{ text: 'Env Context' }]);
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockResolvedValue({
         getGenerativeModel: vi.fn(),
       } as unknown as ContentGenerator);
 
       mockSendMessageStream = vi.fn();
-      vi.mocked(ChatSession).mockImplementation(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
@@ -431,7 +437,9 @@ describe('subagent.ts', () => {
     it('prefers injected environment context loader over foreground Config', async () => {
       const { config } = await createMockConfig();
 
-      vi.mocked(getEnvironmentContext).mockImplementation(() => {
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockImplementation(() => {
         throw new Error('REGRESSION: getEnvironmentContext should not be used');
       });
 
@@ -502,7 +510,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call1',
           responseParts: [{ text: 'file content' }],
@@ -540,7 +548,9 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
+      const [toolExecutorConfig] = (
+        executeToolCall as Mock<typeof executeToolCall>
+      ).mock.calls[0];
       const ephemerals = toolExecutorConfig.getEphemeralSettings();
       expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
     });
@@ -568,7 +578,7 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      vi.mocked(executeToolCall).mockResolvedValue({
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call-1',
           responseParts: [{ text: 'ok' }],
@@ -578,7 +588,8 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      for (const call of vi.mocked(executeToolCall).mock.calls) {
+      for (const call of (executeToolCall as Mock<typeof executeToolCall>).mock
+        .calls) {
         expect(call[0]).not.toBe(config);
       }
     });

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -84,9 +92,9 @@ describe('settingsIntegration', () => {
     // Re-established explicitly rather than relying on mockRestore(): the two
     // runners disagree on whether that returns a mock to the implementation it
     // was constructed with.
-    vi.mocked(getWorkspaceIdentity).mockImplementation(
-      actualGitUtils.getWorkspaceIdentity,
-    );
+    (
+      getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+    ).mockImplementation(actualGitUtils.getWorkspaceIdentity);
     tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-settings-test-'),
     );
@@ -457,7 +465,9 @@ describe('settingsIntegration', () => {
       const workspaceRoot = await fs.promises.mkdtemp(
         path.join(os.tmpdir(), 'llxprt-ws-test-'),
       );
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(workspaceRoot);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(workspaceRoot);
 
       const manifestPath = path.join(tempDir, 'llxprt-extension.json');
       const manifest = {
@@ -507,7 +517,9 @@ describe('settingsIntegration', () => {
       const workspaceRoot = await fs.promises.mkdtemp(
         path.join(os.tmpdir(), 'llxprt-ws-merge-test-'),
       );
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(workspaceRoot);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(workspaceRoot);
 
       const manifestPath = path.join(tempDir, 'llxprt-extension.json');
       const manifest = {
@@ -627,7 +639,9 @@ describe('settingsIntegration', () => {
       );
 
       // Mock getWorkspaceIdentity to return the mock repo root
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(mockRepoRoot);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(mockRepoRoot);
 
       const mockPrompt = vi.fn().mockResolvedValue('workspace-value');
       await updateSetting(
@@ -755,7 +769,9 @@ describe('settingsIntegration', () => {
     });
 
     it('should return workspace source when workspace overrides user', async () => {
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(tempDir);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(tempDir);
 
       // Create manifest
       const manifestPath = path.join(tempDir, 'llxprt-extension.json');

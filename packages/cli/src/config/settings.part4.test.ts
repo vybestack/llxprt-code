@@ -104,11 +104,13 @@ describe('Settings Loading and Merging', () => {
     process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
       '/mock/system/system-defaults.json';
 
-    mockFsExistsSync = vi.mocked(fs.existsSync);
-    mockFsMkdirSync = vi.mocked(fs.mkdirSync);
-    mockStripJsonComments = vi.mocked(stripJsonComments);
+    mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+    mockFsMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+    mockStripJsonComments = stripJsonComments as Mock<typeof stripJsonComments>;
 
-    vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
+    (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
+      '/mock/home/user',
+    );
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
     );
@@ -136,8 +138,12 @@ describe('Settings Loading and Merging', () => {
         return dir; // Return the created directory path for verification
       },
     );
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
-    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
+    (isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>).mockReturnValue(
+      false,
+    );
   });
 
   afterEach(() => {
@@ -155,7 +161,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -186,7 +192,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -218,7 +224,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -273,7 +279,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -303,7 +309,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -334,7 +340,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -365,7 +371,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -397,7 +403,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -450,7 +456,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {
@@ -504,7 +510,7 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH) {

@@ -24,7 +24,15 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { waitFor } from '../../test-utils/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
@@ -301,7 +309,7 @@ describe('SettingsDialog', () => {
   });
   describe('Settings Toggling', () => {
     it('should toggle setting with Enter key', async () => {
-      vi.mocked(saveModifiedSettings).mockClear();
+      (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mockClear();
 
       const settings = createMockSettings();
       const onSelect = vi.fn();
@@ -346,10 +354,14 @@ describe('SettingsDialog', () => {
       });
 
       await vi.waitFor(() => {
-        expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalled();
+        expect(
+          saveModifiedSettings as Mock<typeof saveModifiedSettings>,
+        ).toHaveBeenCalled();
       });
 
-      expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalledWith(
+      expect(
+        saveModifiedSettings as Mock<typeof saveModifiedSettings>,
+      ).toHaveBeenCalledWith(
         new Set<string>(['accessibility.screenReader']),
         expect.objectContaining({
           accessibility: expect.objectContaining({
@@ -366,7 +378,7 @@ describe('SettingsDialog', () => {
     describe('enum values', () => {
       // Enum toggle tests removed - LLxprt's theme setting is a string, not an enum
       it('should handle enum-like settings correctly', async () => {
-        vi.mocked(saveModifiedSettings).mockClear();
+        (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mockClear();
 
         const settings = createMockSettings();
         const onSelect = vi.fn();
@@ -770,7 +782,7 @@ describe('SettingsDialog', () => {
     ])(
       'should $name',
       async ({ toggleCount, accessibilitySettings, expectedSiblings }) => {
-        vi.mocked(saveModifiedSettings).mockClear();
+        (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mockClear();
 
         const settings = createMockSettings({
           accessibility: accessibilitySettings,
@@ -812,11 +824,14 @@ describe('SettingsDialog', () => {
 
         await vi.waitFor(() => {
           expect(
-            vi.mocked(saveModifiedSettings).mock.calls.length,
+            (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mock
+              .calls.length,
           ).toBeGreaterThan(0);
         });
 
-        const calls = vi.mocked(saveModifiedSettings).mock.calls;
+        const calls = (
+          saveModifiedSettings as Mock<typeof saveModifiedSettings>
+        ).mock.calls;
         const accessibilityCalls = calls.filter(([modifiedKeys]) =>
           modifiedKeys.has('accessibility.enableLoadingPhrases'),
         );

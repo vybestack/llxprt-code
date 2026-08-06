@@ -5,7 +5,15 @@
  */
 
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeAll, afterAll } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  type Mock,
+} from 'bun:test';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import {
@@ -22,7 +30,9 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   };
 });
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 
 const renderWithMockedStats = (metrics: TestMetricsInput) => {
   const fullMetrics = withTokenTracking(metrics);

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as path from 'node:path';
 import { cleanupExpiredSessions } from './sessionCleanup.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -23,8 +31,10 @@ import {
   createTestSessions,
 } from './sessionCleanup-test-helpers.js';
 
-const mockFs = vi.mocked(fs);
-const mockGetAllSessionFiles = vi.mocked(getAllSessionFiles);
+const mockFs = fs as Mock<typeof fs>;
+const mockGetAllSessionFiles = getAllSessionFiles as Mock<
+  typeof getAllSessionFiles
+>;
 
 describe('Session Cleanup', () => {
   beforeEach(() => {

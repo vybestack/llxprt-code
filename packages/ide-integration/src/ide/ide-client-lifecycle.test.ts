@@ -12,6 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mocked,
+  type Mock,
 } from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
 import { ideContext, IdeContextNotificationSchema } from './ideContext.js';
@@ -166,30 +167,40 @@ describe('IdeClient connection lifecycle isolation', () => {
     delete process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];
 
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
-    vi.mocked(detectIde).mockReturnValue(IDE_DEFINITIONS.vscode);
-    vi.mocked(getIdeProcessInfo).mockResolvedValue({
+    (detectIde as Mock<typeof detectIde>).mockReturnValue(
+      IDE_DEFINITIONS.vscode,
+    );
+    (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockResolvedValue({
       pid: 12345,
       command: 'test-ide',
     });
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    (os.tmpdir as Mock<typeof os.tmpdir>).mockReturnValue('/tmp');
 
     createdFakes = [];
-    vi.mocked(Client).mockImplementation(() => {
+    (
+      Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => {
       const controller = createFakeClient();
       createdFakes.push(controller);
       return controller.client;
     });
 
     transportMock = { close: vi.fn().mockResolvedValue(undefined) };
-    vi.mocked(StreamableHTTPClientTransport).mockReturnValue(
+    (
+      StreamableHTTPClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue(
       transportMock as unknown as Mocked<StreamableHTTPClientTransport>,
     );
 
-    vi.mocked(fs.promises.readFile).mockResolvedValue(
-      JSON.stringify({ port: '8080' }),
-    );
     (
-      vi.mocked(fs.promises.readdir) as unknown as ReturnType<typeof vi.fn>
+      fs.promises.readFile as Mock<typeof fs.promises.readFile>
+    ).mockResolvedValue(JSON.stringify({ port: '8080' }));
+    (
+      fs.promises.readdir as Mock<
+        typeof fs.promises.readdir
+      > as unknown as ReturnType<typeof vi.fn>
     ).mockResolvedValue([]);
 
     ideClient = await IdeClient.getInstance();

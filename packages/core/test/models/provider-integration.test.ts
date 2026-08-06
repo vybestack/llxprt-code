@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import {
   llxprtModelToIModel,
@@ -130,11 +138,11 @@ describe('hasModelInRegistry', () => {
   describe('with initialized registry', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -179,11 +187,11 @@ describe('getExtendedModelInfo', () => {
   describe('with initialized registry', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -231,11 +239,11 @@ describe('getRecommendedModel', () => {
   describe('with initialized registry', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));

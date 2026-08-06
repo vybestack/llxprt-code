@@ -9,7 +9,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -90,9 +98,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       transport as unknown as SdkClientStdioLib.StdioClientTransport,
     );
@@ -124,9 +132,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
@@ -187,9 +195,9 @@ describe('McpClient disconnect cleanup', () => {
         setRequestHandler: vi.fn(),
         getServerCapabilities: vi.fn().mockReturnValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        sdkClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -234,9 +242,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
@@ -267,9 +275,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -306,9 +314,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -366,9 +374,9 @@ describe('McpClient disconnect cleanup', () => {
         .fn()
         .mockReturnValue({ tools: {}, prompts: {}, resources: {} }),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -447,9 +455,9 @@ describe('McpClient disconnect cleanup', () => {
       setNotificationHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );

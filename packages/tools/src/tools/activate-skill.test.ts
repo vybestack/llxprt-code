@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ActivateSkillTool } from './activate-skill.js';
 import type { ISkillService, SkillInfo } from '../interfaces/index.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
@@ -99,7 +99,11 @@ describe('ActivateSkillTool', () => {
   });
 
   it('should return an error if skill content cannot be read', async () => {
-    vi.mocked(mockSkillService.activateSkill).mockResolvedValue({
+    (
+      mockSkillService.activateSkill as Mock<
+        typeof mockSkillService.activateSkill
+      >
+    ).mockResolvedValue({
       success: false,
       error: 'Skill "test-skill" not found. Available skills are: ',
       availableSkills: [],

@@ -7,7 +7,15 @@
  * @plan PLAN-20260623-ISSUE2132
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -221,7 +229,9 @@ describe('Profile application clears stale auth state (issue #2132)', () => {
 
   it('preserves explicit auth-keyfile on the newly loaded profile', async () => {
     const mockFs = await import('node:fs/promises');
-    vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-content');
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockResolvedValue(
+      'keyfile-content',
+    );
 
     providerManagerStub.available = ['openai'];
     providerManagerStub.providerLookup = new Map([

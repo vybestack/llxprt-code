@@ -129,11 +129,13 @@ describe('Settings Loading and Merging', () => {
     process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
       '/mock/system/system-defaults.json';
 
-    mockFsExistsSync = vi.mocked(fs.existsSync);
-    mockFsMkdirSync = vi.mocked(fs.mkdirSync);
-    mockStripJsonComments = vi.mocked(stripJsonComments);
+    mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+    mockFsMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+    mockStripJsonComments = stripJsonComments as Mock<typeof stripJsonComments>;
 
-    vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
+    (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
+      '/mock/home/user',
+    );
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
     );
@@ -161,8 +163,12 @@ describe('Settings Loading and Merging', () => {
         return dir; // Return the created directory path for verification
       },
     );
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
-    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
+    (isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>).mockReturnValue(
+      false,
+    );
   });
 
   afterEach(() => {
@@ -177,7 +183,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false);
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       // Test that mkdirSync is called with proper parameters
       loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
@@ -199,7 +207,9 @@ describe('Settings Loading and Merging', () => {
         throw new Error('Permission denied');
       });
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       // Should not throw but may handle error internally
       expect(() => {
@@ -406,7 +416,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false);
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       // Test setting complex nested configuration
       const complexMcpServer = {
@@ -448,9 +460,11 @@ describe('Settings Loading and Merging', () => {
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       let writeCallCount = 0;
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {
-        writeCallCount++;
-      });
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {
+          writeCallCount++;
+        },
+      );
 
       // Simulate multiple rapid setValue calls
       loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
@@ -485,8 +499,12 @@ describe('Settings Loading and Merging', () => {
       delete process.env['TESTTEST']; // reset
       const llxprtEnvPath = path.resolve(path.join(LLXPRT_DIR, '.env'));
 
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(isWorkspaceTrustedValue);
-      vi.mocked(isFolderTrustEnabled).mockReturnValue(folderTrustEnabledValue);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        isWorkspaceTrustedValue,
+      );
+      (
+        isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>
+      ).mockReturnValue(folderTrustEnabledValue);
       (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
         [USER_SETTINGS_PATH, llxprtEnvPath].includes(p.toString()),
       );
@@ -523,8 +541,10 @@ describe('Settings Loading and Merging', () => {
 
   describe('saveSettings', () => {
     it('should save settings to file', () => {
-      const mockFsExistsSync = vi.mocked(fs.existsSync);
-      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      const mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+      const mockFsWriteFileSync = fs.writeFileSync as Mock<
+        typeof fs.writeFileSync
+      >;
       mockFsExistsSync.mockReturnValue(true);
       mockFsWriteFileSync.mockImplementation(() => {});
 
@@ -540,9 +560,11 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should create directory if it does not exist', () => {
-      const mockFsExistsSync = vi.mocked(fs.existsSync);
-      const mockFsMkdirSync = vi.mocked(fs.mkdirSync);
-      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      const mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+      const mockFsMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+      const mockFsWriteFileSync = fs.writeFileSync as Mock<
+        typeof fs.writeFileSync
+      >;
       mockFsExistsSync.mockReturnValue(false);
       mockFsWriteFileSync.mockImplementation(() => {});
 
@@ -561,7 +583,7 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should emit error feedback if saving fails', () => {
-      const mockFsExistsSync = vi.mocked(fs.existsSync);
+      const mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
       const error = new Error('Write failed');
       mockFsExistsSync.mockImplementation(() => {
         throw error;

@@ -528,7 +528,11 @@ describe('useReactToolScheduler (split)', () => {
 
   it('reports interactive runtime ready after main scheduler and subagent scheduler factory are registered', async () => {
     vi.useRealTimers();
-    vi.mocked(mockConfig.setInteractiveSubagentSchedulerFactory).mockClear();
+    (
+      mockConfig.setInteractiveSubagentSchedulerFactory as Mock<
+        typeof mockConfig.setInteractiveSubagentSchedulerFactory
+      >
+    ).mockClear();
     const { result } = renderScheduler(
       onComplete,
       mockConfig,

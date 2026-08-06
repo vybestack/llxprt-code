@@ -21,7 +21,15 @@
  *   - trustedFolder true / false
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -331,7 +339,7 @@ describe('approvalModeParity: approval mode resolution', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -341,7 +349,9 @@ describe('approvalModeParity: approval mode resolution', () => {
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     process.argv = ['node', 'script.js'];
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
@@ -443,7 +453,9 @@ describe('approvalModeParity: approval mode resolution', () => {
 
   describe('when folder is NOT trusted (isWorkspaceTrusted returns false)', () => {
     beforeEach(() => {
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        false,
+      );
     });
 
     it('--approval-mode=yolo overridden to DEFAULT', async () => {
@@ -477,7 +489,9 @@ describe('approvalModeParity: approval mode resolution', () => {
   describe('when folderTrust feature is disabled (default)', () => {
     beforeEach(() => {
       // folderTrust: false means the feature is off → always trusted
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        true,
+      );
     });
 
     it('--approval-mode=yolo is honoured when folder trust disabled', async () => {

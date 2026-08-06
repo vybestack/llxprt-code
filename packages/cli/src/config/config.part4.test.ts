@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -503,9 +511,11 @@ describe('loadCliConfig disableYoloMode', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
   });
 
   afterEach(() => {
@@ -559,9 +569,11 @@ describe('loadCliConfig secureModeEnabled', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
   });
 
   afterEach(() => {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
@@ -226,7 +226,9 @@ describe('buildSystemInstruction', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('core system prompt');
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue('core system prompt');
   });
 
   it('includes user memory in the system prompt', async () => {
@@ -269,7 +271,9 @@ describe('buildSystemInstruction', () => {
     const config = makeConfig();
     const envParts = [{ text: 'CWD: /workspace' }];
 
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('base prompt');
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue('base prompt');
 
     const result = await buildSystemInstruction(config, [], envParts, MODEL);
 
@@ -296,9 +300,11 @@ describe('buildSystemInstruction', () => {
     const { shouldIncludeSubagentDelegationForConfig } = await import(
       './clientToolGovernance.js'
     );
-    vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValueOnce(
-      true,
-    );
+    (
+      shouldIncludeSubagentDelegationForConfig as Mock<
+        typeof shouldIncludeSubagentDelegationForConfig
+      >
+    ).mockResolvedValueOnce(true);
 
     const config = makeConfig();
     await buildSystemInstruction(config, ['task', 'list_subagents'], [], MODEL);
@@ -324,9 +330,13 @@ describe('buildSystemInstruction', () => {
 describe('createChatSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('system prompt');
-    vi.mocked(getEnvironmentContext).mockResolvedValue([]);
-    vi.mocked(loadAgentRuntime).mockResolvedValue({
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue('system prompt');
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([]);
+    (loadAgentRuntime as Mock<typeof loadAgentRuntime>).mockResolvedValue({
       runtimeContext: {},
       contentGenerator: {},
       toolsView: { listToolNames: () => [], getToolMetadata: () => undefined },
@@ -355,7 +365,9 @@ describe('createChatSession', () => {
     });
 
     expect(clearFn).toHaveBeenCalled();
-    expect(vi.mocked(loadAgentRuntime)).toHaveBeenCalledWith(
+    expect(
+      loadAgentRuntime as Mock<typeof loadAgentRuntime>,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         overrides: expect.objectContaining({
           historyService: existingHistoryService,
@@ -490,7 +502,9 @@ describe('createChatSession', () => {
       toolRegistry: undefined,
     });
 
-    expect(vi.mocked(loadAgentRuntime)).toHaveBeenCalledWith(
+    expect(
+      loadAgentRuntime as Mock<typeof loadAgentRuntime>,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         profile: expect.objectContaining({
           settings: expect.objectContaining({
@@ -537,7 +551,9 @@ describe('createChatSession', () => {
       setActiveTokenizationTarget: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     };
-    vi.mocked(HistoryService).mockImplementationOnce(
+    (
+      HistoryService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementationOnce(
       () => mockHistoryInstance as unknown as HistoryService,
     );
 
@@ -618,9 +634,9 @@ describe('createChatSession', () => {
       setActiveTodosProvider: vi.fn(),
       getHistoryService: vi.fn().mockReturnValue(null),
     };
-    vi.mocked(ChatSession).mockImplementationOnce(
-      () => mockChat as unknown as ChatSession,
-    );
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementationOnce(() => mockChat as unknown as ChatSession);
 
     await createChatSession({
       config,
@@ -643,9 +659,11 @@ describe('createChatSession', () => {
       './clientToolGovernance.js'
     );
     const mockDeclarations = [{ name: 'todo_write' }];
-    vi.mocked(buildToolDeclarationsFromView).mockReturnValueOnce(
-      mockDeclarations as never,
-    );
+    (
+      buildToolDeclarationsFromView as Mock<
+        typeof buildToolDeclarationsFromView
+      >
+    ).mockReturnValueOnce(mockDeclarations as never);
 
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
@@ -671,12 +689,16 @@ describe('createChatSession', () => {
 describe('createChatSessionSafe', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('system prompt');
-    vi.mocked(getEnvironmentContext).mockResolvedValue([]);
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue('system prompt');
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([]);
   });
 
   it('wraps errors and throws with descriptive message', async () => {
-    vi.mocked(loadAgentRuntime).mockRejectedValueOnce(
+    (loadAgentRuntime as Mock<typeof loadAgentRuntime>).mockRejectedValueOnce(
       new Error('runtime init failed'),
     );
 

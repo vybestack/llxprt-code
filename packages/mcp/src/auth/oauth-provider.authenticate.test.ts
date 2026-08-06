@@ -7,7 +7,7 @@
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 
 const mockOpenBrowserSecurely = vi.fn();
 const mockHttpServer = {
@@ -52,10 +52,12 @@ describe('MCPOAuthProvider', () => {
     it('should perform complete OAuth flow with PKCE', async () => {
       // Mock HTTP server callback
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -158,10 +160,12 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -235,10 +239,12 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -322,10 +328,12 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -431,10 +439,12 @@ describe('MCPOAuthProvider', () => {
 
       // Setup callback handler
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -481,10 +491,12 @@ describe('MCPOAuthProvider', () => {
 
     it('should handle OAuth callback errors', async () => {
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -510,10 +522,12 @@ describe('MCPOAuthProvider', () => {
 
     it('should handle state mismatch in callback', async () => {
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -539,10 +553,12 @@ describe('MCPOAuthProvider', () => {
 
     it('should handle token exchange failure', async () => {
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -576,7 +592,7 @@ describe('MCPOAuthProvider', () => {
     });
 
     it('should handle callback timeout', async () => {
-      vi.mocked(http.createServer).mockImplementation(
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
         () => mockHttpServer as unknown as http.Server,
       );
 
@@ -609,10 +625,12 @@ describe('MCPOAuthProvider', () => {
       };
 
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -660,10 +678,12 @@ describe('MCPOAuthProvider', () => {
       };
 
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();
@@ -707,10 +727,12 @@ describe('MCPOAuthProvider', () => {
       };
 
       let callbackHandler: unknown;
-      vi.mocked(http.createServer).mockImplementation((handler) => {
-        callbackHandler = handler;
-        return mockHttpServer as unknown as http.Server;
-      });
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbackHandler = handler;
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
 
       mockHttpServer.listen.mockImplementation((port, callback) => {
         callback?.();

@@ -9,7 +9,15 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import type {
   ContentBlock,
   AgentMessageInput,
@@ -262,13 +270,17 @@ describe('AgentClient (client.ts)', () => {
     it('should defer overflow decisions to finalized provider enforcement', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       // Set last prompt token count
       const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
-      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       // Mock the chat to return the lastPromptTokenCount
       const mockChat: Partial<ChatSession> = {
@@ -321,13 +333,17 @@ describe('AgentClient (client.ts)', () => {
       // the normal send/compression/enforcement path should attempt to resolve
       // the overflow with the switched model's tokenizer.
       const MOCKED_TOKEN_LIMIT = 200000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       // e.g. 249,442 stored tokens against a 200,000-token model.
       const lastPromptTokenCount = 249442;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
-      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -375,12 +391,16 @@ describe('AgentClient (client.ts)', () => {
       // bare functionResponse part. The negative-remaining short-circuit must
       // defer to the send path rather than tripping a bogus guard.
       const MOCKED_TOKEN_LIMIT = 200000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       const lastPromptTokenCount = 249442;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
-      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -434,11 +454,15 @@ describe('AgentClient (client.ts)', () => {
     it('should defer model-aware tokenization to finalized provider enforcement when remaining capacity is positive', async () => {
       // Arrange — legacy client preflight must not invoke generic tokenization.
       const MOCKED_TOKEN_LIMIT = 10000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 1000;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 1000;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const estimateSpy = vi.fn();
       const mockChat: Partial<ChatSession> = {
@@ -474,11 +498,15 @@ describe('AgentClient (client.ts)', () => {
       // Arrange — proves the negative-remaining short-circuit avoids the
       // tokenizer-backed sizing path entirely (it returns before sizing).
       const MOCKED_TOKEN_LIMIT = 200000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 249442;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 249442;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const convertSpy = vi.fn();
       const estimateSpy = vi.fn();
@@ -519,11 +547,15 @@ describe('AgentClient (client.ts)', () => {
       // Arrange — a minimal chat double without tokenizer methods must still proceed
       // to finalized provider enforcement.
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 0;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 0;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -569,11 +601,15 @@ describe('AgentClient (client.ts)', () => {
     it('should not invoke the legacy client tokenizer during preflight when it would throw (issue 2402)', async () => {
       // Arrange — the client tokenizer would throw if invoked during preflight.
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 0;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 0;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -613,11 +649,15 @@ describe('AgentClient (client.ts)', () => {
     it('should not let inlineData/fileData binary payloads inflate the preflight estimate (issue 2402)', async () => {
       // Arrange — large binary payloads must not inflate the fallback estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 0;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 0;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -661,11 +701,15 @@ describe('AgentClient (client.ts)', () => {
     it('should defer sticky-model limit enforcement to the finalized provider envelope', async () => {
       const STICKY_MODEL_LIMIT = 1000;
       client['currentSequenceModel'] = 'gemini-1.5-flash';
-      vi.mocked(tokenLimit).mockReturnValue(STICKY_MODEL_LIMIT);
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        STICKY_MODEL_LIMIT,
       );
+      const lastPromptTokenCount = 900;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
@@ -707,7 +751,9 @@ describe('AgentClient (client.ts)', () => {
     it('should forward large binary requests to provider enforcement without client overflow preflight', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000000; // 1M tokens
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       const lastPromptTokenCount = 10000;
       const mockChat: Partial<ChatSession> = {

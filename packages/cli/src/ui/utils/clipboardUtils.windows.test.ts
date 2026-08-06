@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs/promises';
 import type { Stats } from 'fs';
 import { saveClipboardImage } from './clipboardUtils.js';
@@ -45,8 +53,8 @@ describe('saveClipboardImage Windows Path Escaping', () => {
     });
 
     // Mock fs calls to succeed
-    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-    vi.mocked(fs.stat).mockResolvedValue({ size: 100 } as Stats);
+    (fs.mkdir as Mock<typeof fs.mkdir>).mockResolvedValue(undefined);
+    (fs.stat as Mock<typeof fs.stat>).mockResolvedValue({ size: 100 } as Stats);
   });
 
   afterEach(() => {

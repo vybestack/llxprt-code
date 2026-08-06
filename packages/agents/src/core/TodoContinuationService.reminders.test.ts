@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -115,7 +115,9 @@ describe('TodoContinuationService', () => {
       writePausedState: todoStoreWritePausedMock,
     }));
 
-    vi.mocked(TodoReminderService).mockImplementation(
+    (
+      TodoReminderService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           getComplexTaskSuggestion: vi
@@ -152,7 +154,9 @@ describe('TodoContinuationService', () => {
       const result = await service.getTodoReminderForCurrentState();
       expect(result.reminder).toBeDefined();
       expect(
-        vi.mocked(reminderService.getCreateListReminder),
+        reminderService.getCreateListReminder as Mock<
+          typeof reminderService.getCreateListReminder
+        >,
       ).toHaveBeenCalled();
     });
 
@@ -161,7 +165,9 @@ describe('TodoContinuationService', () => {
       const result = await service.getTodoReminderForCurrentState();
       expect(result.reminder).toBeDefined();
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+        reminderService.getUpdateActiveTodoReminder as Mock<
+          typeof reminderService.getUpdateActiveTodoReminder
+        >,
       ).toHaveBeenCalledWith(pendingTodo);
     });
 
@@ -177,10 +183,14 @@ describe('TodoContinuationService', () => {
         activeTodos: [],
       });
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+        reminderService.getUpdateActiveTodoReminder as Mock<
+          typeof reminderService.getUpdateActiveTodoReminder
+        >,
       ).not.toHaveBeenCalled();
       expect(
-        vi.mocked(reminderService.getCreateListReminder),
+        reminderService.getCreateListReminder as Mock<
+          typeof reminderService.getCreateListReminder
+        >,
       ).not.toHaveBeenCalled();
     });
 
@@ -191,7 +201,9 @@ describe('TodoContinuationService', () => {
       });
       expect(result.reminder).toBeDefined();
       expect(
-        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
+        reminderService.getEscalatedActiveTodoReminder as Mock<
+          typeof reminderService.getEscalatedActiveTodoReminder
+        >,
       ).toHaveBeenCalled();
     });
 
@@ -292,7 +304,9 @@ describe('TodoContinuationService', () => {
       expect(service.toolActivityCount).toBe(0);
       expect(todoStoreReadMock).not.toHaveBeenCalled();
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+        reminderService.getUpdateActiveTodoReminder as Mock<
+          typeof reminderService.getUpdateActiveTodoReminder
+        >,
       ).not.toHaveBeenCalled();
     });
   });
@@ -306,10 +320,14 @@ describe('TodoContinuationService', () => {
       );
       expect(result).toBe('---\nSystem Note: Update the active todo.\n---');
       expect(
-        vi.mocked(reminderService.getUpdateActiveTodoReminder),
+        reminderService.getUpdateActiveTodoReminder as Mock<
+          typeof reminderService.getUpdateActiveTodoReminder
+        >,
       ).toHaveBeenCalledWith(pendingTodo);
       expect(
-        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
+        reminderService.getEscalatedActiveTodoReminder as Mock<
+          typeof reminderService.getEscalatedActiveTodoReminder
+        >,
       ).not.toHaveBeenCalled();
     });
 
@@ -317,7 +335,9 @@ describe('TodoContinuationService', () => {
       service.lastTodoSnapshot = [pendingTodo];
       service.buildFollowUpReminder([pendingTodo], [pendingTodo]);
       expect(
-        vi.mocked(reminderService.getEscalatedActiveTodoReminder),
+        reminderService.getEscalatedActiveTodoReminder as Mock<
+          typeof reminderService.getEscalatedActiveTodoReminder
+        >,
       ).toHaveBeenCalled();
     });
 
@@ -326,7 +346,9 @@ describe('TodoContinuationService', () => {
       const result = service.buildFollowUpReminder([], []);
       expect(result).toBeDefined();
       expect(
-        vi.mocked(reminderService.getCreateListReminder),
+        reminderService.getCreateListReminder as Mock<
+          typeof reminderService.getCreateListReminder
+        >,
       ).toHaveBeenCalled();
     });
 

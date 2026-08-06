@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { quotaCommand } from './quotaCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -54,7 +54,7 @@ function getLastUiItem(ctx: CommandContext): {
   type: 'info' | 'error';
   text?: string;
 } {
-  const calls = vi.mocked(ctx.ui.addItem).mock.calls;
+  const calls = (ctx.ui.addItem as Mock<typeof ctx.ui.addItem>).mock.calls;
   const lastItem = calls.at(-1)?.[0];
   if (lastItem?.type === 'info') {
     return { type: 'info', text: lastItem.text };
@@ -473,7 +473,9 @@ describe('quotaCommand', () => {
       expect(callArgs[3]).toMatch(UUID_REGEX);
       expect(callArgs[4]).toBeUndefined();
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const calls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const successItem = calls.find((call) => {
         const item = call[0] as { text: string; type: MessageType };
         return (
@@ -508,7 +510,9 @@ describe('quotaCommand', () => {
 
       expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const calls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const alreadyItem = calls.find((call) => {
         const item = call[0] as { text: string; type: MessageType };
         return (
@@ -701,7 +705,9 @@ describe('quotaCommand', () => {
 
       expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
 
-      const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const calls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const successItem = calls.find((call) => {
         const item = call[0] as { text: string; type: MessageType };
         return (
@@ -731,7 +737,11 @@ describe('quotaCommand', () => {
 
       expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
       expect(
-        vi.mocked(mockConsumeCodexRateLimitResetCredit).mock.calls[0][4],
+        (
+          mockConsumeCodexRateLimitResetCredit as Mock<
+            typeof mockConsumeCodexRateLimitResetCredit
+          >
+        ).mock.calls[0][4],
       ).toBe('https://example.test/backend-api');
     });
 
@@ -752,7 +762,11 @@ describe('quotaCommand', () => {
 
       expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
       expect(
-        vi.mocked(mockConsumeCodexRateLimitResetCredit).mock.calls[0][4],
+        (
+          mockConsumeCodexRateLimitResetCredit as Mock<
+            typeof mockConsumeCodexRateLimitResetCredit
+          >
+        ).mock.calls[0][4],
       ).toBeUndefined();
     });
   });

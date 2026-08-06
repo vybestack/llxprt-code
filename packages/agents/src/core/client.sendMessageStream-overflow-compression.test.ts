@@ -11,7 +11,15 @@
  * file-level max-lines).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from '../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -245,14 +253,16 @@ function buildOverflowScenario(
   client: AgentClient,
   scenario: OverflowScenario,
 ): OverflowScenarioHandle {
-  vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+  (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
   const initialBaseline =
     scenario.initialProjectedBaseline ?? PREFLIGHT_BASELINE;
   const observedCount = scenario.lastPromptTokenCount ?? initialBaseline;
-  vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-    observedCount,
-  );
+  (
+    uiTelemetryService.getLastPromptTokenCount as Mock<
+      typeof uiTelemetryService.getLastPromptTokenCount
+    >
+  ).mockReturnValue(observedCount);
 
   let currentBaseline = initialBaseline;
 
@@ -411,7 +421,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
 
     it('should recover via context-window enforcement when ordinary compression is a no-op (issue 2755 A1)', async () => {
       const ENFORCEMENT_TOKEN_LIMIT = 10_000;
-      vi.mocked(tokenLimit).mockReturnValue(ENFORCEMENT_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        ENFORCEMENT_TOKEN_LIMIT,
+      );
 
       const historyService = new HistoryService();
       const fillText = 'x'.repeat(12_000);
@@ -582,8 +594,14 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
     });
 
     it('should defer overflow detection to finalized provider enforcement for consecutive turns with cleared counts (issue 2755 A4)', async () => {
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(0);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(0);
 
       const currentBaseline = PREFLIGHT_BASELINE;
 
@@ -643,7 +661,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
           mockEmbedContentFn,
         })
       ).client;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
       (
         client as unknown as {
           todoContinuationService: { todoToolsAvailable: boolean };
@@ -698,7 +718,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
     });
 
     it('should proceed exactly at the threshold boundary where estimated equals remaining * 0.95 (issue 2755 A7 exact threshold)', async () => {
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       const fitBaseline = 500;
       const requestChars = Math.floor(

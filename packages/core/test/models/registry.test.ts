@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import { ModelRegistry } from '../../src/models/registry.js';
 import { mockApiResponse } from './__fixtures__/mock-data.js';
@@ -35,7 +43,7 @@ describe('ModelRegistry', () => {
     vi.clearAllMocks();
 
     // Default: no cache, no bundled fallback
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -50,11 +58,11 @@ describe('ModelRegistry', () => {
     it('isInitialized returns true after init', async () => {
       // Mock fresh cache to load data
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -65,11 +73,11 @@ describe('ModelRegistry', () => {
 
     it('initialize is idempotent', async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -85,11 +93,11 @@ describe('ModelRegistry', () => {
 
     it('concurrent initialize calls do not duplicate work', async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -112,11 +120,11 @@ describe('ModelRegistry', () => {
   describe('loading strategy', () => {
     it('loads from cache if fresh', async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000, // 1 second ago (fresh)
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -130,11 +138,11 @@ describe('ModelRegistry', () => {
       const now = Date.now();
       const eightDaysAgo = now - 8 * 24 * 60 * 60 * 1000;
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: eightDaysAgo,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -146,7 +154,7 @@ describe('ModelRegistry', () => {
     });
 
     it('loads from API when no cache exists', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockApiResponse,
@@ -163,11 +171,11 @@ describe('ModelRegistry', () => {
   describe('query API', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -258,11 +266,11 @@ describe('ModelRegistry', () => {
   describe('provider API', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -289,11 +297,11 @@ describe('ModelRegistry', () => {
   describe('counts', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -312,11 +320,11 @@ describe('ModelRegistry', () => {
   describe('cache metadata', () => {
     it('getCacheMetadata returns null before refresh', async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -328,7 +336,7 @@ describe('ModelRegistry', () => {
     });
 
     it('getCacheMetadata returns data after successful refresh', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockApiResponse,
@@ -350,7 +358,7 @@ describe('ModelRegistry', () => {
 
   describe('refresh', () => {
     it('refresh updates models from API', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockApiResponse,
@@ -364,7 +372,7 @@ describe('ModelRegistry', () => {
     });
 
     it('refresh returns false on network error', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
       await registry.initialize();
@@ -374,7 +382,7 @@ describe('ModelRegistry', () => {
     });
 
     it('refresh returns false on non-ok response', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
@@ -389,7 +397,7 @@ describe('ModelRegistry', () => {
 
   describe('event system', () => {
     it('emits models:updated on successful refresh', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockApiResponse,
@@ -405,7 +413,7 @@ describe('ModelRegistry', () => {
     });
 
     it('emits models:error on refresh failure', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
       const callback = vi.fn();
@@ -418,7 +426,7 @@ describe('ModelRegistry', () => {
     });
 
     it('off removes event listener', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockApiResponse,

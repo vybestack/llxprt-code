@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import {
   type AnyDeclarativeTool,
   CoreToolHostAdapter,
@@ -222,7 +222,9 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
   const registry = new ToolRegistry(mockConfig, mockMessageBus);
   registry.registerTool(new ReadManyFilesTool(toolHost));
   registry.registerTool(new GlobTool(toolHost));
-  vi.mocked(mockConfig.getToolRegistry).mockReturnValue(registry);
+  (
+    mockConfig.getToolRegistry as Mock<typeof mockConfig.getToolRegistry>
+  ).mockReturnValue(registry);
 
   const getToolHandle = (name: string): AgentToolHandle | undefined => {
     const tool = registry.getTool(name);

@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
@@ -36,8 +36,12 @@ vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
   };
 });
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
-const useRuntimeApiMock = vi.mocked(RuntimeContext.useRuntimeApi);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
+const useRuntimeApiMock = RuntimeContext.useRuntimeApi as Mock<
+  typeof RuntimeContext.useRuntimeApi
+>;
 
 const renderWithMockedStats = (metrics: TestMetricsInput) => {
   const withDefaults = withTokenTracking(metrics);

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { NormalizedToolCall } from './ToolCallNormalizer.js';
 import { ToolCallNormalizer } from './ToolCallNormalizer.js';
 
@@ -36,7 +36,9 @@ describe('ToolCallNormalizer', () => {
   describe('Parameter processing (Problem 2)', () => {
     it('should handle processToolParameters returning object correctly', () => {
       const mockProcessed = { param1: 'value1', param2: 42 };
-      vi.mocked(processToolParameters).mockReturnValue(mockProcessed);
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue(mockProcessed);
 
       const result = normalizer.normalize({
         index: 0,
@@ -59,7 +61,9 @@ describe('ToolCallNormalizer', () => {
       // When processToolParameters returns a string (not an object),
       // it should be wrapped in { value: string } instead of being treated as failure
       const mockProcessed = 'some string result from processToolParameters';
-      vi.mocked(processToolParameters).mockReturnValue(mockProcessed);
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue(mockProcessed);
 
       const result = normalizer.normalize({
         index: 0,
@@ -78,7 +82,9 @@ describe('ToolCallNormalizer', () => {
     });
 
     it('should handle processToolParameters returning null/undefined', () => {
-      vi.mocked(processToolParameters).mockReturnValue(null);
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue(null);
 
       const result = normalizer.normalize({
         index: 0,
@@ -93,7 +99,9 @@ describe('ToolCallNormalizer', () => {
     });
 
     it('should handle empty args correctly', () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue({});
 
       const result = normalizer.normalize({
         index: 0,
@@ -108,7 +116,9 @@ describe('ToolCallNormalizer', () => {
     });
 
     it('should handle undefined args correctly', () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue({});
 
       const result = normalizer.normalize({
         index: 0,
@@ -123,7 +133,9 @@ describe('ToolCallNormalizer', () => {
     });
 
     it('should normalize tool names to lowercase', () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue({});
 
       const result = normalizer.normalize({
         index: 0,
@@ -152,7 +164,9 @@ describe('ToolCallNormalizer', () => {
 
   describe('Batch processing', () => {
     it('should filter out null results in batch processing', () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue({});
 
       const validCall = {
         index: 0,
@@ -205,7 +219,9 @@ describe('ToolCallNormalizer', () => {
 
   describe('Kimi-K2 style prefix stripping', () => {
     beforeEach(() => {
-      vi.mocked(processToolParameters).mockReturnValue({});
+      (
+        processToolParameters as Mock<typeof processToolParameters>
+      ).mockReturnValue({});
     });
 
     it('should strip "functions" prefix from tool name', () => {

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import open from 'open';
 import { bugCommand } from './bugCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -40,8 +48,10 @@ vi.mock('../utils/terminalCapabilityManager.js', () => ({
 
 describe('bugCommand', () => {
   beforeEach(() => {
-    vi.mocked(getCliVersion).mockResolvedValue('0.1.0');
-    vi.mocked(formatMemoryUsage).mockReturnValue('100 MB');
+    (getCliVersion as Mock<typeof getCliVersion>).mockResolvedValue('0.1.0');
+    (formatMemoryUsage as Mock<typeof formatMemoryUsage>).mockReturnValue(
+      '100 MB',
+    );
     vi.stubEnv('SANDBOX', 'gemini-test');
   });
 

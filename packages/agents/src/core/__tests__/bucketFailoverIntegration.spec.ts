@@ -7,7 +7,14 @@
  * Phase 7: Bucket Failover Integration Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type Mock,
+} from '../../testApi.js';
 import {
   executeProviderWithBucketFailover,
   shouldEnableBucketFailover,
@@ -145,9 +152,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion).mockReturnValue(
-        successGenerator(),
-      );
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      ).mockReturnValue(successGenerator());
 
       const config: BucketFailoverConfig = {
         buckets: ['bucket1', 'bucket2'],
@@ -176,7 +185,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -215,7 +228,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -236,9 +253,11 @@ describe('bucketFailoverIntegration', () => {
           new Error('400 Bad Request - invalid parameter'),
         );
 
-      vi.mocked(mockProvider.generateChatCompletion).mockReturnValue(
-        failGenerator(),
-      );
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      ).mockReturnValue(failGenerator());
 
       const config: BucketFailoverConfig = {
         buckets: ['bucket1', 'bucket2'],
@@ -257,7 +276,11 @@ describe('bucketFailoverIntegration', () => {
       const failGenerator = () =>
         createThrowingGenerator(new Error('429 Rate limit exceeded'));
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(failGenerator());
@@ -314,7 +337,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -341,7 +368,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -365,9 +396,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion).mockReturnValue(
-        successGenerator(),
-      );
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      ).mockReturnValue(successGenerator());
 
       const tokenRefreshSpy = vi.fn().mockResolvedValue(undefined);
 
@@ -398,9 +431,11 @@ describe('bucketFailoverIntegration', () => {
         yield chunk2;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion).mockReturnValue(
-        multiChunkGenerator(),
-      );
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      ).mockReturnValue(multiChunkGenerator());
 
       const config: BucketFailoverConfig = {
         buckets: ['bucket1'],
@@ -428,7 +463,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -455,7 +494,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -488,7 +531,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -522,7 +569,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -551,7 +602,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -588,7 +643,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 
@@ -618,7 +677,11 @@ describe('bucketFailoverIntegration', () => {
         yield responseContent;
       }
 
-      vi.mocked(mockProvider.generateChatCompletion)
+      (
+        mockProvider.generateChatCompletion as Mock<
+          typeof mockProvider.generateChatCompletion
+        >
+      )
         .mockReturnValueOnce(failGenerator())
         .mockReturnValueOnce(successGenerator());
 

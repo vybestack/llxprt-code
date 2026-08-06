@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import {
   startLocalOAuthCallback,
@@ -58,7 +66,9 @@ describe('Codex per-bucket browser profile selection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(shouldLaunchBrowser).mockReturnValue(true);
+    (shouldLaunchBrowser as Mock<typeof shouldLaunchBrowser>).mockReturnValue(
+      true,
+    );
     globalThis.fetch = vi.fn(async (_input, init) => {
       const body = new URLSearchParams(String(init?.body));
       const accountId = body.get('code')?.slice(0, 12) ?? 'codex-account';

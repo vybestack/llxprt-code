@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -49,11 +49,13 @@ describe('useExtensionUpdates', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-cli-test-home-'),
     );
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
     userExtensionsDir = path.join(tempHomeDir, LLXPRT_CONFIG_DIR, 'extensions');
     fs.mkdirSync(userExtensionsDir, { recursive: true });
-    vi.mocked(checkForAllExtensionUpdates).mockReset();
-    vi.mocked(updateExtension).mockReset();
+    (
+      checkForAllExtensionUpdates as Mock<typeof checkForAllExtensionUpdates>
+    ).mockReset();
+    (updateExtension as Mock<typeof updateExtension>).mockReset();
   });
 
   afterEach(() => {
@@ -79,17 +81,17 @@ describe('useExtensionUpdates', () => {
     const addItem = vi.fn();
     const cwd = '/test/cwd';
 
-    vi.mocked(checkForAllExtensionUpdates).mockImplementation(
-      async (_extensions, dispatch, _cwd) => {
-        dispatch({
-          type: 'SET_STATE',
-          payload: {
-            name: 'test-extension',
-            state: ExtensionUpdateState.UPDATE_AVAILABLE,
-          },
-        });
-      },
-    );
+    (
+      checkForAllExtensionUpdates as Mock<typeof checkForAllExtensionUpdates>
+    ).mockImplementation(async (_extensions, dispatch, _cwd) => {
+      dispatch({
+        type: 'SET_STATE',
+        payload: {
+          name: 'test-extension',
+          state: ExtensionUpdateState.UPDATE_AVAILABLE,
+        },
+      });
+    });
 
     renderHook(() =>
       useExtensionUpdates(extensions as LlxprtExtension[], addItem, cwd),
@@ -125,19 +127,19 @@ describe('useExtensionUpdates', () => {
 
     const addItem = vi.fn();
 
-    vi.mocked(checkForAllExtensionUpdates).mockImplementation(
-      async (_extensions, dispatch, _cwd) => {
-        dispatch({
-          type: 'SET_STATE',
-          payload: {
-            name: 'test-extension',
-            state: ExtensionUpdateState.UPDATE_AVAILABLE,
-          },
-        });
-      },
-    );
+    (
+      checkForAllExtensionUpdates as Mock<typeof checkForAllExtensionUpdates>
+    ).mockImplementation(async (_extensions, dispatch, _cwd) => {
+      dispatch({
+        type: 'SET_STATE',
+        payload: {
+          name: 'test-extension',
+          state: ExtensionUpdateState.UPDATE_AVAILABLE,
+        },
+      });
+    });
 
-    vi.mocked(updateExtension).mockResolvedValue({
+    (updateExtension as Mock<typeof updateExtension>).mockResolvedValue({
       originalVersion: '1.0.0',
       updatedVersion: '1.1.0',
       name: '',
@@ -198,30 +200,32 @@ describe('useExtensionUpdates', () => {
 
     const addItem = vi.fn();
 
-    vi.mocked(checkForAllExtensionUpdates).mockImplementation(
-      async (_extensions, dispatch, _cwd) => {
-        dispatch({
-          type: 'SET_STATE',
-          payload: {
-            name: 'test-extension-1',
-            state: ExtensionUpdateState.UPDATE_AVAILABLE,
-          },
-        });
-        dispatch({
-          type: 'SET_STATE',
-          payload: {
-            name: 'test-extension-2',
-            state: ExtensionUpdateState.UPDATE_AVAILABLE,
-          },
-        });
-      },
-    );
+    (
+      checkForAllExtensionUpdates as Mock<typeof checkForAllExtensionUpdates>
+    ).mockImplementation(async (_extensions, dispatch, _cwd) => {
+      dispatch({
+        type: 'SET_STATE',
+        payload: {
+          name: 'test-extension-1',
+          state: ExtensionUpdateState.UPDATE_AVAILABLE,
+        },
+      });
+      dispatch({
+        type: 'SET_STATE',
+        payload: {
+          name: 'test-extension-2',
+          state: ExtensionUpdateState.UPDATE_AVAILABLE,
+        },
+      });
+    });
 
-    vi.mocked(updateExtension).mockImplementation(async (ext) => ({
-      originalVersion: ext.version,
-      updatedVersion: `${ext.version}.1`,
-      name: ext.name,
-    }));
+    (updateExtension as Mock<typeof updateExtension>).mockImplementation(
+      async (ext) => ({
+        originalVersion: ext.version,
+        updatedVersion: `${ext.version}.1`,
+        name: ext.name,
+      }),
+    );
 
     renderHook(() => useExtensionUpdates(extensions, addItem, tempHomeDir));
 

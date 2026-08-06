@@ -20,7 +20,15 @@
  *   CLI --model > profile model > settings.model > env vars > alias default > Gemini default
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -322,7 +330,7 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
@@ -376,7 +384,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     process.argv = ['node', 'script.js'];

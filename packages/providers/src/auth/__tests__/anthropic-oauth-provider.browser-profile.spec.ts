@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { BrowserLaunchOptions } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
 vi.mock('../local-oauth-callback.js', () => ({
@@ -21,7 +29,9 @@ import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 
-const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
+const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
+  typeof startLocalOAuthCallback
+>;
 
 /**
  * Minimal TokenStore mock for exercising the provider in isolation.

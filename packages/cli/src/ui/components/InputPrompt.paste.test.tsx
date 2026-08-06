@@ -15,7 +15,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import type { UseCommandCompletionReturn } from '../hooks/useCommandCompletion.js';
@@ -94,13 +94,17 @@ describe('InputPrompt', () => {
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
 
-  const mockedUseShellHistory = vi.mocked(useShellHistory);
-  const mockedUseCommandCompletion = vi.mocked(useCommandCompletion);
-  const mockedUseInputHistory = vi.mocked(useInputHistory);
-  const mockedUseReverseSearchCompletion = vi.mocked(
-    useReverseSearchCompletion,
-  );
-  const mockedUseKittyKeyboardProtocol = vi.mocked(useKittyKeyboardProtocol);
+  const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
+  const mockedUseCommandCompletion = useCommandCompletion as Mock<
+    typeof useCommandCompletion
+  >;
+  const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
+  const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
+    typeof useReverseSearchCompletion
+  >;
+  const mockedUseKittyKeyboardProtocol = useKittyKeyboardProtocol as Mock<
+    typeof useKittyKeyboardProtocol
+  >;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -251,7 +255,7 @@ describe('InputPrompt', () => {
     beforeEach(async () => {
       props.shellModeActive = true;
 
-      vi.mocked(useShellHistory).mockReturnValue({
+      (useShellHistory as Mock<typeof useShellHistory>).mockReturnValue({
         history: ['echo hello', 'echo world', 'ls'],
         getPreviousCommand: vi.fn(),
         getNextCommand: vi.fn(),
@@ -509,19 +513,19 @@ describe('InputPrompt', () => {
     it('enters command search on Ctrl+R and shows suggestions', async () => {
       props.shellModeActive = true;
 
-      vi.mocked(useReverseSearchCompletion).mockImplementation(
-        (buffer, data, isActive) => ({
-          ...mockReverseSearchCompletion,
-          suggestions: isActive
-            ? [
-                { label: 'git commit -m "msg"', value: 'git commit -m "msg"' },
-                { label: 'git push', value: 'git push' },
-              ]
-            : [],
-          showSuggestions: !!isActive,
-          activeSuggestionIndex: isActive ? 0 : -1,
-        }),
-      );
+      (
+        useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
+      ).mockImplementation((buffer, data, isActive) => ({
+        ...mockReverseSearchCompletion,
+        suggestions: isActive
+          ? [
+              { label: 'git commit -m "msg"', value: 'git commit -m "msg"' },
+              { label: 'git push', value: 'git push' },
+            ]
+          : [],
+        showSuggestions: !!isActive,
+        activeSuggestionIndex: isActive ? 0 : -1,
+      }));
 
       const { stdin, stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -544,7 +548,9 @@ describe('InputPrompt', () => {
       props.shellModeActive = true;
       const longValue = 'l'.repeat(200);
 
-      vi.mocked(useReverseSearchCompletion).mockReturnValue({
+      (
+        useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
+      ).mockReturnValue({
         ...mockReverseSearchCompletion,
         suggestions: [{ label: longValue, value: longValue, matchedIndex: 0 }],
         showSuggestions: true,
@@ -592,7 +598,9 @@ describe('InputPrompt', () => {
       const label = 'git commit -m "feat: add search" in src/app';
       const matchedIndex = label.indexOf('commit');
 
-      vi.mocked(useReverseSearchCompletion).mockReturnValue({
+      (
+        useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
+      ).mockReturnValue({
         ...mockReverseSearchCompletion,
         suggestions: [{ label, value: label, matchedIndex }],
         showSuggestions: true,
@@ -630,7 +638,9 @@ describe('InputPrompt', () => {
       props.shellModeActive = true;
       const shortValue = 'echo hello';
 
-      vi.mocked(useReverseSearchCompletion).mockReturnValue({
+      (
+        useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
+      ).mockReturnValue({
         ...mockReverseSearchCompletion,
         suggestions: [{ label: shortValue, value: shortValue }],
         showSuggestions: true,
