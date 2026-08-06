@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   performMigration,
+  runStartupMigrationWithPath,
   shouldMigrate,
   MIGRATION_MARKER_VERSION,
   type MigrationDestinations,
@@ -130,8 +131,12 @@ describe('#3081 migration categorizer (config entries)', () => {
       }),
     );
 
-    // A current marker means the legacy copy pass must NOT run.
+    // A current marker means the production startup orchestrator must skip
+    // the legacy copy pass. Calling performMigration directly would bypass the
+    // marker by design; runStartupMigrationWithPath is the single production
+    // authority that composes shouldMigrate with the copy operation.
     expect(shouldMigrate(legacyDir, destinations)).toBe(false);
+    runStartupMigrationWithPath(legacyDir, destinations);
 
     // The deleted credential is not recreated from the legacy directory.
     expect(
