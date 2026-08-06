@@ -279,10 +279,9 @@ function pushSandboxEnvEntry(args: string[], env: string): void {
   const eqIdx = env.indexOf('=');
   const envName = env.substring(0, eqIdx);
   if (RESERVED_SANDBOX_ENV_KEYS.has(envName)) {
-    debugLogger.log(
-      `SANDBOX_ENV: ignoring reserved key '${envName}' (pinned by sandbox infrastructure)`,
+    throw new FatalSandboxError(
+      `SANDBOX_ENV may not override reserved key '${envName}' (pinned by sandbox infrastructure)`,
     );
-    return;
   }
   debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
   args.push('--env', env);

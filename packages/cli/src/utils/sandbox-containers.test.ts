@@ -724,18 +724,31 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
     expect(Storage.isNonEmptyAbsoluteOverride(emitted)).toBe(true);
   });
 
-  it('emits exactly one --env LLXPRT_CONFIG_HOME even when SANDBOX_ENV also names it', () => {
+  it('rejects a SANDBOX_ENV override of the pinned LLXPRT_CONFIG_HOME', () => {
     process.env.SANDBOX_ENV =
       'FOO=bar,LLXPRT_CONFIG_HOME=/evil/override,BAZ=qux';
     const args = buildArgs(fixturePath);
-    // addContainerEnvVars runs after buildContainerRunArgs in the real flow.
-    addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace');
 
+    // addContainerEnvVars runs after buildContainerRunArgs in the real flow.
+    expect(() =>
+      addContainerEnvVars(
+        args,
+        ENV_CONFIG,
+        'test-container',
+        [],
+        '/workspace',
+      ),
+    ).toThrowError(FatalSandboxError);
+    expect(() =>
+      addContainerEnvVars(
+        args,
+        ENV_CONFIG,
+        'test-container',
+        [],
+        '/workspace',
+      ),
+    ).toThrowError(/may not override reserved key 'LLXPRT_CONFIG_HOME'/);
     expect(countEnv(args, 'LLXPRT_CONFIG_HOME')).toBe(1);
-    // The surviving value is the mount destination, not the SANDBOX_ENV one.
-    expect(envValue(args, 'LLXPRT_CONFIG_HOME')).toBe(
-      getContainerPath(Storage.getGlobalConfigDir()),
-    );
   });
 
   it('translates Windows host paths: no backslash in emitted config home or entrypoint roots', () => {
