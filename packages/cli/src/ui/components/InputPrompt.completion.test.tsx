@@ -691,7 +691,9 @@ describe('InputPrompt', () => {
       // Seed the buffer, then clear the spy so the later assertion is about
       // the ESC-driven clear rather than this setup call.
       props.buffer.setText('text to clear');
-      (props.buffer.setText as unknown as Mock).mockClear();
+      (
+        props.buffer.setText as unknown as Mock<(...args: never[]) => unknown>
+      ).mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,

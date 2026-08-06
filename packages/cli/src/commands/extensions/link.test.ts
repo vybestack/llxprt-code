@@ -12,7 +12,6 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-  type MockInstance,
 } from 'bun:test';
 import { handleLink } from './link.js';
 import type * as extensionModule from '../../config/extension.js';
@@ -51,9 +50,9 @@ vi.mock('../../utils/errors.js', () => ({
 }));
 
 describe('handleLink', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

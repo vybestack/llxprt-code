@@ -139,17 +139,17 @@ describe('OAuthCredentialStorage', () => {
     it('should migrate from legacy .gemini path when llxprt file is missing', async () => {
       vi.spyOn(storage, 'getCredentials').mockResolvedValue(null);
 
-      (fs.readFile as unknown as Mock).mockImplementation(
-        async (filePath: string) => {
-          if (filePath === llxprtFilePath) {
-            throw createEnoentError();
-          }
-          if (filePath === geminiFilePath) {
-            return JSON.stringify(mockCredentials);
-          }
-          throw new Error(`Unexpected path ${filePath}`);
-        },
-      );
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(async (filePath: string) => {
+        if (filePath === llxprtFilePath) {
+          throw createEnoentError();
+        }
+        if (filePath === geminiFilePath) {
+          return JSON.stringify(mockCredentials);
+        }
+        throw new Error(`Unexpected path ${filePath}`);
+      });
 
       const result = await oauthStorage.loadCredentials();
 

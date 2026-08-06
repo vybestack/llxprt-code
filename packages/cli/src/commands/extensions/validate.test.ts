@@ -12,7 +12,7 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type MockInstance,
+  type Mock,
 } from 'bun:test';
 import { handleValidate, validateCommand } from './validate.js';
 import yargs from 'yargs';
@@ -33,10 +33,10 @@ describe('extensions validate command', () => {
 });
 
 describe('handleValidate', () => {
-  let debugLoggerLogSpy: MockInstance;
-  let debugLoggerWarnSpy: MockInstance;
-  let debugLoggerErrorSpy: MockInstance;
-  let processSpy: MockInstance;
+  let debugLoggerLogSpy: Mock<(...args: never[]) => unknown>;
+  let debugLoggerWarnSpy: Mock<(...args: never[]) => unknown>;
+  let debugLoggerErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processSpy: Mock<(...args: never[]) => unknown>;
   let tempHomeDir: string;
   let tempWorkspaceDir: string;
   let originalCwd: string;

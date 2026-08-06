@@ -11,7 +11,6 @@ import {
   expect,
   it,
   vi,
-  type MockedFunction,
   type Mock,
 } from 'bun:test';
 import type React from 'react';
@@ -50,10 +49,10 @@ const mockAllowEditorTypeInSandbox = allowEditorTypeInSandbox as Mock<
 describe('useEditorSettings', () => {
   let mockLoadedSettings: LoadedSettings;
   let mockAppState: AppState;
-  let mockAddItem: MockedFunction<
+  let mockAddItem: Mock<
     (item: Omit<HistoryItem, 'id'>, timestamp: number) => void
   >;
-  let mockDispatch: MockedFunction<React.Dispatch<AppAction>>;
+  let mockDispatch: Mock<React.Dispatch<AppAction>>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -381,9 +380,7 @@ describe('useEditorSettings', () => {
 
     const errorMessage = 'Failed to save settings';
     (
-      mockLoadedSettings.setValue as MockedFunction<
-        typeof mockLoadedSettings.setValue
-      >
+      mockLoadedSettings.setValue as Mock<typeof mockLoadedSettings.setValue>
     ).mockImplementation(() => {
       throw new Error(errorMessage);
     });

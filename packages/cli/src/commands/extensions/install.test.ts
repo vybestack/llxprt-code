@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  type MockInstance,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
@@ -62,9 +55,9 @@ describe('extensions install command', () => {
 });
 
 describe('handleInstall', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

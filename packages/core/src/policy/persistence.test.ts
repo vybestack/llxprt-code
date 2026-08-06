@@ -69,12 +69,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       const toolName = 'test_tool';
       messageBus.publish({
@@ -123,12 +131,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -139,8 +155,12 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Verify atomic write: tmp file created first, then renamed
-      const writeCall = (fs.writeFile as unknown as Mock).mock.calls[0];
-      const renameCall = (fs.rename as unknown as Mock).mock.calls[0];
+      const writeCall = (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
+      const renameCall = (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
 
       expect(writeCall[0]).toMatch(/\.tmp$/);
       expect(renameCall[0]).toMatch(/\.tmp$/);
@@ -154,12 +174,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       const toolName = 'run_shell_command';
       const commandPrefix = 'git status';
@@ -195,12 +223,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       const commandPrefix = 'git log --oneline';
 
@@ -242,12 +278,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       const mcpName = 'my-jira-server';
       const simpleToolName = 'search';
@@ -263,7 +307,9 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Verify TOML file written with mcpName and simple toolName
-      const writeCall = (fs.writeFile as unknown as Mock).mock.calls[0];
+      const writeCall = (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const writtenContent = writeCall[1] as string;
       expect(writtenContent).toContain(`mcpName = "${mcpName}"`);
       expect(writtenContent).toContain(`toolName = "${simpleToolName}"`);
@@ -276,12 +322,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       const mcpName = 'my-server';
       const toolName = 'simple-tool'; // No __ separator
@@ -296,7 +350,9 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Should use toolName as-is (no extraction needed)
-      const writeCall = (fs.writeFile as unknown as Mock).mock.calls[0];
+      const writeCall = (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const writtenContent = writeCall[1] as string;
       expect(writtenContent).toContain(`mcpName = "${mcpName}"`);
       expect(writtenContent).toContain(`toolName = "${toolName}"`);
@@ -309,13 +365,17 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockRejectedValue(
-        new Error('Disk full'),
-      );
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(new Error('Disk full'));
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -341,12 +401,18 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockResolvedValue(
-        'invalid toml syntax {{{',
-      ); // Corrupt file
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue('invalid toml syntax {{{'); // Corrupt file
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       const debugWarnSpy = vi
         .spyOn(debugLoggerModule.debugLogger, 'warn')
@@ -381,12 +447,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -413,12 +487,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -441,12 +523,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -457,7 +547,9 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Verify TOML file has priority 100
-      const writeCall = (fs.writeFile as unknown as Mock).mock.calls[0];
+      const writeCall = (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const writtenContent = writeCall[1] as string;
       expect(writtenContent).toContain('priority = 100');
     });
@@ -467,12 +559,20 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -484,7 +584,9 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Verify TOML file has priority 200 (higher than standard tools)
-      const writeCall = (fs.writeFile as unknown as Mock).mock.calls[0];
+      const writeCall = (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const writtenContent = writeCall[1] as string;
       expect(writtenContent).toContain('priority = 200');
     });
@@ -496,7 +598,9 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       // Existing file with one rule
       const existingToml = `
@@ -505,9 +609,15 @@ toolName = "edit"
 decision = "allow"
 priority = 100
 `;
-      (fs.readFile as unknown as Mock).mockResolvedValue(existingToml);
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(existingToml);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -519,7 +629,9 @@ priority = 100
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Verify new file contains BOTH rules
-      const writeCall = (fs.writeFile as unknown as Mock).mock.calls[0];
+      const writeCall = (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const writtenContent = writeCall[1] as string;
       expect(writtenContent).toContain('toolName = "edit"');
       expect(writtenContent).toContain('toolName = "run_shell_command"');
@@ -533,13 +645,17 @@ priority = 100
 
       const userPoliciesDir = '/mock/user/policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockRejectedValue(
-        new Error('Permission denied'),
-      );
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(new Error('Permission denied'));
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -562,12 +678,20 @@ priority = 100
 
       const userPoliciesDir = '/tmp/llxprt-test-policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
-      (fs.readFile as unknown as Mock).mockRejectedValue(
+      (
+        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(
         Object.assign(new Error('File not found'), { code: 'ENOENT' }),
       );
-      (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
-      (fs.rename as unknown as Mock).mockResolvedValue(undefined);
+      (
+        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
+      (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(undefined);
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
@@ -584,7 +708,9 @@ priority = 100
       );
 
       // Path should NOT contain Google strings
-      const renameCall = (fs.rename as unknown as Mock).mock.calls[0];
+      const renameCall = (
+        fs.rename as unknown as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       expect(renameCall[1]).not.toContain('gemini-code-cli');
       expect(renameCall[1]).not.toContain('google');
     });

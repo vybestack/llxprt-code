@@ -46,9 +46,9 @@ describe('GoogleCredentialProvider', () => {
 
   describe('with provider instance', () => {
     let provider: GoogleCredentialProvider;
-    let mockGetAccessToken: Mock;
+    let mockGetAccessToken: Mock<(...args: never[]) => unknown>;
     let mockClient: {
-      getAccessToken: Mock;
+      getAccessToken: Mock<(...args: never[]) => unknown>;
       credentials?: { expiry_date: number | null };
       quotaProjectId?: string;
     };
@@ -71,9 +71,11 @@ describe('GoogleCredentialProvider', () => {
         getAccessToken: mockGetAccessToken,
         credentials: {},
       };
-      (MockGoogleAuth.prototype.getClient as Mock).mockResolvedValue(
-        mockClient,
-      );
+      (
+        MockGoogleAuth.prototype.getClient as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockResolvedValue(mockClient);
       provider = new GoogleCredentialProvider(config);
       vi.clearAllMocks();
     });

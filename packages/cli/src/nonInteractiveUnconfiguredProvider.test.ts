@@ -131,7 +131,7 @@ function makeSettings(): LoadedSettings {
 
 describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   let originalEnv: Map<string, string | undefined>;
-  let fromConfigMock: Mock;
+  let fromConfigMock: Mock<(...args: never[]) => unknown>;
   let capturedStderr: string[];
 
   beforeEach(async () => {
@@ -385,7 +385,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
 describe('runNonInteractive: unconfigured error output format contracts (#2481)', () => {
   let originalEnv: Map<string, string | undefined>;
-  let fromConfigMock: Mock;
+  let fromConfigMock: Mock<(...args: never[]) => unknown>;
   let capturedStderr: string[];
 
   beforeEach(async () => {

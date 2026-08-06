@@ -38,7 +38,7 @@ vi.mock('../utils.js', () => ({
 describe('mcp remove command', () => {
   describe('unit tests with mocks', () => {
     let parser: Argv;
-    let mockSetValue: Mock;
+    let mockSetValue: Mock<(...args: never[]) => unknown>;
     let mockSettings: Record<string, unknown>;
 
     beforeEach(async () => {

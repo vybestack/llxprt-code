@@ -87,7 +87,7 @@ describe('editor utils', () => {
         // Non-windows tests
         it(`should return true if first command "${commands[0]}" exists on non-windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'linux' });
-          (execSync as Mock).mockReturnValue(
+          (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
             Buffer.from(`/usr/bin/${commands[0]}`),
           );
           expect(checkHasEditorType(editor)).toBe(true);
@@ -99,7 +99,7 @@ describe('editor utils', () => {
         if (commands.length > 1) {
           it(`should return true if first command doesn't exist but second command "${commands[1]}" exists on non-windows`, () => {
             Object.defineProperty(process, 'platform', { value: 'linux' });
-            (execSync as Mock)
+            (execSync as Mock<(...args: never[]) => unknown>)
               .mockImplementationOnce(() => {
                 throw new Error(); // first command not found
               })
@@ -111,9 +111,11 @@ describe('editor utils', () => {
 
         it(`should return false if none of the commands exist on non-windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'linux' });
-          (execSync as Mock).mockImplementation(() => {
-            throw new Error(); // all commands not found
-          });
+          (execSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+            () => {
+              throw new Error(); // all commands not found
+            },
+          );
           expect(checkHasEditorType(editor)).toBe(false);
           expect(execSync).toHaveBeenCalledTimes(commands.length);
         });
@@ -121,7 +123,7 @@ describe('editor utils', () => {
         // Windows tests
         it(`should return true if first command "${win32Commands[0]}" exists on windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'win32' });
-          (execSync as Mock).mockReturnValue(
+          (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
             Buffer.from(`C:\\Program Files\\...\\${win32Commands[0]}`),
           );
           expect(checkHasEditorType(editor)).toBe(true);
@@ -136,7 +138,7 @@ describe('editor utils', () => {
         if (win32Commands.length > 1) {
           it(`should return true if first command doesn't exist but second command "${win32Commands[1]}" exists on windows`, () => {
             Object.defineProperty(process, 'platform', { value: 'win32' });
-            (execSync as Mock)
+            (execSync as Mock<(...args: never[]) => unknown>)
               .mockImplementationOnce(() => {
                 throw new Error(); // first command not found
               })
@@ -150,9 +152,11 @@ describe('editor utils', () => {
 
         it(`should return false if none of the commands exist on windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'win32' });
-          (execSync as Mock).mockImplementation(() => {
-            throw new Error(); // all commands not found
-          });
+          (execSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+            () => {
+              throw new Error(); // all commands not found
+            },
+          );
           expect(checkHasEditorType(editor)).toBe(false);
           expect(execSync).toHaveBeenCalledTimes(win32Commands.length);
         });
@@ -190,7 +194,7 @@ describe('editor utils', () => {
       // Non-windows tests
       it(`should use first command "${commands[0]}" when it exists on non-windows`, () => {
         Object.defineProperty(process, 'platform', { value: 'linux' });
-        (execSync as Mock).mockReturnValue(
+        (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
           Buffer.from(`/usr/bin/${commands[0]}`),
         );
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
@@ -203,7 +207,7 @@ describe('editor utils', () => {
       if (commands.length > 1) {
         it(`should use second command "${commands[1]}" when first doesn't exist on non-windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'linux' });
-          (execSync as Mock)
+          (execSync as Mock<(...args: never[]) => unknown>)
             .mockImplementationOnce(() => {
               throw new Error(); // first command not found
             })
@@ -219,10 +223,12 @@ describe('editor utils', () => {
 
       it(`should fall back to last command "${commands[commands.length - 1]}" when none exist on non-windows`, () => {
         Object.defineProperty(process, 'platform', { value: 'linux' });
-        (execSync as Mock).mockReset();
-        (execSync as Mock).mockImplementation(() => {
-          throw new Error(); // all commands not found
-        });
+        (execSync as Mock<(...args: never[]) => unknown>).mockReset();
+        (execSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+          () => {
+            throw new Error(); // all commands not found
+          },
+        );
 
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
         expect(diffCommand).toStrictEqual({
@@ -234,7 +240,7 @@ describe('editor utils', () => {
       // Windows tests
       it(`should use first command "${win32Commands[0]}" when it exists on windows`, () => {
         Object.defineProperty(process, 'platform', { value: 'win32' });
-        (execSync as Mock).mockReturnValue(
+        (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
           Buffer.from(`C:\\Program Files\\...\\${win32Commands[0]}`),
         );
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
@@ -247,7 +253,7 @@ describe('editor utils', () => {
       if (win32Commands.length > 1) {
         it(`should use second command "${win32Commands[1]}" when first doesn't exist on windows`, () => {
           Object.defineProperty(process, 'platform', { value: 'win32' });
-          (execSync as Mock)
+          (execSync as Mock<(...args: never[]) => unknown>)
             .mockImplementationOnce(() => {
               throw new Error(); // first command not found
             })
@@ -265,9 +271,11 @@ describe('editor utils', () => {
 
       it(`should fall back to last command "${win32Commands[win32Commands.length - 1]}" when none exist on windows`, () => {
         Object.defineProperty(process, 'platform', { value: 'win32' });
-        (execSync as Mock).mockImplementation(() => {
-          throw new Error(); // all commands not found
-        });
+        (execSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+          () => {
+            throw new Error(); // all commands not found
+          },
+        );
 
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
         expect(diffCommand).toStrictEqual({
@@ -351,7 +359,9 @@ describe('editor utils', () => {
             cb(0);
           }
         });
-        (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
+        (spawn as Mock<(...args: never[]) => unknown>).mockReturnValue({
+          on: mockSpawnOn,
+        });
 
         await openDiff('old.txt', 'new.txt', editor);
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
@@ -374,7 +384,9 @@ describe('editor utils', () => {
             cb(mockError);
           }
         });
-        (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
+        (spawn as Mock<(...args: never[]) => unknown>).mockReturnValue({
+          on: mockSpawnOn,
+        });
 
         await expect(openDiff('old.txt', 'new.txt', editor)).rejects.toThrow(
           'spawn error',
@@ -387,7 +399,9 @@ describe('editor utils', () => {
             cb(1);
           }
         });
-        (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
+        (spawn as Mock<(...args: never[]) => unknown>).mockReturnValue({
+          on: mockSpawnOn,
+        });
 
         await expect(openDiff('old.txt', 'new.txt', editor)).rejects.toThrow(
           `${editor} exited with code 1`,
@@ -492,43 +506,57 @@ describe('editor utils', () => {
     });
 
     it('should return true for vscode when installed and not in sandbox mode', () => {
-      (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/code'));
+      (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        Buffer.from('/usr/bin/code'),
+      );
       expect(isEditorAvailable('vscode')).toBe(true);
     });
 
     it('should return false for vscode when not installed and not in sandbox mode', () => {
-      (execSync as Mock).mockImplementation(() => {
-        throw new Error();
-      });
+      (execSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+        () => {
+          throw new Error();
+        },
+      );
       expect(isEditorAvailable('vscode')).toBe(false);
     });
 
     it('should return false for vscode when installed and in sandbox mode', () => {
-      (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/code'));
+      (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        Buffer.from('/usr/bin/code'),
+      );
       setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('vscode')).toBe(false);
     });
 
     it('should return true for vim when installed and in sandbox mode', () => {
-      (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/vim'));
+      (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        Buffer.from('/usr/bin/vim'),
+      );
       setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('vim')).toBe(true);
     });
 
     it('should return true for emacs when installed and in sandbox mode', () => {
-      (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/emacs'));
+      (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        Buffer.from('/usr/bin/emacs'),
+      );
       setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('emacs')).toBe(true);
     });
 
     it('should return true for hx when installed and in sandbox mode', () => {
-      (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/hx'));
+      (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        Buffer.from('/usr/bin/hx'),
+      );
       setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('hx')).toBe(true);
     });
 
     it('should return true for neovim when installed and in sandbox mode', () => {
-      (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/nvim'));
+      (execSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        Buffer.from('/usr/bin/nvim'),
+      );
       setEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('neovim')).toBe(true);
     });

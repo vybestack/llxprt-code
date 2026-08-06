@@ -42,7 +42,6 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
   type Mock,
 } from 'bun:test';
 import * as fs from 'fs'; // fs will be mocked separately
@@ -117,9 +116,9 @@ vi.mock('strip-json-comments', () => ({
 }));
 
 describe('Settings Loading and Merging', () => {
-  let mockFsExistsSync: Mocked<typeof fs.existsSync>;
-  let mockStripJsonComments: Mocked<typeof stripJsonComments>;
-  let mockFsMkdirSync: Mocked<typeof fs.mkdirSync>;
+  let mockFsExistsSync: Mock<typeof fs.existsSync>;
+  let mockStripJsonComments: Mock<typeof stripJsonComments>;
+  let mockFsMkdirSync: Mock<typeof fs.mkdirSync>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -136,11 +135,13 @@ describe('Settings Loading and Merging', () => {
     (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
       '/mock/home/user',
     );
-    (mockStripJsonComments as unknown as Mock).mockImplementation(
-      (jsonString: string) => jsonString,
+    (
+      mockStripJsonComments as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((jsonString: string) => jsonString);
+    (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      false,
     );
-    (mockFsExistsSync as Mock).mockReturnValue(false);
-    (fs.readFileSync as Mock).mockImplementation(
+    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
       (p: fs.PathOrFileDescriptor) => {
         // Handle system paths specifically
         if (
@@ -154,7 +155,7 @@ describe('Settings Loading and Merging', () => {
         return '{}';
       },
     );
-    (mockFsMkdirSync as Mock).mockImplementation(
+    (mockFsMkdirSync as Mock<(...args: never[]) => unknown>).mockImplementation(
       (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
         if (!dir || typeof dir !== 'string') {
@@ -180,7 +181,9 @@ describe('Settings Loading and Merging', () => {
 
   describe('Settings validation and error handling improvements', () => {
     it('should validate directory creation during setValue operations', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
@@ -199,11 +202,15 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle file system errors gracefully during directory creation', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       // Mock mkdirSync to throw an error
-      (mockFsMkdirSync as Mock).mockImplementation(() => {
+      (
+        mockFsMkdirSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(() => {
         throw new Error('Permission denied');
       });
 
@@ -218,7 +225,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should properly validate JSON structure in settings files', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const complexSettingsContent = {
         theme: 'dark',
         mcpServers: {
@@ -241,13 +250,13 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(complexSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(complexSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       const arbitrary = dynamicSettings(settings);
@@ -262,17 +271,19 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle malformed JSON with detailed error information', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const malformedJson = '{ "theme": "dark", "mcpServers": { "test": } }'; // Missing value
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH) {
-            return malformedJson;
-          }
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH) {
+          return malformedJson;
+        }
+        return '{}';
+      });
 
       // Mock JSON.parse to throw a detailed error only for the malformed JSON
       const parseError = new SyntaxError(
@@ -324,16 +335,16 @@ describe('Settings Loading and Merging', () => {
       process.env['USER'] = 'testuser';
       process.env['HOST'] = 'testhost';
 
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const arbitrary = dynamicSettings(loadSettings(MOCK_WORKSPACE_DIR));
 
@@ -360,7 +371,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should properly merge arrays without overwriting in includeDirectories', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemDefaultsContent = {
         includeDirectories: [
           '/system/defaults/common',
@@ -377,19 +390,19 @@ describe('Settings Loading and Merging', () => {
         includeDirectories: ['/workspace/src', '/workspace/tests'],
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === getSystemDefaultsPath())
-            return JSON.stringify(systemDefaultsContent);
-          if (p === getSystemSettingsPath())
-            return JSON.stringify(systemSettingsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === getSystemDefaultsPath())
+          return JSON.stringify(systemDefaultsContent);
+        if (p === getSystemSettingsPath())
+          return JSON.stringify(systemSettingsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -413,7 +426,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should validate setValue operations with complex nested objects', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
@@ -456,7 +471,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle concurrent setValue operations correctly', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       let writeCallCount = 0;
@@ -505,7 +522,9 @@ describe('Settings Loading and Merging', () => {
       (
         isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>
       ).mockReturnValue(folderTrustEnabledValue);
-      (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) =>
         [USER_SETTINGS_PATH, llxprtEnvPath].includes(p.toString()),
       );
       const userSettingsContent = {
@@ -514,14 +533,14 @@ describe('Settings Loading and Merging', () => {
         folderTrust: folderTrustEnabledValue,
         contextFileName: 'USER_CONTEXT.md',
       };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === llxprtEnvPath) return 'TESTTEST=1234';
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === llxprtEnvPath) return 'TESTTEST=1234';
+        return '{}';
+      });
     }
 
     it('sets environment variables from .env files', () => {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock, MockInstance } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { createTransport } from '@vybestack/llxprt-code-mcp';
@@ -48,23 +48,27 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js');
 const mockedExtensionStorage = ExtensionStorage as unknown as {
   getUserExtensionsDir: ReturnType<typeof vi.fn>;
 };
-const mockedLoadSettings = loadSettings as Mock;
-const mockedLoadExtensions = loadExtensions as Mock;
-const mockedCreateTransport = createTransport as Mock;
-const MockedClient = Client as Mock;
+const mockedLoadSettings = loadSettings as Mock<(...args: never[]) => unknown>;
+const mockedLoadExtensions = loadExtensions as Mock<
+  (...args: never[]) => unknown
+>;
+const mockedCreateTransport = createTransport as Mock<
+  (...args: never[]) => unknown
+>;
+const MockedClient = Client as Mock<(...args: never[]) => unknown>;
 
 interface MockClient {
-  connect: Mock;
-  ping: Mock;
-  close: Mock;
+  connect: Mock<(...args: never[]) => unknown>;
+  ping: Mock<(...args: never[]) => unknown>;
+  close: Mock<(...args: never[]) => unknown>;
 }
 
 interface MockTransport {
-  close: Mock;
+  close: Mock<(...args: never[]) => unknown>;
 }
 
 describe('mcp list command', () => {
-  let consoleSpy: MockInstance;
+  let consoleSpy: Mock<(...args: never[]) => unknown>;
   let mockClient: MockClient;
   let mockTransport: MockTransport;
 

@@ -161,11 +161,11 @@ describe('useAgentStream subagent isolation', () => {
   let mockConfig: Config;
   let mockOverrides: StreamRuntimeTestOverrides;
   let mockSettings: LoadedSettings;
-  let mockAddItem: Mock;
-  let mockOnDebugMessage: Mock;
-  let mockHandleSlashCommand: Mock;
-  let mockScheduleToolCalls: Mock;
-  let mockMarkToolsAsDisplayCleared: Mock;
+  let mockAddItem: Mock<(...args: never[]) => unknown>;
+  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
+  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
+  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -335,7 +335,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock description`,
+        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'task',
@@ -386,7 +386,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock description`,
+        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'task',
@@ -457,7 +457,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock description`,
+        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'task',
@@ -575,7 +575,7 @@ describe('useAgentStream subagent isolation', () => {
         errorType: undefined,
       },
       invocation: {
-        getDescription: () => `Mock description`,
+        getDescription: () => `Mock<(...args: never[]) => unknown> description`,
       } as unknown as AnyToolInvocation,
       tool: {
         name: 'list_directory',

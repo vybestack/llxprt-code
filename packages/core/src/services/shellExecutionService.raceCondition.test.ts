@@ -64,9 +64,9 @@ vi.spyOn(process, 'kill').mockImplementation(() => true);
 describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
 
@@ -84,9 +84,9 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
 
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();

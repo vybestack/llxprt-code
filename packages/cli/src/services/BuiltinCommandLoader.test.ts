@@ -122,7 +122,9 @@ vi.mock('../utils/installationInfo.js', async () => {
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;
 
-  const restoreCommandMock = restoreCommand as Mock;
+  const restoreCommandMock = restoreCommand as Mock<
+    (...args: never[]) => unknown
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks();

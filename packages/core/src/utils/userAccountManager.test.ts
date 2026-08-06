@@ -30,7 +30,9 @@ describe('UserAccountManager', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
-    (os.homedir as Mock).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      tempHomeDir,
+    );
     accountsFile = () =>
       path.join(tempHomeDir, '.llxprt', 'provider_accounts.json');
     vi.spyOn(Storage, 'getProviderAccountsPath').mockImplementation(() =>

@@ -17,9 +17,9 @@ vi.mock('../utils/commandUtils.js', () => ({
 
 describe('copyCommand', () => {
   let mockContext: CommandContext;
-  let mockCopyToClipboard: Mock;
-  let mockGetChat: Mock;
-  let mockGetHistory: Mock;
+  let mockCopyToClipboard: Mock<(...args: never[]) => unknown>;
+  let mockGetChat: Mock<(...args: never[]) => unknown>;
+  let mockGetHistory: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MockInstance } from 'bun:test';
+import type { Mock } from 'bun:test';
 import {
   vi,
   describe,
@@ -32,7 +32,7 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 describe('ideCommand', () => {
   let mockContext: CommandContext;
   let mockConfig: Config;
-  let platformSpy: MockInstance;
+  let platformSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     mockContext = {

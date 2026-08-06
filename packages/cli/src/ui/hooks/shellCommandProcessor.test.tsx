@@ -71,11 +71,11 @@ import type { HistoryItemWithoutId } from '../types.js';
 import { testRegex } from '../../test-utils/regex.js';
 
 describe('useShellCommandProcessor', () => {
-  let addItemToHistoryMock: Mock;
-  let setPendingHistoryItemMock: Mock;
-  let onExecMock: Mock;
-  let onDebugMessageMock: Mock;
-  let setShellInputFocusedMock: Mock;
+  let addItemToHistoryMock: Mock<(...args: never[]) => unknown>;
+  let setPendingHistoryItemMock: Mock<(...args: never[]) => unknown>;
+  let onExecMock: Mock<(...args: never[]) => unknown>;
+  let onDebugMessageMock: Mock<(...args: never[]) => unknown>;
+  let setShellInputFocusedMock: Mock<(...args: never[]) => unknown>;
   let mockConfig: Config;
   let mockAgentClient: AgentClient;
 
@@ -123,7 +123,9 @@ describe('useShellCommandProcessor', () => {
     // os functions are already mocked in the vi.mock call above
     // No need to re-mock them here
     (
-      crypto.randomBytes as Mock<typeof crypto.randomBytes> as Mock
+      crypto.randomBytes as Mock<typeof crypto.randomBytes> as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockReturnValue(Buffer.from('abcdef', 'hex'));
     mockIsBinary.mockReturnValue(false);
     (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);

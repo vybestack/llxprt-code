@@ -187,7 +187,9 @@ describe('ShellProcessor', () => {
       disallowedCommands: ['rm -rf /'],
     });
     // Override the approval mode for this test
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+    (
+      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(ApprovalMode.YOLO);
     mockShellExecute.mockReturnValue({
       result: Promise.resolve({ ...SUCCESS_RESULT, output: 'deleted' }),
     });
@@ -216,7 +218,9 @@ describe('ShellProcessor', () => {
       blockReason: 'System commands are blocked',
     });
     // Set approval mode to YOLO
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+    (
+      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(ApprovalMode.YOLO);
 
     await expect(processor.process(prompt, context)).rejects.toThrow(
       /Blocked command: "reboot". Reason: System commands are blocked/,

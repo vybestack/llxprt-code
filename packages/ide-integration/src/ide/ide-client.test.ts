@@ -11,7 +11,6 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
   type Mock,
 } from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
@@ -43,8 +42,8 @@ vi.mock('./detect-ide.js');
 vi.mock('node:os');
 
 describe('IdeClient', () => {
-  let mockClient: Mocked<Client>;
-  let mockHttpTransport: Mocked<StreamableHTTPClientTransport>;
+  let mockClient: Client;
+  let mockHttpTransport: StreamableHTTPClientTransport;
 
   beforeEach(async () => {
     // Reset singleton instance for test isolation
@@ -92,10 +91,10 @@ describe('IdeClient', () => {
         }
       }),
       callTool: vi.fn(),
-    } as unknown as Mocked<Client>;
+    } as unknown as Client;
     mockHttpTransport = {
       close: vi.fn(),
-    } as unknown as Mocked<StreamableHTTPClientTransport>;
+    } as unknown as StreamableHTTPClientTransport;
 
     (Client as unknown as Mock<(...args: never[]) => unknown>).mockReturnValue(
       mockClient,

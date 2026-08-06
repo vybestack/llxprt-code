@@ -234,8 +234,8 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    (mockBuffer.setText as Mock).mockClear();
-    (mockBuffer.insert as Mock).mockClear();
+    (mockBuffer.setText as Mock<(...args: never[]) => unknown>).mockClear();
+    (mockBuffer.insert as Mock<(...args: never[]) => unknown>).mockClear();
 
     await sendKey({
       name: 'paste',
@@ -375,9 +375,9 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    (mockBuffer.setText as Mock).mockClear();
-    (mockBuffer.insert as Mock).mockClear();
-    (mockBuffer.handleInput as Mock).mockClear();
+    (mockBuffer.setText as Mock<(...args: never[]) => unknown>).mockClear();
+    (mockBuffer.insert as Mock<(...args: never[]) => unknown>).mockClear();
+    (mockBuffer.handleInput as Mock<(...args: never[]) => unknown>).mockClear();
 
     await sendKey({
       name: 'paste',
@@ -510,7 +510,9 @@ describe('InputPrompt paste functionality', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Clear any initial calls
-    (mockBuffer.replaceRangeByOffset as Mock).mockClear();
+    (
+      mockBuffer.replaceRangeByOffset as Mock<(...args: never[]) => unknown>
+    ).mockClear();
 
     // Verify useMouse was set up
     expect(mouseHandler).not.toBeNull();

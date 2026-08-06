@@ -42,7 +42,6 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
   type Mock,
 } from 'bun:test';
 import * as fs from 'fs'; // fs will be mocked separately
@@ -119,9 +118,9 @@ vi.mock('strip-json-comments', () => ({
 }));
 
 describe('Settings Loading and Merging', () => {
-  let mockFsExistsSync: Mocked<typeof fs.existsSync>;
-  let mockStripJsonComments: Mocked<typeof stripJsonComments>;
-  let mockFsMkdirSync: Mocked<typeof fs.mkdirSync>;
+  let mockFsExistsSync: Mock<typeof fs.existsSync>;
+  let mockStripJsonComments: Mock<typeof stripJsonComments>;
+  let mockFsMkdirSync: Mock<typeof fs.mkdirSync>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -138,11 +137,13 @@ describe('Settings Loading and Merging', () => {
     (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
       '/mock/home/user',
     );
-    (mockStripJsonComments as unknown as Mock).mockImplementation(
-      (jsonString: string) => jsonString,
+    (
+      mockStripJsonComments as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((jsonString: string) => jsonString);
+    (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      false,
     );
-    (mockFsExistsSync as Mock).mockReturnValue(false);
-    (fs.readFileSync as Mock).mockImplementation(
+    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
       (p: fs.PathOrFileDescriptor) => {
         // Handle system paths specifically
         if (
@@ -156,7 +157,7 @@ describe('Settings Loading and Merging', () => {
         return '{}';
       },
     );
-    (mockFsMkdirSync as Mock).mockImplementation(
+    (mockFsMkdirSync as Mock<(...args: never[]) => unknown>).mockImplementation(
       (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
         if (!dir || typeof dir !== 'string') {
@@ -182,19 +183,19 @@ describe('Settings Loading and Merging', () => {
 
   describe('loadSettings', () => {
     it('should handle chatCompression when only in user settings', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
       const userSettingsContent = {
         chatCompression: { contextPercentageThreshold: 0.5 },
       };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       expect(settings.merged.chatCompression).toStrictEqual({
@@ -203,14 +204,20 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should have chatCompression as an empty object if not in any settings file', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false); // No settings files exist
-      (fs.readFileSync as Mock).mockReturnValue('{}');
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      ); // No settings files exist
+      (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        '{}',
+      );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       expect(settings.merged.chatCompression).toStrictEqual({});
     });
 
     it('should deep merge chatCompression settings', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const userSettingsContent = {
         chatCompression: { contextPercentageThreshold: 0.5 },
       };
@@ -218,15 +225,15 @@ describe('Settings Loading and Merging', () => {
         chatCompression: {},
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -236,7 +243,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should map V2 model.compressionThreshold to chatCompression without changing model string selection', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const userSettingsContent = {
         model: {
           name: 'user-model',
@@ -247,15 +256,15 @@ describe('Settings Loading and Merging', () => {
         model: 'workspace-model',
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -270,7 +279,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should let higher-precedence model.compressionThreshold override legacy chatCompression', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const userSettingsContent = {
         chatCompression: { contextPercentageThreshold: 0.5 },
       };
@@ -281,15 +292,15 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -300,7 +311,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should preserve legacy chatCompression when lower-precedence model.compressionThreshold exists', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const userSettingsContent = {
         model: { compressionThreshold: 0.5 },
       };
@@ -308,15 +321,15 @@ describe('Settings Loading and Merging', () => {
         chatCompression: { contextPercentageThreshold: 0.8 },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -326,9 +339,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should preserve legacy chatCompression strategy and profile fields', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
       const userSettingsContent = {
         chatCompression: {
           contextPercentageThreshold: 0.5,
@@ -337,13 +350,13 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -360,7 +373,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should keep workspace and user model precedence over system model settings', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemSettingsContent = {
         model: 'system-model',
       };
@@ -374,19 +389,19 @@ describe('Settings Loading and Merging', () => {
         model: { name: 'workspace-model' },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_SYSTEM_SETTINGS_PATH)
-            return JSON.stringify(systemSettingsContent);
-          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
-            return JSON.stringify(systemDefaultsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === MOCK_SYSTEM_SETTINGS_PATH)
+          return JSON.stringify(systemSettingsContent);
+        if (p === MOCK_SYSTEM_DEFAULTS_PATH)
+          return JSON.stringify(systemDefaultsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -394,7 +409,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should keep user model precedence over system model settings when workspace model is absent', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemSettingsContent = {
         model: { name: 'system-model' },
       };
@@ -406,19 +423,19 @@ describe('Settings Loading and Merging', () => {
       };
       const workspaceSettingsContent = {};
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_SYSTEM_SETTINGS_PATH)
-            return JSON.stringify(systemSettingsContent);
-          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
-            return JSON.stringify(systemDefaultsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === MOCK_SYSTEM_SETTINGS_PATH)
+          return JSON.stringify(systemSettingsContent);
+        if (p === MOCK_SYSTEM_DEFAULTS_PATH)
+          return JSON.stringify(systemDefaultsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -426,7 +443,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should use system model precedence over systemDefaults when user and workspace are absent', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemSettingsContent = {
         model: 'system-model',
       };
@@ -436,19 +455,19 @@ describe('Settings Loading and Merging', () => {
       const userSettingsContent = {};
       const workspaceSettingsContent = {};
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_SYSTEM_SETTINGS_PATH)
-            return JSON.stringify(systemSettingsContent);
-          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
-            return JSON.stringify(systemDefaultsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === MOCK_SYSTEM_SETTINGS_PATH)
+          return JSON.stringify(systemSettingsContent);
+        if (p === MOCK_SYSTEM_DEFAULTS_PATH)
+          return JSON.stringify(systemDefaultsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -456,7 +475,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should use systemDefaults model when no higher precedence model exists', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemSettingsContent = {};
       const systemDefaultsContent = {
         model: 'system-default-model',
@@ -464,19 +485,19 @@ describe('Settings Loading and Merging', () => {
       const userSettingsContent = {};
       const workspaceSettingsContent = {};
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_SYSTEM_SETTINGS_PATH)
-            return JSON.stringify(systemSettingsContent);
-          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
-            return JSON.stringify(systemDefaultsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === MOCK_SYSTEM_SETTINGS_PATH)
+          return JSON.stringify(systemSettingsContent);
+        if (p === MOCK_SYSTEM_DEFAULTS_PATH)
+          return JSON.stringify(systemDefaultsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -484,9 +505,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should read V2 namespaced UI settings into their top-level compatibility sections', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
       const userSettingsContent = {
         ui: {
           accessibility: { screenReader: true },
@@ -495,13 +516,13 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -517,9 +538,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should prefer V2 namespaced values over legacy top-level values in the same settings layer', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
       const userSettingsContent = {
         accessibility: { screenReader: false },
         checkpointing: { enabled: false },
@@ -531,13 +552,13 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -547,7 +568,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should keep layer precedence when merging legacy top-level and V2 namespaced settings', () => {
-      (mockFsExistsSync as Mock).mockImplementation(
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         (p: fs.PathLike) =>
           p === USER_SETTINGS_PATH || p === MOCK_WORKSPACE_SETTINGS_PATH,
       );
@@ -564,15 +587,15 @@ describe('Settings Loading and Merging', () => {
         fileFiltering: { enableFuzzySearch: true },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -603,7 +626,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should merge includeDirectories from all scopes', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemSettingsContent = {
         includeDirectories: ['/system/dir'],
       };
@@ -617,19 +642,19 @@ describe('Settings Loading and Merging', () => {
         includeDirectories: ['/workspace/dir'],
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === getSystemSettingsPath())
-            return JSON.stringify(systemSettingsContent);
-          if (p === getSystemDefaultsPath())
-            return JSON.stringify(systemDefaultsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === getSystemSettingsPath())
+          return JSON.stringify(systemSettingsContent);
+        if (p === getSystemDefaultsPath())
+          return JSON.stringify(systemDefaultsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -643,7 +668,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle JSON parsing errors gracefully', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true); // Both files "exist"
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      ); // Both files "exist"
       const invalidJsonContent = 'invalid json';
       const userReadError = new SyntaxError(
         "Expected ',' or '}' after property value in JSON at position 10",
@@ -652,25 +679,25 @@ describe('Settings Loading and Merging', () => {
         'Unexpected token i in JSON at position 0',
       );
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH) {
-            // Simulate JSON.parse throwing for user settings
-            vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
-              throw userReadError;
-            });
-            return invalidJsonContent; // Content that would cause JSON.parse to throw
-          }
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH) {
-            // Simulate JSON.parse throwing for workspace settings
-            vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
-              throw workspaceReadError;
-            });
-            return invalidJsonContent;
-          }
-          return '{}'; // Default for other reads
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH) {
+          // Simulate JSON.parse throwing for user settings
+          vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+            throw userReadError;
+          });
+          return invalidJsonContent; // Content that would cause JSON.parse to throw
+        }
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH) {
+          // Simulate JSON.parse throwing for workspace settings
+          vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+            throw workspaceReadError;
+          });
+          return invalidJsonContent;
+        }
+        return '{}'; // Default for other reads
+      });
 
       // Errors now throw FatalConfigError instead of being collected
       expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
@@ -685,16 +712,16 @@ describe('Settings Loading and Merging', () => {
         apiKey: '$TEST_API_KEY',
         someUrl: 'https://test.com/${TEST_API_KEY}',
       };
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const arbitrary = dynamicSettings(loadSettings(MOCK_WORKSPACE_DIR));
       expect(arbitrary.user.settings.apiKey).toBe('user_api_key_from_env');
@@ -711,16 +738,18 @@ describe('Settings Loading and Merging', () => {
         endpoint: '${WORKSPACE_ENDPOINT}/api',
         nested: { value: '$WORKSPACE_ENDPOINT' },
       };
-      (mockFsExistsSync as Mock).mockImplementation(
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(
         (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
       );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       const arbitrary = dynamicSettings(settings);

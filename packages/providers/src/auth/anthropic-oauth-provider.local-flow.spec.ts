@@ -5,7 +5,6 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type MockInstance,
   type Mock,
 } from 'bun:test';
 
@@ -36,7 +35,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
   let provider: AnthropicOAuthProvider;
   let tokenStore: TokenStore;
   let deviceFlow: coreModule.AnthropicDeviceFlow;
-  let shouldLaunchBrowserSpy: MockInstance;
+  let shouldLaunchBrowserSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     openBrowserArgs.length = 0;

@@ -32,8 +32,6 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
-  type MockedFunction,
   type Mock,
 } from 'bun:test';
 import * as fs from 'fs';
@@ -78,13 +76,13 @@ vi.mock('strip-json-comments', () => ({
 }));
 
 describe('Trusted Folders Loading', () => {
-  let mockFsExistsSync: Mocked<typeof fs.existsSync>;
-  let mockStripJsonComments: Mocked<typeof stripJsonComments>;
-  let mockFsWriteFileSync: MockedFunction<typeof fs.writeFileSync>;
-  let mockFsChmodSync: MockedFunction<typeof fs.chmodSync>;
-  let mockFsStatSync: MockedFunction<typeof fs.statSync>;
-  let mockFsRenameSync: MockedFunction<typeof fs.renameSync>;
-  let mockFsUnlinkSync: MockedFunction<typeof fs.unlinkSync>;
+  let mockFsExistsSync: Mock<typeof fs.existsSync>;
+  let mockStripJsonComments: Mock<typeof stripJsonComments>;
+  let mockFsWriteFileSync: Mock<typeof fs.writeFileSync>;
+  let mockFsChmodSync: Mock<typeof fs.chmodSync>;
+  let mockFsStatSync: Mock<typeof fs.statSync>;
+  let mockFsRenameSync: Mock<typeof fs.renameSync>;
+  let mockFsUnlinkSync: Mock<typeof fs.unlinkSync>;
 
   beforeEach(() => {
     resetTrustedFoldersForTesting();
@@ -102,11 +100,15 @@ describe('Trusted Folders Loading', () => {
     (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
       '/mock/home/user',
     );
-    (mockStripJsonComments as unknown as Mock).mockImplementation(
-      (jsonString: string) => jsonString,
+    (
+      mockStripJsonComments as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((jsonString: string) => jsonString);
+    (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      false,
     );
-    (mockFsExistsSync as Mock).mockReturnValue(false);
-    (fs.readFileSync as Mock).mockReturnValue('{}');
+    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      '{}',
+    );
     (fs.realpathSync as Mock<typeof fs.realpathSync>).mockImplementation(
       (location) =>
         typeof location === 'string' ? location : location.toString(),
@@ -125,10 +127,12 @@ describe('Trusted Folders Loading', () => {
 
   describe('isPathTrusted', () => {
     function setup({ config = {} as Record<string, TrustLevel> } = {}) {
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p) => p === getTrustedFoldersPath(),
-      );
-      (fs.readFileSync as Mock).mockImplementation((p) => {
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p) => p === getTrustedFoldersPath());
+      (
+        fs.readFileSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p) => {
         if (p === getTrustedFoldersPath()) return JSON.stringify(config);
         return '{}';
       });
@@ -217,14 +221,18 @@ describe('Trusted Folders Loading', () => {
 
   it('should load user rules if only user file exists', () => {
     const userPath = getTrustedFoldersPath();
-    (mockFsExistsSync as Mock).mockImplementation((p) => p === userPath);
+    (
+      mockFsExistsSync as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p) => p === userPath);
     const userContent = {
       '/user/folder': TrustLevel.TRUST_FOLDER,
     };
-    (fs.readFileSync as Mock).mockImplementation((p) => {
-      if (p === userPath) return JSON.stringify(userContent);
-      return '{}';
-    });
+    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+      (p) => {
+        if (p === userPath) return JSON.stringify(userContent);
+        return '{}';
+      },
+    );
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([
@@ -235,11 +243,15 @@ describe('Trusted Folders Loading', () => {
 
   it('should handle JSON parsing errors gracefully', () => {
     const userPath = getTrustedFoldersPath();
-    (mockFsExistsSync as Mock).mockImplementation((p) => p === userPath);
-    (fs.readFileSync as Mock).mockImplementation((p) => {
-      if (p === userPath) return 'invalid json';
-      return '{}';
-    });
+    (
+      mockFsExistsSync as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p) => p === userPath);
+    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+      (p) => {
+        if (p === userPath) return 'invalid json';
+        return '{}';
+      },
+    );
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([]);
@@ -254,14 +266,18 @@ describe('Trusted Folders Loading', () => {
     const customPath = '/custom/path/to/trusted_folders.json';
     process.env['LLXPRT_CODE_TRUSTED_FOLDERS_PATH'] = customPath;
 
-    (mockFsExistsSync as Mock).mockImplementation((p) => p === customPath);
+    (
+      mockFsExistsSync as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p) => p === customPath);
     const userContent = {
       '/user/folder/from/env': TrustLevel.TRUST_FOLDER,
     };
-    (fs.readFileSync as Mock).mockImplementation((p) => {
-      if (p === customPath) return JSON.stringify(userContent);
-      return '{}';
-    });
+    (fs.readFileSync as Mock<(...args: never[]) => unknown>).mockImplementation(
+      (p) => {
+        if (p === customPath) return JSON.stringify(userContent);
+        return '{}';
+      },
+    );
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([

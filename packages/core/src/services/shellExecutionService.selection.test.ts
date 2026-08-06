@@ -394,9 +394,9 @@ describe('ShellExecutionService execution method selection', () => {
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
 
@@ -407,9 +407,9 @@ describe('ShellExecutionService execution method selection', () => {
     // Mock for pty
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
@@ -513,9 +513,9 @@ describe('ShellExecutionService environment sanitization wiring', () => {
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
 
@@ -535,9 +535,9 @@ describe('ShellExecutionService environment sanitization wiring', () => {
     // Mock for pty
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();

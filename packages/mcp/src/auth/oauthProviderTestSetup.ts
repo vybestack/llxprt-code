@@ -13,7 +13,7 @@ import {
   restoreGlobals,
 } from '../../../test-utils/src/global-test-helpers.js';
 import { vi, type Mock, afterEach } from 'bun:test';
-import type { MockInstance } from 'bun:test';
+import type { Mock } from 'bun:test';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
@@ -110,10 +110,10 @@ export const mockTokenResponse: OAuthTokenResponse = {
 };
 
 export type OAuthSpies = {
-  saveTokenSpy: MockInstance;
-  getCredentialsSpy: MockInstance;
-  deleteCredentialsSpy: MockInstance;
-  isTokenExpiredSpy: MockInstance;
+  saveTokenSpy: Mock<(...args: never[]) => unknown>;
+  getCredentialsSpy: Mock<(...args: never[]) => unknown>;
+  deleteCredentialsSpy: Mock<(...args: never[]) => unknown>;
+  isTokenExpiredSpy: Mock<(...args: never[]) => unknown>;
 };
 
 export function setupOAuthTestSpies(

@@ -75,7 +75,7 @@ describe('Kitty Sequence Parsing', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });

@@ -5,14 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type MockedFunction,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';
@@ -64,13 +57,11 @@ const testTodos: Todo[] = [
 ];
 
 describe('TodoPanel Responsive Behavior', () => {
-  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+  let mockUseTerminalSize: Mock<typeof useTerminalSize>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseTerminalSize = useTerminalSize as MockedFunction<
-      typeof useTerminalSize
-    >;
+    mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
     mockTodoContext.todos = testTodos;
   });
 

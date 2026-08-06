@@ -33,8 +33,8 @@ const mockLoadExtensionConfig: Mock<
 > = vi.fn();
 const mockPromptForSetting: Mock<typeof settingsModule.promptForSetting> =
   vi.fn();
-const mockConfirmOverwrite: Mock = vi.fn();
-const mockLoadSettings: Mock = vi.fn();
+const mockConfirmOverwrite: Mock<(...args: never[]) => unknown> = vi.fn();
+const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
 // Mock readline module to control confirmOverwrite
 vi.mock('node:readline', () => ({

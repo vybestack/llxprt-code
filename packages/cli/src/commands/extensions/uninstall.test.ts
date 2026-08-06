@@ -12,7 +12,6 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-  type MockInstance,
 } from 'bun:test';
 import { handleUninstall, uninstallCommand } from './uninstall.js';
 import yargs from 'yargs';
@@ -42,9 +41,9 @@ describe('extensions uninstall command', () => {
 });
 
 describe('handleUninstall', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processExitSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processExitSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

@@ -75,9 +75,9 @@ const shellExecutionConfig: ShellExecutionConfig = {
 describe('ShellExecutionService', () => {
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
 
@@ -95,10 +95,10 @@ describe('ShellExecutionService', () => {
 
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
-      write: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
+      write: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();

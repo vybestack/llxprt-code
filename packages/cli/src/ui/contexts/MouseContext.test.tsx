@@ -40,7 +40,7 @@ describe('MouseContext', () => {
 
   beforeEach(() => {
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: vi.fn(),
     });

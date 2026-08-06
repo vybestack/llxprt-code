@@ -169,9 +169,18 @@ describe('generateDynamicToolSettings', () => {
   describe('Dynamic tool settings generation', () => {
     it('should filter out non-core tools correctly', () => {
       // Test the actual generateDynamicToolSettings function
-      globalThis.console.log('Mock config:', mockConfig);
-      globalThis.console.log('Mock tool registry:', mockToolRegistry);
-      globalThis.console.log('Mock all tools:', mockAllTools);
+      globalThis.console.log(
+        'Mock<(...args: never[]) => unknown> config:',
+        mockConfig,
+      );
+      globalThis.console.log(
+        'Mock<(...args: never[]) => unknown> tool registry:',
+        mockToolRegistry,
+      );
+      globalThis.console.log(
+        'Mock<(...args: never[]) => unknown> all tools:',
+        mockAllTools,
+      );
 
       const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
       globalThis.console.log('Generated tool settings:', toolSettings);

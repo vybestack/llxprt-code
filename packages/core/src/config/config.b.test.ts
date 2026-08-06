@@ -106,7 +106,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       // Set fallback mode to true to ensure it gets reset
       config.setFallbackMode(true);
@@ -139,7 +141,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       // Mock the existing client with some history
       const mockExistingHistory = [
@@ -204,7 +208,9 @@ describe('Server Config (config.ts)', () => {
         model: 'gemini-pro',
         apiKey: 'test-key',
       };
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const carriedHistory: ContractContent[] = [
         { role: 'user', parts: [{ text: 'Remember the passphrase' }] },
@@ -258,7 +264,9 @@ describe('Server Config (config.ts)', () => {
         { role: 'user', parts: [{ text: 'This turn is still retrying' }] },
       ];
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const chatGetHistory = vi.fn().mockReturnValue(committedHistory);
       const mockHistoryService = { setTokenizerFactory: vi.fn() };
@@ -310,7 +318,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -351,7 +361,9 @@ describe('Server Config (config.ts)', () => {
         config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
       ).contentGeneratorConfig = mockContentConfig;
 
-      (createContentGeneratorConfig as Mock).mockReturnValue({
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue({
         ...mockContentConfig,
         vertexai: true,
       });
@@ -422,7 +434,9 @@ describe('Server Config (config.ts)', () => {
         config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
       ).contentGeneratorConfig = mockContentConfig;
 
-      (createContentGeneratorConfig as Mock).mockReturnValue({
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue({
         ...mockContentConfig,
         vertexai: false,
       });
@@ -488,7 +502,9 @@ describe('Server Config (config.ts)', () => {
         oauthManager: mockOAuthManager,
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -548,7 +564,9 @@ describe('Server Config (config.ts)', () => {
         oauthManager: mockOAuthManager,
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -586,7 +604,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const dispose = vi.fn();
       const mockExistingClient = {

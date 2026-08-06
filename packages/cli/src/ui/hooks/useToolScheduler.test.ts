@@ -430,12 +430,12 @@ const mockConfig = {
 
 const mockTool = new MockTool({
   name: 'mockTool',
-  displayName: 'Mock Tool',
+  displayName: 'Mock<(...args: never[]) => unknown> Tool',
   shouldConfirmExecute: vi.fn(),
 });
 const mockToolRequiresConfirmation = new MockTool({
   name: 'mockToolRequiresConfirmation',
-  displayName: 'Mock Tool Requires Confirmation',
+  displayName: 'Mock<(...args: never[]) => unknown> Tool Requires Confirmation',
   shouldConfirmExecute: vi.fn(),
 });
 
@@ -444,9 +444,9 @@ const mockToolRequiresConfirmation = new MockTool({
  * Used across multiple test suites to avoid sonarjs/no-identical-functions.
  */
 const renderScheduler = (
-  onComplete: Mock,
+  onComplete: Mock<(...args: never[]) => unknown>,
   mockConfig: Partial<Config>,
-  setPendingHistoryItem: Mock,
+  setPendingHistoryItem: Mock<(...args: never[]) => unknown>,
 ) =>
   renderHook(() =>
     useReactToolScheduler(
@@ -459,8 +459,8 @@ const renderScheduler = (
   );
 
 describe('useReactToolScheduler in YOLO Mode', () => {
-  let onComplete: Mock;
-  let setPendingHistoryItem: Mock;
+  let onComplete: Mock<(...args: never[]) => unknown>;
+  let setPendingHistoryItem: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     onComplete = vi.fn();
@@ -469,7 +469,9 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     mockToolRequiresConfirmation.executeFn.mockClear();
 
     // IMPORTANT: Enable YOLO mode for this test suite
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+    (
+      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(ApprovalMode.YOLO);
 
     vi.useFakeTimers();
   });

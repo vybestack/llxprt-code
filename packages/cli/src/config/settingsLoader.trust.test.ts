@@ -66,7 +66,9 @@ describe('settingsLoader workspace trust provenance', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     (
-      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock
+      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockImplementation((location: fs.PathLike): string => String(location));
     resetTrustedFoldersForTesting();
     process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
@@ -90,12 +92,18 @@ describe('settingsLoader workspace trust provenance', () => {
   });
 
   function exposeTrustRules(rules: Record<string, TrustLevel>): void {
-    (fs.existsSync as Mock<typeof fs.existsSync> as Mock).mockImplementation(
+    (
+      fs.existsSync as Mock<typeof fs.existsSync> as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockImplementation(
       (path: fs.PathLike) =>
         path === USER_SETTINGS_PATH || path === TRUSTED_FOLDERS_PATH,
     );
     (
-      fs.readFileSync as Mock<typeof fs.readFileSync> as Mock
+      fs.readFileSync as Mock<typeof fs.readFileSync> as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockImplementation((path: fs.PathOrFileDescriptor) => {
       if (path === USER_SETTINGS_PATH) {
         return JSON.stringify({
@@ -149,7 +157,9 @@ describe('settingsLoader workspace trust provenance', () => {
       [workspaceSymlink]: TrustLevel.TRUST_FOLDER,
     });
     (
-      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock
+      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockImplementation((location: fs.PathLike): string =>
       String(location) === path.resolve('/mock/home/user')
         ? String(location)
@@ -175,7 +185,9 @@ describe('settingsLoader workspace trust provenance', () => {
     const workspace = '/trusted/workspace';
     exposeTrustRules({ [workspace]: TrustLevel.TRUST_FOLDER });
     (
-      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock
+      fs.realpathSync as Mock<typeof fs.realpathSync> as Mock<
+        (...args: never[]) => unknown
+      >
     ).mockImplementation((location: fs.PathLike): string => {
       if (String(location) === path.resolve(workspace)) {
         throw new Error('canonical identity unavailable');

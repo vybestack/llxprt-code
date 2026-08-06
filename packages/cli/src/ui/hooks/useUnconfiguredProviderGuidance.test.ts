@@ -19,7 +19,7 @@ import { renderHook } from '../../test-utils/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
 
 describe('useUnconfiguredProviderGuidance', () => {
-  let addItem: Mock;
+  let addItem: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     addItem = vi.fn();

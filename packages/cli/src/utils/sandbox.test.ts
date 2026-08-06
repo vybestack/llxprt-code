@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
-import type { MockInstance } from 'bun:test';
+import type { Mock } from 'bun:test';
 import {
   buildSandboxEnvArgs,
   getPassthroughEnvVars,
@@ -355,7 +355,7 @@ describe('sandbox rebuild uses Bun + scripts/build_sandbox.ts', () => {
 describe('mountGitConfigFiles', () => {
   const hostHome = path.resolve('/Users/alice');
   const containerHome = '/home/node';
-  let existsSyncSpy: MockInstance<typeof fs.existsSync>;
+  let existsSyncSpy: Mock<typeof fs.existsSync>;
 
   beforeEach(() => {
     existsSyncSpy = vi.spyOn(fs, 'existsSync');

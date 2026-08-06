@@ -57,7 +57,9 @@ describe('InstallationManager', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
-    (os.homedir as Mock).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      tempHomeDir,
+    );
     vi.spyOn(Storage, 'getInstallationIdPath').mockImplementation(() =>
       installationIdFile(),
     );
@@ -72,7 +74,9 @@ describe('InstallationManager', () => {
   describe('getInstallationId', () => {
     it('should create and write a new installation ID if one does not exist', () => {
       const newId = 'new-uuid-123';
-      (randomUUID as Mock).mockReturnValue(newId);
+      (randomUUID as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        newId,
+      );
 
       const installationId = installationManager.getInstallationId();
 

@@ -47,7 +47,9 @@ vi.mock('./useReactToolScheduler.js', () => {
     useReactToolScheduler: vi.fn(),
   };
 });
-const mockUseReactToolScheduler = useReactToolScheduler as Mock;
+const mockUseReactToolScheduler = useReactToolScheduler as Mock<
+  (...args: never[]) => unknown
+>;
 
 vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
@@ -114,13 +116,13 @@ vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock;
+  let mockAddItem: Mock<(...args: never[]) => unknown>;
   let mockConfig: Config;
-  let mockOnDebugMessage: Mock;
-  let mockHandleSlashCommand: Mock;
-  let mockScheduleToolCalls: Mock;
-  let mockCancelAllToolCalls: Mock;
-  let mockMarkToolsAsDisplayCleared: Mock;
+  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
+  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
+  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockCancelAllToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test

@@ -15,7 +15,7 @@ import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import type { MockInstance } from 'bun:test';
+import type { Mock } from 'bun:test';
 
 type ParsedStreamEvent = {
   type: string;
@@ -69,8 +69,8 @@ function createMockConfig(overrides?: {
 }
 
 describe('processAgentStream — quiet mode', () => {
-  let processStdoutSpy: MockInstance<typeof process.stdout.write>;
-  let processStderrSpy: MockInstance<typeof process.stderr.write>;
+  let processStdoutSpy: Mock<typeof process.stdout.write>;
+  let processStderrSpy: Mock<typeof process.stderr.write>;
 
   beforeEach(() => {
     processStdoutSpy = vi

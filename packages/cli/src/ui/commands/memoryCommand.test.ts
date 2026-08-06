@@ -50,7 +50,9 @@ vi.mock('../../config/environmentLoader.js', () => {
   };
 });
 
-const mockLoadHierarchicalLlxprtMemory = loadHierarchicalLlxprtMemory as Mock;
+const mockLoadHierarchicalLlxprtMemory = loadHierarchicalLlxprtMemory as Mock<
+  (...args: never[]) => unknown
+>;
 
 describe('memoryCommand', () => {
   let mockContext: CommandContext;
@@ -67,8 +69,8 @@ describe('memoryCommand', () => {
 
   describe('/memory show', () => {
     let showCommand: SlashCommand;
-    let mockGetUserMemory: Mock;
-    let mockGetLlxprtMdFileCount: Mock;
+    let mockGetUserMemory: Mock<(...args: never[]) => unknown>;
+    let mockGetLlxprtMdFileCount: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
       showCommand = getSubCommand('show');
@@ -335,9 +337,9 @@ describe('memoryCommand', () => {
 
   describe('/memory refresh', () => {
     let refreshCommand: SlashCommand;
-    let mockSetUserMemory: Mock;
-    let mockSetLlxprtMdFileCount: Mock;
-    let mockSetLlxprtMdFilePaths: Mock;
+    let mockSetUserMemory: Mock<(...args: never[]) => unknown>;
+    let mockSetLlxprtMdFileCount: Mock<(...args: never[]) => unknown>;
+    let mockSetLlxprtMdFilePaths: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
       refreshCommand = getSubCommand('refresh');
@@ -537,7 +539,7 @@ describe('memoryCommand', () => {
 
   describe('/memory list', () => {
     let listCommand: SlashCommand;
-    let mockGetLlxprtMdFilePaths: Mock;
+    let mockGetLlxprtMdFilePaths: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
       listCommand = getSubCommand('list');

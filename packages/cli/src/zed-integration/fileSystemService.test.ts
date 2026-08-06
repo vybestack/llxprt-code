@@ -4,14 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mocked } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { AcpFileSystemService } from './fileSystemService.js';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { FileSystemService } from '@vybestack/llxprt-code-storage';
 
+/**
+ * Bun ships no deep-mock type, so the members each suite actually drives are
+ * named explicitly and given Bun's Mock signature.
+ */
+type MockedMembers<T, K extends keyof T> = {
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+};
+
+type MockedConnection = MockedMembers<
+  acp.AgentSideConnection,
+  'requestPermission' | 'sessionUpdate' | 'writeTextFile' | 'readTextFile'
+>;
+type MockedFallback = MockedMembers<
+  FileSystemService,
+  'readTextFile' | 'writeTextFile'
+>;
+
 describe('AcpFileSystemService', () => {
-  let mockConnection: Mocked<acp.AgentSideConnection>;
-  let mockFallback: Mocked<FileSystemService>;
+  let mockConnection: MockedConnection;
+  let mockFallback: MockedFallback;
   let service: AcpFileSystemService;
 
   beforeEach(() => {
@@ -20,7 +37,7 @@ describe('AcpFileSystemService', () => {
       sessionUpdate: vi.fn(),
       writeTextFile: vi.fn(),
       readTextFile: vi.fn(),
-    } as unknown as Mocked<acp.AgentSideConnection>;
+    } as unknown as MockedConnection;
     mockFallback = {
       readTextFile: vi.fn(),
       writeTextFile: vi.fn(),

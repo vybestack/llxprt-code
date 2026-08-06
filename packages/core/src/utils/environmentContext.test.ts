@@ -39,7 +39,7 @@ describe('getDirectoryContextString', () => {
       getEnvironmentMemory: vi.fn().mockReturnValue(''),
     };
     (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
-      'Mock Folder Structure',
+      'Mock<(...args: never[]) => unknown> Folder Structure',
     );
   });
 
@@ -63,7 +63,7 @@ describe('getDirectoryContextString', () => {
         mockConfig.getWorkspaceContext! as Mock<
           typeof mockConfig.getWorkspaceContext
         >
-      )().getDirectories as Mock
+      )().getDirectories as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(['/test/dir1', '/test/dir2']);
     (getFolderStructure as Mock<typeof getFolderStructure>)
       .mockResolvedValueOnce('Structure 1')
@@ -81,7 +81,7 @@ describe('getDirectoryContextString', () => {
 
 describe('getEnvironmentContext', () => {
   let mockConfig: Partial<Config>;
-  let mockToolRegistry: { getTool: Mock };
+  let mockToolRegistry: { getTool: Mock<(...args: never[]) => unknown> };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -101,7 +101,7 @@ describe('getEnvironmentContext', () => {
     };
 
     (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
-      'Mock Folder Structure',
+      'Mock<(...args: never[]) => unknown> Folder Structure',
     );
   });
 
@@ -136,7 +136,7 @@ describe('getEnvironmentContext', () => {
         mockConfig.getWorkspaceContext! as Mock<
           typeof mockConfig.getWorkspaceContext
         >
-      )().getDirectories as Mock
+      )().getDirectories as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(['/test/dir1', '/test/dir2']);
     (getFolderStructure as Mock<typeof getFolderStructure>)
       .mockResolvedValueOnce('Structure 1')

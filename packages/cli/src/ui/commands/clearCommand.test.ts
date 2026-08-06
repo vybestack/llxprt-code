@@ -78,16 +78,21 @@ describe('clearCommand', () => {
     expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
 
     // Check the order of operations.
-    const setDebugMessageOrder = (mockContext.ui.setDebugMessage as Mock).mock
-      .invocationCallOrder[0];
-    const resetChatOrder = mockResetChat.mock.invocationCallOrder[0];
-    const resetTelemetryOrder = (uiTelemetryService.reset as Mock).mock
-      .invocationCallOrder[0];
-    const updateHistoryTokenCountOrder = (
-      mockContext.ui.updateHistoryTokenCount as Mock
+    const setDebugMessageOrder = (
+      mockContext.ui.setDebugMessage as Mock<(...args: never[]) => unknown>
     ).mock.invocationCallOrder[0];
-    const clearOrder = (mockContext.ui.clear as Mock).mock
-      .invocationCallOrder[0];
+    const resetChatOrder = mockResetChat.mock.invocationCallOrder[0];
+    const resetTelemetryOrder = (
+      uiTelemetryService.reset as Mock<(...args: never[]) => unknown>
+    ).mock.invocationCallOrder[0];
+    const updateHistoryTokenCountOrder = (
+      mockContext.ui.updateHistoryTokenCount as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mock.invocationCallOrder[0];
+    const clearOrder = (
+      mockContext.ui.clear as Mock<(...args: never[]) => unknown>
+    ).mock.invocationCallOrder[0];
 
     expect(setDebugMessageOrder).toBeLessThan(resetChatOrder);
     expect(resetChatOrder).toBeLessThan(resetTelemetryOrder);
@@ -140,14 +145,16 @@ describe('clearCommand', () => {
     );
 
     // Assert: triggerSessionEndHook called BEFORE resetChat
-    const endHookOrder = (triggerSessionEndHook as Mock).mock
-      .invocationCallOrder[0];
+    const endHookOrder = (
+      triggerSessionEndHook as Mock<(...args: never[]) => unknown>
+    ).mock.invocationCallOrder[0];
     const resetChatOrder = mockResetChat.mock.invocationCallOrder[0];
     expect(endHookOrder).toBeLessThan(resetChatOrder);
 
     // Assert: triggerSessionStartHook called AFTER resetChat
-    const startHookOrder = (triggerSessionStartHook as Mock).mock
-      .invocationCallOrder[0];
+    const startHookOrder = (
+      triggerSessionStartHook as Mock<(...args: never[]) => unknown>
+    ).mock.invocationCallOrder[0];
     expect(resetChatOrder).toBeLessThan(startHookOrder);
   });
 

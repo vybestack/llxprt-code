@@ -27,7 +27,7 @@ vi.mock('mime-types', () => ({
   lookup: vi.fn(),
 }));
 
-const mockMimeLookup = mime.lookup as Mock;
+const mockMimeLookup = mime.lookup as Mock<(...args: never[]) => unknown>;
 
 describe('fileUtils.detectFileType', () => {
   let tempRootDir: string;

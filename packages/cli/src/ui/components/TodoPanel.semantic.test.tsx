@@ -12,7 +12,7 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type MockedFunction,
+  type Mock,
 } from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
@@ -50,13 +50,11 @@ const mockToolCallContext = {
 
 describe('TodoPanel Semantic Colors', () => {
   let originalTheme: string;
-  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+  let mockUseTerminalSize: Mock<typeof useTerminalSize>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseTerminalSize = useTerminalSize as MockedFunction<
-      typeof useTerminalSize
-    >;
+    mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
     // Set wide width to ensure full task details are shown
     mockUseTerminalSize.mockReturnValue({ columns: 150, rows: 20 });
     originalTheme = themeManager.getActiveTheme().name;

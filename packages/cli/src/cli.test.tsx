@@ -122,7 +122,7 @@ vi.mock('./utils/events.js', () => {
 
 vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
-  start_sandbox: vi.fn(() => Promise.resolve(0)), // Mock as an async function that resolves
+  start_sandbox: vi.fn(() => Promise.resolve(0)), // Mock<(...args: never[]) => unknown> as an async function that resolves
 }));
 
 // Mock bootstrap utilities for deferred init tests

@@ -78,7 +78,7 @@ describe('KeypressContext - Kitty Protocol', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });
@@ -572,7 +572,7 @@ describe('Drag and Drop Handling', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });

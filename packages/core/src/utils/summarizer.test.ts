@@ -30,7 +30,7 @@ describe('summarizers', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    (debugLogger.error as Mock).mockRestore();
+    (debugLogger.error as Mock<(...args: never[]) => unknown>).mockRestore();
   });
 
   describe('summarizeToolOutput', () => {
@@ -67,7 +67,9 @@ describe('summarizers', () => {
           blocks: [{ type: 'text', text: summary }],
         },
       };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(mockOutput);
 
       const result = await summarizeToolOutput(
         longText,
@@ -83,7 +85,9 @@ describe('summarizers', () => {
     it('should return original text if generateContent throws an error', async () => {
       const longText = 'This is a very long text.'.repeat(200);
       const error = new Error('API Error');
-      (mockAgentClient.generateContent as Mock).mockRejectedValue(error);
+      (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(error);
 
       const result = await summarizeToolOutput(
         longText,
@@ -109,7 +113,9 @@ describe('summarizers', () => {
           blocks: [{ type: 'text', text: summary }],
         },
       };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(mockOutput);
 
       await summarizeToolOutput(longText, mockAgentClient, abortSignal, 1000);
 
@@ -126,8 +132,9 @@ Text to summarize:
 
 Return the summary string which should first contain an overall summarization of text followed by the full stack trace of errors and warnings in the tool output.
 `;
-      const calledWith = (mockAgentClient.generateContent as Mock).mock
-        .calls[0];
+      const calledWith = (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const contents = calledWith[0];
       expect(contents[0].blocks[0].text).toBe(expectedPrompt);
     });
@@ -146,7 +153,9 @@ Return the summary string which should first contain an overall summarization of
           blocks: [{ type: 'text', text: summary }],
         },
       };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(mockOutput);
 
       const result = await llmSummarizer(
         toolResult,
@@ -171,7 +180,9 @@ Return the summary string which should first contain an overall summarization of
           blocks: [{ type: 'text', text: summary }],
         },
       };
-      (mockAgentClient.generateContent as Mock).mockResolvedValue(mockOutput);
+      (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mockResolvedValue(mockOutput);
 
       const result = await llmSummarizer(
         toolResult,
@@ -180,8 +191,9 @@ Return the summary string which should first contain an overall summarization of
       );
 
       expect(mockAgentClient.generateContent).toHaveBeenCalledTimes(1);
-      const calledWith = (mockAgentClient.generateContent as Mock).mock
-        .calls[0];
+      const calledWith = (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
       const contents = calledWith[0];
       expect(contents[0].blocks[0].text).toContain(`"${longText}"`);
       expect(result).toBe(summary);

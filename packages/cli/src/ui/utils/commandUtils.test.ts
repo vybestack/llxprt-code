@@ -92,10 +92,10 @@ const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
     off: EventEmitter.prototype.off,
     removeAllListeners: EventEmitter.prototype.removeAllListeners,
   }) as unknown as EventEmitter & {
-    write: Mock;
-    end: Mock;
+    write: Mock<(...args: never[]) => unknown>;
+    end: Mock<(...args: never[]) => unknown>;
     isTTY?: boolean;
-    removeAllListeners: Mock;
+    removeAllListeners: Mock<(...args: never[]) => unknown>;
   };
   return stream;
 };
@@ -116,8 +116,8 @@ const resetEnv = () => {
 
 interface MockChildProcess extends EventEmitter {
   stdin: EventEmitter & {
-    write: Mock;
-    end: Mock;
+    write: Mock<(...args: never[]) => unknown>;
+    end: Mock<(...args: never[]) => unknown>;
   };
   stderr: EventEmitter;
 }
@@ -125,9 +125,9 @@ interface MockChildProcess extends EventEmitter {
 describe('commandUtils', () => {
   afterAll(restoreRealStdio);
 
-  let mockSpawn: Mock;
+  let mockSpawn: Mock<(...args: never[]) => unknown>;
   let mockChild: MockChildProcess;
-  let mockClipboardyWrite: Mock;
+  let mockClipboardyWrite: Mock<(...args: never[]) => unknown>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -155,7 +155,9 @@ describe('commandUtils', () => {
     mockSpawn.mockReturnValue(mockChild as unknown as ChildProcess);
 
     // Setup clipboardy mock
-    mockClipboardyWrite = clipboardy.write as Mock;
+    mockClipboardyWrite = clipboardy.write as Mock<
+      (...args: never[]) => unknown
+    >;
 
     // default: /dev/tty creation succeeds and emits 'open'
     mockFs.createWriteStream.mockImplementation(() => {
@@ -474,8 +476,12 @@ describe('commandUtils', () => {
       await copyToClipboard('');
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
       // ensure no accidental writes to stdio either
-      const stderrStream = process.stderr as unknown as { write: Mock };
-      const stdoutStream = process.stdout as unknown as { write: Mock };
+      const stderrStream = process.stderr as unknown as {
+        write: Mock<(...args: never[]) => unknown>;
+      };
+      const stdoutStream = process.stdout as unknown as {
+        write: Mock<(...args: never[]) => unknown>;
+      };
       expect(stderrStream.write).not.toHaveBeenCalled();
       expect(stdoutStream.write).not.toHaveBeenCalled();
     });

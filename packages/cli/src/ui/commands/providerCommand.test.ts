@@ -28,7 +28,7 @@ import type { Mock } from 'bun:test';
  * CommandContext boundary (see mockCommandContext.ts).
  */
 interface AgentDouble {
-  setProvider: Mock;
+  setProvider: Mock<(...args: never[]) => unknown>;
 }
 
 const mocks = (() => {

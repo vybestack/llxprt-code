@@ -11,7 +11,7 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type MockInstance,
+  type Mock,
 } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -203,8 +203,8 @@ describe('reportUnconfiguredProviderError: single emission', () => {
 });
 
 describe('guardUnconfiguredProvider: void return and exit behavior', () => {
-  let stderrSpy: MockInstance;
-  let exitSpy: MockInstance;
+  let stderrSpy: Mock<(...args: never[]) => unknown>;
+  let exitSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     stderrSpy = vi

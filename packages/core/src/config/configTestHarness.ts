@@ -321,8 +321,10 @@ export function createBaseParams(
  */
 export function resetAgentClientMock(): void {
   vi.clearAllMocks();
-  (AgentClient as unknown as Mock).mockReset();
-  (AgentClient as unknown as Mock).mockImplementation(() => ({
+  (AgentClient as unknown as Mock<(...args: never[]) => unknown>).mockReset();
+  (
+    AgentClient as unknown as Mock<(...args: never[]) => unknown>
+  ).mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     isInitialized: vi.fn().mockReturnValue(false),
     hasChatInitialized: vi.fn().mockReturnValue(false),

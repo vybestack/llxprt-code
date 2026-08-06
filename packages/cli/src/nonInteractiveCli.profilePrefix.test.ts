@@ -16,7 +16,7 @@
 import { type Config, StreamJsonFormatter } from '@vybestack/llxprt-code-core';
 import {
   vi,
-  type MockInstance,
+  type Mock,
   describe,
   it,
   expect,
@@ -32,7 +32,7 @@ function createMockConfig(): Config {
 }
 
 describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () => {
-  let processStdoutSpy: MockInstance;
+  let processStdoutSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     processStdoutSpy = vi

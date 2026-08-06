@@ -72,7 +72,7 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });

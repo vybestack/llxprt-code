@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, type MockInstance } from 'bun:test';
+import { vi, type Mock } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalInputError } from '@vybestack/llxprt-code-core';
 import {
@@ -47,8 +47,8 @@ vi.mock('@vybestack/llxprt-code-core', () => {
 
 describe('errors', () => {
   let mockConfig: Config;
-  let processExitSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
+  let processExitSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     // Reset mocks

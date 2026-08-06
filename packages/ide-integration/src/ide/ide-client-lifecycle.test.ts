@@ -11,7 +11,6 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
   type Mock,
 } from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
@@ -48,7 +47,7 @@ vi.mock('node:os');
  * verifying private method calls.
  */
 interface FakeClientController {
-  client: Mocked<Client>;
+  client: Client;
   contextHandler:
     | ((notification: { params: Record<string, unknown> }) => void)
     | undefined;
@@ -111,7 +110,7 @@ function createFakeClient(): FakeClientController {
       return (client as unknown as { _onclose: unknown })
         ._onclose as () => void;
     },
-  } as unknown as Mocked<Client>;
+  } as unknown as Client;
 
   return {
     client,
@@ -191,7 +190,7 @@ describe('IdeClient connection lifecycle isolation', () => {
         (...args: never[]) => unknown
       >
     ).mockReturnValue(
-      transportMock as unknown as Mocked<StreamableHTTPClientTransport>,
+      transportMock as unknown as StreamableHTTPClientTransport,
     );
 
     (

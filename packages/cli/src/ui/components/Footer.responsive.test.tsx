@@ -6,14 +6,7 @@
 
 import { render } from 'ink-testing-library';
 import type React from 'react';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type MockedFunction,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { testRegex } from '../../test-utils/regex.js';
@@ -34,9 +27,7 @@ vi.mock('node:v8', () => ({
   },
 }));
 
-const mockUseTerminalSize = useTerminalSize as MockedFunction<
-  typeof useTerminalSize
->;
+const mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
 
 function renderFooter(
   props: React.ComponentProps<typeof Footer>,

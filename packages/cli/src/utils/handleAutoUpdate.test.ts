@@ -90,7 +90,7 @@ const mockHomedir = os.homedir as Mock<typeof os.homedir>;
 const TEST_CONFIG_HOME = path.resolve('/tmp/llxprt-test-config-home');
 
 describe('handleAutoUpdate', () => {
-  let mockSpawn: Mock;
+  let mockSpawn: Mock<(...args: never[]) => unknown>;
   let mockUpdateInfo: UpdateObject;
   let mockSettings: LoadedSettings;
   let mockChildProcess: ChildProcess;
@@ -139,7 +139,7 @@ describe('handleAutoUpdate', () => {
     delete process.env['LLXPRT_DATA_HOME'];
     mockExistsSync.mockReturnValue(false);
     mockReaddirSync.mockReturnValue([]);
-    mockOpenSync.mockReturnValue(42); // Mock file descriptor
+    mockOpenSync.mockReturnValue(42); // Mock<(...args: never[]) => unknown> file descriptor
   });
 
   afterEach(() => {

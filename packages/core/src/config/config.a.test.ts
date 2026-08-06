@@ -178,7 +178,9 @@ describe('Server Config (config.ts)', () => {
 
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
+      (
+        GitService.prototype.initialize as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,
@@ -190,7 +192,9 @@ describe('Server Config (config.ts)', () => {
 
     it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
+      (
+        GitService.prototype.initialize as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,

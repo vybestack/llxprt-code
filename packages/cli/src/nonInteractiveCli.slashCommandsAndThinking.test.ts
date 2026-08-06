@@ -28,7 +28,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Mock, MockInstance } from 'bun:test';
+import type { Mock } from 'bun:test';
 import type { LoadedSettings } from './config/settings.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
@@ -127,9 +127,9 @@ function buildFakeAgent(): Agent {
 describe('runNonInteractive - slash commands and thinking output', () => {
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockShutdownTelemetry: Mock;
-  let mockIsTelemetrySdkInitialized: Mock;
-  let processStdoutSpy: MockInstance;
+  let mockShutdownTelemetry: Mock<(...args: never[]) => unknown>;
+  let mockIsTelemetrySdkInitialized: Mock<(...args: never[]) => unknown>;
+  let processStdoutSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(async () => {
     mockShutdownTelemetry = shutdownTelemetry as Mock<typeof shutdownTelemetry>;
