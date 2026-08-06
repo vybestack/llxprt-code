@@ -399,9 +399,13 @@ export function sanitizeHistoryForCompression(
         if (block.type === 'tool_response') {
           const tr = block;
           let text = `[Tool Result: ${tr.toolName}]`;
+          // A failed tool_response carries BOTH the terse top-level `error`
+          // marker AND the model-facing remedy in `result`. Render the two
+          // channels independently so compression keeps the #3037 remedy.
           if (tr.error) {
             text += `\nError: ${tr.error}`;
-          } else if (tr.result !== undefined) {
+          }
+          if (tr.result !== undefined) {
             try {
               const resultStr =
                 typeof tr.result === 'string'

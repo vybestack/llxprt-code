@@ -520,22 +520,14 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         statusCode: number | undefined;
         body: string;
       }>((resolve) => {
-        // The monitor forwards the upstream 200 status line before the
-        // mid-stream crash. Capture it the instant the response object is
-        // delivered so that a post-header connection reset — which can emit
-        // 'error' on both the response and the request — cannot overwrite the
-        // already-observed status with the sentinel 0.
-        let resolved = false;
+        // The upstream sends 200 headers and then destroys the socket
+        // mid-body, so the client-visible failure can surface either on the
+        // response stream or as a request-level 'error', depending on which
+        // event loop turn the reset lands in. Record the status line as soon
+        // as headers arrive so the request-level path reports the status the
+        // client genuinely observed instead of racing to 0.
         let observedStatus: number | undefined;
-        const settle = (value: {
-          statusCode: number | undefined;
-          body: string;
-        }) => {
-          if (!resolved) {
-            resolved = true;
-            resolve(value);
-          }
-        };
+        let observedChunks: Buffer[] = [];
         const proxyRequest = http.request(
           new URL(asString(resource.ready.proxy_url)),
           {
@@ -548,15 +540,16 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
           (response) => {
             observedStatus = response.statusCode;
             const chunks: Buffer[] = [];
+            observedChunks = chunks;
             response.on('data', (chunk) => chunks.push(chunk));
             response.on('end', () =>
-              settle({
+              resolve({
                 statusCode: observedStatus,
                 body: Buffer.concat(chunks).toString('utf8'),
               }),
             );
             response.on('error', () =>
-              settle({
+              resolve({
                 statusCode: observedStatus,
                 body: Buffer.concat(chunks).toString('utf8'),
               }),
@@ -567,12 +560,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         // been delivered; once the monitor has forwarded the 200 a subsequent
         // reset must not erase it.
         proxyRequest.once('error', () =>
-          settle({
+          resolve({
             statusCode: observedStatus ?? 0,
             body:
               observedStatus === undefined
                 ? 'connection error'
-                : 'connection reset after headers',
+                : Buffer.concat(observedChunks).toString('utf8'),
           }),
         );
         proxyRequest.end('{"test":true}');

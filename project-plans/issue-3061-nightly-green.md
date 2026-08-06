@@ -67,7 +67,7 @@ Chronic since 2026-08-01.
 | `packages/providers/src/auth/proxy/__tests__/e2e-credential-flow.test.ts` Scenario 7 | "throws connection error after proxy stops" times out at 30 s. Named-pipe teardown does not surface the connection error the way a Unix socket does. |
 | `packages/test-utils/src/process-run.test.ts:283` | Asserts `/ENOENT/`; Bun on Windows reports `Executable not found in $PATH: "..."`. |
 | `packages/test-utils/src/quota-guard-vitest-integration.test.ts` (2 tests) | Both tests spawn a real nested vitest run with `process.execPath`, which under this package's Bun-hosted suite is Bun. Vitest is a Node tool whose forks pool assumes a Node runtime; on Windows the nested run dies, so no sentinel is published and the second test's run exits 1 where 0 was expected. |
-| `packages/tools/src/__tests__/shell-timeout-bounds.test.ts:252` | Not present in the failing nightly — it arrived with #3050 after that run and was caught by dispatching the nightly on this branch. The test builds a `is_background: true` invocation unconditionally, but `ShellTool.validateToolParams` rejects background jobs on win32 outright (`BACKGROUND_WINDOWS_ERROR`), so `build()` throws before the clamp behaviour is ever exercised. |
+| `packages/tools/src/__tests__/shell-timeout-bounds.test.ts:252` | Not present in the failing nightly — it arrived with #3050 after that run and was caught by dispatching the nightly on this branch. The test built an `is_background: true` invocation unconditionally, but `ShellTool` rejected background jobs on win32 outright, so `build()` threw before the clamp behaviour was reached. **Superseded:** #3078 subsequently implemented Windows background jobs via `Start-Process` and removed that rejection, so the behaviour now exists on every platform and the test needs no gate at all. |
 
 ## 3. `macos_ci` — one racy test
 
@@ -153,3 +153,21 @@ not mistaken for one.
 - Dispatch the nightly workflow on the branch and iterate until every job is
   green. Platform-specific fixes cannot be proven locally on macOS; the
   dispatched nightly is the acceptance gate.
+
+## Rebase onto a moved main
+
+Two commits landed on `main` mid-flight that bear directly on this work:
+
+- **#3078** implemented Windows background shell jobs via `Start-Process` and
+  removed the `is_background` win32 rejection. The gate this branch had added to
+  the timeout-ceiling suite — and the complementary win32 assertion added from
+  review — were both correct against the old production code and wrong against
+  the new one. Both are gone; the clamp test now runs unguarded on every
+  platform, as it should.
+- **#3080** staged the CLI bundle's runtime assets. It merged cleanly with the
+  build-diagnostics work here.
+
+`main` also fixed the same OCR canary race independently. Its version records
+the bytes the client actually received rather than a fixed string, so the
+conflict was resolved in its favour; the 50 ms delay from this branch is kept
+because it is what makes the client reach the response callback at all.

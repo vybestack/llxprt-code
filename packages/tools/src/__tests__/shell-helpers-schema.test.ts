@@ -109,6 +109,27 @@ describe('ShellTool schema guidance on Windows', () => {
       /cmd\.exe \/c|start \/b/,
     );
   });
+
+  it('describes managed background jobs with Start-Process and taskkill guidance', () => {
+    const description = createShellTool().schema.description ?? '';
+
+    expect({
+      managedJob: description.includes('managed background job'),
+      checkAsyncTasks: description.includes('check_async_tasks'),
+      startProcess: description.includes('Start-Process'),
+      taskkill: description.includes('taskkill /T /F /PID'),
+    }).toStrictEqual({
+      managedJob: true,
+      checkAsyncTasks: true,
+      startProcess: true,
+      taskkill: true,
+    });
+  });
+
+  it('does not advertise POSIX kill -- -PGID in the Windows description', () => {
+    const description = createShellTool().schema.description ?? '';
+    expect(description).not.toContain('kill -- -PGID');
+  });
 });
 
 describe('Windows command preparation', () => {
@@ -183,6 +204,7 @@ describe('ShellTool schema is_background property', () => {
       'properties',
     );
     const isBackground = getObjectProperty(properties, 'is_background');
+    expect(isBackground).toBeDefined();
     expect(getObjectProperty(isBackground, 'type')).toBe('boolean');
     const description = getObjectProperty(isBackground, 'description');
     expect(typeof description).toBe('string');
@@ -195,14 +217,25 @@ describe('ShellTool schema is_background property', () => {
     ).toBe(true);
   });
 
-  it('does not expose is_background on Windows', () => {
+  it('exposes is_background on Windows with the managed job contract', () => {
     mockPlatform.mockReturnValue('win32');
 
     const properties = getObjectProperty(
       createShellTool().schema.parametersJsonSchema,
       'properties',
     );
-    expect(getObjectProperty(properties, 'is_background')).toBeUndefined();
+    const isBackground = getObjectProperty(properties, 'is_background');
+    expect(isBackground).toBeDefined();
+    expect(getObjectProperty(isBackground, 'type')).toBe('boolean');
+    const description = getObjectProperty(isBackground, 'description');
+    expect(typeof description).toBe('string');
+    expect(
+      typeof description === 'string' &&
+        description.includes('check_async_tasks'),
+    ).toBe(true);
+    expect(
+      typeof description === 'string' && description.includes('job id'),
+    ).toBe(true);
   });
 });
 

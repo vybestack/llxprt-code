@@ -233,64 +233,34 @@ describe('Issue #3031 — shell tool timeout ceiling semantics', () => {
     ).not.toThrow();
   });
 
-  // Gated to match the production guard: ShellTool.validateToolParams rejects
-  // `is_background: true` on win32 outright (shell.ts BACKGROUND_WINDOWS_ERROR),
-  // so a background job — and therefore the absence of a clamp notice on one —
-  // cannot exist there. Without the gate `build()` throws that validation error
-  // and the test fails for a reason unrelated to clamping.
-  it.skipIf(process.platform === 'win32')(
-    'does not report a clamp notice for a background job (no false claim)',
-    async () => {
-      const host = createFakeHost({
-        max: 0.1,
-        defaultSeconds: 60,
-        behavior: 'complete',
-      });
-      // Override launchBackgroundJob so background execution is exercised.
-      host.launchBackgroundJob = () => ({
-        id: 'job-1',
-        command: 'sleep 9999',
-        cwd: '/tmp',
-        state: 'running',
-        startedAt: Date.now(),
-        pid: 12345,
-      });
-      const tool = new ShellTool(host);
-      const invocation = tool.build({
-        command: 'sleep 9999',
-        is_background: true,
-        timeout_seconds: 9999,
-      });
-      const result = await invocation.execute(new AbortController().signal);
-      const content = String(result.llmContent);
-      // A clamp notice would be a false claim: no timeout is applied to
-      // background jobs (Finding 3).
-      expect(content).not.toContain('reduced to the configured ceiling');
-      expect(content).not.toContain('clamp');
-    },
-  );
-
-  // The complement of the gate above: win32 has no background jobs, and that
-  // rejection is the reason the clamp case cannot be exercised there. Asserting
-  // it keeps the platform covered rather than merely skipped.
-  it.skipIf(process.platform !== 'win32')(
-    'rejects a background job outright on Windows',
-    () => {
-      const host = createFakeHost({
-        max: 0.1,
-        defaultSeconds: 60,
-        behavior: 'complete',
-      });
-      const tool = new ShellTool(host);
-      expect(() =>
-        tool.build({
-          command: 'sleep 9999',
-          is_background: true,
-          timeout_seconds: 9999,
-        }),
-      ).toThrow(/is_background is not supported on Windows/);
-    },
-  );
+  it('does not report a clamp notice for a background job (no false claim)', async () => {
+    const host = createFakeHost({
+      max: 0.1,
+      defaultSeconds: 60,
+      behavior: 'complete',
+    });
+    // Override launchBackgroundJob so background execution is exercised.
+    host.launchBackgroundJob = () => ({
+      id: 'job-1',
+      command: 'sleep 9999',
+      cwd: '/tmp',
+      state: 'running',
+      startedAt: Date.now(),
+      pid: 12345,
+    });
+    const tool = new ShellTool(host);
+    const invocation = tool.build({
+      command: 'sleep 9999',
+      is_background: true,
+      timeout_seconds: 9999,
+    });
+    const result = await invocation.execute(new AbortController().signal);
+    const content = String(result.llmContent);
+    // A clamp notice would be a false claim: no timeout is applied to
+    // background jobs (Finding 3).
+    expect(content).not.toContain('reduced to the configured ceiling');
+    expect(content).not.toContain('clamp');
+  });
 
   it('survives summarization and token limiting (durable clamp notice, Finding 4)', async () => {
     const host = createFakeHost({
