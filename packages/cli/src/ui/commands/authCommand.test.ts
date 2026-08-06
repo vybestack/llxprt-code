@@ -13,9 +13,12 @@ import type { CommandContext } from './types.js';
 // imports discoverBrowserProfiles from the public core barrel
 // (@vybestack/llxprt-code-core), so the mock must target that specifier and
 // preserve all other core exports via importActual.
-vi.mock('@vybestack/llxprt-code-core', async (importActual) => {
-  const actual =
-    await importActual<typeof import('@vybestack/llxprt-code-core')>();
+
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return { ...actual, discoverBrowserProfiles: vi.fn() };
 });
 

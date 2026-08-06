@@ -38,12 +38,14 @@ import {
   hasFunctionResponse,
 } from './agenticLoop-test-helpers.js';
 
+const realLlxprtCodeToolsModule = {
+  ...(await import('@vybestack/llxprt-code-tools')),
+};
 const { modifyWithEditorMock } = {
   modifyWithEditorMock: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-tools', async (importActual) => {
-  const actual =
-    await importActual<typeof import('@vybestack/llxprt-code-tools')>();
+vi.mock('@vybestack/llxprt-code-tools', () => {
+  const actual = realLlxprtCodeToolsModule;
   return { ...actual, modifyWithEditor: modifyWithEditorMock };
 });
 

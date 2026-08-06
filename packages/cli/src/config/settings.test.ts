@@ -9,6 +9,8 @@
 // Mock 'os' first.
 import * as osActual from 'os';
 import * as pathActual from 'node:path'; // Import for type info for the mock factory
+
+const realSettingsModule = { ...(await import('./settings.js')) };
 const actualOs = { ...(await import('os')) };
 vi.mock('os', () => {
   return {
@@ -19,8 +21,8 @@ vi.mock('os', () => {
 });
 
 // Mock './settings.js' to ensure it uses the mocked 'os.homedir()' for its internal constants.
-vi.mock('./settings.js', async (importActual) => {
-  const originalModule = await importActual<typeof import('./settings.js')>();
+vi.mock('./settings.js', () => {
+  const originalModule = realSettingsModule;
   return {
     __esModule: true, // Ensure correct module shape
     ...originalModule, // Re-export all original members
