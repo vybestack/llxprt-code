@@ -107,6 +107,12 @@ export function getCompletionBudget(
   settingsService: { get: (key: string) => unknown } | undefined,
   contextLimit: number,
 ): number {
+  if (!Number.isFinite(contextLimit) || contextLimit <= 0) {
+    throw new RangeError(
+      `Context limit must be a positive finite number: got ${contextLimit}`,
+    );
+  }
+
   // Check global ephemeral setting for maxOutputTokens (set via /set maxOutputTokens)
   const liveMaxOutputTokens = settingsService?.get('maxOutputTokens');
   const liveBudget = asNumber(liveMaxOutputTokens);

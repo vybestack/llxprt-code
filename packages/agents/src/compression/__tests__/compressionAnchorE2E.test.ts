@@ -69,6 +69,11 @@ function extractHeadByAnchor(hs: HistoryService): string[] {
     const anchorIndex = curated.findIndex(
       (entry) => entry.metadata?.chronology?.seq === anchorSeq,
     );
+    if (anchorIndex < 0) {
+      throw new Error(
+        `Cache anchor ${anchorSeq} is absent from curated history`,
+      );
+    }
     headEnd = anchorIndex + 1;
   }
   return serializeForCache(curated.slice(0, headEnd));

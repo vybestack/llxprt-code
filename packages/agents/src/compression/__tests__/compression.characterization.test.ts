@@ -490,6 +490,12 @@ describe('P26: compressionBudgeting characterization', () => {
     ).toBe(32768);
   });
 
+  it('getCompletionBudget rejects a non-positive context limit', () => {
+    expect(() => getCompletionBudget({}, 'm', undefined, undefined, 0)).toThrow(
+      RangeError,
+    );
+  });
+
   it('getCompletionBudget rejects a live budget that consumes the context', () => {
     const settingsService = {
       get: (key: string) => (key === 'maxOutputTokens' ? 131_072 : undefined),
