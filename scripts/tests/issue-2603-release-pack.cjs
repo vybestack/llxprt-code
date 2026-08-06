@@ -33,7 +33,7 @@ const {
   cpSync,
   copyFileSync,
 } = require('node:fs');
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { npmInvocation } = require('../lib/npm-command.cjs');
 const {
@@ -288,12 +288,28 @@ function runBindReleaseDeps(workCopy) {
   }
 }
 
+/**
+ * The os-gated launcher packages (issue #2978) deliberately are NOT root npm
+ * workspaces: npm enforces a workspace's `os` field, so listing them would fail
+ * EBADPLATFORM on every platform. packages/cli depends on them as exact
+ * optionalDependencies. They must still be packed here, or npm cannot resolve
+ * them from the offline replica, silently skips the optional dep, and the
+ * install produces no `llxprt` bin at all.
+ */
+const CLI_LAUNCHER_PLATFORM_PACKAGE_DIRS = [
+  'packages/llxprt-cli-posix',
+  'packages/llxprt-cli-win32',
+];
+
 function collectInternalPackages(workCopy) {
   const rootPkg = JSON.parse(
     readFileSync(join(workCopy, 'package.json'), 'utf8'),
   );
   const internal = [];
-  for (const ws of rootPkg.workspaces) {
+  for (const ws of [
+    ...rootPkg.workspaces,
+    ...CLI_LAUNCHER_PLATFORM_PACKAGE_DIRS,
+  ]) {
     const pkgPath = join(workCopy, ws, 'package.json');
     if (!existsSync(pkgPath)) continue;
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -389,28 +405,31 @@ function assertReleaseTarballAssets(releaseTarball) {
 
 function packAllInternal(internalPkgs, workCopy, cacheDir) {
   const tarballMap = new Map();
-  for (const { name } of internalPkgs) {
+  for (const { name, path: pkgPath } of internalPkgs) {
+    // Pack by DIRECTORY, not `-w <name>`. The os-gated launcher packages
+    // (issue #2978) cannot be root workspaces, so `npm pack -w` fails them with
+    // "No workspaces found". Running npm pack inside the package directory
+    // works uniformly for workspace and non-workspace packages alike.
+    const pkgDir = dirname(pkgPath);
     const { command, args } = npmInvocation([
       'pack',
-      '-w',
-      name,
       '--pack-destination',
       cacheDir,
     ]);
     const packResult = spawnSync(command, args, {
-      cwd: workCopy,
+      cwd: pkgDir,
       encoding: 'utf8',
       timeout: 120_000,
       maxBuffer: 64 * 1024 * 1024,
     });
     if (packResult.error) {
       throw new Error(
-        `npm pack -w ${name} spawn failed: ${packResult.error.message}`,
+        `npm pack ${name} (in ${pkgDir}) spawn failed: ${packResult.error.message}`,
       );
     }
     if (packResult.status !== 0) {
       throw new Error(
-        `npm pack -w ${name} failed (exit ${packResult.status}, signal=${packResult.signal ?? 'none'}): ${packResult.stderr || packResult.stdout}`,
+        `npm pack ${name} (in ${pkgDir}) failed (exit ${packResult.status}, signal=${packResult.signal ?? 'none'}): ${packResult.stderr || packResult.stdout}`,
       );
     }
     const tarName = findTarballName(packResult.stdout, cacheDir);
