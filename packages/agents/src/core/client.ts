@@ -563,6 +563,7 @@ export class AgentClient implements AgentClientContract {
       if (historyService != null) {
         // Clear the history service directly
         historyService.clear();
+        historyService.resetCacheAnchorSeq();
       } else {
         // Fallback to chat's clearHistory if no history service
         this.chat.clearHistory();
@@ -638,6 +639,12 @@ export class AgentClient implements AgentClientContract {
         'Cannot restore history: History service unavailable after chat initialization',
       );
     }
+
+    // Reset the cache anchor: restoreHistory is a wholesale history replacement
+    // reachable from the public Agent.restoreHistory API with no preceding
+    // resetChat, so it was missed when the lifecycle was enumerated by clear()
+    // call sites (#3070 Defect 6).
+    historyService.resetCacheAnchorSeq();
 
     try {
       // Validate and fix any issues in the history service before adding items

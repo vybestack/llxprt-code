@@ -65,6 +65,30 @@ You can override any limit at runtime:
 /set modelparam max_tokens 4096
 ```
 
+> **Note:** `context-limit` must always exceed `max_tokens` / `maxOutputTokens`.
+> A configured `max_tokens >= context-limit` is rejected as an impossible
+> configuration. For models whose catalog context window is already 200,000,
+> setting `/set context-limit 200000` adds no headroom over the default — you
+> may want to leave the default or increase it only if the provider's actual
+> window is larger.
+
+## Compression and context budgeting
+
+The automatic compression trigger fires when `currentTokens >=
+compressionThreshold × (context-limit − completionBudget)`. This means:
+
+- **Lowering `context-limit` increases spend superlinearly.** Halving the limit
+  does not halve the trigger point — it cuts it much more steeply, because the
+  completion budget is subtracted from a smaller base. More compressions means
+  more paid LLM summarization calls **and** more prompt-cache prefix rewrites.
+- **`max_tokens >= context-limit` is rejected.** An explicitly configured
+  completion budget that meets or exceeds the context window leaves zero prompt
+  budget and is now rejected with an error rather than silently triggering
+  compression on every send.
+- **`compression.strategy=high-density` mutates history continuously** (every
+  turn, not just at the threshold) and is hostile to prompt caching. Use
+  `middle-out` (the default) when cache reuse matters.
+
 ## Model geometry and budgeting
 
 `context-limit` and `max_tokens` describe a **single shared window**, not two

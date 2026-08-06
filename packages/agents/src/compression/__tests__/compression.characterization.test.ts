@@ -40,6 +40,7 @@ import {
   extractCompletionBudgetFromParams,
   getCompletionBudget,
   estimatePendingTokens,
+  InvalidContextBudgetError,
 } from '../compressionBudgeting.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 
@@ -453,18 +454,24 @@ describe('P26: compressionBudgeting characterization', () => {
 
   it('getCompletionBudget prefers generationConfig.maxOutputTokens over provider params and default', () => {
     const cfg = { maxOutputTokens: 8192 } as Record<string, unknown>;
-    expect(getCompletionBudget(cfg as never, 'm')).toBe(8192);
+    expect(
+      getCompletionBudget(cfg as never, 'm', undefined, undefined, 131_072),
+    ).toBe(8192);
   });
 
   it('getCompletionBudget falls back to provider getModelParams when generationConfig has no budget', () => {
     const provider = {
       getModelParams: () => ({ maxTokens: 4096 }),
     } as unknown as IProvider;
-    expect(getCompletionBudget({}, 'm', provider)).toBe(4096);
+    expect(getCompletionBudget({}, 'm', provider, undefined, 131_072)).toBe(
+      4096,
+    );
   });
 
   it('getCompletionBudget falls back to the default (65536) when nothing is set', () => {
-    expect(getCompletionBudget({}, 'm')).toBe(65_536);
+    expect(getCompletionBudget({}, 'm', undefined, undefined, 131_072)).toBe(
+      65_536,
+    );
   });
 
   it('getCompletionBudget prefers the live settingsService maxOutputTokens over all other sources', () => {
@@ -473,8 +480,39 @@ describe('P26: compressionBudgeting characterization', () => {
     };
     const cfg = { maxOutputTokens: 8192 } as Record<string, unknown>;
     expect(
-      getCompletionBudget(cfg as never, 'm', undefined, settingsService),
+      getCompletionBudget(
+        cfg as never,
+        'm',
+        undefined,
+        settingsService,
+        131_072,
+      ),
     ).toBe(32768);
+  });
+
+  it('getCompletionBudget rejects a live budget that consumes the context', () => {
+    const settingsService = {
+      get: (key: string) => (key === 'maxOutputTokens' ? 131_072 : undefined),
+    };
+    expect(() =>
+      getCompletionBudget({}, 'm', undefined, settingsService, 131_072),
+    ).toThrow(InvalidContextBudgetError);
+  });
+
+  it('getCompletionBudget rejects a generation budget that consumes the context', () => {
+    const cfg = { maxOutputTokens: 131_072 } as Record<string, unknown>;
+    expect(() =>
+      getCompletionBudget(cfg as never, 'm', undefined, undefined, 131_072),
+    ).toThrow(InvalidContextBudgetError);
+  });
+
+  it('getCompletionBudget rejects a provider budget that consumes the context', () => {
+    const provider = {
+      getModelParams: () => ({ maxTokens: 131_072 }),
+    } as unknown as IProvider;
+    expect(() =>
+      getCompletionBudget({}, 'm', provider, undefined, 131_072),
+    ).toThrow(InvalidContextBudgetError);
   });
 
   it('estimatePendingTokens returns 0 for empty contents', async () => {

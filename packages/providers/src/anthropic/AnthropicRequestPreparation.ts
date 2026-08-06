@@ -20,6 +20,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ProviderToolset } from '../IProvider.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
+import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
 import { convertToolsToAnthropic } from './schemaConverter.js';
 import {
   buildAnthropicSystemPrompt,
@@ -739,6 +740,16 @@ function buildRequestContext(params: {
   // message-level cache_control injection.
   if (wantCaching) {
     attachPromptCaching(
+      systemContext.messages,
+      requestSettings.ttl,
+      cacheLogger,
+    );
+    // Issue #3070: spend a third breakpoint at the preserved-head boundary so
+    // the byte-stable compressed head is READ from cache instead of re-billed
+    // at cache-WRITE pricing. Runs after the rolling-tail breakpoint so the
+    // two are never placed on the same block. Gated on the same native-base-URL
+    // flag as the other breakpoints (third-party gateways stay unchanged).
+    attachAnchorCacheControl(
       systemContext.messages,
       requestSettings.ttl,
       cacheLogger,

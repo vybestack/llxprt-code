@@ -76,6 +76,8 @@ Match your context limit to your local model's configuration:
 
 **Important**: This should match the context size configured in your local server (LM Studio, llama.cpp, etc.). Mismatched settings can cause truncation or errors.
 
+> **Rule**: `context-limit` must always be strictly greater than `max_tokens` / `maxOutputTokens`. The completion budget is reserved inside `context-limit`, so a `context-limit` at or below the budget leaves zero room for prompts. For small-context local models (e.g. 32K), explicitly set a smaller `maxOutputTokens` (e.g. `/set maxOutputTokens 8192`) or the compression trigger will fire on every send. See [Provider Models and Limits](./providers/models-and-limits.md) for details.
+
 ### Socket Configuration for Stability
 
 Local AI servers can sometimes have connection stability issues. Configure socket settings for more reliable connections:
@@ -130,6 +132,7 @@ LM Studio is one of the easiest ways to run local models:
 /key clear
 /model your-model-name
 /set context-limit 32768  # Match LM Studio's context setting
+/set maxOutputTokens 16384  # Reserve a smaller budget for small-context models
 ```
 
 ### Ollama

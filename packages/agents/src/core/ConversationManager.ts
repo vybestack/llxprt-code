@@ -546,6 +546,7 @@ export class ConversationManager {
    */
   clearHistory(): void {
     this.historyService.clear();
+    this.historyService.resetCacheAnchorSeq();
   }
 
   /**
@@ -569,6 +570,7 @@ export class ConversationManager {
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
     this.historyService.clear();
+    this.historyService.resetCacheAnchorSeq();
     for (const content of history) {
       const turnKey = this.historyService.generateTurnKey();
       this.historyService.add(
