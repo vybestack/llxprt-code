@@ -16,10 +16,19 @@ import { Footer } from './Footer.js';
 import { getProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Mock the hooks
 vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: vi.fn(() => ({ breakpoint: 'NARROW' })),
+}));
+
+// Footer reads the runtime bridge, which is infrastructure this test does not
+// exercise. Supplying it here keeps the subject the context indicator itself.
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => ({
+    getActiveProviderStatus: () => ({ providerName: 'openai' }),
+  }),
 }));
 
 // Mock the provider manager
@@ -34,8 +43,12 @@ describe('ContextIndicator UI', () => {
   let mockProviderManager: ProviderManager;
 
   beforeEach(() => {
-    // Create a real ProviderManager instance and mock its methods
-    mockProviderManager = new ProviderManager();
+    // Create a real ProviderManager instance and mock its methods.
+    // ProviderManager requires an explicit runtime context (issue #2300); it
+    // deliberately refuses to read ambient global state.
+    mockProviderManager = new ProviderManager({
+      settingsService: new SettingsService(),
+    });
 
     // Mock the methods we need
     vi.spyOn(mockProviderManager, 'hasActiveProvider').mockReturnValue(true);
@@ -137,8 +150,10 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should use local calculation for non-OpenAI providers in new format
-    expect(lastFrame()).toContain('Ctx: 1.0k/1049k');
+    // Local calculation for non-OpenAI providers. claude-3-opus has a 200k
+    // context window; the previous 1049k expectation was a stale default from
+    // an older model table.
+    expect(lastFrame()).toContain('Ctx: 1.0k/200k');
   });
 
   it('should handle missing conversation context', () => {

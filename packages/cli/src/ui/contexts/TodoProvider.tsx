@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   TodoStore,
   type Todo,
@@ -23,7 +23,49 @@ interface TodoProviderProps {
 }
 
 /**
- * Hook for managing task state and loading.
+ * Publish a provider-originated task-list replacement on the observation
+ * channel (issue #3052). Every observer of the singleton `todoEvents`
+ * emitter — external consumers (JSP/jefe, Zed) and any peer `TodoProvider`
+ * subscribed to the same channel — receives it. The originating provider's own
+ * listener is skipped by matching the exact event object against its
+ * per-instance publication ref (see `useTaskPersistence` / `useTaskUpdates`),
+ * so a provider-originated publication does not re-enter the origin.
+ *
+ * This mirrors the TodoWrite tool's canonical event shape and channel, not its
+ * call ordering: `updateTodos` stays a synchronous, optimistic API that applies
+ * local UI state and starts fire-and-forget persistence before emitting. The
+ * synchronous emit preserves fail-fast behavior — a throwing observer
+ * propagates to the caller.
+ */
+function publishTodos(
+  sessionId: string,
+  agentId: string | undefined,
+  todos: Todo[],
+  originPublicationRef: React.MutableRefObject<TodoUpdateEvent | null>,
+): void {
+  const eventData: TodoUpdateEvent = {
+    sessionId,
+    agentId,
+    todos,
+    timestamp: new Date(),
+  };
+  const previousPublication = originPublicationRef.current;
+  originPublicationRef.current = eventData;
+  try {
+    todoEvents.emitTodoUpdated(eventData);
+  } finally {
+    originPublicationRef.current = previousPublication;
+  }
+}
+
+/**
+ * Hook for managing task state and the mount/session read.
+ *
+ * The read path deliberately does NOT publish. `TodoStore.readTodos` maps a
+ * parse or I/O failure to an empty list, so a refresh cannot distinguish an
+ * authoritative empty list from a load failure, and publishing it would risk
+ * advertising a stale or failed state as current. External TodoWrite events
+ * remain the authoritative source for external observers.
  */
 function useTaskState(sessionId: string, agentId: string | undefined) {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -35,9 +77,7 @@ function useTaskState(sessionId: string, agentId: string | undefined) {
       setLoading(true);
       const store = new TodoStore(
         sessionId,
-        {
-          dataDirResolver: () => Storage.getGlobalDataDir(),
-        },
+        { dataDirResolver: () => Storage.getGlobalDataDir() },
         agentId,
       );
       const loadedTodos = await store.readTodos();
@@ -65,16 +105,26 @@ function useTaskState(sessionId: string, agentId: string | undefined) {
 }
 
 /**
- * Hook for listening to task update events.
+ * Hook for listening to task update events. An accepted external event (e.g.
+ * from the TodoWrite tool) is authoritative and mirrors the published list into
+ * local state. A provider-originated publication records the exact event object
+ * in its per-instance `originPublicationRef` before emitting (see
+ * `useTaskPersistence`); the origin's own listener skips only that event while
+ * external observers, nested external events, and matching peer providers still
+ * receive their events.
  */
 function useTaskUpdates(
   sessionId: string,
   scopedAgentId: string,
+  originPublicationRef: React.MutableRefObject<TodoUpdateEvent | null>,
   setTodos: (todos: Todo[]) => void,
   setError: (error: string | null) => void,
 ) {
   useEffect(() => {
     const handleTaskUpdate = (eventData: TodoUpdateEvent) => {
+      if (originPublicationRef.current === eventData) {
+        return;
+      }
       if (
         eventData.sessionId === sessionId &&
         (eventData.agentId ?? DEFAULT_AGENT_ID) === scopedAgentId
@@ -89,35 +139,83 @@ function useTaskUpdates(
     return () => {
       todoEvents.offTodoUpdated(handleTaskUpdate);
     };
-  }, [scopedAgentId, sessionId, setTodos, setError]);
+  }, [scopedAgentId, sessionId, originPublicationRef, setTodos, setError]);
 }
 
 /**
- * Hook for task persistence operations.
+ * Hook for task persistence operations — the single provider write path. It
+ * applies local UI state, starts fire-and-forget persistence, then publishes
+ * synchronously. The exact event object is recorded per provider so the
+ * origin's own `todoEvents` listener skips only that event (issue #3052), while
+ * external observers and any matching peer provider still receive it once.
+ *
+ * Persistence is ordered per provider: the first write starts immediately
+ * (before publication), and every subsequent write chains behind the in-flight
+ * one. This keeps `updateTodos` synchronous and fire-and-forget while ensuring
+ * writes reach disk in update call order — including a synchronously nested
+ * update invoked by a prepended `todoEvents` listener during the outer publish,
+ * which would otherwise race the outer write on the same store file.
  */
 function useTaskPersistence(
   sessionId: string,
   agentId: string | undefined,
+  originPublicationRef: React.MutableRefObject<TodoUpdateEvent | null>,
   setTodos: (todos: Todo[]) => void,
   setError: (error: string | null) => void,
 ) {
+  // Tail of this provider's fire-and-forget persistence chain. `null` means no
+  // write is in flight, so the next write starts immediately. A pending tail
+  // makes the next write chain behind it so persistence follows update call
+  // order. A failed write reports the save error but does not poison later
+  // chained writes.
+  const inFlightWriteRef = useRef<Promise<void> | null>(null);
+
   const updateTodos = useCallback(
     (newTodos: Todo[]) => {
       setTodos(newTodos);
-      const store = new TodoStore(
-        sessionId,
-        {
-          dataDirResolver: () => Storage.getGlobalDataDir(),
-        },
-        agentId,
-      );
-      store.writeTodos(newTodos).catch((err) => {
-        setError(
-          `Failed to save todos: ${err instanceof Error ? err.message : 'Unknown error'}`,
+
+      const writeNewTodos = (): Promise<void> => {
+        const store = new TodoStore(
+          sessionId,
+          { dataDirResolver: () => Storage.getGlobalDataDir() },
+          agentId,
         );
-      });
+        return store.writeTodos(newTodos);
+      };
+
+      const previous = inFlightWriteRef.current;
+      const next =
+        previous === null
+          ? writeNewTodos()
+          : previous.then(writeNewTodos, writeNewTodos);
+
+      const tail = next.then(
+        () => {
+          if (inFlightWriteRef.current === tail) {
+            inFlightWriteRef.current = null;
+          }
+        },
+        (err: unknown) => {
+          setError(
+            `Failed to save todos: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+          if (inFlightWriteRef.current === tail) {
+            inFlightWriteRef.current = null;
+          }
+        },
+      );
+      inFlightWriteRef.current = tail;
+
+      publishTodos(sessionId, agentId, newTodos, originPublicationRef);
     },
-    [agentId, sessionId, setTodos, setError],
+    [
+      agentId,
+      inFlightWriteRef,
+      originPublicationRef,
+      sessionId,
+      setTodos,
+      setError,
+    ],
   );
 
   return { updateTodos };
@@ -128,13 +226,21 @@ function useTaskPersistence(
  */
 function useTaskManagement(sessionId: string, agentId: string | undefined) {
   const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
+  const originPublicationRef = useRef<TodoUpdateEvent | null>(null);
   const state = useTaskState(sessionId, agentId);
 
-  useTaskUpdates(sessionId, scopedAgentId, state.setTodos, state.setError);
+  useTaskUpdates(
+    sessionId,
+    scopedAgentId,
+    originPublicationRef,
+    state.setTodos,
+    state.setError,
+  );
 
   const persistence = useTaskPersistence(
     sessionId,
     agentId,
+    originPublicationRef,
     state.setTodos,
     state.setError,
   );

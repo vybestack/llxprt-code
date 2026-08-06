@@ -7,6 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import * as fs from 'fs/promises';
 import type {
   Profile,
@@ -25,15 +27,29 @@ interface CliResult {
   exitCode: number;
 }
 
+/**
+ * The CLI's real entry point. Nothing compiles this workspace before tests run
+ * (issue #2983), so spawning `node dist/index.js` had no target; `index.ts` is
+ * what the installed launcher and `npm run start` execute anyway.
+ */
+const CLI_ENTRY = path.resolve(
+  fileURLToPath(import.meta.url),
+  '..',
+  '..',
+  '..',
+  'index.ts',
+);
+
 async function runCli(
   args: string[],
   env: Record<string, string> = {},
   input?: string,
 ): Promise<CliResult> {
   return new Promise((resolve) => {
-    const cliPath = path.join(process.cwd(), 'dist', 'index.js');
-
-    const child = spawn('node', [cliPath, ...args], {
+    // `process.execPath` is the Bun binary running this suite — the CLI
+    // workspace executes Bun-native (issue #2843) — which is exactly the
+    // runtime the shipped launcher execs `index.ts` with.
+    const child = spawn(process.execPath, [CLI_ENTRY, ...args], {
       env: {
         ...process.env,
         ...env,
@@ -63,6 +79,11 @@ async function runCli(
       child.stdin.end();
     }
 
+    // Spawning the CLI runs TypeScript from source, which costs roughly ten
+    // seconds on a cold CI runner against well under a second locally. A 10s
+    // budget expired before the child could answer, so every assertion saw
+    // exit code -1. Sized as a hang guard, well inside the runner's 120s
+    // per-case budget for integration files.
     const timeout = setTimeout(() => {
       child.kill();
       resolve({
@@ -70,7 +91,20 @@ async function runCli(
         stderr,
         exitCode: -1,
       });
-    }, 10000);
+    }, 60_000);
+
+    // A spawn failure (e.g. a moved or deleted CLI entry) emits 'error' and
+    // then 'close' with a null exit code. Settling here keeps the spawn
+    // message; the later 'close' cannot change an already-settled promise.
+    // Without this the case would report a bare exit code with no cause.
+    child.on('error', (error: Error) => {
+      clearTimeout(timeout);
+      resolve({
+        stdout,
+        stderr: `${stderr}Failed to spawn ${CLI_ENTRY}: ${error.message}`,
+        exitCode: -1,
+      });
+    });
 
     child.on('close', (code) => {
       clearTimeout(timeout);
@@ -86,16 +120,26 @@ async function runCli(
 describe('LoadBalancer Integration Tests', () => {
   let tempDir: string;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
     originalHome = process.env.HOME;
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
     process.env.HOME = tempDir;
+    process.env.LLXPRT_CONFIG_HOME = tempDir;
   });
 
   afterEach(async () => {
-    if (originalHome) {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
       process.env.HOME = originalHome;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env.LLXPRT_CONFIG_HOME;
+    } else {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
     }
     await cleanupTempDirectory(tempDir);
   });
@@ -120,7 +164,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -166,17 +210,20 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
+      // The profile having been applied is evidenced by the CLI attempting the
+      // load-balancer provider, rather than by a debug log line.
       expect(fullOutput).toMatch(
-        testRegex(
-          'Loaded profile.*lb-profile|Loading profile.*lb-profile',
-          'i',
-        ),
+        testRegex('load-balancer|Loaded profile.*lb-profile', 'i'),
       );
     });
 
@@ -192,7 +239,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -215,6 +262,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -222,7 +273,7 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        testRegex('profile.*not found|failed.*load', 'i'),
+        testRegex('profile.*not found|non-existent profile|failed.*load', 'i'),
       );
     });
 
@@ -238,7 +289,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -260,6 +311,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -295,7 +350,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -331,6 +386,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -348,6 +407,10 @@ describe('LoadBalancer Integration Tests', () => {
         ['--profile', invalidJson, '--prompt', 'test'],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -367,7 +430,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -407,6 +470,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -439,7 +506,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -485,6 +552,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 

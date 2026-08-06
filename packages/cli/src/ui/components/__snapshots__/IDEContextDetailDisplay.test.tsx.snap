@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`IDEContextDetailDisplay > handles duplicate basenames by showing path hints 1`] = `
+exports[`IDEContextDetailDisplay handles duplicate basenames by showing path hints 1`] = `
 "
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ VS Code Context (ctrl+g to toggle)                                                               │
@@ -12,7 +12,7 @@ exports[`IDEContextDetailDisplay > handles duplicate basenames by showing path h
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`IDEContextDetailDisplay > renders a list of open files with active status 1`] = `
+exports[`IDEContextDetailDisplay renders a list of open files with active status 1`] = `
 "
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ VS Code Context (ctrl+g to toggle)                                                               │

@@ -11,6 +11,10 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { serializeWireContentForEstimate } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import {
+  buildInvalidContextBudgetError,
+  InvalidContextBudgetError,
+} from './invalidContextBudgetError.js';
 
 const logger = new DebugLogger('llxprt:gemini:compression-budgeting');
 
@@ -63,35 +67,100 @@ export function extractCompletionBudgetFromParams(
 }
 
 /**
- * Get completion budget from generation config, provider params, or default.
- * Used to reserve output tokens when calculating context limits.
+ * Absolute fallback output reservation, capped to half of the context window
+ * via {@link DEFAULT_COMPLETION_FRACTION} so it can never equal or exceed the
+ * whole window on small context models.
+ */
+export const DEFAULT_COMPLETION_BUDGET = 65_536;
+
+/**
+ * Fraction of the context window reserved for completion tokens when no budget
+ * is explicitly configured. This keeps the unconfigured default proportional
+ * to the window so a small context limit never collapses the compression
+ * trigger to zero. For windows >= 131,072 the proportional default equals the
+ * flat {@link DEFAULT_COMPLETION_BUDGET} (65536), preserving existing cloud
+ * behaviour.
+ */
+export const DEFAULT_COMPLETION_FRACTION = 0.5;
+
+/**
+ * Get completion budget from generation config, provider params, or a
+ * context-limit-aware default. Used to reserve output tokens when calculating
+ * context limits.
+ *
+ * - An explicitly configured budget (ephemeral `maxOutputTokens`,
+ *   `generationConfig`, or provider params) that is `>= contextLimit` throws
+ *   {@link InvalidContextBudgetError}: that is a genuinely impossible
+ *   configuration that must fail fast rather than silently collapsing the
+ *   effective limit to zero.
+ * - When nothing is configured, the budget is
+ *   `min(DEFAULT_COMPLETION_BUDGET, floor(contextLimit * DEFAULT_COMPLETION_FRACTION))`
+ *   so the default never consumes the whole window. This is our bug, not the
+ *   user's, so the unconfigured case never throws.
+ *
  * @plan PLAN-20260220-DECOMPOSE.P03
  */
 export function getCompletionBudget(
   generationConfig: ModelGenerationSettings,
   _model: string,
-  provider?: IProvider,
-  settingsService?: { get: (key: string) => unknown },
+  provider: IProvider | undefined,
+  settingsService: { get: (key: string) => unknown } | undefined,
+  contextLimit: number,
 ): number {
-  const DEFAULT_COMPLETION_BUDGET = 65_536;
+  if (!Number.isFinite(contextLimit) || contextLimit <= 0) {
+    throw new RangeError(
+      `Context limit must be a positive finite number: got ${contextLimit}`,
+    );
+  }
 
   // Check global ephemeral setting for maxOutputTokens (set via /set maxOutputTokens)
-  // This is a generic setting that providers should translate to their native param
   const liveMaxOutputTokens = settingsService?.get('maxOutputTokens');
   const liveBudget = asNumber(liveMaxOutputTokens);
   if (liveBudget !== undefined && liveBudget > 0) {
+    if (liveBudget >= contextLimit) {
+      throw buildInvalidContextBudgetError(
+        liveBudget,
+        contextLimit,
+        'maxOutputTokens',
+      );
+    }
     return liveBudget;
   }
 
   const generationBudget = asNumber(
     (generationConfig as { maxOutputTokens?: unknown }).maxOutputTokens,
   );
+  if (generationBudget !== undefined && generationBudget > 0) {
+    if (generationBudget >= contextLimit) {
+      throw buildInvalidContextBudgetError(
+        generationBudget,
+        contextLimit,
+        'generationConfig',
+      );
+    }
+    return generationBudget;
+  }
 
   const providerParams = provider?.getModelParams?.();
   const providerBudget = extractCompletionBudgetFromParams(providerParams);
+  if (providerBudget !== undefined) {
+    if (providerBudget >= contextLimit) {
+      throw buildInvalidContextBudgetError(
+        providerBudget,
+        contextLimit,
+        'providerParams',
+      );
+    }
+    return providerBudget;
+  }
 
-  return generationBudget ?? providerBudget ?? DEFAULT_COMPLETION_BUDGET;
+  return Math.min(
+    DEFAULT_COMPLETION_BUDGET,
+    Math.floor(contextLimit * DEFAULT_COMPLETION_FRACTION),
+  );
 }
+
+export { InvalidContextBudgetError };
 
 /**
  * Estimate token count for pending content that hasn't been added to history yet.

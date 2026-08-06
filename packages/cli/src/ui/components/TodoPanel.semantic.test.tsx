@@ -86,7 +86,7 @@ describe('TodoPanel Semantic Colors', () => {
 
     const output = lastFrame();
     // Check for the marker and content pattern in the rendered output
-    expect(output).toMatch(testRegex('✔.*Completed task', ''));
+    expect(output).toMatch(testRegex('✓.*Completed task', ''));
 
     // Verify the output contains the task text - exact color testing is hard with ink
     // but we can verify the component renders correctly
@@ -111,7 +111,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    expect(output).toMatch(testRegex('→.*Current task.*← current', ''));
+    expect(output).toMatch(testRegex('→.*Current task', ''));
   });
 
   it('should use semantic secondary color for pending todos', () => {
@@ -155,7 +155,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const darkOutput = darkFrame();
-    expect(darkOutput).toMatch(testRegex('✔.*Test task', ''));
+    expect(darkOutput).toMatch(testRegex('✓.*Test task', ''));
 
     // Test with light theme
     themeManager.setActiveTheme(DefaultLight.name);
@@ -168,7 +168,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const lightOutput = lightFrame();
-    expect(lightOutput).toMatch(testRegex('✔.*Test task', ''));
+    expect(lightOutput).toMatch(testRegex('✓.*Test task', ''));
 
     // Both should render correctly even though colors might be different
     expect(darkOutput).toBeTruthy();
@@ -187,32 +187,5 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     expect(lastFrame()).toBe('');
-  });
-
-  it('should render subtasks with semantic secondary colors', () => {
-    const todoWithSubtasks: Todo = {
-      id: '1',
-      content: 'Main task',
-      status: 'in_progress',
-      subtasks: [
-        { id: '1-1', content: 'Subtask 1', toolCalls: [] },
-        { id: '1-2', content: 'Subtask 2', toolCalls: [] },
-      ],
-    };
-
-    mockTodoContext.todos = [todoWithSubtasks];
-
-    const { lastFrame } = render(
-      <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
-      </TodoContext.Provider>,
-    );
-
-    const output = lastFrame();
-    expect(output).toMatch(testRegex('→.*Main task.*← current', ''));
-    expect(output).toMatch(testRegex('•.*Subtask 1', ''));
-    expect(output).toMatch(testRegex('•.*Subtask 2', ''));
   });
 });

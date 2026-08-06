@@ -166,6 +166,14 @@ export interface CompressionContext {
    * Enables RetryOrchestrator to access getBucketFailoverHandler().
    */
   readonly config?: Config;
+
+  /**
+   * The highest chronology `seq` that the preserved head must always include.
+   * `MiddleOutStrategy.computeSplit` raises `topSplitIndex` to cover this seq so
+   * the cacheable prefix stays byte-identical across successive compressions for
+   * every provider (#3070). 0 means no anchor is set.
+   */
+  readonly cacheAnchorSeq?: number;
 }
 
 /**

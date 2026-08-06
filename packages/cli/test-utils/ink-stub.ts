@@ -29,14 +29,26 @@ export const render = () => ({
   waitUntilExit: async () => {},
 });
 
-export const useStdin = () => {
-  const emitter = new EventEmitter() as unknown as NodeJS.ReadStream;
-  return {
-    stdin: emitter,
-    setRawMode: () => {},
-    isRawModeSupported: true,
-  };
+/**
+ * The stdin the active test render is writing to.
+ *
+ * Components import `useStdin` from 'ink', which the test setup redirects to
+ * this stub. Without a registry each call returned a fresh EventEmitter, so
+ * anything a test wrote to the render's `stdin` reached nothing and every
+ * keyboard-driven assertion failed with zero interactions. `render()` in
+ * test-utils/ink-testing-library.ts registers its stdin here.
+ */
+let activeStdin: NodeJS.ReadStream | null = null;
+
+export const setActiveStdin = (stdin: NodeJS.ReadStream | null): void => {
+  activeStdin = stdin;
 };
+
+export const useStdin = () => ({
+  stdin: activeStdin ?? (new EventEmitter() as unknown as NodeJS.ReadStream),
+  setRawMode: () => {},
+  isRawModeSupported: true,
+});
 
 export const useStdout = () => ({
   stdout: new EventEmitter(),

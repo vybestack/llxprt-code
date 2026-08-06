@@ -71,7 +71,10 @@ describe('mcp add command', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    const yargsInstance = yargs([]).command(addCommand);
+    // exitProcess(false) makes yargs rethrow a handler failure instead of
+    // calling process.exit, which would terminate the Bun test process before
+    // the remaining tests run.
+    const yargsInstance = yargs([]).command(addCommand).exitProcess(false);
     parser = yargsInstance;
     mockSetValue = vi.fn();
     mockConsoleError = vi.fn();

@@ -14,6 +14,8 @@ import type {
   TextBufferAction,
   VisualLayout,
   TextBufferOptions,
+  TextBuffer,
+  Viewport,
 } from './text-buffer.js';
 import { useTextBuffer, textBufferReducer } from './text-buffer.js';
 
@@ -36,6 +38,32 @@ const initialState: TextBufferState = {
   viewportHeight: 24,
   visualLayout: defaultVisualLayout,
 };
+
+const viewport: Viewport = { width: 10, height: 3 };
+
+const getBufferState = (result: { current: TextBuffer }) => {
+  expect(result.current).toHaveOnlyValidCharacters();
+  return {
+    text: result.current.text,
+    lines: [...result.current.lines],
+    cursor: [...result.current.cursor] as [number, number],
+    allVisualLines: [...result.current.allVisualLines],
+    viewportVisualLines: [...result.current.viewportVisualLines],
+    visualCursor: [...result.current.visualCursor] as [number, number],
+    visualScrollRow: result.current.visualScrollRow,
+    preferredCol: result.current.preferredCol,
+  };
+};
+
+const createSingleLineState = (
+  text: string,
+  cursorCol: number,
+): TextBufferState => ({
+  ...initialState,
+  lines: [text],
+  cursorRow: 0,
+  cursorCol,
+});
 
 describe('set_text action', () => {
   it('should set new text and move cursor to the end', () => {

@@ -40,6 +40,7 @@ describe('handleInput', () => {
         meta: false,
         shift: false,
         sequence: 'h',
+        insertable: true,
       }),
     );
     act(() =>
@@ -49,6 +50,7 @@ describe('handleInput', () => {
         meta: false,
         shift: false,
         sequence: 'i',
+        insertable: true,
       }),
     );
     expect(getBufferState(result).text).toBe('hi');
@@ -356,10 +358,10 @@ describe('handleInput', () => {
       useTextBuffer({ viewport, isValidPath: () => false }),
     );
     const textWithAnsi = '\x1B[31mHello\x1B[0m \x1B[32mWorld\x1B[0m';
-    // Simulate pasting by calling handleInput with a string longer than 1 char
+    // Simulate pasting by calling handleInput with name 'paste'
     act(() =>
       result.current.handleInput({
-        name: '',
+        name: 'paste',
         ctrl: false,
         meta: false,
         shift: false,

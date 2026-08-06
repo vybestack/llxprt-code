@@ -19,18 +19,21 @@ const coreMocks = vi.hoisted(() => {
     .fn()
     .mockReturnValue((async function* () {})());
   const mockStartChat = vi.fn();
-  const MockedAgentClientClass = vi.fn().mockImplementation(function (
-    this: Record<string, unknown>,
-    _config: unknown,
-  ) {
-    this.startChat = mockStartChat;
-    this.sendMessageStream = mockSendMessageStream;
-    this.addHistory = vi.fn();
-    this.getCurrentSequenceModel = vi.fn().mockReturnValue(null);
-    this.getChat = vi.fn().mockReturnValue({
+  // A real class rather than vi.fn().mockImplementation: this value is only
+  // used with `new`, and a mock function's implementation is not applied as a
+  // constructor consistently across test runners, which leaves instances
+  // without their members.
+  class MockedAgentClientClass {
+    startChat = mockStartChat;
+    sendMessageStream = mockSendMessageStream;
+    addHistory = vi.fn();
+    getCurrentSequenceModel = vi.fn().mockReturnValue(null);
+    getChat = vi.fn().mockReturnValue({
       recordCompletedToolCalls: vi.fn(),
     });
-  });
+
+    constructor(_config: unknown) {}
+  }
   const MockedUserPromptEvent = vi.fn().mockImplementation(() => {});
   const mockParseAndFormatApiError = vi.fn();
 

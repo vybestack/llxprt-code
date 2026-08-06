@@ -401,8 +401,12 @@ describe('relaunchUnderBunIfNeeded', () => {
               JSON.stringify(recorder) +
               ',[],{stdio:[0,1,2,0],env:{...process.env,LLXPRT_BUN_RELAUNCHED:"true"}});c.on("close",e=>process.exit(e));',
           );
+          // Explicitly `node`, not process.execPath: this case exercises
+          // Node's platform fd-forwarding, and under the Bun test runner
+          // process.execPath is the bun binary. The recorder script already
+          // requires node through its shebang.
           const result = (await import('node:child_process')).spawnSync(
-            process.execPath,
+            'node',
             [harness],
             { encoding: 'utf8', timeout: 10000, input: token },
           );

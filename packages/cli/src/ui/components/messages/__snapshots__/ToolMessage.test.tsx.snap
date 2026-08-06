@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<ToolMessage /> > renders AnsiOutputText for AnsiOutput results 1`] = `
+exports[`<ToolMessage /> renders AnsiOutputText for AnsiOutput results 1`] = `
 "│                                                                              │
 │ ✓                                                                            │
 │ test-tool A tool for testing                                                 │
@@ -8,7 +8,7 @@ exports[`<ToolMessage /> > renders AnsiOutputText for AnsiOutput results 1`] = `
 │    hello                                                                     │"
 `;
 
-exports[`<ToolMessage /> > renders DiffRenderer for diff results 1`] = `
+exports[`<ToolMessage /> renders DiffRenderer for diff results 1`] = `
 "│                                                                              │
 │ ✓                                                                            │
 │ test-tool A tool for testing                                                 │
@@ -20,7 +20,7 @@ exports[`<ToolMessage /> > renders DiffRenderer for diff results 1`] = `
 │    +new                                                                      │"
 `;
 
-exports[`<ToolMessage /> > renders emphasis correctly 1`] = `
+exports[`<ToolMessage /> renders emphasis correctly 1`] = `
 "│                                                                              │
 │ ✓                                                                            │
 │ test-tool A tool for testing                                                 │
@@ -29,7 +29,7 @@ exports[`<ToolMessage /> > renders emphasis correctly 1`] = `
 │    MockMarkdown:Test result                                                  │"
 `;
 
-exports[`<ToolMessage /> > renders emphasis correctly 2`] = `
+exports[`<ToolMessage /> renders emphasis correctly 2`] = `
 "│                                                                              │
 │ ✓                                                                            │
 │ test-tool A tool for testing                                                 │

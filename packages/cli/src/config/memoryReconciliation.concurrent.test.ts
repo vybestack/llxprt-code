@@ -146,10 +146,13 @@ describe('reconcileGlobalMemory: concurrent and edge cases', () => {
       // An empty canonical file was created so the marker converges.
       const configFile = path.join(configDir, 'LLXPRT.md');
       expect(await fs.promises.readFile(configFile, 'utf8')).toBe('');
-      // Marker converges: it was written.
-      await expect(
-        fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-      ).resolves.toBeUndefined();
+      // Marker converges: it was written. Awaited directly rather than
+      // asserting the resolved value, which is undefined on Node and null on
+      // Bun; access() throws when the file is missing, which is the contract
+      // under test.
+      await fs.promises.access(
+        path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+      );
     });
 
     it('archives an empty source but preserves existing canonical content (no destructive overwrite)', async () => {

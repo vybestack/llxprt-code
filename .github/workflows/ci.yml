@@ -379,6 +379,10 @@ jobs:
         run: |-
           npm run lint:no-new-js
 
+      - name: 'Run CLI test-discovery guard (#2923)'
+        run: |-
+          npm run lint:cli-test-discovery
+
       - name: 'Run copyright-year guard (#2820)'
         env:
           COPYRIGHT_GUARD_BASE: >-
@@ -412,15 +416,27 @@ jobs:
         run: |-
           npm run lint:affected-shards
 
-      # Build must run BEFORE the type-aware lint: several workspace tsconfigs
-      # map cross-workspace imports to `dist/*.d.ts` (e.g. storage, settings),
-      # so tsserver (projectService) needs the compiled declarations on disk to
-      # resolve types. Under npm `npm ci`'s postinstall builds implicitly; under
-      # `bun install` (whose postinstall only symlinks, see scripts/postinstall.cjs)
-      # it does not, so the build is explicit here.
-      - name: 'Build project'
+      # Build must run BEFORE the type-aware lint: three workspace tsconfigs
+      # map cross-workspace imports to `dist/*.d.ts` — cli -> tools, core -> mcp,
+      # and a2a-server -> settings/storage/tools — so tsserver (projectService)
+      # needs the compiled declarations on disk to resolve types. Under npm
+      # `npm ci`'s postinstall builds implicitly; under `bun install` (whose
+      # postinstall only symlinks, see scripts/postinstall.cjs) it does not, so
+      # the build is explicit here.
+      #
+      # `build:types` emits declarations only (issue #2983). Every step in this
+      # job reads types and none executes application code, so the transpiled
+      # `.js` was pure cost here. Do not reuse `build:types` in a job that runs
+      # the CLI or a Bun test suite: Bun honors tsconfig `paths`, so a
+      # declaration-only `dist` makes cross-package imports resolve to a
+      # `.d.ts` with no JavaScript behind it. The release path
+      # (release.yml -> `npm run build:packages`) still does a full emit,
+      # because every published library workspace declares `main:
+      # dist/index.js` and ships `dist`, so npm consumers resolving without the
+      # `bun` export condition load that JavaScript.
+      - name: 'Build declarations for type-aware lint'
         run: |-
-          npm run build
+          npm run build:types
 
       - name: 'Run agents API-surface guard'
         run: |-
@@ -1008,17 +1024,39 @@ jobs:
         run: |-
           bun install
           git checkout -- bun.lock
-      - name: 'Build project'
+      # Issue #2983: tests never read compiled output. Every workspace declares
+      # a `bun` export condition resolving to TypeScript source, and
+      # packages/cli/vitest.config.ts aliases cross-workspace imports straight
+      # at source, so a full build here produced JavaScript nothing loaded.
+      #
+      # Two shards are the exception. Both run the agents API-surface guard
+      # (`scripts/check-agents-api-surface.ts`) — the `agents` shard through its
+      # package `pretest` hook, the `scripts` shard through
+      # scripts/tests/check-agents-api-surface.test.ts. That guard's temp
+      # tsconfig resolves `@vybestack/llxprt-code-{telemetry,mcp}` and several
+      # `storage/*` subpaths through node_modules to `dist/*.d.ts`, because
+      # packages/agents/tsconfig.json has no source mapping for them. Issue
+      # #2618 (tsconfig bypasses) owns repointing those mappings at source;
+      # until it lands, these two legs need a built workspace.
+      #
+      # These legs must run the FULL build, not `build:types`. Bun applies
+      # tsconfig `paths` at runtime, so `packages/core/tsconfig.json`'s
+      # `@vybestack/llxprt-code-mcp -> ../mcp/dist/mcp/index.d.ts` mapping wins
+      # over the package's `bun` export condition whenever that file exists. A
+      # declaration-only `dist` therefore resolves to a `.d.ts` whose relative
+      # re-export has no emitted JavaScript behind it, and every test importing
+      # core through mcp dies at import time. Either a complete `dist` or no
+      # `dist` at all works; a partial one does not. `build:types` is confined
+      # to `lint_javascript`, which runs no application code.
+      #
+      # The standalone `Run agents API-surface guard` step is gone: the
+      # `lint_javascript` job already runs it after its own declaration build,
+      # and the `agents` shard runs it through the agents package `pretest`
+      # hook.
+      - name: 'Build project (agents API-surface guard prerequisite)'
+        if: matrix.shard == 'agents' || matrix.shard == 'scripts'
         run: |-
           npm run build
-
-      - name: 'Run agents API-surface guard'
-        # Only the agents shard needs this guard (it inspects the agents
-        # package's public API surface). Running it on every shard wastes CI
-        # time on shards that don't exercise the agents package.
-        if: matrix.shard == 'agents'
-        run: |-
-          npm run lint:agents-api-surface
 
       - name: 'Verify test shard completeness (issue #2707)'
         # Fails if any workspace declared in package.json is missing from the
@@ -1541,11 +1579,11 @@ jobs:
       - name: 'Download CLI coverage (cli shard)'
         # Issue #2707: coverage is now per-shard. The composite action consumes
         # the cli + core coverage summaries, produced by their respective shards.
-        # continue-on-error is not needed here: post_coverage_comment already
-        # has continue-on-error: true at the job level, so a missing artifact
-        # will fail this step but not block PR merges. The job's own `if`
-        # condition gates on needs.test.result == 'success', which means the
-        # cli/core shards passed and their coverage artifacts exist.
+        # CLI tests migrated to Bun's native runner (issue #2843) and no longer
+        # upload a Vitest coverage artifact, exactly as core did in #2842.
+        # Continue-on-error lets the post-coverage-comment action report "N/A"
+        # for cli instead of failing the job on a missing artifact.
+        continue-on-error: true
         uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: 'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}'

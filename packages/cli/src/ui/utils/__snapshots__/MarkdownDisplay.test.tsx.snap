@@ -1,48 +1,10 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`<MarkdownDisplay /> > renders a simple paragraph 1`] = `"Hello, world."`;
+exports[`<MarkdownDisplay /> renders nothing for empty text 1`] = `""`;
 
-exports[`<MarkdownDisplay /> > renders nothing for empty text 1`] = `""`;
+exports[`<MarkdownDisplay /> renders a simple paragraph 1`] = `"Hello, world."`;
 
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > correctly parses a mix of markdown elements 1`] = `
-"Main Title
-
-Here is a paragraph.
-
- - List item 1
- - List item 2
-
- 1 some code
-
-Another paragraph.
-"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > handles a table at the end of the input 1`] = `
-"Some text before.
-| A | B |
-|---|
-| 1 | 2 |"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > handles unclosed (pending) code blocks 1`] = `" 1 let y = 2;"`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > hides line numbers in code blocks when showLineNumbers is false 1`] = `" const x = 1;"`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > inserts a single space between paragraphs 1`] = `
-"Paragraph 1.
-
-Paragraph 2."
-`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders a fenced code block with a language 1`] = `
-" 1 const x = 1;
- 2 console.log(x);"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders a fenced code block without a language 1`] = `" 1 plain text"`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders headers with correct levels 1`] = `
+exports[`<MarkdownDisplay /> with Windows line endings renders headers with correct levels 1`] = `
 "Header 1
 Header 2
 Header 3
@@ -50,7 +12,36 @@ Header 4
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders horizontal rules 1`] = `
+exports[`<MarkdownDisplay /> with Windows line endings renders a fenced code block with a language 1`] = `
+" const x = 1;
+ console.log(x);"
+`;
+
+exports[`<MarkdownDisplay /> with Windows line endings renders a fenced code block without a language 1`] = `" plain text"`;
+
+exports[`<MarkdownDisplay /> with Windows line endings handles unclosed (pending) code blocks 1`] = `" let y = 2;"`;
+
+exports[`<MarkdownDisplay /> with Windows line endings renders unordered lists with different markers 1`] = `
+" - item A
+ * item B
+ + item C
+"
+`;
+
+exports[`<MarkdownDisplay /> with Windows line endings renders nested unordered lists 1`] = `
+" * Level 1
+   * Level 2
+     * Level 3
+"
+`;
+
+exports[`<MarkdownDisplay /> with Windows line endings renders ordered lists 1`] = `
+" 1. First item
+ 2. Second item
+"
+`;
+
+exports[`<MarkdownDisplay /> with Windows line endings renders horizontal rules 1`] = `
 "Hello
 ---
 World
@@ -59,20 +50,7 @@ Test
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders nested unordered lists 1`] = `
-" * Level 1
-   * Level 2
-     * Level 3
-"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders ordered lists 1`] = `
-" 1. First item
- 2. Second item
-"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders tables correctly 1`] = `
+exports[`<MarkdownDisplay /> with Windows line endings renders tables correctly 1`] = `
 "
 ┌──────────┬──────────┐
 │ Header 1 │ Header 2 │
@@ -83,16 +61,20 @@ exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders tables correct
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > renders unordered lists with different markers 1`] = `
-" - item A
- * item B
- + item C
-"
+exports[`<MarkdownDisplay /> with Windows line endings handles a table at the end of the input 1`] = `
+"Some text before.
+| A | B |
+|---|
+| 1 | 2 |"
 `;
 
-exports[`<MarkdownDisplay /> > with 'Unix' line endings > shows line numbers in code blocks by default 1`] = `" 1 const x = 1;"`;
+exports[`<MarkdownDisplay /> with Windows line endings inserts a single space between paragraphs 1`] = `
+"Paragraph 1.
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > correctly parses a mix of markdown elements 1`] = `
+Paragraph 2."
+`;
+
+exports[`<MarkdownDisplay /> with Windows line endings correctly parses a mix of markdown elements 1`] = `
 "Main Title
 
 Here is a paragraph.
@@ -100,37 +82,17 @@ Here is a paragraph.
  - List item 1
  - List item 2
 
- 1 some code
+ some code
 
 Another paragraph.
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > handles a table at the end of the input 1`] = `
-"Some text before.
-| A | B |
-|---|
-| 1 | 2 |"
-`;
+exports[`<MarkdownDisplay /> with Windows line endings hides line numbers in code blocks when showLineNumbers is false 1`] = `" const x = 1;"`;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > handles unclosed (pending) code blocks 1`] = `" 1 let y = 2;"`;
+exports[`<MarkdownDisplay /> with Windows line endings shows line numbers in code blocks when showLineNumbers is true 1`] = `" 1 const x = 1;"`;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > hides line numbers in code blocks when showLineNumbers is false 1`] = `" const x = 1;"`;
-
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > inserts a single space between paragraphs 1`] = `
-"Paragraph 1.
-
-Paragraph 2."
-`;
-
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders a fenced code block with a language 1`] = `
-" 1 const x = 1;
- 2 console.log(x);"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders a fenced code block without a language 1`] = `" 1 plain text"`;
-
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders headers with correct levels 1`] = `
+exports[`<MarkdownDisplay /> with Unix line endings renders headers with correct levels 1`] = `
 "Header 1
 Header 2
 Header 3
@@ -138,7 +100,36 @@ Header 4
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders horizontal rules 1`] = `
+exports[`<MarkdownDisplay /> with Unix line endings renders a fenced code block with a language 1`] = `
+" const x = 1;
+ console.log(x);"
+`;
+
+exports[`<MarkdownDisplay /> with Unix line endings renders a fenced code block without a language 1`] = `" plain text"`;
+
+exports[`<MarkdownDisplay /> with Unix line endings handles unclosed (pending) code blocks 1`] = `" let y = 2;"`;
+
+exports[`<MarkdownDisplay /> with Unix line endings renders unordered lists with different markers 1`] = `
+" - item A
+ * item B
+ + item C
+"
+`;
+
+exports[`<MarkdownDisplay /> with Unix line endings renders nested unordered lists 1`] = `
+" * Level 1
+   * Level 2
+     * Level 3
+"
+`;
+
+exports[`<MarkdownDisplay /> with Unix line endings renders ordered lists 1`] = `
+" 1. First item
+ 2. Second item
+"
+`;
+
+exports[`<MarkdownDisplay /> with Unix line endings renders horizontal rules 1`] = `
 "Hello
 ---
 World
@@ -147,20 +138,7 @@ Test
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders nested unordered lists 1`] = `
-" * Level 1
-   * Level 2
-     * Level 3
-"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders ordered lists 1`] = `
-" 1. First item
- 2. Second item
-"
-`;
-
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders tables correctly 1`] = `
+exports[`<MarkdownDisplay /> with Unix line endings renders tables correctly 1`] = `
 "
 ┌──────────┬──────────┐
 │ Header 1 │ Header 2 │
@@ -171,11 +149,33 @@ exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders tables corr
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > renders unordered lists with different markers 1`] = `
-" - item A
- * item B
- + item C
+exports[`<MarkdownDisplay /> with Unix line endings handles a table at the end of the input 1`] = `
+"Some text before.
+| A | B |
+|---|
+| 1 | 2 |"
+`;
+
+exports[`<MarkdownDisplay /> with Unix line endings inserts a single space between paragraphs 1`] = `
+"Paragraph 1.
+
+Paragraph 2."
+`;
+
+exports[`<MarkdownDisplay /> with Unix line endings correctly parses a mix of markdown elements 1`] = `
+"Main Title
+
+Here is a paragraph.
+
+ - List item 1
+ - List item 2
+
+ some code
+
+Another paragraph.
 "
 `;
 
-exports[`<MarkdownDisplay /> > with 'Windows' line endings > shows line numbers in code blocks by default 1`] = `" 1 const x = 1;"`;
+exports[`<MarkdownDisplay /> with Unix line endings hides line numbers in code blocks when showLineNumbers is false 1`] = `" const x = 1;"`;
+
+exports[`<MarkdownDisplay /> with Unix line endings shows line numbers in code blocks when showLineNumbers is true 1`] = `" 1 const x = 1;"`;

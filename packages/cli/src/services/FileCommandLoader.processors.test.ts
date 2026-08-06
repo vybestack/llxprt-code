@@ -6,10 +6,14 @@
 
 import * as glob from 'glob';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import mock from 'mock-fs';
 import { FileCommandLoader } from './FileCommandLoader.js';
-import { assert, vi } from 'vitest';
+import { vi } from 'vitest';
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (condition === undefined || condition === null || condition === false) {
+    throw new Error(message);
+  }
+}
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import {
   SHELL_INJECTION_TRIGGER,
@@ -24,8 +28,31 @@ import type { CommandContext } from '../ui/commands/types.js';
 
 type PromptPipelineContent = Array<{ text: string }>;
 
+const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
 const mockShellProcess = vi.hoisted(() => vi.fn());
 const mockAtFileProcess = vi.hoisted(() => vi.fn());
+
+// The settings mock must be available before vi.mock runs (Bun evaluates the
+// factory eagerly at vi.mock() call time). Use vi.hoisted with createRequire
+// to create the FsMockContext and settingsMock first, then reference them in
+// the mock factory.
+const settingsMockHoisted: {
+  ctx?: InstanceType<
+    typeof import('./__testhelpers__/mockFs.js').FsMockContext
+  >;
+} = vi.hoisted(() => ({}));
+
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  // Resolved with vi.importActual inside the factory: it returns the genuine
+  // module on both runners, and the factory is the earliest point at which the
+  // helper can be loaded on Vitest (which hoists this call above the imports).
+  const { FsMockContext } = await vi.importActual<
+    typeof import('./__testhelpers__/mockFs.js')
+  >('./__testhelpers__/mockFs.js');
+  const ctx = new FsMockContext();
+  settingsMockHoisted.ctx = ctx;
+  return ctx.settingsMock();
+});
 
 vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({
@@ -42,47 +69,46 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
   },
 }));
 
-vi.mock('./prompt-processors/argumentProcessor.js', async (importOriginal) => {
-  const original =
-    await importOriginal<
-      typeof import('./prompt-processors/argumentProcessor.js')
-    >();
-  return {
-    DefaultArgumentProcessor: vi
-      .fn()
-      .mockImplementation(() => new original.DefaultArgumentProcessor()),
-  };
-});
-
-vi.mock('./prompt-processors/atFileProcessor.js', () => ({
-  AtFileProcessor: vi.fn().mockImplementation(() => ({
-    process: mockAtFileProcess,
-  })),
+// Capture the real constructor before Bun patches the live module namespace.
+// Constructor calls stay observable while processor behavior remains real.
+vi.mock('./prompt-processors/argumentProcessor.js', () => ({
+  DefaultArgumentProcessor: vi
+    .fn()
+    .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...original,
-    Storage: original.Storage,
-    isCommandAllowed: vi.fn(),
-    ShellExecutionService: {
-      execute: vi.fn(),
-    },
-  };
-});
 
 vi.mock('glob', () => ({
   glob: vi.fn(),
 }));
+
+/**
+ * The settings mock factory constructs the filesystem context; reading it
+ * through a getter keeps the access after that factory has run on both
+ * runners.
+ */
+function getFsMock(): InstanceType<
+  typeof import('./__testhelpers__/mockFs.js').FsMockContext
+> {
+  assert(
+    settingsMockHoisted.ctx,
+    'settings mock factory has not initialised the filesystem context',
+  );
+  return settingsMockHoisted.ctx;
+}
 
 describe('FileCommandLoader (processors)', () => {
   const signal: AbortSignal = new AbortController().signal;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { glob: actualGlob } =
-      await vi.importActual<typeof import('glob')>('glob');
+    const fsMock = getFsMock();
+    fsMock.clear();
+    // Re-establish the real glob implementation. vi.importActual returns the
+    // real module snapshot captured at mock-registration time, but
+    // vi.clearAllMocks() resets the mock function's implementation, so we
+    // restore it here.
+    const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
+      .glob;
     vi.mocked(glob.glob).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
@@ -97,17 +123,18 @@ describe('FileCommandLoader (processors)', () => {
   });
 
   afterEach(() => {
-    mock.restore();
+    getFsMock().restore();
+  });
+
+  afterAll(() => {
+    getFsMock().cleanup();
   });
 
   describe('Default Argument Processor Integration', () => {
     it('correctly processes a command without {{args}}', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'model_led.toml':
-            'prompt = "This is the instruction."\ndescription = "Default processor test"',
-        },
+      getFsMock().mock({
+        'model_led.toml':
+          'prompt = "This is the instruction."\ndescription = "Default processor test"',
       });
 
       const loader = new FileCommandLoader(null as unknown as Config);
@@ -135,11 +162,8 @@ describe('FileCommandLoader (processors)', () => {
 
   describe('Shell Processor Integration', () => {
     it('instantiates ShellProcessor if {{args}} is present (even without shell trigger)', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'args_only.toml': `prompt = "Hello {{args}}"`,
-        },
+      getFsMock().mock({
+        'args_only.toml': `prompt = "Hello {{args}}"`,
       });
 
       const loader = new FileCommandLoader(null as unknown as Config);
@@ -148,11 +172,8 @@ describe('FileCommandLoader (processors)', () => {
       expect(ShellProcessor).toHaveBeenCalledWith('args_only');
     });
     it('instantiates ShellProcessor if the trigger is present', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'shell.toml': `prompt = "Run this: ${SHELL_INJECTION_TRIGGER}echo hello}"`,
-        },
+      getFsMock().mock({
+        'shell.toml': `prompt = "Run this: ${SHELL_INJECTION_TRIGGER}echo hello}"`,
       });
 
       const loader = new FileCommandLoader(null as unknown as Config);
@@ -162,11 +183,8 @@ describe('FileCommandLoader (processors)', () => {
     });
 
     it('does not instantiate ShellProcessor if no triggers ({{args}} or !{}) are present', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'regular.toml': `prompt = "Just a regular prompt"`,
-        },
+      getFsMock().mock({
+        'regular.toml': `prompt = "Just a regular prompt"`,
       });
 
       const loader = new FileCommandLoader(null as unknown as Config);
@@ -176,11 +194,8 @@ describe('FileCommandLoader (processors)', () => {
     });
 
     it('returns a "submit_prompt" action if shell processing succeeds', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'shell.toml': `prompt = "Run !{echo 'hello'}"`,
-        },
+      getFsMock().mock({
+        'shell.toml': `prompt = "Run !{echo 'hello'}"`,
       });
       mockShellProcess.mockResolvedValue('Run hello');
 
@@ -202,12 +217,9 @@ describe('FileCommandLoader (processors)', () => {
     });
 
     it('returns a "confirm_shell_commands" action if shell processing requires it', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
       const rawInvocation = '/shell rm -rf /';
-      mock({
-        [userCommandsDir]: {
-          'shell.toml': `prompt = "Run !{rm -rf /}"`,
-        },
+      getFsMock().mock({
+        'shell.toml': `prompt = "Run !{rm -rf /}"`,
       });
 
       // Mock the processor to throw the specific error
@@ -238,11 +250,8 @@ describe('FileCommandLoader (processors)', () => {
     });
 
     it('re-throws other errors from the processor', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'shell.toml': `prompt = "Run !{something}"`,
-        },
+      getFsMock().mock({
+        'shell.toml': `prompt = "Run !{something}"`,
       });
 
       const genericError = new Error('Something else went wrong');
@@ -263,14 +272,11 @@ describe('FileCommandLoader (processors)', () => {
       ).rejects.toThrow('Something else went wrong');
     });
     it('assembles the processor pipeline in the correct order (Shell -> Default)', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          // This prompt uses !{} but NOT {{args}}, so both processors should be active.
-          'pipeline.toml': `
+      getFsMock().mock({
+        // This prompt uses !{} but NOT {{args}}, so both processors should be active.
+        'pipeline.toml': `
               prompt = "Shell says: ${SHELL_INJECTION_TRIGGER}echo foo}."
             `,
-        },
       });
 
       const defaultProcessMock = vi
@@ -327,15 +333,10 @@ describe('FileCommandLoader (processors)', () => {
 
   describe('@-file Processor Integration', () => {
     it('correctly processes a command with @{file}', async () => {
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'at-file.toml':
-            'prompt = "Context from file: @{./test.txt}"\ndescription = "@-file test"',
-        },
-        './test.txt': 'file content',
+      getFsMock().mock({
+        'at-file.toml':
+          'prompt = "Context from file: @{./test.txt}"\ndescription = "@-file test"',
       });
-
       mockAtFileProcess.mockImplementation(
         async (prompt: PromptPipelineContent) => {
           // A simplified mock of AtFileProcessor's behavior
@@ -390,12 +391,9 @@ describe('FileCommandLoader (processors)', () => {
         getFolderTrust: vi.fn(() => true),
         isTrustedFolder: vi.fn(() => true),
       } as unknown as Config;
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'test1.toml': 'prompt = "Prompt 1"',
-          'test2.toml': 'prompt = "Prompt 2"',
-        },
+      getFsMock().mock({
+        'test1.toml': 'prompt = "Prompt 1"',
+        'test2.toml': 'prompt = "Prompt 2"',
       });
 
       const loader = new FileCommandLoader(mockConfig);
@@ -411,12 +409,9 @@ describe('FileCommandLoader (processors)', () => {
         getFolderTrust: vi.fn(() => true),
         isTrustedFolder: vi.fn(() => false),
       } as unknown as Config;
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'test1.toml': 'prompt = "Prompt 1"',
-          'test2.toml': 'prompt = "Prompt 2"',
-        },
+      getFsMock().mock({
+        'test1.toml': 'prompt = "Prompt 1"',
+        'test2.toml': 'prompt = "Prompt 2"',
       });
 
       const loader = new FileCommandLoader(mockConfig);
@@ -443,11 +438,8 @@ describe('FileCommandLoader (processors)', () => {
       } as unknown as Config;
 
       // Set up mock-fs so that the loader attempts to read a directory.
-      const userCommandsDir = Storage.getUserCommandsDir();
-      mock({
-        [userCommandsDir]: {
-          'test1.toml': 'prompt = "Prompt 1"',
-        },
+      getFsMock().mock({
+        'test1.toml': 'prompt = "Prompt 1"',
       });
 
       const loader = new FileCommandLoader(mockConfig);

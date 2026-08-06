@@ -208,8 +208,29 @@ function isEmptyContentBlock(block: CacheableContentBlock): boolean {
 }
 
 /**
+ * Index of the last non-thinking, non-empty content block in `content`, or -1
+ * when none qualifies. Shared by the rolling-tail breakpoint
+ * (`attachPromptCaching`) and the preserved-head anchor breakpoint so both
+ * select the same kind of block for a `cache_control` marker (#3070).
+ */
+export function selectLastCacheableBlockIndex(
+  content: CacheableContentBlock[],
+): number {
+  for (let i = content.length - 1; i >= 0; i--) {
+    const block = content[i];
+    const isThinkingBlock =
+      block.type === 'thinking' || block.type === 'redacted_thinking';
+    if (!isThinkingBlock && !isEmptyContentBlock(block)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
  * Attach cache_control to the last message's last non-thinking block
- * Mutates messages in place (acceptable since Anthropic conversion creates fresh objects)
+ * Mutates messages in place (acceptable because Anthropic conversion creates
+ * fresh objects).
  */
 export function attachPromptCaching(
   messages: AnthropicMessage[],
@@ -238,16 +259,7 @@ export function attachPromptCaching(
   } else if (Array.isArray(lastMessage.content)) {
     const content = lastMessage.content as CacheableContentBlock[];
 
-    let lastNonThinkingIndex = -1;
-    for (let i = content.length - 1; i >= 0; i--) {
-      const block = content[i];
-      const isThinkingBlock =
-        block.type === 'thinking' || block.type === 'redacted_thinking';
-      if (!isThinkingBlock && !isEmptyContentBlock(block)) {
-        lastNonThinkingIndex = i;
-        break;
-      }
-    }
+    const lastNonThinkingIndex = selectLastCacheableBlockIndex(content);
 
     if (lastNonThinkingIndex >= 0) {
       content[lastNonThinkingIndex] = sanitizeBlockForCacheControl(

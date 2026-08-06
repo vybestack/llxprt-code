@@ -127,6 +127,11 @@ function streamingFetchStub(requestedUrls: string[]): typeof global.fetch {
     return new Response(
       new ReadableStream({
         start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+            ),
+          );
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         },

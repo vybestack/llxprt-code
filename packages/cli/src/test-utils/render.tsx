@@ -6,9 +6,11 @@
 
 import { render as inkRender } from 'ink-testing-library';
 import React, { act, createContext, useContext } from 'react';
+import { vi } from 'vitest';
 
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
+import { MouseProvider } from '../ui/contexts/MouseContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { ShellCommandDisplayProvider } from '../ui/contexts/ShellCommandDisplayContext.js';
 import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
@@ -71,6 +73,10 @@ const baseMockUiState: Partial<UIState> = {
   mainAreaWidth: 100,
   terminalWidth: 120,
   terminalBackgroundColor: undefined,
+  // Matches the shipped default. Without it, message components fall back to
+  // plain-text rendering and code blocks lose their syntax highlighting and
+  // line numbers, which silently changes what every snapshot captures.
+  renderMarkdown: true,
 };
 
 // Mock RuntimeApi for tests - provides stub implementations of runtime functions
@@ -165,9 +171,15 @@ export const renderWithProviders = (
   {
     settings = mockSettings,
     uiState = baseMockUiState,
+    mouseEventsEnabled = false,
   }: {
     settings?: LoadedSettings;
     uiState?: Partial<UIState>;
+    /**
+     * MouseProvider only attaches its stdin listener when this is true, so
+     * tests that drive SGR mouse sequences have to opt in.
+     */
+    mouseEventsEnabled?: boolean;
   } = {},
 ): ReturnType<typeof render> =>
   render(
@@ -175,13 +187,15 @@ export const renderWithProviders = (
       <UIStateContext.Provider value={uiState as UIState}>
         <MockRuntimeContextProvider>
           <KeypressProvider>
-            <ShellCommandDisplayProvider
-              alwaysDisplayFullShellCommand={
-                settings.merged.ui.alwaysDisplayFullShellCommand ?? true
-              }
-            >
-              {component}
-            </ShellCommandDisplayProvider>
+            <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
+              <ShellCommandDisplayProvider
+                alwaysDisplayFullShellCommand={
+                  settings.merged.ui.alwaysDisplayFullShellCommand ?? true
+                }
+              >
+                {component}
+              </ShellCommandDisplayProvider>
+            </MouseProvider>
           </KeypressProvider>
         </MockRuntimeContextProvider>
       </UIStateContext.Provider>
@@ -255,21 +269,40 @@ export function cleanup(): void {
   // This is a no-op for compatibility
 }
 
-// Simple waitFor implementation - polls until callback succeeds or timeout
+// Simple waitFor implementation - polls until callback succeeds or timeout.
+// Handles both real and fake timers: under fake timers, advances the timer
+// clock to flush pending state updates instead of relying on real setTimeout.
+// Also explicitly flushes microtasks on each iteration, which is needed for
+// mocked async operations (e.g. mockResolvedValue) whose continuation runs
+// in a microtask that Bun's act() integration does not always flush.
 export const waitFor = async (
   callback: () => void | Promise<void>,
   options?: { timeout?: number; interval?: number },
 ): Promise<void> => {
   const timeout = options?.timeout ?? 1000;
   const interval = options?.interval ?? 50;
-  const start = Date.now();
+  const maxIterations = Math.ceil(timeout / interval);
 
-  while (Date.now() - start < timeout) {
+  for (let i = 0; i < maxIterations; i++) {
     try {
       await callback();
       return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, interval));
+      // Flush pending microtasks so that mocked async operations (e.g.
+      // mockResolvedValue) continue and update React state.
+      await new Promise<void>((resolve) => {
+        queueMicrotask(resolve);
+      });
+
+      // Under fake timers, setTimeout never fires on its own. The async helper
+      // advances the clock and drains microtasks scheduled by timer callbacks,
+      // so the next poll sees the resulting React state update.
+      try {
+        await vi.advanceTimersByTimeAsync(interval);
+      } catch {
+        // Real timers: use real setTimeout for the polling interval.
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
     }
   }
   // Final attempt - let it throw if it fails

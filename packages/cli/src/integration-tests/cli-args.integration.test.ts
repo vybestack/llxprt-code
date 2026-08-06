@@ -14,6 +14,7 @@ import {
   cleanupTempDirectory,
   createTempKeyfile,
 } from './test-utils.js';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { runCli } from './cli-args-test-helpers.js';
 import { testRegex } from '../test-utils/regex.js';
 
@@ -118,7 +119,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
     it('should error when invalid profile format is explicitly specified', async () => {
       // Create an invalid profile file
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
       await fs.writeFile(
         path.join(profilesDir, 'invalid-profile.json'),
@@ -488,7 +489,7 @@ describe('CLI --profile-load Integration Tests', () => {
   describe('Error Cases', () => {
     it('should handle missing profile version', async () => {
       // Create profile without version
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
       await fs.writeFile(
         path.join(profilesDir, 'no-version.json'),
@@ -516,7 +517,7 @@ describe('CLI --profile-load Integration Tests', () => {
 
     it('should handle unsupported profile version', async () => {
       // Create profile with unsupported version
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
       await fs.writeFile(
         path.join(profilesDir, 'bad-version.json'),
@@ -596,7 +597,7 @@ describe('CLI --version and --help flags', () => {
 
   it('should print help even with invalid settings.json (--help)', async () => {
     // Write an invalid settings file with an unrecognized key
-    const settingsDir = path.join(tempDir, '.llxprt');
+    const settingsDir = Storage.getGlobalConfigDir();
     await fs.mkdir(settingsDir, { recursive: true });
     await fs.writeFile(
       path.join(settingsDir, 'settings.json'),
@@ -615,7 +616,7 @@ describe('CLI --version and --help flags', () => {
 
   it('should show config error (not silently fail) with invalid settings.json and no args', async () => {
     // Write an invalid settings file with an unrecognized key
-    const settingsDir = path.join(tempDir, '.llxprt');
+    const settingsDir = Storage.getGlobalConfigDir();
     await fs.mkdir(settingsDir, { recursive: true });
     await fs.writeFile(
       path.join(settingsDir, 'settings.json'),

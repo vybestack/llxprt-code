@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Capture env version at module initialization (startup/import time)
-const startupEnvVersion = process.env['CLI_VERSION'];
+let startupEnvVersion = process.env['CLI_VERSION'];
 
 let versionPromise: Promise<string> | undefined;
 
@@ -33,4 +33,16 @@ async function resolveVersion(): Promise<string> {
 export async function getCliVersion(): Promise<string> {
   versionPromise ??= resolveVersion();
   return versionPromise;
+}
+
+/**
+ * Resets the cached version and re-captures the current CLI_VERSION env var.
+ *
+ * Test seam: Bun's test runner does not support module re-imports, so tests
+ * that need to verify startup-stable semantics across different env values
+ * call this instead of `vi.resetModules()` + dynamic `import()`.
+ */
+export function __resetVersionCacheForTesting(): void {
+  startupEnvVersion = process.env['CLI_VERSION'];
+  versionPromise = undefined;
 }

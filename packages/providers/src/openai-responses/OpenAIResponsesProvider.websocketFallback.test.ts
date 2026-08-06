@@ -102,6 +102,11 @@ function httpSseResponse(): Response {
           'data: {"type":"response.output_text.delta","delta":"http"}\n\n',
         ),
       );
+      controller.enqueue(
+        encoder.encode(
+          'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+        ),
+      );
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
     },

@@ -167,7 +167,7 @@ describe('SettingsDialog', () => {
 
       // Verify the complete UI is rendered with all necessary sections
       expect(lastFrame()).toContain('Settings'); // Title
-      expect(lastFrame()).toContain('Disable Loading Phrases'); // First visible setting
+      expect(lastFrame()).toContain('Enable Loading Phrases'); // First visible setting
       expect(lastFrame()).toContain('Apply To'); // Scope section
       expect(lastFrame()).toContain('User Settings'); // Scope options (no numbers when settings focused)
       // In nav mode, help text shows navigation help

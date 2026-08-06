@@ -7,12 +7,9 @@
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
 // Mock ink before any imports
-// Mock chalk
-vi.mock('chalk', () => ({
-  default: {
-    inverse: (text: string) => text,
-  },
-}));
+// chalk is deliberately NOT mocked. Ink's colorize calls chalk.hex for hex
+// colours, and a stub exposing only `inverse` made every render in this file
+// throw before the component could register its keypress handler.
 
 // Mock string-width
 vi.mock('string-width', () => ({
@@ -79,28 +76,17 @@ vi.mock('../utils/clipboardUtils.js', () => ({
   clipboardHasImage: vi.fn(),
 }));
 
-vi.mock('../hooks/usePromptEnhancement.js', () => ({
-  usePromptEnhancement: () => ({
-    enhancedPrompt: '',
-    isEnhancing: false,
-    enhancePrompt: vi.fn(),
-    acceptEnhancement: vi.fn(),
-    cancelEnhancement: vi.fn(),
-  }),
-}));
-
-vi.mock('../hooks/useProviderModelDialog.js', () => ({
-  useProviderModelDialog: () => ({
-    dialog: null,
-    showDialog: vi.fn(),
-  }),
-}));
+// Mocks for '../hooks/usePromptEnhancement.js' and
+// '../hooks/useProviderModelDialog.js' were removed: neither module exists
+// anywhere in the workspace any more, so both mocks targeted nothing.
 
 // Variable to store the keypress handler
 let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
-vi.mock('../hooks/useKeypress.ts', () => ({
+// Must match the specifier the consumer imports ('.js'), not the file on disk:
+// Bun's mock.module keys on the specifier string.
+vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (
     handler: (key: Record<string, unknown>) => void,
     _options?: unknown,
@@ -157,6 +143,8 @@ describe('InputPrompt paste functionality', () => {
     // Create a mock TextBuffer
     mockBuffer = {
       lines: [''],
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       text: '',
       cursor: [0, 0],
       preferredCol: null,

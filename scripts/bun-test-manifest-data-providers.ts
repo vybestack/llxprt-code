@@ -350,6 +350,7 @@ export const PROVIDERS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts',
     'src/openai-responses/openAIResponsesExecutor.abort.test.ts',
     'src/openai-responses/openAIResponsesExecutor.liveness.test.ts',
+    'src/openai-responses/openAIResponsesExecutor.streamIntegrity.test.ts',
     'src/openai-responses/openAIResponsesExecutor.websocket.test.ts',
     'src/openai-responses/OpenAIResponsesProvider.emptyModelFallback.test.ts',
     'src/openai-responses/OpenAIResponsesProvider.headers.test.ts',

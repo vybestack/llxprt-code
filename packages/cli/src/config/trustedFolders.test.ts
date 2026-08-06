@@ -15,6 +15,14 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    getIdeTrust: vi.fn(),
+  };
+});
+
 import { FatalConfigError, getIdeTrust } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -232,7 +240,9 @@ describe('Trusted Folders Loading', () => {
     expect(rules).toStrictEqual([]);
     expect(errors.length).toBe(1);
     expect(errors[0].path).toBe(userPath);
-    expect(errors[0].message).toContain('Unexpected token');
+    // V8 reports "Unexpected token ..." and JavaScriptCore reports
+    // "Unexpected identifier ..."; both describe the same parse failure.
+    expect(errors[0].message).toMatch(/Unexpected (token|identifier)/);
   });
 
   it('should use LLXPRT_CODE_TRUSTED_FOLDERS_PATH env var if set', () => {
@@ -599,14 +609,6 @@ describe('isWorkspaceTrusted', () => {
   });
 });
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    getIdeTrust: vi.fn(),
-  };
-});
-
 describe('isWorkspaceTrusted with IDE override', () => {
   const mockSettings: Settings = {
     folderTrust: true,
@@ -691,6 +693,10 @@ describe('invalid trust levels', () => {
 
   beforeEach(() => {
     resetTrustedFoldersForTesting();
+    // Stated explicitly: these cases exercise the configuration path, which is
+    // only reached when the IDE expresses no opinion. An earlier describe
+    // configures getIdeTrust, and that mock is shared across the whole file.
+    vi.mocked(getIdeTrust).mockReturnValue(undefined);
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
     vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
       if (p === getTrustedFoldersPath()) {

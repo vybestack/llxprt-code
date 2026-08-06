@@ -27,6 +27,7 @@ import {
   test as bunTest,
   expect,
 } from 'bun:test';
+import { drainMicrotasks } from 'bun:jsc';
 import { createRequire, isBuiltin } from 'node:module';
 import {
   StubRegistry,
@@ -186,6 +187,12 @@ const advanceTimersByTimeAsyncImpl = async (ms: number): Promise<void> => {
   }
 
   if (Math.floor(total) === 0) {
+    // Vitest runs the timers that are already due when advancing by zero (a
+    // common way to flush `setTimeout(fn, 0)` callbacks). Bun's advance loop
+    // above does nothing for a zero advance, so run the due timers explicitly.
+    if (realIsFakeTimers()) {
+      realAdvanceTimersByTime(0);
+    }
     await flushPendingTasks();
   }
 };
@@ -416,6 +423,156 @@ function defineAutomockedProperty(
   });
 }
 
+/**
+ * Normalizes a mock factory result into a module namespace object. Factories
+ * that return a non-object (rare, but legal for default-only modules) are
+ * wrapped so consumers still see a `default` export.
+ */
+const toNamespace = (exports: unknown): object =>
+  typeof exports === 'object' && exports !== null
+    ? (exports as object)
+    : { default: exports };
+
+/**
+ * Adds CommonJS default interop to an AUTOMOCKED module namespace.
+ *
+ * Vitest's automocker replaces every export of a module, including the default
+ * export it synthesises for a CommonJS module such as `node:fs/promises`. Bun
+ * keeps the real default, so `import fs from 'fs/promises'` would hand back the
+ * real module even though the named exports are mocked.
+ *
+ * This applies to automocks only. A `vi.mock` factory controls its own exports,
+ * and Vitest does not synthesise a default for it, so adding one there would
+ * mock more than the test asked for.
+ */
+const withDefaultInterop = (namespace: object): object => {
+  if ('default' in namespace) {
+    return namespace;
+  }
+  Object.defineProperty(namespace, 'default', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: { ...namespace },
+  });
+  return namespace;
+};
+
+/**
+ * Copies a module's exports into a plain object.
+ *
+ * Bun's `mock.module` patches a module namespace IN PLACE, so a snapshot must
+ * copy the values rather than hold a reference. Node built-ins expose their
+ * exports as accessor properties on the namespace, so an accessor is read
+ * through the getter; a getter that throws is skipped rather than aborting the
+ * whole snapshot.
+ */
+function snapshotExports(module: unknown): Record<string | symbol, unknown> {
+  const snapshot: Record<string | symbol, unknown> = {};
+  if (typeof module !== 'object' || module === null) {
+    return Object.assign(snapshot, { default: module });
+  }
+  for (const key of Reflect.ownKeys(module)) {
+    const descriptor = Object.getOwnPropertyDescriptor(module, key);
+    if (!descriptor) continue;
+    let value: unknown;
+    if ('value' in descriptor) {
+      value = descriptor.value;
+    } else {
+      try {
+        value = Reflect.get(module, key);
+      } catch {
+        continue;
+      }
+    }
+    Object.defineProperty(snapshot, key, {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      writable: true,
+      value,
+    });
+  }
+  return snapshot;
+}
+
+/**
+ * Every module namespace currently registered through `vi.mock` / `vi.doMock`,
+ * keyed by the specifier the test used.
+ *
+ * Bun's `mock.restore()` reverts module mocks as well as spies, but Vitest's
+ * `vi.restoreAllMocks()` only restores spies — a module mocked with `vi.mock`
+ * stays mocked for the lifetime of the file. This registry lets
+ * `restoreAllMocks` re-apply the module mocks after Bun has restored the spies,
+ * so a `restoreAllMocks()` in one `afterEach` cannot silently un-mock modules
+ * for every later test in the file.
+ */
+const registeredModuleMocks = new Map<string, object>();
+
+/**
+ * The genuine exports captured just before a module was first mocked, keyed by
+ * resolved module id. `vi.unmock` restores from here because once a mock is
+ * registered Bun's `require` can hand back the mocked namespace instead of the
+ * real module.
+ */
+const preMockSnapshots = new Map<string, object>();
+
+const applyModuleMock = (
+  mockId: string,
+  resolvedId: string,
+  namespace: object,
+): unknown => {
+  for (const id of new Set([mockId, resolvedId])) {
+    registeredModuleMocks.set(id, namespace);
+  }
+  return mock.module(mockId, () => namespace);
+};
+
+const reapplyModuleMocks = (): void => {
+  for (const [id, namespace] of registeredModuleMocks) {
+    mock.module(id, () => namespace);
+  }
+};
+
+/**
+ * Clears the call history of the mock functions a test installed through
+ * `vi.mock`.
+ *
+ * Vitest's `restoreAllMocks()` resets every mock it created, so a module mock's
+ * recorded calls do not survive into the next test. Bun's leaves them, which
+ * silently accumulates call counts across a file. Only the exports of
+ * explicitly mocked modules are touched, and only their call history — the
+ * implementations a test configured at module scope are left alone.
+ */
+const clearModuleMockCalls = (): void => {
+  const visited = new Set<unknown>();
+
+  // Mock functions are routinely nested — `{ default: { thing: vi.fn() } }` is
+  // a common shape — so clearing only the direct exports leaves call history
+  // from a previous test visible to the next one. Walk the namespace with
+  // cycle protection instead. Accessor properties are skipped rather than
+  // read, since invoking a getter here could have side effects.
+  const clearWithin = (value: unknown): void => {
+    if (value === null || visited.has(value)) return;
+    const kind = typeof value;
+    if (kind !== 'object' && kind !== 'function') return;
+    visited.add(value);
+
+    if (isMockFunction(value)) {
+      value.mockClear?.();
+    }
+
+    for (const key of Reflect.ownKeys(value as object)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value as object, key);
+      if (!descriptor || !('value' in descriptor)) continue;
+      clearWithin(descriptor.value);
+    }
+  };
+
+  for (const namespace of registeredModuleMocks.values()) {
+    clearWithin(namespace);
+  }
+};
+
 const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
@@ -435,24 +592,13 @@ const registerModuleMock = (
     // at which point require() would return the mocked namespace.
     mockedResolvedIds.add(resolvedId);
     const realModule = loadIsolatedModuleSync(resolvedId);
-    const actualSnapshot: Record<string | symbol, unknown> = {};
-    if (typeof realModule === 'object' && realModule !== null) {
-      for (const key of Reflect.ownKeys(realModule)) {
-        const descriptor = Object.getOwnPropertyDescriptor(realModule, key);
-        if (descriptor) {
-          Object.defineProperty(actualSnapshot, key, {
-            configurable: true,
-            enumerable: descriptor.enumerable,
-            writable: true,
-            value: descriptor.value,
-          });
-        }
-      }
-    } else {
-      Object.assign(actualSnapshot, { default: realModule });
-    }
+    const actualSnapshot = snapshotExports(realModule);
     actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
-    return mock.module(mockId, () => automockValue(realModule, new Map()));
+    preMockSnapshots.set(resolvedId, actualSnapshot);
+    const automocked = withDefaultInterop(
+      toNamespace(automockValue(realModule, new Map())),
+    );
+    return applyModuleMock(mockId, resolvedId, automocked);
   }
 
   // Bun's mock.module does NOT drain the microtask queue inside factory
@@ -473,56 +619,97 @@ const registerModuleMock = (
   // loadActualSync detect the dangerous case where localRequire would
   // return the mock instead of the actual module (issue #2909 / #2910).
   mockedResolvedIds.add(resolvedId);
-  const syncActual = loadIsolatedModuleSync(resolvedId);
-  // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
-  // REAL exports, not the mock.module-patched namespace. Bun's mock.module
-  // patches the module namespace object IN PLACE, so storing a reference to
-  // the namespace would later reflect the mocked values. A shallow clone
-  // preserves the original export values at registration time.
-  const actualSnapshot: Record<string | symbol, unknown> = {};
-  if (typeof syncActual === 'object' && syncActual !== null) {
-    for (const key of Reflect.ownKeys(syncActual)) {
-      const descriptor = Object.getOwnPropertyDescriptor(syncActual, key);
-      if (descriptor) {
-        Object.defineProperty(actualSnapshot, key, {
-          configurable: true,
-          enumerable: descriptor.enumerable,
-          writable: true,
-          value: descriptor.value,
-        });
-      }
-    }
-  } else {
-    Object.assign(actualSnapshot, { default: syncActual });
+  // Some dependencies (async ESM such as `ink`) cannot be loaded through
+  // require at all. Registering their mock must still work; only a factory
+  // that actually asks for the original exports needs to fail, and it should
+  // fail with the underlying loader error rather than a missing snapshot.
+  let syncActual: unknown;
+  let loadError: unknown;
+  try {
+    syncActual = loadIsolatedModuleSync(resolvedId);
+  } catch (error: unknown) {
+    loadError = error;
   }
-  actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
-  const importOriginal = (): unknown => syncActual;
+  if (loadError === undefined) {
+    // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
+    // REAL exports, not the mock.module-patched namespace. Bun's mock.module
+    // patches the module namespace object IN PLACE, so storing a reference to
+    // the namespace would later reflect the mocked values. A shallow clone
+    // preserves the original export values at registration time.
+    const actualSnapshot = snapshotExports(syncActual);
+    actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
+    preMockSnapshots.set(resolvedId, actualSnapshot);
+  }
+  const importOriginal = (): unknown => {
+    if (loadError !== undefined) throw loadError;
+    return syncActual;
+  };
   const factoryResult = factory(importOriginal as () => Promise<unknown>);
 
   if (!(factoryResult instanceof Promise)) {
     // Sync factory result — register directly
-    return mock.module(mockId, () => factoryResult as object);
+    return applyModuleMock(mockId, resolvedId, toNamespace(factoryResult));
   }
 
-  // Async factory result — Bun can't await inside mock.module factories.
-  // Register a placeholder (real module) and re-register when resolved.
-  // This is a race: if the module is imported before the factory resolves,
-  // the real module is returned. In practice, vi.mock() is called at module
-  // evaluation time, well before the module is first imported by test code.
-  // IMPORTANT: Factory bodies that call `await import('./local.js')` will
-  // STILL hang because ESM import() inside factories is intercepted by
-  // mock.module. Those test files must be refactored.
-  mock.module(mockId, () => syncActual as object);
+  // Async factory result — Bun cannot await inside a mock.module factory, and
+  // Vitest hoists vi.mock() so the mocked exports exist before the test module
+  // body runs. Test modules rely on that ordering (e.g. `const spy = imported
+  // as Mock` at module scope), so deferring registration to a microtask is not
+  // equivalent. Every async factory in this repository only awaits values that
+  // are already available synchronously (vi.importActual / importOriginal), so
+  // draining the microtask queue settles the promise immediately and lets the
+  // mock be registered before the module body continues.
+  drainMicrotasks();
+  const factoryStatus = Bun.peek.status(factoryResult);
+  if (factoryStatus === 'fulfilled') {
+    return applyModuleMock(
+      mockId,
+      resolvedId,
+      toNamespace(Bun.peek(factoryResult)),
+    );
+  }
+  if (factoryStatus === 'rejected') {
+    const rejection = Bun.peek(factoryResult);
+    void factoryResult.catch(() => {});
+    throw rejection;
+  }
+  if (loadError !== undefined) {
+    void factoryResult.catch(() => {});
+    throw new Error(
+      `vi.mock factory for "${mockId}" remained pending while its original ` +
+        'module could not be loaded synchronously',
+      { cause: loadError },
+    );
+  }
+
+  // Genuinely pending factory (real async work). Register a placeholder with
+  // the real module and re-register once the promise settles.
+  applyModuleMock(mockId, resolvedId, toNamespace(syncActual));
   factoryResult
     .then((exports) => {
-      if (typeof exports === 'object' && exports !== null) {
-        mock.module(mockId, () => exports as object);
-      } else {
-        mock.module(mockId, () => ({ default: exports }));
-      }
+      // Bun resolves a *relative* mock.module specifier against the module
+      // that is executing when the call is made. Re-registration happens in a
+      // microtask, after the test module finished evaluating, so a relative
+      // specifier no longer resolves to the same module and the mock silently
+      // does not apply. Registering the absolute path resolved at vi.mock()
+      // time is caller-independent and always targets the right module.
+      applyModuleMock(mockId, resolvedId, toNamespace(exports));
+      mock.module(resolvedId, () => toNamespace(exports));
     })
-    .catch(() => {
-      // Factory error — leave the real module in place
+    .catch((error: unknown) => {
+      // Never leave the real module silently installed in place of a mock the
+      // test asked for: that turns a broken factory into a passing test.
+      const reason = error instanceof Error ? error.message : String(error);
+      const failure = new Error(
+        `vi.mock factory for "${mockId}" rejected, so the real module is still ` +
+          `installed and this test would run unmocked: ${reason}`,
+        { cause: error },
+      );
+      // Surface asynchronously as an unhandled rejection so the test process
+      // fails rather than reporting success.
+      queueMicrotask(() => {
+        throw failure;
+      });
     });
   return undefined;
 };
@@ -561,6 +748,23 @@ const unsupportedModuleIsolation = (): never => {
   );
 };
 
+/**
+ * Restores a module that a preload (or an earlier call) mocked, by
+ * re-registering it with the real implementation loaded outside the mock
+ * registry. Bun has no `unmock`, but re-registering the genuine exports is
+ * observationally identical for a test that wants the real module back.
+ */
+const unmockModule = (id: string): void => {
+  const resolvedId = resolveActualId(id);
+  const snapshot = preMockSnapshots.get(resolvedId);
+  const namespace = snapshot ?? toNamespace(loadIsolatedModuleSync(resolvedId));
+  mockedResolvedIds.delete(resolvedId);
+  for (const candidate of new Set([id, resolvedId])) {
+    registeredModuleMocks.delete(candidate);
+    mock.module(candidate, () => namespace);
+  }
+};
+
 const unsupportedMockRegistry = new Proxy(Object.freeze({}), {
   get: (): never => {
     throw new Error('Bun does not expose its module mock registry');
@@ -577,9 +781,123 @@ const originalRestoreAllMocks = (bunVi as BunViBase).restoreAllMocks.bind(
 );
 const originalClearAllMocks = (bunVi as BunViBase).clearAllMocks.bind(bunVi);
 
+const originalSpyOn = (bunVi as BunViBase).spyOn.bind(bunVi);
+
+interface InstalledSpy {
+  readonly target: object;
+  readonly key: PropertyKey;
+  readonly original: unknown;
+  readonly spy: unknown;
+}
+
+/**
+ * Writes a property, preferring plain assignment because a module namespace
+ * binding cannot be redefined with `Object.defineProperty`.
+ */
+function writeProperty(
+  target: object,
+  key: PropertyKey,
+  value: unknown,
+): boolean {
+  if (Reflect.set(target, key, value) && Reflect.get(target, key) === value) {
+    return true;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(target, key);
+  if (descriptor && !descriptor.configurable) {
+    return false;
+  }
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: descriptor?.enumerable ?? true,
+    writable: true,
+    value,
+  });
+  return true;
+}
+
+/**
+ * Spies this shim installed over properties that were already mock functions.
+ * Kept as a list so `restoreAllMocks` can put the original descriptors back.
+ */
+const installedSpies: InstalledSpy[] = [];
+
+const findInstalledSpy = (
+  target: object,
+  key: PropertyKey,
+): InstalledSpy | undefined =>
+  installedSpies.find((entry) => entry.target === target && entry.key === key);
+
+/**
+ * Vitest's `vi.spyOn` installs a NEW spy with an empty call history even when
+ * the property is already a mock function (for example an export replaced by a
+ * `vi.mock` factory). Bun returns the existing mock, so its accumulated calls
+ * leak into per-test assertions such as `expect(fs.readFileSync)
+ * .not.toHaveBeenCalled()`. Install a fresh delegating spy to match Vitest,
+ * and return the same spy on repeat calls exactly as Vitest does.
+ */
+const spyOnCompat = (target: object, key: PropertyKey): unknown => {
+  // Anything that is not an object cannot carry a replacement spy. Delegate so
+  // Bun reports the same error it would have without this compatibility layer.
+  if (
+    (typeof target !== 'object' && typeof target !== 'function') ||
+    target === null
+  ) {
+    return originalSpyOn(
+      target as Parameters<typeof originalSpyOn>[0],
+      key as Parameters<typeof originalSpyOn>[1],
+    );
+  }
+
+  const alreadyInstalled = findInstalledSpy(target, key);
+  if (alreadyInstalled) {
+    return alreadyInstalled.spy;
+  }
+
+  const current = Reflect.get(target, key);
+  if (typeof current !== 'function' || !isMockFunction(current)) {
+    return originalSpyOn(
+      target as Parameters<typeof originalSpyOn>[0],
+      key as Parameters<typeof originalSpyOn>[1],
+    );
+  }
+
+  const spy = bunVi.fn(current as (...args: unknown[]) => unknown);
+  if (!writeProperty(target, key, spy)) {
+    // ES module namespace bindings cannot be rebound, so the existing mock
+    // has to stay in place. Clearing its history reproduces the observable
+    // part of Vitest's behaviour: assertions made after `vi.spyOn` start from
+    // an empty call list.
+    const existingMock = current as { mockClear?: () => void };
+    existingMock.mockClear?.();
+    return current;
+  }
+  const entry: InstalledSpy = { target, key, original: current, spy };
+  installedSpies.push(entry);
+  Object.defineProperty(spy, 'mockRestore', {
+    configurable: true,
+    writable: true,
+    value: (): void => restoreInstalledSpy(entry),
+  });
+  return spy;
+};
+
+function restoreInstalledSpy(entry: InstalledSpy): void {
+  const index = installedSpies.indexOf(entry);
+  if (index < 0) return;
+  installedSpies.splice(index, 1);
+  writeProperty(entry.target, entry.key, entry.original);
+}
+
+const restoreInstalledSpies = (): void => {
+  while (installedSpies.length > 0) {
+    restoreInstalledSpy(installedSpies[installedSpies.length - 1]);
+  }
+};
+
 const viAugmentations = {
   mocked: <T>(item: T): T => item,
   hoisted: <T>(factory: () => T): T => factory(),
+  spyOn: spyOnCompat,
   stubEnv: (key: string, value: string): void => {
     envRegistry.stub(key, value);
   },
@@ -602,13 +920,16 @@ const viAugmentations = {
   },
   restoreAllMocks: (): void => {
     runCleanupSteps([
+      () => restoreInstalledSpies(),
       () => originalRestoreAllMocks(),
-      // Vitest's restoreAllMocks calls mockRestore() on each spy, which both
-      // restores the original implementation AND resets the recorded calls.
-      // Bun's mock.restore() only does the former, so a spy installed over an
-      // automocked module export keeps its call history across tests and
-      // later assertions see calls from earlier tests.
+      // Vitest restores the original implementation AND resets
+      // recorded calls; Bun only does the former, so spy history
+      // would otherwise leak across tests.
       () => originalClearAllMocks(),
+      // Bun also reverts module mocks, which Vitest does not, so
+      // re-register them and clear their (possibly nested) calls.
+      () => reapplyModuleMocks(),
+      () => clearModuleMockCalls(),
       () => envRegistry.restoreAll(),
       () => globalRegistry.restoreAll(),
     ]);
@@ -641,8 +962,8 @@ const viAugmentations = {
       return result as object;
     });
   },
-  doUnmock: unsupportedModuleIsolation,
-  unmock: unsupportedModuleIsolation,
+  doUnmock: unmockModule,
+  unmock: unmockModule,
   isMockFunction,
   advanceTimersByTimeAsync: advanceTimersByTimeAsyncImpl,
   runAllTimersAsync: async (): Promise<void> => {
@@ -699,6 +1020,9 @@ afterEach(() => {
 const forceOverride = new Set([
   'mock',
   'doMock',
+  'unmock',
+  'doUnmock',
+  'spyOn',
   'stubEnv',
   'unstubAllEnvs',
   'stubGlobal',

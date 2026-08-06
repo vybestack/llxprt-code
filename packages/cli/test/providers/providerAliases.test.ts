@@ -9,16 +9,24 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// This integration test needs real config files, not the global mock
+// This integration test needs real config files, not the global mock.
 vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
-import {
+
+// Loaded with top-level await rather than a static import so the modules that
+// consume providerAliases are evaluated AFTER the unmock above. Static imports
+// are hoisted, so they would otherwise capture the globally mocked entries.
+const {
   getProviderManager,
   resetProviderManager,
   setFileSystem,
   createProviderManager,
   registerProviderManagerSingleton,
-} from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition/IFileSystem.js';
+} = await import(
+  '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js'
+);
+const { NodeFileSystem } = await import(
+  '@vybestack/llxprt-code-providers/composition/IFileSystem.js'
+);
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,

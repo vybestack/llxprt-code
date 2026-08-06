@@ -241,6 +241,10 @@ describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
     fs.writeFileSync(blockedHome, 'file blocks child directory creation');
     process.env.HOME = blockedHome;
     process.env.USERPROFILE = blockedHome;
+    // The code under test resolves the home directory with os.homedir(), which
+    // honours process.env.HOME on Node but not on Bun. Spy on it directly so
+    // the redirection works regardless of runtime.
+    vi.spyOn(os, 'homedir').mockReturnValue(blockedHome);
 
     expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
       /host-only directory/i,
@@ -532,18 +536,20 @@ describe('setupCredentialProxy: fail-fast when socket path is undefined (AC12)',
 
   it('surfaces both invariant and stopProxy failures via AggregateError when socket path is undefined and stopProxy rejects', async () => {
     authMocks.stopProxy.mockRejectedValue(new Error('stopProxy failed'));
-    await expect(callSetupCredentialProxy()).rejects.toSatisfy(
-      (err: unknown) => {
-        if (!(err instanceof AggregateError)) return false;
-        const messages = err.errors.map((e) =>
-          e instanceof Error ? e.message : String(e),
-        );
-        return (
-          messages.some((m) => /socket path/i.test(m)) &&
-          messages.some((m) => /stopProxy failed/i.test(m))
-        );
-      },
+    // Captured explicitly rather than with rejects.toSatisfy, which hands the
+    // pending promise to the predicate instead of the rejection value.
+    let caught: unknown;
+    try {
+      await callSetupCredentialProxy();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AggregateError);
+    const messages = (caught as AggregateError).errors.map((e) =>
+      e instanceof Error ? e.message : String(e),
     );
+    expect(messages.some((m) => /socket path/i.test(m))).toBe(true);
+    expect(messages.some((m) => /stopProxy failed/i.test(m))).toBe(true);
   });
 
   it('does not silently return unprotected sandbox (args unchanged)', async () => {
@@ -685,6 +691,7 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
   beforeEach(() => {
     origHome = process.env.HOME;
     process.env.HOME = getTmpDir();
+    vi.spyOn(os, 'homedir').mockReturnValue(getTmpDir());
   });
 
   afterEach(() => {

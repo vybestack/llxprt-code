@@ -47,6 +47,7 @@ import {
 import {
   adjustForToolCallBoundary,
   aggregateTextFromBlocks,
+  findForwardValidSplitPoint,
   buildTriggerInstruction,
   COMPRESSION_SECURITY_PREAMBLE,
   runVerificationPass,
@@ -243,7 +244,12 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const topPreserveThreshold =
       context.runtimeContext.ephemerals.topPreserveThreshold();
 
-    let topSplitIndex = Math.ceil(history.length * topPreserveThreshold);
+    let topSplitIndex = this.resolveTopSplitIndex(
+      history,
+      topPreserveThreshold,
+      context.cacheAnchorSeq ?? 0,
+    );
+    const anchorFloor = topSplitIndex;
     let bottomSplitIndex = Math.floor(history.length * (1 - preserveThreshold));
 
     if (bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES) {
@@ -251,6 +257,18 @@ export class MiddleOutStrategy implements CompressionStrategy {
     }
 
     topSplitIndex = adjustForToolCallBoundary(history, topSplitIndex);
+    // The tool-boundary adjustment can move the index BACKWARD (forward scan
+    // returns index-1; backward scan can go arbitrarily far back). If it drops
+    // below the anchor floor, search FORWARD for the next valid split point at
+    // or above the floor so the cacheable prefix invariant is never broken
+    // (#3070 Defect 4). If no valid split at or above the floor exists, return
+    // a clean structural no-op rather than silently dropping below the floor.
+    if (topSplitIndex < anchorFloor) {
+      topSplitIndex = this.findValidSplitAtOrAboveFloor(history, anchorFloor);
+      if (topSplitIndex === -1) {
+        return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
+      }
+    }
     bottomSplitIndex = adjustForToolCallBoundary(history, bottomSplitIndex);
 
     if (
@@ -265,6 +283,70 @@ export class MiddleOutStrategy implements CompressionStrategy {
       toCompress: history.slice(topSplitIndex, bottomSplitIndex),
       toKeepBottom: history.slice(bottomSplitIndex),
     };
+  }
+
+  /**
+   * Resolve the top (preserved-head) split index, applying the monotonic cache
+   * anchor floor so the preserved head never shrinks across successive
+   * compressions (#3070).
+   *
+   * The base index is `ceil(N * topPreserveThreshold)`. The anchor raises it to
+   * `anchorIndex + 1`, where `anchorIndex` is the index of the history entry
+   * whose chronology `seq` is EXACTLY `cacheAnchorSeq`. The match is by exact
+   * identity, not a `<=` threshold scan, because the compression rebuild
+   * re-adds preserved TAIL entries that keep their ORIGINAL low seqs while the
+   * freshly minted summary/continuation get the HIGHEST seqs and sit in the
+   * MIDDLE of the array — so the array is NOT sorted by seq and a backward
+   * `<=` scan would match a low-seq TAIL entry at a high index (#3070 Defect 2).
+   * When no entry matches exactly there is no floor; fall back to the base
+   * fractional split. An anchor at or beyond the whole history degrades to a
+   * split past the end, which the caller's structural no-op guards turn into a
+   * clean no-op.
+   */
+  private resolveTopSplitIndex(
+    history: readonly IContent[],
+    topPreserveThreshold: number,
+    cacheAnchorSeq: number,
+  ): number {
+    const baseSplitIndex = Math.ceil(history.length * topPreserveThreshold);
+
+    if (cacheAnchorSeq <= 0) {
+      return baseSplitIndex;
+    }
+
+    let anchorIndex = -1;
+    for (let i = 0; i < history.length; i++) {
+      const seq = history[i].metadata?.chronology?.seq;
+      if (seq === cacheAnchorSeq) {
+        anchorIndex = i;
+        break;
+      }
+    }
+
+    if (anchorIndex === -1) {
+      return baseSplitIndex;
+    }
+
+    return Math.max(baseSplitIndex, anchorIndex + 1);
+  }
+
+  /**
+   * Search forward from the anchor floor for the next valid split point that
+   * does not land inside a tool-call/response pair. The canonical utility may
+   * move a candidate backward, so candidates below the floor are skipped.
+   */
+  private findValidSplitAtOrAboveFloor(
+    history: readonly IContent[],
+    floor: number,
+  ): number {
+    const candidateHistory = [...history];
+    for (let candidate = floor; candidate <= history.length; candidate++) {
+      const adjusted = findForwardValidSplitPoint(candidateHistory, candidate);
+      if (adjusted >= floor) {
+        return adjusted;
+      }
+    }
+    return -1;
   }
 
   private resolvePrompt(context: CompressionContext): string {

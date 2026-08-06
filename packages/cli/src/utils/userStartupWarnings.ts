@@ -7,7 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import os from 'node:os';
+import * as os from 'node:os';
 import type { Settings } from '../config/settingsSchema.js';
 import {
   isFolderTrustEnabled,

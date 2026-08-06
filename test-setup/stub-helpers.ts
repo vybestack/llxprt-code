@@ -393,6 +393,11 @@ export function isMockFunction(value: unknown): value is ((
   ...args: unknown[]
 ) => unknown) & {
   mock: Record<string, unknown>;
+  // Both runners attach these alongside `.mock`; declaring them lets callers
+  // reset a mock without asserting across otherwise non-overlapping types.
+  mockClear?: () => void;
+  mockReset?: () => void;
+  mockRestore?: () => void;
 } {
   if (typeof value !== 'function') return false;
   const mock = (value as { mock?: unknown }).mock;
