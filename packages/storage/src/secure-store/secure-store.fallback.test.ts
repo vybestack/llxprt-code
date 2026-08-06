@@ -267,17 +267,22 @@ describe('SecureStore — Probe Cache Invalidation', () => {
   it('consecutive failure counter resets on successful keyring operation', async () => {
     let shouldFail = false;
     const mockKeyring = createMockKeyring();
+    // Issue #2928: a LOCKED/DENIED error now latches the OS keyring off for the
+    // whole process. This test exercises the transient consecutive-failure +
+    // recovery path, so it uses a non-latching TIMEOUT error rather than a
+    // "locked" one (which would latch and make recovery unreachable).
+    const transientMessage = 'The keyring operation timed out';
     const adapter: KeyringAdapter = {
       getPassword: async (service, account) => {
-        if (shouldFail) throw new Error('Keyring temporarily locked');
+        if (shouldFail) throw new Error(transientMessage);
         return mockKeyring.getPassword(service, account);
       },
       setPassword: async (service, account, password) => {
-        if (shouldFail) throw new Error('Keyring temporarily locked');
+        if (shouldFail) throw new Error(transientMessage);
         return mockKeyring.setPassword(service, account, password);
       },
       deletePassword: async (service, account) => {
-        if (shouldFail) throw new Error('Keyring temporarily locked');
+        if (shouldFail) throw new Error(transientMessage);
         return mockKeyring.deletePassword(service, account);
       },
     };
