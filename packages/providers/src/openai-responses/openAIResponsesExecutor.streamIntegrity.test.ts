@@ -421,6 +421,8 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     const single = await drainWithPossibleRejection(
       executeOpenAIResponsesRequest(buildNormalizedOptions(), buildDeps()),
     );
+    fetchMock.restore();
+    fetchMock = undefined;
 
     // The identical two events split across separate reader chunks.
     fetchMock = installFetch(
