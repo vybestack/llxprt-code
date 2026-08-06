@@ -567,6 +567,22 @@ describe('published package no-compile runtime contract (S6)', () => {
       }
     }
 
+    // Issue #2978: the os-gated launcher packages are published from THIS repo
+    // but are deliberately not root workspaces — npm installs every declared
+    // workspace unconditionally and enforces its `os` field, which would fail
+    // with EBADPLATFORM on every platform. They are therefore first-party, not
+    // external, and must not be required to appear in the root manifest.
+    for (const dir of ['llxprt-cli-posix', 'llxprt-cli-win32']) {
+      const manifestPath = join(repoRoot, 'packages', dir, 'package.json');
+      if (!existsSync(manifestPath)) continue;
+      const manifest = asRecord(
+        JSON.parse(readFileSync(manifestPath, 'utf-8')),
+      );
+      if (manifest.name !== undefined) {
+        internalPackages.add(asString(manifest.name));
+      }
+    }
+
     // Build the package-name→workspace-directory map and a real protocol
     // resolver (F5) so file:/workspace:/link: specifiers are validated
     // against the actual workspace name→directory map, not just the name set.
@@ -959,6 +975,25 @@ describe('platform launcher package invariants (issue #2978)', () => {
       ).toBe(true);
     },
   );
+
+  // Regression guard: the POSIX launcher was first committed from Windows as
+  // mode 100644. npm preserves tarball modes, so a non-executable bin script
+  // makes `llxprt` unrunnable on Linux/macOS after install — the exact failure
+  // this package exists to prevent. The git index mode is the invariant that
+  // matters, because that is what a Linux checkout (and therefore the published
+  // tarball) receives, and it is assertable from any platform.
+  it('ships the POSIX launcher with the executable bit set in git', () => {
+    const entry = execFileSync(
+      'git',
+      ['ls-files', '-s', '--', 'packages/llxprt-cli-posix/bin/llxprt'],
+      { cwd: repoRoot, encoding: 'utf8' },
+    ).trim();
+    expect(entry, 'POSIX launcher must be tracked by git').not.toBe('');
+    expect(
+      entry.split(/\s+/)[0],
+      `POSIX launcher must be mode 100755, got: ${entry}`,
+    ).toBe('100755');
+  });
 });
 
 describe('release build self-contained generate contract (issue #2392)', () => {

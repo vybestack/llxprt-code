@@ -119,9 +119,9 @@ LLxprt Code由[Bun](https://bun.sh)运行时驱动。当您运行`llxprt`时，�
 
 启动器永远不会扫描`.bin`符号链接。当包的`package.json`声明了精确的Bun固定版本（例如`1.3.14`）时，`package.json`/版本缺失或不匹配的候选项将被拒绝。
 
-<a id="npm-v12安装脚本默认拒绝"></a>
+#### npm v12安装脚本默认拒绝
 
-**npm v12安装脚本默认拒绝（RFC 0054）：** npm v12默认禁用依赖安装脚本。`bun`包通过`postinstall`将其二进制文件从`@oven/bun-<platform>`可选依赖移动到`bun/bin/bun.exe`。当安装脚本被阻止时，该二进制文件永远不会出现。LLxprt Code将全部16个`@oven/bun-<platform>`包声明为自己的`optionalDependencies`；这些tarball仅包含`bin/bun[.exe]`且没有安装脚本，因此在默认拒绝下仍会出现。启动器和TypeScript解析器在`bun/bin/bun.exe`不存在时回退到它们。主机检测（CPU特性、ABI）仅在此回退路径上运行 — 正常安装永远不会fork检测子进程。
+npm v12（RFC 0054）默认禁用依赖安装脚本。`bun`包通过`postinstall`将其二进制文件从`@oven/bun-<platform>`可选依赖移动到`bun/bin/bun.exe`。当安装脚本被阻止时，该二进制文件永远不会出现。LLxprt Code将全部16个`@oven/bun-<platform>`包声明为自己的`optionalDependencies`；这些tarball仅包含`bin/bun[.exe]`且没有安装脚本，因此在默认拒绝下仍会出现。启动器和TypeScript解析器在`bun/bin/bun.exe`不存在时回退到它们。主机检测（CPU特性、ABI）仅在此回退路径上运行 — 正常安装永远不会fork检测子进程。
 
 只有在以上每个候选项都已探测并被拒绝之后 — 包括每一层级及其`@oven`回退，以及macOS的`PATH`优先路径 — 启动器才会打印可操作的错误（退出码43）：
 

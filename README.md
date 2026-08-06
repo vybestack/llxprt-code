@@ -119,9 +119,9 @@ On macOS, a Bun already on `PATH` that meets the pinned version floor is preferr
 
 The launcher never scans `.bin` symlinks. When the package's `package.json` declares an exact Bun pin (e.g. `1.3.14`), a candidate whose `package.json`/version is missing or mismatched is rejected.
 
-<a id="npm-v12-install-script-default-deny"></a>
+#### npm v12 install-script default-deny
 
-**npm v12 install-script default-deny (RFC 0054):** npm v12 disables dependency install scripts by default. The `bun` package ships its binary via a `postinstall` that moves it from an `@oven/bun-<platform>` optional dependency into `bun/bin/bun.exe`. When install scripts are blocked, that binary never materializes. LLxprt Code declares all 16 `@oven/bun-<platform>` packages as its own `optionalDependencies`; those tarballs contain only `bin/bun[.exe]` with no install scripts, so they materialize under default-deny. The launcher and TypeScript resolver fall back to them when `bun/bin/bun.exe` is absent. Host detection (CPU features, ABI) runs only on this fallback path — a normal install never forks detection subprocesses.
+npm v12 (RFC 0054) disables dependency install scripts by default. The `bun` package ships its binary via a `postinstall` that moves it from an `@oven/bun-<platform>` optional dependency into `bun/bin/bun.exe`. When install scripts are blocked, that binary never materializes. LLxprt Code declares all 16 `@oven/bun-<platform>` packages as its own `optionalDependencies`; those tarballs contain only `bin/bun[.exe]` with no install scripts, so they materialize under default-deny. The launcher and TypeScript resolver fall back to them when `bun/bin/bun.exe` is absent. Host detection (CPU features, ABI) runs only on this fallback path — a normal install never forks detection subprocesses.
 
 Only after every candidate above has been probed and rejected — each level and its `@oven` fallback, plus the macOS `PATH` preference — does the launcher print an actionable error (exit code 43):
 

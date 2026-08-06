@@ -459,6 +459,9 @@ _llxprt_probe_oven() {
           _llxprt_po_avx2=1
         fi
         ;;
+      # No probe for other kernels: leave avx2=0 so the baseline build is
+      # chosen. An unknown OS is rejected by the candidate case below anyway.
+      *) ;;
     esac
   fi
 
@@ -480,6 +483,7 @@ _llxprt_probe_oven() {
             set -- '@oven/bun-darwin-x64-baseline'
           fi
           ;;
+        *) return 1 ;;
       esac
       ;;
     linux)
@@ -506,12 +510,14 @@ _llxprt_probe_oven() {
             fi
           fi
           ;;
+        *) return 1 ;;
       esac
       ;;
     freebsd)
       case "$_llxprt_po_arch" in
         arm64) set -- '@oven/bun-freebsd-aarch64' ;;
         x64)   set -- '@oven/bun-freebsd-x64' ;;
+        *) return 1 ;;
       esac
       ;;
     win32)
@@ -524,6 +530,7 @@ _llxprt_probe_oven() {
             set -- '@oven/bun-windows-x64-baseline'
           fi
           ;;
+        *) return 1 ;;
       esac
       ;;
     *) return 1 ;;

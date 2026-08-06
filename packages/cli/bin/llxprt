@@ -374,41 +374,6 @@ if [ "$_llxprt_kernel" = "Darwin" ] && [ -n "$_llxprt_bun_pin" ]; then
   if _llxprt_path_bun_version=$(bun --version 2>/dev/null) && \
      [ -n "$_llxprt_path_bun_version" ] && \
      _llxprt_version_ge "$_llxprt_path_bun_version" "$_llxprt_bun_pin"; then
-    # Issue #3021: an ad-hoc or cdhash-only signed PATH Bun cannot satisfy the
-    # identity-based macOS Keychain ACL, so every credential read degrades to a
-    # login-password prompt that "Always Allow" cannot persist (#3020 sealed
-    # change_acl with an empty application list). Inspect the designated
-    # requirement of the exact binary selected and warn once unless it carries
-    # Oven's exact team-identity clause (certificate leaf[subject.OU] =
-    # "7FRXF46ZSN"), which is the OU stored in the existing Keychain ACL. The
-    # warning is advisory: a Bun that is ad-hoc signed or has no team identity
-    # runs llxprt correctly except for Keychain access, and skipping it would
-    # silently restore the npm-unlink failure mode #2962 exists to prevent.
-    if _llxprt_path_bun_exe=$(command -v bun 2>/dev/null) && \
-       [ -n "$_llxprt_path_bun_exe" ]; then
-      # Suppress the warning only when codesign succeeds AND its output carries
-      # Oven's exact team-identity clause. A failing codesign (unsigned binary,
-      # or an error whose diagnostic merely echoes the clause), or a successful
-      # inspection signed by any other team, must still warn — the Keychain ACL
-      # stores Oven's OU (7FRXF46ZSN) and only a binary signed by that exact
-      # team can satisfy it.
-      _llxprt_has_team_id=0
-      if _llxprt_dr=$(codesign -d --requirements - "$_llxprt_path_bun_exe" 2>&1); then
-        case "$_llxprt_dr" in
-          *certificate\ leaf\[subject.OU]\ =\ \"7FRXF46ZSN\"*) _llxprt_has_team_id=1 ;;
-          *) ;;
-        esac
-      fi
-      if [ "$_llxprt_has_team_id" -eq 0 ]; then
-        printf '%s\n' 'LLxprt Code: the Bun on your PATH is ad-hoc signed or otherwise' >&2
-        printf '%s\n' 'lacks a stable team identity, so it cannot hold a persistent macOS' >&2
-        printf '%s\n' 'Keychain grant. You will be prompted for your login password on every' >&2
-        printf '%s\n' 'credential read, and "Always Allow" will not persist (#3020).' >&2
-        printf '%s\n' 'Install the official Bun release signed by Oven:' >&2
-        printf '%s\n' '    brew uninstall bun && brew install oven-sh/bun/bun' >&2
-        printf '%s\n' '    curl -fsSL https://bun.com/install | bash' >&2
-      fi
-    fi
     exec bun "$_llxprt_entry" "$@"
   fi
 fi
@@ -494,6 +459,9 @@ _llxprt_probe_oven() {
           _llxprt_po_avx2=1
         fi
         ;;
+      # No probe for other kernels: leave avx2=0 so the baseline build is
+      # chosen. An unknown OS is rejected by the candidate case below anyway.
+      *) ;;
     esac
   fi
 
@@ -515,6 +483,7 @@ _llxprt_probe_oven() {
             set -- '@oven/bun-darwin-x64-baseline'
           fi
           ;;
+        *) return 1 ;;
       esac
       ;;
     linux)
@@ -541,12 +510,14 @@ _llxprt_probe_oven() {
             fi
           fi
           ;;
+        *) return 1 ;;
       esac
       ;;
     freebsd)
       case "$_llxprt_po_arch" in
         arm64) set -- '@oven/bun-freebsd-aarch64' ;;
         x64)   set -- '@oven/bun-freebsd-x64' ;;
+        *) return 1 ;;
       esac
       ;;
     win32)
@@ -559,6 +530,7 @@ _llxprt_probe_oven() {
             set -- '@oven/bun-windows-x64-baseline'
           fi
           ;;
+        *) return 1 ;;
       esac
       ;;
     *) return 1 ;;
