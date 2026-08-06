@@ -185,6 +185,12 @@ async function handleZedAcpIntegration(
   return true;
 }
 
+function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
+  return [argv.provider, argv.profile, argv.profileLoad].some(
+    (value) => typeof value === 'string' && value.trim().length > 0,
+  );
+}
+
 /**
  * Construct the SINGLE foreground Agent (#2378) and dispatch the interactive or
  * non-interactive session. The spinner wraps agent construction, which (via
@@ -227,6 +233,7 @@ async function constructForegroundAgentAndDispatch(
     recording,
     hasPipedInput,
     readStdinData,
+    suppressStartupWelcome: hasExplicitProviderProfileSelector(argv),
   });
 }
 

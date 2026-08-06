@@ -66,6 +66,7 @@ export interface SessionDispatchOptions {
   recording: SessionRecordingSetup;
   hasPipedInput: boolean;
   readStdinData: () => Promise<string>;
+  suppressStartupWelcome?: boolean;
 }
 
 /**
@@ -80,6 +81,7 @@ export async function dispatchInteractiveOrNonInteractive({
   recording,
   hasPipedInput,
   readStdinData,
+  suppressStartupWelcome,
 }: SessionDispatchOptions): Promise<void> {
   const input = config.getQuestion();
 
@@ -114,6 +116,7 @@ export async function dispatchInteractiveOrNonInteractive({
       recording.resumedHistory ?? undefined,
       recording.recordingService,
       recording.resumedLockHandle,
+      suppressStartupWelcome,
     );
     return;
   }

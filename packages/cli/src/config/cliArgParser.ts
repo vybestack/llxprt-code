@@ -68,6 +68,7 @@ export interface CliArgs {
   proxy: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
+  profile?: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
   screenReader: boolean | undefined;
@@ -192,13 +193,14 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     experimentalUi: result['experimentalUi'] as boolean | undefined,
     extensions: result['extensions'] as string[] | undefined,
     listExtensions: result['listExtensions'] as boolean | undefined,
-    provider: result['provider'] as string | undefined,
+    provider: pickLastRepeatedStringOption(result['provider']),
     key: result['key'] as string | undefined,
     keyfile: result['keyfile'] as string | undefined,
     baseurl: result['baseurl'] as string | undefined,
     proxy: result['proxy'] as string | undefined,
     includeDirectories: result['includeDirectories'] as string[] | undefined,
-    profileLoad: result['profileLoad'] as string | undefined,
+    profileLoad: pickLastRepeatedStringOption(result['profileLoad']),
+    profile: pickLastRepeatedStringOption(result['profile']),
     loadMemoryFromIncludeDirectories: result[
       'loadMemoryFromIncludeDirectories'
     ] as boolean | undefined,
@@ -217,6 +219,14 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     imageOutput: result['imageOutput'] as string | undefined,
     imagePrompt: result['imagePrompt'] as string | undefined,
   };
+}
+
+function pickLastRepeatedStringOption(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    const last = value[value.length - 1];
+    return typeof last === 'string' ? last : undefined;
+  }
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** Checks for subcommand dispatch (mcp, hooks, extensions) and exits if handled. */
@@ -344,10 +354,9 @@ function validateRootArgs(argv: Record<string, unknown>): true {
     'jspBootstrapInternalEnvPath',
     '--jsp-bootstrap-internal-env-path',
   );
-  if (
-    hasNonEmptyString(argv['profile']) &&
-    hasNonEmptyString(argv['profileLoad'])
-  ) {
+  const profile = pickLastRepeatedStringOption(argv['profile']);
+  const profileLoad = pickLastRepeatedStringOption(argv['profileLoad']);
+  if (hasNonEmptyString(profile) && hasNonEmptyString(profileLoad)) {
     throw new Error(
       'Cannot use both --profile and --profile-load. Use one at a time.',
     );
