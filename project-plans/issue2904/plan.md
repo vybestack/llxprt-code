@@ -135,3 +135,7 @@ The initial signal reporting carried synthetic `TestResult` fixtures through `ge
 ### Provider suite rename for core runner discovery
 
 `packages/core/src/integration-tests/provider-settings-integration.spec.ts` is renamed to `provider-settings-integration.test.ts` so the existing core `run-bun-tests.ts` (which discovers only `.test.ts`/`.test.tsx`) includes this suite directly. Only this one spec is renamed; runner discovery is not broadened and no unrelated specs are renamed. The stale in-file `metadata.source` self-reference was updated to match.
+
+### PR OCR cleanup-failure finding
+
+The PR OCR finding that the real-signal test's `finally` cleanup could suppress an earlier behavioral assertion failure is classified **In-scope-Fix**. The concern applies directly to the new behavioral evidence. Instead of swallowing cleanup errors or adding defensive exception aggregation, the generated temporary source is replaced by a committed, non-discoverable auth test fixture. The behavioral test still invokes the real child process and verifies signal propagation, while no fallible cleanup can obscure its assertions.

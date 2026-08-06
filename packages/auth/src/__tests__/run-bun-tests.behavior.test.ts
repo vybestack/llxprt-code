@@ -5,8 +5,6 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   formatFailureReason,
@@ -106,27 +104,17 @@ describe('auth run-bun-tests real child signal propagation', () => {
   it.skipIf(isWindows)(
     'carries a real SIGTERM child exit into the result and JUnit failure text',
     async () => {
-      const fixtureDir = mkdtempSync(join(tmpdir(), 'auth-signal-'));
-      const fixturePath = join(fixtureDir, 'self-sigterm.test.ts');
-      writeFileSync(
-        fixturePath,
-        `import { test } from 'bun:test';
-test('self-terminate', () => {
-  process.kill(process.pid, 'SIGTERM');
-});
-`,
+      const fixturePath = join(
+        import.meta.dir,
+        '../../test-fixtures/self-sigterm.fixture.ts',
       );
-      try {
-        const result = await runTestFile(fixturePath);
+      const result = await runTestFile(fixturePath);
 
-        expect(result.signal).toBe('SIGTERM');
-        expect(result.passed).toBe(false);
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.passed).toBe(false);
 
-        const xml = generateJUnit([result], 1, 1);
-        expect(xml).toContain('Killed by signal SIGTERM');
-      } finally {
-        rmSync(fixtureDir, { recursive: true, force: true });
-      }
+      const xml = generateJUnit([result], 1, 1);
+      expect(xml).toContain('Killed by signal SIGTERM');
     },
   );
 });
