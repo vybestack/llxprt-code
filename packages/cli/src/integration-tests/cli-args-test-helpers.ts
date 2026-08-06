@@ -133,8 +133,9 @@ export async function runCli(
     }, 60_000);
 
     // A spawn failure (e.g. a moved or deleted CLI entry) emits 'error' and
-    // never 'close'. Without this the promise would never settle and the case
-    // would hang until the runner's own timeout, hiding the cause.
+    // then 'close' with a null exit code. Settling here keeps the spawn
+    // message; the later 'close' cannot change an already-settled promise.
+    // Without this the case would report a bare exit code with no cause.
     child.on('error', (error: Error) => {
       clearTimeout(timeout);
       resolve({

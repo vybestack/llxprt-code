@@ -100,9 +100,16 @@ function workspaceBuildSelector(): string {
   if (!isDeclarationsOnly()) {
     return '--workspaces';
   }
-  return declarationBuildWorkspaces(readWorkspacePackageNames())
-    .map((name) => `--workspace=${name}`)
-    .join(' ');
+  const selected = declarationBuildWorkspaces(readWorkspacePackageNames());
+  if (selected.length === 0) {
+    // An empty selector would leave a bare `npm run build`, which re-enters
+    // this script instead of fanning out to the workspaces — a silent wrong
+    // build rather than a failure.
+    throw new Error(
+      'Declaration build selected no workspaces; check NON_DECLARATION_WORKSPACES.',
+    );
+  }
+  return selected.map((name) => `--workspace=${name}`).join(' ');
 }
 
 function sandboxAvailable(): boolean {

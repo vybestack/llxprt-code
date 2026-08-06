@@ -274,6 +274,39 @@ describe('issue #2983 — entry-point execution contract', () => {
       rmSync(outsidePackages, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it('still runs build.ts when it is the entry point', () => {
+    // build.ts has no cwd guard — it anchors on import.meta.url and would run
+    // a real build. Emptying PATH makes its first action, `npm run generate`,
+    // fail immediately, so reaching that failure proves `main()` ran without
+    // building anything.
+    const emptyPath = mkdtempSync(join(tmpdir(), 'issue-2983-nopath-'));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [join(REPO_ROOT, 'scripts', 'build.ts')],
+        {
+          cwd: REPO_ROOT,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: emptyPath, Path: emptyPath },
+          timeout: 120_000,
+        },
+      );
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+      expect(result.status, output).not.toBe(0);
+      expect(output).toContain('npm run generate');
+    } finally {
+      rmSync(emptyPath, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it('refuses to build zero workspaces rather than re-entering itself', () => {
+    // A bare `npm run build` re-enters this script instead of fanning out.
+    expect(declarationBuildWorkspaces([])).toEqual([]);
+    expect(readRepoFile('scripts/build.ts')).toContain(
+      'Declaration build selected no workspaces',
+    );
+  });
 });
 
 describe('issue #2983 — declaration-only emit', () => {
