@@ -495,79 +495,123 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
     });
 
     it('handles an upstream error after headers and partial body without crashing or double-counting', async () => {
+      const partialSentinel = '{"partial":';
+      let triggerUpstreamReset: (() => void) | null = null;
       const upstream = http.createServer((request, response) => {
         request.resume();
         request.on('end', () => {
           response.writeHead(200, { 'content-type': 'application/json' });
-          response.write('{"partial":');
-          setImmediate(() =>
-            response.destroy(new Error('upstream mid-stream crash')),
-          );
+          response.write(partialSentinel);
+          triggerUpstreamReset = () => {
+            response.destroy(new Error('upstream mid-stream crash'));
+          };
         });
       });
       const upstreamPort = await listen(upstream);
-      const resource = await startEmbeddedMonitor(
-        `http://127.0.0.1:${upstreamPort}/v1`,
-      );
+      let resource:
+        | Awaited<ReturnType<typeof startEmbeddedMonitor>>
+        | undefined;
+      let monitorStopAttempted = false;
 
-      const result = await new Promise<{
-        statusCode: number | undefined;
-        body: string;
-      }>((resolve) => {
-        // The upstream sends 200 headers and then destroys the socket
-        // mid-body, so the client-visible failure can surface either on the
-        // response stream or as a request-level 'error', depending on which
-        // event loop turn the reset lands in. Record the status line as soon
-        // as headers arrive so the request-level path reports the status the
-        // client genuinely observed instead of racing to 0.
-        let observedStatus: number | undefined;
-        let observedChunks: Buffer[] = [];
-        const proxyRequest = http.request(
-          new URL(asString(resource.ready.proxy_url)),
-          {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'x-stainless-retry-count': '0',
-            },
-          },
-          (response) => {
-            observedStatus = response.statusCode;
+      try {
+        resource = await startEmbeddedMonitor(
+          `http://127.0.0.1:${upstreamPort}/v1`,
+        );
+        const result = await new Promise<{ statusCode: number; body: string }>(
+          (resolve, reject) => {
             const chunks: Buffer[] = [];
-            observedChunks = chunks;
-            response.on('data', (chunk) => chunks.push(chunk));
-            response.on('end', () =>
-              resolve({
-                statusCode: response.statusCode,
-                body: Buffer.concat(chunks).toString('utf8'),
-              }),
+            let terminatedCleanly = false;
+            let settled = false;
+            const proxyRequest = http.request(
+              new URL(asString(resource.ready.proxy_url)),
+              {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  'x-stainless-retry-count': '0',
+                },
+              },
+              (response) => {
+                const statusCode = response.statusCode;
+                if (statusCode === undefined) {
+                  settled = true;
+                  reject(new Error('response arrived without an HTTP status'));
+                  return;
+                }
+                const resolveAbnormal = () => {
+                  if (settled) {
+                    return;
+                  }
+                  settled = true;
+                  resolve({
+                    statusCode,
+                    body: Buffer.concat(chunks).toString('utf8'),
+                  });
+                };
+                response.on('data', (chunk) => {
+                  chunks.push(chunk);
+                  if (
+                    triggerUpstreamReset !== null &&
+                    Buffer.concat(chunks).toString('utf8') === partialSentinel
+                  ) {
+                    const trigger = triggerUpstreamReset;
+                    triggerUpstreamReset = null;
+                    trigger();
+                  }
+                });
+                response.on('end', () => {
+                  terminatedCleanly = true;
+                  if (!settled) {
+                    settled = true;
+                    reject(
+                      new Error(
+                        'response ended cleanly; expected abnormal termination after the partial sentinel',
+                      ),
+                    );
+                  }
+                });
+                response.on('error', resolveAbnormal);
+                response.on('close', () => {
+                  if (!terminatedCleanly) {
+                    resolveAbnormal();
+                  }
+                });
+              },
             );
-            response.on('error', () =>
-              resolve({
-                statusCode: response.statusCode,
-                body: Buffer.concat(chunks).toString('utf8'),
-              }),
-            );
+            proxyRequest.once('error', (error) => {
+              if (!settled) {
+                settled = true;
+                reject(
+                  new Error(
+                    `request-level error reached the client before response headers: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                  ),
+                );
+              }
+            });
+            proxyRequest.end('{"test":true}');
           },
         );
-        proxyRequest.once('error', () =>
-          resolve({
-            statusCode: observedStatus ?? 0,
-            body:
-              observedStatus === undefined
-                ? 'connection error'
-                : Buffer.concat(observedChunks).toString('utf8'),
-          }),
-        );
-        proxyRequest.end('{"test":true}');
-      });
-      const telemetry = await stopEmbeddedMonitor(resource);
-      await closeServer(upstream);
+        monitorStopAttempted = true;
+        const telemetry = await stopEmbeddedMonitor(resource);
 
-      expect(telemetry.total_requests).toBe(1);
-      expect(telemetry.upstream_errors).toBe(0);
-      expect(telemetry.responses_by_status).toEqual({ 200: 1 });
-      expect(result.statusCode).toBe(200);
+        expect(result.statusCode).toBe(200);
+        expect(result.body).toBe(partialSentinel);
+        expect(telemetry.total_requests).toBe(1);
+        expect(telemetry.upstream_errors).toBe(0);
+        expect(telemetry.responses_by_status).toEqual({ 200: 1 });
+        expect(telemetry.shutdown_complete).toBe(true);
+      } finally {
+        try {
+          if (resource !== undefined && !monitorStopAttempted) {
+            monitorStopAttempted = true;
+            await stopEmbeddedMonitor(resource);
+          }
+        } finally {
+          await closeServer(upstream);
+        }
+      }
     });
 
     it('handles a client-aborted request during streaming without crashing or double-counting', async () => {
