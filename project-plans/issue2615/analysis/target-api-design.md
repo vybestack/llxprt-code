@@ -158,9 +158,21 @@ Core's 126 non-root subpaths, bucketed so each is counted exactly once:
 imports — consists of production code reaching into core internals. That is the actual problem, and
 no amount of shim-removal, dead-path deletion or test-scaffolding relocation touches it.
 
-The mechanical 30% is worth doing first because it is free and because each removal is justified by
-coherence, not arithmetic: dead paths have no consumers, shims make core claim ownership of another
-package's API, and test scaffolding is not a production contract.
+The mechanical 30% is worth doing first because each removal is justified by coherence, not
+arithmetic: shims make core claim ownership of another package's API, and test scaffolding is not a
+production contract.
+
+> **Corrected — "dead" does not mean "safe to delete."** `@vybestack/llxprt-code-core` is a
+> published package (version 0.11.0, no `private` flag) whose `exports` map is a public contract.
+> The census establishes only that **no workspace file imports these paths**; it says nothing about
+> external consumers. An earlier draft called deletion of these entries free and free of design
+> debate. It is neither.
+>
+> Every removal from the exports map requires an explicit decision under a stated policy: a major
+> version break, or a deprecation window with a temporary compatibility facade. The right term for
+> the 18 entries is **"unused in this checkout,"** not "dead." Verification must include packing the
+> package and importing every retained seam from an isolated fixture, not merely a green workspace
+> build.
 
 The 88 production reach-throughs are a different question, and it is **not** "how do we get this
 number under 20." Most of them are not things that should leave core. They are things core
@@ -202,8 +214,49 @@ compile-time surface control.
 
 ## 6. Config role interfaces
 
-`Config` spans 2,514 lines across three files and declares ~200 methods. **81 are called from
-outside core; 119 are internal-only** and belong in no published contract.
+> **Corrected.** An earlier draft of this section claimed the cross-package contract was exactly
+> 81 methods, with 119 provably internal. That number came from a prototype that examined only
+> files importing `Config` from a deep `config/*` subpath and matched four hard-coded receiver
+> names. It excluded root-barrel `Config` importers entirely. The claim was a subset presented as
+> a measurement, and the eight roles derived from it were therefore unvalidated. See
+> `scripts/config-contract.ts` for the replacement analysis.
+
+`Config` spans 2,514 lines across three files and declares ~200 methods. The cross-package surface
+is **bounded, not yet pinned**:
+
+| Bound | Value | Method |
+|---|---|---|
+| Lower | ~81 members | deep-`config/*` importers only, four receiver names (undercount) |
+| Upper | **156 members** with ≥1 production access | AST over all root-barrel and deep importers, receivers bound by type annotation (overcount) |
+
+The upper bound is syntactic, not type-resolved, so it admits false positives where a file binds an
+unrelated identifier named `config` (`apiKey`, `providerName`, `mediaSupport` and similar entries in
+its output are almost certainly provider-config properties, not core `Config` members).
+
+**The true contract lies between these two numbers and must be pinned with type-resolved analysis
+before any role interface is published.** Publishing roles against either bound would repeat the
+mistake this section is correcting.
+
+What the corrected analysis does establish, because it holds at both bounds:
+
+- **162 production files outside core import `Config`** (plus 300 test files).
+- **78 members have exactly one production call site.** The earlier draft estimated ~45. The tail is
+  larger than thought and its composition is unambiguous: `getAsyncTaskManager`, `getShellJobManager`,
+  `getLspServiceClient`, `getGitService`, `getIdeClient`, `getRuntimeOAuthManager`,
+  `getOrCreateScheduler`, `getToolSchedulerFactory`, `getAgentClientFactory`. These are services
+  fetched through Config, not configuration.
+- **The capability-narrowing pattern already exists but is barely used**: exactly one production
+  `Pick<Config, ...>` narrowing (`getOutputFormat`, in `packages/cli/src/session/errorReporting.ts`).
+
+That last point reframes the target. Rather than eight package-scale role interfaces — which risk
+becoming smaller god-objects — the unit should be the **per-use-case capability interface** the
+codebase has already demonstrated. `LspControlDeps` (`packages/agents/src/api/control/lspControl.ts`)
+takes all of `Config` while needing only the LSP surface; that is the shape of the migration, one
+consumer at a time, with `Config` structurally satisfying each new interface until the last caller
+is gone.
+
+The eight clusters below are retained as **discovery categories for that work — not as a proposed
+published API.**
 
 Cross-package calls cluster into eight roles:
 
@@ -248,10 +301,19 @@ Ordered by leverage, reusing what already exists:
 6. **Universal package cycle test**, generalised from the currently-dead
    `check-storage-package-cycle.ts`.
 
-The declared-barrel approach makes `check-agents-api-surface.ts` and `expected-root-surface.json`
-redundant: a hand-written barrel is validated by `tsc` for free, whereas a snapshot is a derived
-artifact whose designed failure response is "regenerate". Snapshots normalise drift; declarations
-prevent it.
+> **Corrected — the declaration snapshot stays.** An earlier draft argued that a hand-written
+> barrel makes `check-agents-api-surface.ts` and `expected-root-surface.json` redundant. That
+> conflates two different guarantees. A declared barrel prevents *accidental additions*, because
+> widening it is a visible diff. It does **not** detect signature drift, silent removals, or
+> internal types leaking into emitted declarations through a public signature — `tsc` only proves
+> the barrel compiles.
+>
+> Both mechanisms are needed and they check different things: the barrel governs *what is named*,
+> the snapshot governs *what the emitted declarations actually contain*. Generalise the existing
+> guard and extend it with an exports-subpath and condition manifest. The original criticism of
+> snapshots still holds and should be addressed directly — a snapshot whose failure mode is
+> "regenerate it" teaches people to regenerate it — so the update path must require review rather
+> than being a single command in CI output.
 
 ## 8. Questions resolved from data
 
@@ -321,7 +383,18 @@ improves, at the cost of a package no longer owning its own vocabulary.
 
 The content model is core's domain vocabulary and stays in core, published as a first-class seam.
 
-## 8b. The proposed contract: 88 reach-throughs collapse into 11 seams
+## 8b. Candidate seams — an open manifest, not a closed contract
+
+> **Corrected.** This section was previously headed "88 reach-throughs collapse into 11 seams."
+> That was false by the section's own arithmetic: the named seams absorb 54 of 88 paths and 800 of
+> 978 production imports, leaving 34 paths and 178 imports unassigned. A contract with a third of
+> its surface unassigned is not a contract. Nothing may be trimmed against this table until every
+> path carries a disposition.
+
+Each of the 88 production reach-through paths must end up with exactly one of five dispositions:
+**retained as a named seam**, **moved to an owning package**, **made internal behind a named port or
+factory**, **kept temporarily under an explicit compatibility policy**, or **blocked on a named
+issue**. The table below records progress toward that, and is incomplete.
 
 Applying rule 0 — group by domain, name the contract, let the count fall out. Every one of the 88
 production reach-through subpaths is assigned to a candidate seam:
@@ -394,6 +467,20 @@ lands. So the shared kernel is roughly four seams, not nine paths.
 surface to be minimised. Grouping by consumer shows 76% of them were never public API in the first
 place — they are simply in the wrong package.
 
+> **Corrected — "one external consumer" does not imply "move it there."** The triage counts only
+> *package-specifier* consumers. It is blind to core-internal relative imports, and therefore to
+> whether core itself still needs the code. Three of the proposed moves fail on inspection: `Config`
+> constructs `WorkspaceContext` (`packages/core/src/config/configConstructor.ts`), constructs
+> `SkillManager` (same file), and constructs `ResourceRegistry` (`packages/core/src/config/config.ts`),
+> exposing all three via `configBaseCore.ts`. Moving them to mcp or agents while core still
+> constructs them would create a new backwards edge — the exact defect this work exists to remove.
+>
+> The mechanical rule is therefore demoted to a **candidate filter**. Each candidate needs an
+> ownership check before it moves: who constructs it, who owns its lifetime and state, whether core
+> retains a relative import, whether the target direction is legal under the DAG (§10), and whether
+> any prerequisite decomposition must land first. Several of these are blocked behind the Config
+> work rather than available now.
+
 Note that `utils/debugLogger.js` (18 production imports) sits here while `debug/DebugLogger.js`
 (a shim onto telemetry) sits in §4 — the two-logger duplication #2617 exists to resolve.
 
@@ -454,7 +541,47 @@ enforcement gate is switched on — the worst possible moment. Either the progra
 workstream for the agent-loop and utility domains, or this design has to specify their public
 contract up front so the gap is closed by decision rather than by discovery.
 
-## 10. Remaining decision
+## 10. The target DAG must be decided first — and this document had it wrong
 
-Ownership: does this design stand as its own issue ahead of #2614–#2617, or fold into #2615?
-The role interfaces in §6 are simultaneously that issue's deliverable and this one's input.
+An earlier draft asserted that `core → tools` is acceptable "because tools is a lower layer,"
+carried over from issue #2618's framing. **The codebase disagrees**, in a comment written
+specifically to record the intent:
+
+```ts
+// packages/core/src/config/configTypes.ts
+/**
+ * Registration hook for post-skill-discovery tool registration.
+ * Injected by composition roots. Eliminates the inverted core->tools
+ * dependency by letting the CLI register ActivateSkillTool without
+ * core importing from the tools package.
+ */
+postSkillDiscoveryToolRegistrar?: PostSkillDiscoveryToolRegistrar;
+```
+
+`core → tools` is being actively eliminated, not sanctioned. Core nonetheless still declares
+dependencies on both `tools` and `mcp` in `packages/core/package.json`, and `Config` imports from
+both directly.
+
+This is a blocking prerequisite, not a detail. Ownership decisions depend entirely on it: whether
+`ResourceRegistry` may move to mcp, whether `SkillManager` may move to agents, and where #2617
+places retry/errors/logger are all determined by which edges are legal. Deciding seams before the
+DAG risks naming a contract that encodes an edge the project intends to delete.
+
+**Required before implementation:** a written target DAG covering core, tools, mcp, providers,
+agents, cli, settings, policy, telemetry, storage and auth, with each currently-violating edge
+listed and assigned to an issue. Every proposed move in §5 and §8b is provisional until then.
+
+## 11. Status
+
+This design is **not ready to implement**. Outstanding, in order:
+
+1. Decide and document the target DAG (§10).
+2. Give all 88 paths a disposition; close the 34 unassigned and the 55 unowned (§8b, §9).
+3. Pin the Config contract with type-resolved analysis; the surface is bounded 81–156 and neither
+   bound is publishable (§6).
+4. Specify resolution concretely: emitted declaration paths, `types`/`bun`/`import` condition
+   parity, clean-checkout typecheck without stale `dist`, and the real test-runner topology —
+   note there are no `agents` or `cli` vitest configs, contrary to issue #2618's text.
+5. State the compatibility policy for a published package before removing any export (§5).
+
+Ownership is settled: this work lands under #2615, whose Config decomposition supplies item 3.

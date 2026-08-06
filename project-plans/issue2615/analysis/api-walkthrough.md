@@ -36,10 +36,10 @@ to `packages/core/src/content/model.ts` tomorrow and not one caller changes — 
 {
   "exports": {
     ".":                   { "types": "./dist/index.d.ts",           "bun": "./index.ts",              "import": "./dist/index.js" },
-    "./content":           { "types": "./dist/api/content.d.ts",     "bun": "./src/api/content.ts",    "import": "./dist/api/content.js" },
-    "./config":            { "types": "./dist/api/config.d.ts",      "bun": "./src/api/config.ts",     "import": "./dist/api/config.js" },
-    "./session":           { "types": "./dist/api/session.d.ts",     "bun": "./src/api/session.ts",    "import": "./dist/api/session.js" },
-    "./runtime/contracts": { "types": "./dist/api/contracts.d.ts",   "bun": "./src/api/contracts.ts",  "import": "./dist/api/contracts.js" }
+    "./content":           { "types": "./dist/src/api/content.d.ts",     "bun": "./src/api/content.ts",    "import": "./dist/src/api/content.js" },
+    "./config":            { "types": "./dist/src/api/config.d.ts",      "bun": "./src/api/config.ts",     "import": "./dist/src/api/config.js" },
+    "./session":           { "types": "./dist/src/api/session.d.ts",     "bun": "./src/api/session.ts",    "import": "./dist/src/api/session.js" },
+    "./runtime/contracts": { "types": "./dist/src/api/contracts.d.ts",   "bun": "./src/api/contracts.ts",  "import": "./dist/src/api/contracts.js" }
     // ~8 more
   }
 }
@@ -91,8 +91,18 @@ Two things changed beyond the paths:
 | cli / a2a-server | agents, core: `content`, `session`, `policy` | — |
 | mcp, auth, settings, storage, policy, telemetry | *(leaves — nothing internal)* | core |
 
-The one edge that must disappear is **core → mcp**. Core depends on mcp today while mcp declares
-core only as a devDependency: an actual cycle plus a packaging bug.
+**The `core` row above is provisional and the DAG is not settled.** An earlier version of this table
+treated `core → tools` as normal. The codebase says otherwise — `packages/core/src/config/configTypes.ts`
+carries a hook whose stated purpose is "Eliminates the inverted core->tools dependency," so that edge
+is being removed, not sanctioned. Core still declares dependencies on both `tools` and `mcp`.
+
+Two edges are therefore in question, not one:
+
+- **core → mcp** — an actual cycle today; mcp declares core only as a devDependency, which is also a
+  packaging bug.
+- **core → tools** — treated as inverted by the source, as accepted by issue #2618. This must be
+  resolved before any ownership move, because it decides where retry/errors/logger land and whether
+  `ResourceRegistry` and `SkillManager` may move at all.
 
 ## 5. What happens when you get it wrong
 
