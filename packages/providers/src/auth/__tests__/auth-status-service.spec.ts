@@ -9,6 +9,10 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 // ---------------------------------------------------------------------------
 // Hoist mock factories so they're available before vi.mock() runs
 // ---------------------------------------------------------------------------
+const realLlxprtCodeAuthModule = {
+  ...(await import('@vybestack/llxprt-code-auth')),
+};
+
 const { flushMockRef, providerManagerRef, providerRef } = {
   flushMockRef: {
     current: undefined as ReturnType<typeof vi.fn> | undefined,
@@ -24,9 +28,7 @@ const { flushMockRef, providerManagerRef, providerRef } = {
 };
 
 vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
-    '@vybestack/llxprt-code-auth',
-  );
+  const actual = realLlxprtCodeAuthModule;
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],
@@ -47,7 +49,6 @@ import type { ProviderRegistry } from '../provider-registry.js';
 import type { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
 import type { OAuthBucketManager } from '../OAuthBucketManager.js';
 import type { TokenAccessCoordinator } from '../token-access-coordinator.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -10,7 +10,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import {
   debugLogger,
   sanitizeForByteString,
@@ -24,8 +23,10 @@ import {
 } from './providerManagerInstance.js';
 
 // Mock os module and set homedir before imports
+const realOsModule = { ...(await import('os')) };
+
 vi.mock('os', () => {
-  const actual = importActualSync<typeof import('os')>('os');
+  const actual = realOsModule;
   return {
     ...actual,
     homedir: vi.fn(() => '/home/user'),

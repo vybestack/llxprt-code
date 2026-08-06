@@ -14,9 +14,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
 const saveProfileMock = vi.fn();
 
@@ -72,9 +75,7 @@ vi.mock('../profileApplication.js', () => ({
 }));
 
 vi.mock('@vybestack/llxprt-code-settings', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+  const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     ProfileManager: vi.fn(() => ({

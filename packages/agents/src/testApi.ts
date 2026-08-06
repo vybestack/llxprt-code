@@ -14,8 +14,8 @@
  * augmented API that `test-setup/augment-bun-vi.ts` installs at runtime:
  *
  * 1. **`vi.mock`** — Bun types it as `typeof mock.module`, whose return type
- *    is `void | Promise<void>`. Our shim's `registerModuleMock` registers
- *    the mock **synchronously** and returns `unknown`; callers never await it.
+ *    is `void | Promise<void>`. Registration is synchronous and no caller
+ *    awaits it.
  *    Bun's declared `Promise<void>` arm makes `@typescript-eslint/no-floating-promises`
  *    fire on every top-level `vi.mock(...)` call (323 errors).
  *
@@ -30,9 +30,8 @@
  *    fire 159 times.
  *
  * The facade re-exports the full Bun test API with exactly these two
- * corrections applied, plus the `vi` shim-additions (`mocked`, `waitFor`,
- * `hoisted`, `stubEnv`, …) that `test-vi.ts` previously typed separately.
- * This replaces `test-vi.ts` so there is **one** import target, not two.
+ * corrections applied. It adds no behaviour; every member it exposes is
+ * Bun's own.
  *
  * CONSTRAINTS
  *
@@ -58,105 +57,27 @@ import {
 } from 'bun:test';
 
 // ---------------------------------------------------------------------------
-// (a) vi — override mock() to return void, and fold in the shim additions.
+// (a) vi — correct the declared return type of mock().
 // ---------------------------------------------------------------------------
 
-/**
- * Narrows T:
- * - If T has a call signature (plain function) → Bun's `Mock<T>`.
- * - If T has a construct signature (class) → `Mock<(...args) => InstanceType<T>>`
- *   & original static members (so `.mockImplementation()` is available on
- *   mocked classes). Mirrors vitest's `MaybeMockedConstructor`.
- * - Otherwise → T unchanged.
- *
- * Uses `(...args: never[]) => unknown` as the function constraint to avoid
- * `any` while remaining permissive (all function types are assignable to it
- * because `never[]` is the bottom type for parameter arrays).
- */
-type MaybeMocked<T> = T extends (...args: never[]) => unknown
-  ? Mock<T>
-  : T extends new (...args: never[]) => infer R
-    ? Mock<(...args: ConstructorParameters<T>) => R> & {
-        prototype: T extends { prototype: infer P } ? P : unknown;
-      }
-    : T;
-
-/**
- * The set of members our shim adds on top of Bun's `vi`. Signatures match the
- * real runtime implementations in `test-setup/augment-bun-vi.ts` — not
- * invented. Only members the shim genuinely installs are listed.
- *
- * `mocked` is an identity function at runtime (the item is already a mock
- * after vi.mock replaces it), but its return type is `MaybeMocked<T>` so
- * callers get proper mock-method types (`.mockClear()`, `.mockResolvedValue()`, etc.).
- *
- * `mock` is overridden to return `void` because the shim's
- * `registerModuleMock` registers synchronously and its return value is never
- * consumed. The factory's `importOriginal` is typed as returning a Promise
- * because every call site is written to `await importOriginal()` and the
- * shim deliberately returns a sync value so the await resolves immediately.
- */
-interface ViShimAdditions {
-  mocked: {
-    <T>(item: T): MaybeMocked<T>;
-    <T>(item: T, deep: false): MaybeMocked<T>;
-    <T>(item: T, deep: true): MaybeMocked<T>;
-    <T>(item: T, options: { partial?: false; deep?: false }): MaybeMocked<T>;
-    <T>(item: T, options: { partial?: false; deep: true }): MaybeMocked<T>;
-    <T>(item: T, options: { partial: true; deep?: false }): MaybeMocked<T>;
-    <T>(item: T, options: { partial: true; deep: true }): MaybeMocked<T>;
-  };
-  /** Async polling helper from test-setup/stub-helpers.ts. */
-  waitFor: <T>(
-    callback: () => T | Promise<T>,
-    options?: number | { interval?: number; timeout?: number },
-  ) => Promise<T>;
-  hoisted: <T>(factory: () => T) => T;
-  stubEnv: (key: string, value: string) => void;
-  unstubAllEnvs: () => void;
-  stubGlobal: (key: string, value: unknown) => void;
-  unstubAllGlobals: () => void;
-  importActual: (id: string) => Promise<unknown>;
-  importActualSync: (id: string) => unknown;
-  isMockFunction: (value: unknown) => value is ((
-    ...args: unknown[]
-  ) => unknown) & {
-    mock: Record<string, unknown>;
-  };
-  advanceTimersByTimeAsync: (ms: number) => Promise<void>;
-  runAllTimersAsync: () => Promise<void>;
-  runOnlyPendingTimersAsync: () => Promise<void>;
-  setSystemTime: (time?: number | Date) => void;
-  resetModules: () => never;
-  unmock: () => never;
-  doUnmock: () => never;
-  doMock: (
-    id: string,
-    factory?: (importOriginal: () => Promise<unknown>) => unknown,
-  ) => unknown;
+interface ViTypeCorrections {
   /**
-   * Corrected signature: the shim registers the mock synchronously and the
-   * return value is never consumed. The factory's `importOriginal` is typed
-   * as returning a Promise because every call site awaits it and the shim
-   * deliberately returns a sync value so `await importOriginal()` resolves
-   * immediately.
+   * Bun types `vi.mock` as `typeof mock.module`, whose return type includes a
+   * `Promise<void>` arm. Registration is synchronous and no call site awaits
+   * it, so the declared promise makes `no-floating-promises` fire on every
+   * top-level `vi.mock(...)`.
    */
-  mock: (
-    path: string,
-    factory?: (importOriginal: <T>() => Promise<T>) => unknown,
-  ) => void;
+  mock: (path: string, factory?: () => unknown) => void;
 }
 
 /** Bun's `vi` minus the `mock` member we are overriding. */
 type BunViWithoutMock = Omit<typeof bunVi, 'mock'>;
 
-export type Vi = BunViWithoutMock & ViShimAdditions;
+export type Vi = BunViWithoutMock & ViTypeCorrections;
 
 /**
- * The runtime `vi` object — Bun's `vi` after the preload shim has augmented
- * it. The cast is sound because `augment-bun-vi.ts` installs every member of
- * `ViShimAdditions` (including the corrected `mock`) before any consumer
- * imports this module, and the shim's `registerModuleMock` returns `void`.
+ * The runtime `vi` object. The cast only corrects the declared return type of
+ * `mock`; every member consumers use is Bun's own.
  */
 export const vi = bunVi as Vi;
 

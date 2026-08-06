@@ -15,7 +15,6 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -27,8 +26,10 @@ import * as path from 'node:path';
 // real behavior for every method while making them mockable. Both this file
 // and credential-proxy-server.ts resolve the same mocked module, so a spy here
 // intercepts the server's own fs calls.
+const realNodeFsModule = { ...(await import('node:fs')) };
+
 vi.mock('node:fs', () => {
-  const actual = importActualSync<typeof import('node:fs')>('node:fs');
+  const actual = realNodeFsModule;
   return { ...actual };
 });
 

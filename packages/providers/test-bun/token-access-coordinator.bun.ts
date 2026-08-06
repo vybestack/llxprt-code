@@ -28,7 +28,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { TokenAccessCoordinator } from '../src/auth/token-access-coordinator.js';
 import type {
   OAuthProvider,
@@ -45,6 +44,10 @@ import { oauthRuntimeBridge } from '../src/auth/runtime-accessor-bridge.js';
 // --------------------------------------------------------------------------
 // Minimal stub helpers
 // --------------------------------------------------------------------------
+
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
 function makeToken(accessToken: string, expiryOffsetSecs = 3600): OAuthToken {
   return {
@@ -127,9 +130,7 @@ function createMockFacade() {
 
 // Mock @vybestack/llxprt-code-core ProfileManager
 vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-core');
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     ProfileManager: class MockProfileManager {

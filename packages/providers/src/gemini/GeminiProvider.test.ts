@@ -17,11 +17,14 @@ import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '@google/genai';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import {
   getSettingsService,
   type SettingsService,
 } from '@vybestack/llxprt-code-settings';
+
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
 const generateContentStreamMock = vi.fn();
 
@@ -49,9 +52,7 @@ const mockSettingsService = {
 };
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
   SETTINGS_REGISTRY: [],
 }));

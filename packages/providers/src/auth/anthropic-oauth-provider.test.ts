@@ -17,6 +17,15 @@ import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 
 // Mock the ClipboardService class - do this before importing it
+const realSecureBrowserLauncherModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js'
+  )),
+};
+const realLlxprtCodeAuthModule = {
+  ...(await import('@vybestack/llxprt-code-auth')),
+};
+
 vi.mock('./ClipboardService.js', () => ({
   ClipboardService: {
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
@@ -28,13 +37,10 @@ import { ClipboardService } from './ClipboardService.js';
 
 // Register real runtime accessors via the bridge (no mock theater)
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // Mock the device flow implementation
 vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => {
-  const actual = importActualSync(
-    '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
-  );
+  const actual = realSecureBrowserLauncherModule;
   return {
     ...actual,
     // Mock shouldLaunchBrowser to return true for tests
@@ -45,7 +51,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => {
 });
 
 vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = importActualSync('@vybestack/llxprt-code-auth');
+  const actual = realLlxprtCodeAuthModule;
   return {
     ...actual,
     AnthropicDeviceFlow: vi.fn().mockImplementation(() => ({

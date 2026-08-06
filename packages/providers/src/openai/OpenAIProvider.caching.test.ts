@@ -4,7 +4,10 @@ import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
 const { mockChatCreate, mockOpenAIConstructor } = (() => {
   const chatCreate = vi.fn();
@@ -39,9 +42,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 }));
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => settingsServiceRef.current,
   SETTINGS_REGISTRY: [],
 }));

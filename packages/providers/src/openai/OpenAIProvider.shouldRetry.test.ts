@@ -5,8 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OpenAIProvider } from './OpenAIProvider.js';
+
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
 const mockSettingsService = {
   set: vi.fn(),
@@ -19,9 +22,7 @@ const mockSettingsService = {
 };
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));

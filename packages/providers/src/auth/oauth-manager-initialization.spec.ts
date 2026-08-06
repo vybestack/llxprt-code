@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
@@ -18,6 +17,8 @@ import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from './test-oauth-settings.js';
 
 /** Minimal in-memory ISecureStore for tests that don't exercise storage. */
+const realNodeFsModule = { ...(await import('node:fs')) };
+
 function createStubSecureStore(): ISecureStore {
   const store = new Map<string, string>();
   return {
@@ -33,7 +34,7 @@ function createStubSecureStore(): ISecureStore {
 
 // Mock the file system to simulate missing OAuth credentials
 vi.mock('node:fs', () => {
-  const actual = importActualSync<typeof import('node:fs')>('node:fs');
+  const actual = realNodeFsModule;
   return {
     ...actual,
     promises: {

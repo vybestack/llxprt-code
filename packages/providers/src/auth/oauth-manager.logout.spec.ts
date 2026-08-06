@@ -5,7 +5,10 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+
+const realLlxprtCodeAuthModule = {
+  ...(await import('@vybestack/llxprt-code-auth')),
+};
 
 const { flushMockRef, providerManagerRef, providerRef } = {
   flushMockRef: {
@@ -22,9 +25,7 @@ const { flushMockRef, providerManagerRef, providerRef } = {
 };
 
 vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
-    '@vybestack/llxprt-code-auth',
-  );
+  const actual = realLlxprtCodeAuthModule;
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],

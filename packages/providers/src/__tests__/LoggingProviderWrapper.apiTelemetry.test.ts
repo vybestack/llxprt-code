@@ -9,7 +9,6 @@
  */
 
 import { describe, expect, it, vi, beforeEach, type Mock } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,10 +24,12 @@ import {
 } from './LoggingProviderWrapper.test-helpers.js';
 
 // Mock the loggers module
+const realLoggersModule = {
+  ...(await import('@vybestack/llxprt-code-telemetry/telemetry/loggers.js')),
+};
+
 vi.mock('@vybestack/llxprt-code-telemetry/telemetry/loggers.js', () => {
-  const actual = importActualSync<typeof loggers>(
-    '@vybestack/llxprt-code-telemetry/telemetry/loggers.js',
-  );
+  const actual = realLoggersModule;
   return {
     ...actual,
     logApiResponse: vi.fn(),

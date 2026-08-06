@@ -1,9 +1,12 @@
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
 const mockSettingsService = {
   set: vi.fn(),
@@ -22,9 +25,7 @@ const parseResponsesStreamMock = vi.fn(async function* () {
 const fetchMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));

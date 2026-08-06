@@ -17,7 +17,6 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProviderMock,
@@ -40,9 +39,10 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
+const realPromisesModule = { ...(await import('node:fs/promises')) };
+
 vi.mock('node:fs/promises', () => {
-  const actual =
-    importActualSync<typeof import('node:fs/promises')>('node:fs/promises');
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),

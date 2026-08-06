@@ -22,7 +22,7 @@ import type { IContent, ContentBlock } from '@vybestack/llxprt-code-core';
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { vi } from '../../../../test-utils/bunTest.js';
+import { vi } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';

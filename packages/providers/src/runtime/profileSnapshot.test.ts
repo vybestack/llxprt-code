@@ -13,12 +13,15 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
 // Mock external dependencies of applyProfileSnapshot so we can verify
 // emission without bootstrapping the entire CLI runtime.
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 vi.mock('./runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({
     config: {},
@@ -54,9 +57,7 @@ vi.mock('./profileApplication.js', () => ({
 const profileManagerLoadProfileMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-settings', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+  const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     ProfileManager: vi.fn(() => ({
