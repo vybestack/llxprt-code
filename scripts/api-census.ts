@@ -50,13 +50,34 @@ const TEST_DIR_SEGMENTS = [
   'test-utils',
   'integration-tests',
   'test-setup',
+  'test-scripts',
 ];
 const TEST_FILE_RE = /\.(test|spec)\.[cm]?tsx?$|\.bun\.ts$/;
+/**
+ * Package-root harness files. These are not under a test directory and do not
+ * carry a test suffix, so an earlier version counted them as production.
+ */
+const TEST_FILE_NAMES = new Set([
+  'test-setup.ts',
+  'bun-test-setup.ts',
+  'vitest.config.ts',
+  'vitest.setup.ts',
+  'bunfig.toml.ts',
+]);
 
 export function isTestPath(relPath: string): boolean {
   const parts = relPath.split('/');
   if (parts.some((p) => TEST_DIR_SEGMENTS.includes(p))) return true;
+  if (TEST_FILE_NAMES.has(parts[parts.length - 1])) return true;
   return TEST_FILE_RE.test(relPath);
+}
+
+/**
+ * True when the specifier is this monorepo's scope at a package boundary.
+ * A bare `startsWith` would also match `@vybestack/llxprt-codeXYZ`.
+ */
+export function isWorkspaceSpecifier(spec: string): boolean {
+  return spec === SCOPE || spec.startsWith(`${SCOPE}-`);
 }
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -107,6 +128,25 @@ function collectNamed(
   return { specifiers, namespace };
 }
 
+/** A call expression of the form `import('...')` with a literal specifier. */
+function dynamicImportSpecifier(node: ts.Node): string | null {
+  if (!ts.isCallExpression(node)) return null;
+  if (node.expression.kind !== ts.SyntaxKind.ImportKeyword) return null;
+  const [first] = node.arguments;
+  if (!first || !ts.isStringLiteralLike(first)) return null;
+  return first.text;
+}
+
+/** A call expression of the form `require('...')` with a literal specifier. */
+function requireSpecifier(node: ts.Node): string | null {
+  if (!ts.isCallExpression(node)) return null;
+  if (!ts.isIdentifier(node.expression)) return null;
+  if (node.expression.text !== 'require') return null;
+  const [first] = node.arguments;
+  if (!first || !ts.isStringLiteralLike(first)) return null;
+  return first.text;
+}
+
 export function scanFile(
   absPath: string,
   relPath: string,
@@ -131,7 +171,7 @@ export function scanFile(
     namespaceImport: boolean,
     defaultImport: boolean,
   ) => {
-    if (!spec.startsWith(SCOPE)) return;
+    if (!isWorkspaceSpecifier(spec)) return;
     const { pkg, subpath } = splitSpecifier(spec);
     records.push({
       consumer,
@@ -148,59 +188,42 @@ export function scanFile(
     });
   };
 
+  const visitImport = (node: ts.ImportDeclaration): void => {
+    const clause = node.importClause;
+    const { specifiers, namespace } = collectNamed(clause?.namedBindings);
+    push(
+      (node.moduleSpecifier as ts.StringLiteral).text,
+      'import',
+      Boolean(clause?.isTypeOnly),
+      specifiers,
+      namespace,
+      Boolean(clause?.name),
+    );
+  };
+
+  const visitExportFrom = (node: ts.ExportDeclaration): void => {
+    const { specifiers, namespace } = collectNamed(node.exportClause);
+    push(
+      (node.moduleSpecifier as ts.StringLiteral).text,
+      'export-from',
+      Boolean(node.isTypeOnly),
+      specifiers,
+      namespace || !node.exportClause, // bare `export * from`
+      false,
+    );
+  };
+
   const visit = (node: ts.Node): void => {
+    const dynamic = dynamicImportSpecifier(node);
+    const required = requireSpecifier(node);
     if (ts.isImportDeclaration(node)) {
-      const spec = (node.moduleSpecifier as ts.StringLiteral).text;
-      const clause = node.importClause;
-      const { specifiers, namespace } = collectNamed(clause?.namedBindings);
-      push(
-        spec,
-        'import',
-        Boolean(clause?.isTypeOnly),
-        specifiers,
-        namespace,
-        Boolean(clause?.name),
-      );
+      visitImport(node);
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
-      const spec = (node.moduleSpecifier as ts.StringLiteral).text;
-      const { specifiers, namespace } = collectNamed(node.exportClause);
-      push(
-        spec,
-        'export-from',
-        Boolean(node.isTypeOnly),
-        specifiers,
-        namespace || !node.exportClause, // bare `export * from`
-        false,
-      );
-    } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length > 0 &&
-      ts.isStringLiteralLike(node.arguments[0])
-    ) {
-      push(
-        (node.arguments[0] as ts.StringLiteral).text,
-        'dynamic',
-        false,
-        [],
-        false,
-        false,
-      );
-    } else if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'require' &&
-      node.arguments.length > 0 &&
-      ts.isStringLiteralLike(node.arguments[0])
-    ) {
-      push(
-        (node.arguments[0] as ts.StringLiteral).text,
-        'require',
-        false,
-        [],
-        false,
-        false,
-      );
+      visitExportFrom(node);
+    } else if (dynamic !== null) {
+      push(dynamic, 'dynamic', false, [], false, false);
+    } else if (required !== null) {
+      push(required, 'require', false, [], false, false);
     }
     ts.forEachChild(node, visit);
   };
@@ -257,15 +280,25 @@ function main(): void {
     }
   }
   const totalSpec = typeSpec + valueSpec;
+  // Denominator is NAMED BINDINGS only. Namespace imports, default imports,
+  // dynamic imports, side-effect imports and export-star carry no named
+  // bindings and are excluded — this is not a percentage of statements.
+  const unnamed = deep.filter(
+    (r) => r.specifiers.length === 0 && !r.statementTypeOnly,
+  ).length;
   console.log(
-    `\nsymbol bindings (deep): ${totalSpec}  type-only=${typeSpec} (${((typeSpec / totalSpec) * 100).toFixed(1)}%)  value=${valueSpec}`,
+    `\nnamed symbol bindings (deep): ${totalSpec}  type-only=${typeSpec} (${((typeSpec / totalSpec) * 100).toFixed(1)}% of named bindings)  value=${valueSpec}`,
+  );
+  console.log(
+    `  statements carrying no named binding (namespace/default/dynamic/star): ${unnamed} — excluded from the ratio above`,
   );
 
   console.log('\ndeep statements by target package (prod / test):');
   const byPkg = new Map<string, { p: number; t: number }>();
   for (const r of deep) {
     const e = byPkg.get(r.targetPkg) ?? { p: 0, t: 0 };
-    r.isTest ? e.t++ : e.p++;
+    if (r.isTest) e.t++;
+    else e.p++;
     byPkg.set(r.targetPkg, e);
   }
   for (const [k, v] of [...byPkg.entries()].sort(

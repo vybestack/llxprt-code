@@ -60,7 +60,7 @@ clusters cleanly into five seams.
 This is the data model every package speaks. It is the largest single cluster and it is pure types.
 Proposed entry: `./content`.
 
-`packages/core/src/services/history/IContent.ts` is 510 lines, 16 exports, zero import statements —
+`packages/core/src/services/history/IContent.ts` is 509 lines, 16 exports, zero import statements —
 every block type (`TextBlock`, `ToolCallBlock`, `ToolResponseBlock`, `MediaBlock`, `ThinkingBlock`,
 `CodeBlock`), the `ContentMetadata`/`UsageStats` shapes, a `ContentValidation` const and three
 factory functions, all self-contained.
@@ -88,7 +88,7 @@ Publishing it as a named seam fixes that without moving a line of code.
 > `./model-protocol`) for the neutral protocol layer. Collapsing them under the name "content"
 > would misname the larger of the two.
 >
-> Note also that `llm-types/index.ts` is built from 14 `export *` statements — it is itself an
+> Note also that `llm-types/index.ts` is built from 12 `export *` statements — it is itself an
 > instance of the growth mechanism rule 2 forbids, and converting it to explicit re-exports is part
 > of publishing it.
 
@@ -111,9 +111,9 @@ against, not the object. See §6.
 
 ### Seam D — History (~84 imports, 178 construction sites — but only 9 in production)
 
-`HistoryService` is constructed 178 times, and **169 of those are in test files**. Production
-construction is 9 sites, 3 of which are inside core itself. Outside core the entire production
-need is 5 files in agents (`api/createAgent.ts`, `core/ChatSessionFactory.ts`,
+`HistoryService` is constructed 178 times, and **171 of those are in test files**. Production
+construction is 7 sites, 3 of which are inside core itself. Outside core the entire production
+need is 4 files in agents (`api/createAgent.ts`, `core/ChatSessionFactory.ts`,
 `core/chatSession-tokenSync-helpers.ts`, `core/client.ts`) and **zero in cli**.
 
 So the concrete class does not need to be public. Publish an interface plus a core-owned factory
@@ -257,27 +257,39 @@ compile-time surface control.
 `Config` spans 2,514 lines across three files and declares ~200 methods. The cross-package surface
 is **bounded, not yet pinned**:
 
-| Bound | Value | Method |
+| Estimate | Value | Method |
 |---|---|---|
-| Lower | ~81 members | deep-`config/*` importers only, four receiver names (undercount) |
-| Upper | **156 members** with ≥1 production access | AST over all root-barrel and deep importers, receivers bound by type annotation (overcount) |
+| Stale undercount | ~81 members | deep-`config/*` importers only, four receiver names |
+| Syntactic (current script) | **131 members** with ≥1 production access | AST, all importers, receivers bound by type annotation |
+| Type-resolved (independent) | **128 members**, 53 single-access | TypeScript checker over resolved receiver types |
 
-The upper bound is syntactic, not type-resolved, so it admits false positives where a file binds an
-unrelated identifier named `config` (`apiKey`, `providerName`, `mediaSupport` and similar entries in
-its output are almost certainly provider-config properties, not core `Config` members).
+An earlier revision reported 156 and described 81–156 as a bound. **Neither framing was correct.**
+The 156 came from a receiver-unwrapping bug — the walk selected the last segment of `a.b.c` rather
+than the receiver, so `config.options.x` attributed `x` to a receiver named `options`. That is fixed
+in `scripts/config-contract.ts`, bringing the syntactic figure to 131, within 3 of an independent
+type-resolved pass.
 
-**The true contract lies between these two numbers and must be pinned with type-resolved analysis
-before any role interface is published.** Publishing roles against either bound would repeat the
-mistake this section is correcting.
+These are two estimates that converge, not a mathematical bound: 81 is a stale subset, and 131 still
+admits false positives from same-named identifiers because the script tracks identifier text
+per-file rather than resolving symbols and scopes.
+
+**The contract must be pinned with committed checker-based tooling before any `./config` seam is
+published.** Roughly 128 members, of which roughly 53 have a single production access, is the
+working estimate — good enough to size the problem, not good enough to publish.
 
 What the corrected analysis does establish, because it holds at both bounds:
 
 - **162 production files outside core import `Config`** (plus 300 test files).
-- **78 members have exactly one production call site.** The earlier draft estimated ~45. The tail is
-  larger than thought and its composition is unambiguous: `getAsyncTaskManager`, `getShellJobManager`,
+- **Roughly 53 members have exactly one production access** (73 by the syntactic script, 53
+  type-resolved). Their composition is unambiguous: `getAsyncTaskManager`, `getShellJobManager`,
   `getLspServiceClient`, `getGitService`, `getIdeClient`, `getRuntimeOAuthManager`,
   `getOrCreateScheduler`, `getToolSchedulerFactory`, `getAgentClientFactory`. These are services
   fetched through Config, not configuration.
+
+  **Access count is evidence, not the criterion.** A single-use member can be a legitimate
+  configuration value, and a high-traffic getter can still be service location — `getToolRegistry`
+  is called 15 times and is a service handle. Classify by return type, ownership, construction site,
+  lifetime and mutability. Frequency only points at where to look.
 - **The capability-narrowing pattern already exists but is barely used**: exactly one production
   `Pick<Config, ...>` narrowing (`getOutputFormat`, in `packages/cli/src/session/errorReporting.ts`).
 
@@ -355,8 +367,8 @@ Ordered by leverage, reusing what already exists:
 | | Sites |
 |---|---|
 | Total `new HistoryService(...)` | 178 |
-| **Production** | **9** |
-| Test | 169 |
+| **Production** | **7** |
+| Test | 171 |
 
 Of the 9 production sites, 3 are inside core and 1 is a `test-bun` harness file. External
 production construction is 5 files, all in agents; cli has none. Publish an interface plus a
@@ -461,10 +473,10 @@ withdrawn, and 34 paths remain unassigned.
 
 Two observations.
 
-**The vocabulary is smaller than the path count suggests.** `./content` is two paths carrying 216
-production imports — `services/history/IContent.js` (150) and `llm-types/index.js` (66). The single
-highest-traffic seam in the monorepo is two files. Most of the 88 are not distinct concepts; they
-are one concept reached at several internal paths.
+**The vocabulary is smaller than the path count suggests.** The two highest-traffic doors are one
+file each: `./content` is `services/history/IContent.js` (150 production imports) and `./llm-types`
+is `llm-types/index.js` (66). Most of the 88 are not distinct concepts; they are a few concepts
+reached at many internal paths.
 
 **The triage bucket is mostly not an API problem at all — it is misplacement.** Resolving the
 utility/services paths by consumer profile settles 37 paths:
@@ -613,17 +625,66 @@ DAG risks naming a contract that encodes an edge the project intends to delete.
 agents, cli, settings, policy, telemetry, storage and auth, with each currently-violating edge
 listed and assigned to an issue. Every proposed move in §5 and §8b is provisional until then.
 
-## 11. Status
+## 11. Status and order of work
 
-This design is **not ready to implement**. Outstanding, in order:
+This design is **not ready to publish as a contract**, but parts of it are ready to build. Ownership
+is settled: this work lands under #2615.
 
-1. Decide and document the target DAG (§10).
-2. Give all 88 paths a disposition; close the 34 unassigned and the 55 unowned (§8b, §9).
-3. Pin the Config contract with type-resolved analysis; the surface is bounded 81–156 and neither
-   bound is publishable (§6).
-4. Specify resolution concretely: emitted declaration paths, `types`/`bun`/`import` condition
-   parity, clean-checkout typecheck without stale `dist`, and the real test-runner topology —
-   note there are no `agents` or `cli` vitest configs, contrary to issue #2618's text.
-5. State the compatibility policy for a published package before removing any export (§5).
+### Prerequisites, in dependency order
 
-Ownership is settled: this work lands under #2615, whose Config decomposition supplies item 3.
+1. **Corrected, committed tooling and one baseline.** `scripts/api-census.ts` and
+   `scripts/config-contract.ts` exist but must be pinned to a SHA, and the Config analysis must
+   become checker-based rather than syntactic (§6).
+2. **One machine-readable disposition manifest.** Every export key and every imported-but-unexported
+   path gets exactly one disposition, an owner package, a prerequisite issue and a compatibility
+   action, validated for drift in CI.
+
+   > The "34 unassigned" and "55 unowned" figures are **overlapping views, not additive
+   > inventories** — 34 counts paths outside a named seam row, 55 counts paths not attributable to
+   > one of the five issues by prefix. Carrying both invites double-counting. One manifest replaces
+   > both.
+
+3. **Target DAG and interface-ownership rule** (§10). Ownership moves cannot be evaluated without it.
+4. **Compatibility and test-entry policy** (§5). This moved *up* from last: it determines whether old
+   export keys coexist during migration, so it constrains every earlier step, not just deletion.
+5. **A proven resolution model.** Clean checkout, no stale `dist`, `types`/`bun`/`import` parity, and
+   a packed-tarball fixture importing every seam under Node ESM, Bun and `tsc --moduleResolution
+   nodenext`. Adding `types` conditions alone does **not** achieve this: `types` points at untracked
+   `dist`, root `typecheck` does not build first, so a clean checkout still fails TS2307. Either
+   declaration build ordering / project references or an exports-aware source condition is required.
+6. **Per-consumer resolver inventory.** 11 tsconfig wildcard alias sets; vitest configs for
+   auth, core, lsp, mcp, providers, storage and tools — with *custom source-resolver plugins* in
+   core, providers and mcp, not merely static aliases; `test-bun` directories in agents, cli,
+   providers, storage and tools. There are no agents or cli vitest configs, contrary to #2618's
+   text. Each mechanism needs its own migration and a negative test proving internal paths fail.
+
+### What can begin now
+
+- Local, **non-published** capability interfaces at individual consumers. `LspControl` stores all of
+  `Config` while using only `getLspConfig` and `getLspServiceClient` — a two-method capability, no
+  behaviour change, `Config` structurally satisfies it.
+- Publishing `./content` after an explicit decision on all 16 `IContent.ts` exports.
+- Preserving and generalising `./runtime/contracts`.
+- Converting `llm-types/index.ts` from `export *` to an explicit manifest, coordinated with #2614 on
+  its Gemini-specific vocabulary.
+- Repointing telemetry/storage/policy proxy imports to their owning packages — **without** removing
+  the old export keys, which is governed by item 4.
+- Building the manifest, corrected analyzers, package cycle check and packed-package fixture.
+
+### What must not begin
+
+Publishing `./config`, `./runtime`, or broad `./session` / `./prompts` / `./hooks` seams; removing
+any export key; deleting wildcard aliases.
+
+### Correction: settings is not the first slice
+
+An earlier revision argued the settings seam should come first. **That was wrong on risk.**
+`setEphemeralSetting` (`packages/core/src/config/configBase.ts`) is not a setter: it normalises and
+persists, updates `AsyncTaskManager` and `ShellJobManager`, and invalidates provider client and auth
+caches — synchronously. Extracting it behind an interface or an EventEmitter changes delivery
+timing, listener order, exception propagation and cache-staleness semantics. That is behavioural
+redesign, and it needs characterisation tests and an explicit delivery contract first.
+
+Settings remains the right seam to fix *before settings internals are refactored* — the original
+argument in that narrow form still holds. It is simply not the right place to start the capability
+migration. Start at a leaf: `LspControl`.
