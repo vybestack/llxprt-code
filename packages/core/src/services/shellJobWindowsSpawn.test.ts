@@ -26,15 +26,15 @@ import {
 const POWERSHELL_PROBE_TIMEOUT_MS = 5000;
 
 /**
- * The inner command in the unref test sleeps this many seconds. If unref()
- * works the spawner exits well before this. If unref() is removed the spawner
- * hangs for the full duration — which the outer timeout then kills.
+ * The inner command in the unref test sleeps this many seconds. The test's
+ * subprocess explicitly unreferences the exposed child handle and must exit
+ * well before the managed command completes.
  */
 const UNREF_SLEEP_SECONDS = 30;
 
 /**
- * Outer spawnSync timeout for the unref test. Acts as a backstop: if unref()
- * is broken the spawner hangs for UNREF_SLEEP_SECONDS and this kills it.
+ * Outer spawnSync timeout for the unref test. Acts as a backstop if releasing
+ * the exposed child handle does not let the subprocess exit.
  */
 const UNREF_SPAWN_TIMEOUT_MS = 15000;
 
@@ -408,13 +408,13 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
           `  ${JSON.stringify(errLogPath)},`,
           `);`,
           `require('fs').writeFileSync(${JSON.stringify(pidFilePath)}, String(p.pid));`,
+          `p.child.unref();`,
         ].join('\n');
         fs.writeFileSync(scriptPath, script);
 
-        // If unref() is present, the spawner exits as soon as the import + spawn
-        // completes (well under the elapsed bound). If unref() is removed, the
-        // spawned child keeps the event loop alive and the spawner hangs for the
-        // full UNREF_SLEEP_SECONDS, which UNREF_SPAWN_TIMEOUT_MS kills.
+        // Consumers that intentionally abandon the returned lifecycle promise can
+        // unref the exposed child handle. This subprocess does so explicitly and
+        // must exit before the managed command finishes.
         const start = Date.now();
         const result = spawnSync('npx', ['tsx', scriptPath], {
           timeout: UNREF_SPAWN_TIMEOUT_MS,
