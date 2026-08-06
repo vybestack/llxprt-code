@@ -22,10 +22,7 @@ import {
   createHostOnlyCapabilityEnvFile,
   runCapabilityCleanupStep,
 } from './sandbox-capability.js';
-import {
-  USER_SETTINGS_DIR,
-  SETTINGS_DIRECTORY_NAME,
-} from '../config/settings.js';
+import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 import {
   getContainerPath,
   mountGitConfigFiles,
@@ -49,6 +46,7 @@ import {
   getProxySocketPath,
   getProxyCapabilityToken,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { Storage } from '@vybestack/llxprt-code-storage';
 
 const execAsync = promisify(exec);
 
@@ -185,35 +183,36 @@ export function buildContainerRunArgs(
   }
   if (shouldAllocateSandboxTty()) args.push('-t');
   args.push('--volume', `${workdir}:${containerWorkdir}`);
-  // Issue #3081: mount the host config directory at path parity and pin all
-  // four canonical roots via env overrides. The legacy /home/node/.llxprt
-  // destination is dropped: the in-container CLI resolves its config through
-  // Storage to /home/node/.config/llxprt-code, so nothing was mounted where
-  // it looks and every sandboxed launch saw an empty config. Setting
+  // Issue #3081: mount the host config directory at path parity and pin
+  // LLXPRT_CONFIG_HOME to the mount destination. The legacy dot-llxprt
+  // destination under the container home was dropped: the in-container CLI
+  // resolves its config through Storage, so nothing was mounted where it
+  // looks and every sandboxed launch saw an empty config. Pinning
   // LLXPRT_CONFIG_HOME also short-circuits the in-container startup
-  // migration. Data/cache/log stay container-local (ephemeral); only the
-  // config directory crosses the boundary, unchanged from before — mounting
-  // the data directory would push raw OAuth/provider credentials across the
-  // sandbox boundary (#2946). All four roots must be pinned because
-  // resolveGlobalDataDir/CacheDir/LogDir fall back to LLXPRT_CONFIG_HOME.
-  const hostConfigDir = USER_SETTINGS_DIR;
+  // migration. The host dir is resolved dynamically through Storage (not the
+  // module-load-time constant) so the legacy-fallback path in cli.tsx that
+  // sets LLXPRT_CONFIG_HOME at runtime is honoured by the mount too. The
+  // startup lifecycle (cli.tsx) creates this directory long before any
+  // sandbox launch, so no defensive mkdir is needed here. Data/cache/log
+  // stay container-local (ephemeral); only the config directory crosses the
+  // boundary — mounting the data directory would push raw OAuth/provider
+  // credentials across the sandbox boundary (#2946). Their roots are pinned
+  // from the real container HOME inside the entrypoint (sandbox-entrypoint.ts)
+  // so they follow the image's default user home; they cannot be left unset
+  // because resolveGlobalDataDir/CacheDir/LogDir fall back to
+  // LLXPRT_CONFIG_HOME. The config mount needs the :z SELinux shared label
+  // under podman (matching the SSH-agent socket mount in setupSshAgentLinux)
+  // so a labelled container process can read/write it on SELinux hosts.
+  const hostConfigDir = Storage.getGlobalConfigDir();
   const containerConfigDir = getContainerPath(hostConfigDir);
-  if (!fs.existsSync(hostConfigDir)) {
-    fs.mkdirSync(hostConfigDir, { recursive: true });
-  }
-  args.push('--volume', `${hostConfigDir}:${containerConfigDir}`);
-  const containerHome = resolveSandboxContainerHome();
+  const configMountLabel = config.command === 'podman' ? ':z' : '';
   args.push(
-    '--env',
-    `LLXPRT_CONFIG_HOME=${containerConfigDir}`,
-    '--env',
-    `LLXPRT_DATA_HOME=${path.posix.join(containerHome, '.local/share/llxprt-code')}`,
-    '--env',
-    `LLXPRT_CACHE_HOME=${path.posix.join(containerHome, '.cache/llxprt-code')}`,
-    '--env',
-    `LLXPRT_LOG_HOME=${path.posix.join(containerHome, '.local/state/llxprt-code')}`,
+    '--volume',
+    `${hostConfigDir}:${containerConfigDir}${configMountLabel}`,
   );
-  mountGitConfigFiles(args, os.homedir(), '/home/node');
+  args.push('--env', `LLXPRT_CONFIG_HOME=${containerConfigDir}`);
+  const containerHome = resolveSandboxContainerHome();
+  mountGitConfigFiles(args, os.homedir(), containerHome);
   args.push(
     '--volume',
     `${resolvedTmpdir}:${getContainerPath(resolvedTmpdir)}`,
@@ -253,20 +252,47 @@ function addCustomMounts(
   }
 }
 
+/**
+ * Env var names that SANDBOX_ENV may not override because the sandbox
+ * infrastructure pins them authoritatively. `LLXPRT_CONFIG_HOME` is pinned by
+ * `buildContainerRunArgs` to point at the config bind mount; a SANDBOX_ENV
+ * value would come later in the argv and win under docker/podman last-wins
+ * semantics, silently detaching the in-container CLI from its mounted config.
+ * The data/cache/log roots are exported unconditionally from the container
+ * `$HOME` inside the entrypoint (#3081) so they follow the image's real home;
+ * reserving them here ensures a SANDBOX_ENV entry cannot also emit a host-side
+ * `--env` that would shadow the entrypoint export under last-wins semantics.
+ */
+const RESERVED_SANDBOX_ENV_KEYS = new Set([
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+]);
+
+function pushSandboxEnvEntry(args: string[], env: string): void {
+  if (!env.includes('=')) {
+    throw new FatalSandboxError(
+      'SANDBOX_ENV must be a comma-separated list of key=value pairs',
+    );
+  }
+  const eqIdx = env.indexOf('=');
+  const envName = env.substring(0, eqIdx);
+  if (RESERVED_SANDBOX_ENV_KEYS.has(envName)) {
+    debugLogger.log(
+      `SANDBOX_ENV: ignoring reserved key '${envName}' (pinned by sandbox infrastructure)`,
+    );
+    return;
+  }
+  debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
+  args.push('--env', env);
+}
+
 function addSandboxEnvVars(args: string[]): void {
   for (const raw of process.env.SANDBOX_ENV!.split(',')) {
     const env = raw.trim();
     if (env !== '') {
-      if (env.includes('=')) {
-        const eqIdx = env.indexOf('=');
-        const envName = env.substring(0, eqIdx);
-        debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
-        args.push('--env', env);
-      } else {
-        throw new FatalSandboxError(
-          'SANDBOX_ENV must be a comma-separated list of key=value pairs',
-        );
-      }
+      pushSandboxEnvEntry(args, env);
     }
   }
 }
@@ -427,7 +453,7 @@ export async function setupContainerUser(
 ): Promise<string> {
   let userFlag = '';
 
-  if (await shouldUseCurrentUserInSandbox()) {
+  if (shouldUseCurrentUserInSandbox()) {
     // Root is required here: this branch runs groupadd/useradd to create the
     // host user inside the container, then su to drop to that user's uid/gid.
     // Creating the user and writing /etc/shadow needs the capabilities below;

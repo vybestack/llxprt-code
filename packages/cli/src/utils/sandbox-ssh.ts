@@ -356,7 +356,7 @@ export async function setupSshAgentDockerLinux(
   args: string[],
   sshAuthSock: string,
 ): Promise<SshAgentResult> {
-  const willMatchHostUser = await shouldUseCurrentUserInSandbox();
+  const willMatchHostUser = shouldUseCurrentUserInSandbox();
   const hostUid = process.getuid?.() ?? -1;
 
   if (willMatchHostUser || hostUid === 1000) {

@@ -12,7 +12,6 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../test-utils/regex.js';
 
 vi.mock('node:child_process');
-vi.mock('node:fs/promises');
 
 import {
   setupSshAgentForwarding,
@@ -835,10 +834,15 @@ describe('setupSshAgentDockerLinux', () => {
 
   it('falls back to TCP bridge when host uid differs from container uid', async () => {
     process.getuid = () => 501;
-    // shouldUseCurrentUserInSandboxSync returns false when os-release is
-    // unavailable. The detection reads /etc/os-release synchronously.
-    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-      throw new Error('not found');
+    // shouldUseCurrentUserInSandbox returns false when os-release is
+    // unavailable. The stub is path-conditional: only /etc/os-release throws;
+    // every other synchronous read delegates to the real implementation.
+    const realReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+      if (p === '/etc/os-release') {
+        throw new Error('not found');
+      }
+      return realReadFileSync(p);
     });
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     const args: string[] = [];
@@ -854,9 +858,15 @@ describe('setupSshAgentDockerLinux', () => {
 
   it('uses direct bind-mount on Debian/Ubuntu (shouldUseCurrentUserInSandbox)', async () => {
     process.getuid = () => 501;
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(
-      'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"',
-    );
+    // Path-conditional stub: only /etc/os-release returns Ubuntu content;
+    // every other synchronous read delegates to the real implementation.
+    const realReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+      if (p === '/etc/os-release') {
+        return 'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"';
+      }
+      return realReadFileSync(p);
+    });
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     // shouldUseCurrentUserInSandbox logs an INFO message via debugLogger.log on Debian/Ubuntu
     const logSpy = vi

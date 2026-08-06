@@ -145,7 +145,7 @@ function osReleaseContainsLike(content: string, keyword: string): boolean {
   return false;
 }
 
-export function shouldUseCurrentUserInSandboxSync(): boolean {
+export function shouldUseCurrentUserInSandbox(): boolean {
   const envVar = process.env.SANDBOX_SET_UID_GID?.toLowerCase().trim();
 
   if (envVar === '1' || envVar === 'true') {
@@ -178,10 +178,6 @@ export function shouldUseCurrentUserInSandboxSync(): boolean {
   return false;
 }
 
-export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
-  return shouldUseCurrentUserInSandboxSync();
-}
-
 /**
  * The container HOME used to derive container-local XDG directories.
  *
@@ -190,11 +186,10 @@ export async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
  * `/home/node`). Sharing this single resolution between
  * {@link buildContainerRunArgs} — which sets the `LLXPRT_*_HOME` env overrides
  * — and the user setup guarantees the in-container HOME and the pinned roots
- * can never disagree. Synchronous so it is callable from the synchronous
- * arg builder.
+ * can never disagree.
  */
 export function resolveSandboxContainerHome(): string {
-  return shouldUseCurrentUserInSandboxSync()
+  return shouldUseCurrentUserInSandbox()
     ? getContainerPath(os.homedir())
     : '/home/node';
 }

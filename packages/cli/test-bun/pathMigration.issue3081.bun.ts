@@ -20,6 +20,7 @@ import * as os from 'node:os';
 import {
   performMigration,
   shouldMigrate,
+  MIGRATION_MARKER_VERSION,
   type MigrationDestinations,
 } from '../src/config/pathMigration.js';
 
@@ -108,52 +109,59 @@ describe('#3081 migration categorizer (config entries)', () => {
     ).toBe(true);
   });
 
-  it('does not overwrite a pre-existing canonical file on re-run after the marker version bump', () => {
-    // Pre-existing canonical welcome marker (already migrated correctly).
-    writeFile(destinations.configDir, 'welcomeConfig.json', 'CANONICAL');
-    // Legacy still carries a (different) copy.
-    writeFile(legacyDir, 'welcomeConfig.json', 'LEGACY');
-    // Stamp an outdated v1 marker: after the bump to v2, isMigrationComplete
-    // must treat it as stale so the re-run actually happens.
+  it('does not recreate a deleted canonical entry when the migration marker is current', () => {
+    // Safety property (#3081): with a CURRENT marker, shouldMigrate returns
+    // false and the legacy copy pass is skipped, so an entry the user
+    // deliberately deleted from the canonical directories is never resurrected
+    // from the legacy directory. oauth_creds.json is the concrete case — it is
+    // deleted by OAuthCredentialStorage.clearCredentials() on logout, and
+    // re-running the copy pass would silently re-authenticate a user who
+    // logged out. The marker version stays at 1: bumping it would re-run the
+    // whole copy pass and recreate every deleted entry.
+    writeFile(legacyDir, 'oauth_creds.json', '{"token":"LEGACY"}');
+    // Canonical data dir exists but oauth_creds.json was deleted by the user.
     fs.mkdirSync(destinations.dataDir, { recursive: true });
     writeFile(
       destinations.dataDir,
       '.migration-complete.json',
-      JSON.stringify({ version: 1, completedAt: '1970-01-01T00:00:00.000Z' }),
+      JSON.stringify({
+        version: MIGRATION_MARKER_VERSION,
+        completedAt: '2026-01-01T00:00:00.000Z',
+      }),
     );
 
-    // The marker version bump causes shouldMigrate to re-run.
-    expect(shouldMigrate(legacyDir, destinations)).toBe(true);
+    // A current marker means the legacy copy pass must NOT run.
+    expect(shouldMigrate(legacyDir, destinations)).toBe(false);
+
+    // The deleted credential is not recreated from the legacy directory.
+    expect(
+      fs.existsSync(path.join(destinations.dataDir, 'oauth_creds.json')),
+    ).toBe(false);
+  });
+
+  it('gives top-level skills/ precedence over tmp/skills/ on a same-name collision', () => {
+    // Both <legacy>/skills and <legacy>/tmp/skills target <config>/skills.
+    // For a same-named skill, the top-level copy must win (explicit
+    // precedence implemented by deterministic name-sorted iteration order
+    // combined with no-overwrite COPYFILE_EXCL copy semantics).
+    writeFile(
+      legacyDir,
+      path.join('skills', 'shared', 'SKILL.md'),
+      'TOP_LEVEL',
+    );
+    writeFile(
+      legacyDir,
+      path.join('tmp', 'skills', 'shared', 'SKILL.md'),
+      'TMP',
+    );
 
     performMigration(legacyDir, destinations);
 
-    // No-overwrite copy semantics: the canonical file is untouched.
     expect(
       fs.readFileSync(
-        path.join(destinations.configDir, 'welcomeConfig.json'),
+        path.join(destinations.configDir, 'skills', 'shared', 'SKILL.md'),
         'utf-8',
       ),
-    ).toBe('CANONICAL');
-  });
-
-  it('keeps the tmp/skills special case benign alongside the top-level skills config entry', () => {
-    // Both <legacy>/skills and <legacy>/tmp/skills now target <config>/skills.
-    // They must merge without clobbering each other (distinct child names).
-    writeFile(legacyDir, path.join('skills', 'a', 'SKILL.md'), '# a');
-    writeFile(legacyDir, path.join('tmp', 'skills', 'b', 'SKILL.md'), '# b');
-
-    const result = performMigration(legacyDir, destinations);
-
-    expect(result.filesCopied).toBeGreaterThan(0);
-    expect(
-      fs.existsSync(
-        path.join(destinations.configDir, 'skills', 'a', 'SKILL.md'),
-      ),
-    ).toBe(true);
-    expect(
-      fs.existsSync(
-        path.join(destinations.configDir, 'skills', 'b', 'SKILL.md'),
-      ),
-    ).toBe(true);
+    ).toBe('TOP_LEVEL');
   });
 });
