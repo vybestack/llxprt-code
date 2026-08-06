@@ -2,7 +2,15 @@
 linker = "hoisted"
 
 [test]
-preload = ["../../test-setup/augment-bun-vi.ts", "./bun-test-setup.ts"]
+# Storage isolation must be preloaded, not imported by a test: it has to call
+# isolateStorageRoots() before any test module imports the Storage singleton.
+# It applies to every file here because discovery runs the whole workspace, so
+# a suite that drives the real store cannot opt in per file (issue #2979).
+preload = [
+  "../../test-setup/augment-bun-vi.ts",
+  "./test-setup-storage-isolation.ts",
+  "./bun-test-setup.ts",
+]
 # Matches the testTimeout/hookTimeout that the removed vitest.config.ts set.
 # Bun defaults to 5s, which is not enough for the tests that spawn the real CLI
 # as a subprocess when the suite runs with concurrency.
