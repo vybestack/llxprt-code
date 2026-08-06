@@ -149,10 +149,7 @@ export const SLOW_SCRIPTS_TEST = 'issue-2603-release-install.test.ts';
 export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'a2a-server',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'bun-preload-storage-isolation.ts',
-    ],
+    preload: ['bun-preload-storage-isolation.ts'],
     include: ['src/**/*.test.ts'],
   },
   {
@@ -214,7 +211,6 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/zed-integration/zedIntegration.terminal.test.ts',
       'test-bun/iContentToHistoryItems.issue2511.bun.ts',
       'src/ui/commands/authCommand.loginWithBucket.issue2891.test.ts',
-      'test-utils/augment-bun-vi-cleanup.bun.ts',
       // Issue #2951: Windows Ctrl+Enter steering. Each file pins
       // process.platform at the very top before the key-matcher module graph
       // loads, so win32 and darwin must run in separate processes.
@@ -252,33 +248,22 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   MCP_MANIFEST_ENTRY,
   {
     workspace: 'telemetry',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts'],
     include: ['src/**/*.test.ts'],
   },
   STORAGE_MANIFEST_ENTRY,
   {
     workspace: 'test-utils',
-    preload: ['../../test-setup/augment-bun-vi.ts'],
     include: ['src/**/*.test.ts'],
   },
   {
     workspace: 'settings',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts'],
     include: ['src/**/*.test.ts'],
   },
   {
     workspace: 'ide-integration',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-      'test-setup.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts', 'test-setup.ts'],
     include: ['src/**/*.test.ts'],
   },
   {
@@ -286,27 +271,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     // it, so a test-only tsconfig maps the specifier at a stub the per-file
     // `vi.mock('vscode', …)` factories then replace.
     workspace: 'vscode-ide-companion',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts'],
     tsconfig: 'tsconfig.bun-test.json',
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
   },
   {
     workspace: 'policy',
-    preload: ['../../test-setup/augment-bun-vi.ts'],
     include: ['src/**/*.test.ts'],
     exclude: ['src/research/**'],
-  },
-  {
-    workspace: 'test-setup',
-    cwd: '.',
-    files: [
-      'test-setup/augment-bun-vi.test.ts',
-      'test-setup/stub-helpers.bun.test.ts',
-      'test-setup/vitest-parity.test.ts',
-    ],
   },
   {
     // The whole script harness. Previously split into several curated roots
@@ -316,7 +288,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     // `*.bun.test.ts` files that were always Bun-only.
     workspace: 'scripts-tests',
     cwd: '.',
-    preload: ['test-setup/augment-bun-vi.ts', 'scripts/tests/test-setup.ts'],
+    preload: ['scripts/tests/test-setup.ts'],
     include: ['scripts/tests/**/*.test.ts', 'scripts/tests/**/*.test.js'],
     exclude: [`scripts/tests/${SLOW_SCRIPTS_TEST}`],
   },
@@ -327,14 +299,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     // that still catches genuine hangs.
     workspace: 'scripts-tests-slow',
     cwd: '.',
-    preload: ['test-setup/augment-bun-vi.ts', 'scripts/tests/test-setup.ts'],
+    preload: ['scripts/tests/test-setup.ts'],
     files: [`scripts/tests/${SLOW_SCRIPTS_TEST}`],
     timeout: 300_000,
   },
   {
     workspace: 'evals',
     cwd: 'evals',
-    preload: ['../test-setup/augment-bun-vi.ts'],
     include: ['**/*.eval.ts'],
     globalSetup: 'globalSetup.ts',
     timeout: 300_000,
@@ -346,7 +317,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     // retry budget mirroring the Vitest config these replaced.
     workspace: 'integration-tests',
     cwd: 'integration-tests',
-    preload: ['../test-setup/augment-bun-vi.ts', 'setup-quota-guard.ts'],
+    preload: ['setup-quota-guard.ts'],
     include: ['**/*.test.ts'],
     globalSetup: 'globalSetup.ts',
     timeout: 300_000,

@@ -7,7 +7,9 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { ShellPermissionConfig } from './shell-utils.js';
 
+const realShellParserModule = { ...(await import('./shell-parser.js')) };
 vi.mock('./shell-parser.js', () => ({
+  ...realShellParserModule,
   isParserAvailable: () => false,
   parseShellCommand: () => null,
   extractCommandNames: () => [],

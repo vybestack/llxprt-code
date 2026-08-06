@@ -10,8 +10,7 @@
  * WHY THIS EXISTS
  *
  * The tests import from `'bun:test'` and run under `bun test`. Two of Bun's
- * type declarations, however, describe Bun's *own* API rather than the
- * augmented API that `test-setup/augment-bun-vi.ts` installs at runtime:
+ * type declarations do not match what the runtime actually provides:
  *
  * 1. **`vi.mock`** — Bun types it as `typeof mock.module`, whose return type
  *    is `void | Promise<void>`. Registration is synchronous and no caller

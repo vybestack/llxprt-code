@@ -28,6 +28,7 @@ import type { Config } from '../config/config.js';
 import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
 
+const realDebugModule = { ...(await import('../debug/index.js')) };
 afterEach(() => {
   restoreGlobals();
 });
@@ -85,6 +86,7 @@ vi.mock('../debug/index.js', () => {
   DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
 
   return {
+    ...realDebugModule,
     DebugLogger,
   };
 });

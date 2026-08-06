@@ -28,6 +28,7 @@ import type { MessageBus } from '../../confirmation-bus/message-bus.js';
 // Mocks
 // ---------------------------------------------------------------------------
 
+const realDebugModule = { ...(await import('../../debug/index.js')) };
 vi.mock('../../debug/index.js', () => {
   const mockLogger = {
     log: vi.fn(),
@@ -40,7 +41,10 @@ vi.mock('../../debug/index.js', () => {
     return mockLogger;
   }
   DebugLogger.getLogger = vi.fn(() => mockLogger);
-  return { DebugLogger };
+  return {
+    ...realDebugModule,
+    DebugLogger,
+  };
 });
 
 vi.mock('fs', () => ({

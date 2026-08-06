@@ -35,22 +35,12 @@ afterEach(() => {
 });
 
 describe('Bun native test manifest', () => {
-  it('gates the exact test-setup native suite', () => {
+  it('has no test-setup root, because the compatibility shim is gone', () => {
     expect(
       BUN_NATIVE_TEST_MANIFEST.find(
         ({ workspace }) => workspace === 'test-setup',
       ),
-    ).toEqual({
-      workspace: 'test-setup',
-      cwd: '.',
-      files: [
-        'test-setup/augment-bun-vi.test.ts',
-        'test-setup/stub-helpers.bun.test.ts',
-        // Vitest-parity guarantees relied on by every migrated workspace
-        // (issue #2843).
-        'test-setup/vitest-parity.test.ts',
-      ],
-    });
+    ).toBeUndefined();
   });
 
   it('resolves every advertised workspace to verified files', () => {

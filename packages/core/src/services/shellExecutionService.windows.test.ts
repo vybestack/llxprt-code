@@ -29,13 +29,12 @@ const fakeChildFactory = () => {
   return child;
 };
 
-vi.mock('child_process', (orig) => {
-  const mod = orig() as typeof import('child_process');
-  return {
-    ...mod,
-    spawn: vi.fn(() => fakeChildFactory()),
-  };
-});
+const realChildProcessModule = { ...(await import('child_process')) };
+
+vi.mock('child_process', () => ({
+  ...realChildProcessModule,
+  spawn: vi.fn(() => fakeChildFactory()),
+}));
 
 vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('shift_jis'),

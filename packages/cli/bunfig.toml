@@ -2,7 +2,7 @@
 linker = "hoisted"
 
 [test]
-preload = ["../../test-setup/augment-bun-vi.ts", "./bun-test-setup.ts"]
+preload = ["./bun-test-setup.ts"]
 # Matches the testTimeout/hookTimeout that the removed vitest.config.ts set.
 # Bun defaults to 5s, which is not enough for the tests that spawn the real CLI
 # as a subprocess when the suite runs with concurrency.

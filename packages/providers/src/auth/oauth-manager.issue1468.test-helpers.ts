@@ -20,9 +20,6 @@
  */
 
 import { vi } from 'bun:test';
-import type * as Core from '@vybestack/llxprt-code-core';
-import type * as SettingsPackage from '@vybestack/llxprt-code-settings';
-import type * as Providers from '@vybestack/llxprt-code-providers';
 
 // Hoisted mocks used by module factories
 const realLlxprtCodeProvidersModule = {

@@ -15,6 +15,8 @@ import type { Config } from '../config/config.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 
 // Mock DebugLogger
+
+const realDebugModule = { ...(await import('../debug/index.js')) };
 const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock('../debug/index.js', () => {
   DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
 
   return {
+    ...realDebugModule,
     DebugLogger,
   };
 });
