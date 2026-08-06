@@ -18,6 +18,7 @@ import {
   addContainerEnvVars,
   addContainerVolumeMounts,
 } from './sandbox-containers.js';
+import { runContainerSandbox } from './sandbox-exec.js';
 import {
   getContainerPath,
   resolveSandboxContainerHome,
@@ -567,20 +568,6 @@ function envValue(args: readonly string[], name: string): string | undefined {
   return undefined;
 }
 
-function countEnv(args: readonly string[], name: string): number {
-  let count = 0;
-  for (let i = 0; i < args.length; i++) {
-    if (
-      args[i] === '--env' &&
-      i + 1 < args.length &&
-      args[i + 1].startsWith(`${name}=`)
-    ) {
-      count++;
-    }
-  }
-  return count;
-}
-
 function entrypointScript(workdir: string): string {
   // The final element of entrypoint()'s returned argv is the shell script the
   // container runs. cliArgs is [cli, subcommand, ...userArgs].
@@ -724,31 +711,33 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
     expect(Storage.isNonEmptyAbsoluteOverride(emitted)).toBe(true);
   });
 
-  it('rejects a SANDBOX_ENV override of the pinned LLXPRT_CONFIG_HOME', () => {
-    process.env.SANDBOX_ENV =
-      'FOO=bar,LLXPRT_CONFIG_HOME=/evil/override,BAZ=qux';
+  it.each([
+    'LLXPRT_CONFIG_HOME',
+    'LLXPRT_DATA_HOME',
+    'LLXPRT_CACHE_HOME',
+    'LLXPRT_LOG_HOME',
+  ])('rejects a SANDBOX_ENV override of pinned %s', (reservedKey) => {
+    process.env.SANDBOX_ENV = `FOO=bar,${reservedKey}=/evil/override,BAZ=qux`;
     const args = buildArgs(fixturePath);
 
     // addContainerEnvVars runs after buildContainerRunArgs in the real flow.
     expect(() =>
-      addContainerEnvVars(
-        args,
-        ENV_CONFIG,
-        'test-container',
-        [],
-        '/workspace',
-      ),
+      addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace'),
     ).toThrowError(FatalSandboxError);
     expect(() =>
-      addContainerEnvVars(
-        args,
-        ENV_CONFIG,
-        'test-container',
-        [],
-        '/workspace',
-      ),
-    ).toThrowError(/may not override reserved key 'LLXPRT_CONFIG_HOME'/);
-    expect(countEnv(args, 'LLXPRT_CONFIG_HOME')).toBe(1);
+      addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace'),
+    ).toThrowError(
+      new RegExp(`may not override reserved key '${reservedKey}'`),
+    );
+  });
+
+  it('rejects reserved SANDBOX_ENV before image or network side effects', async () => {
+    process.env.SANDBOX_ENV = 'LLXPRT_CONFIG_HOME=/evil/override';
+
+    await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
+      /may not override reserved key 'LLXPRT_CONFIG_HOME'/,
+    );
+    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
   });
 
   it('translates Windows host paths: no backslash in emitted config home or entrypoint roots', () => {

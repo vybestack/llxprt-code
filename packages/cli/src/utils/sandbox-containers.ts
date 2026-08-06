@@ -270,29 +270,40 @@ const RESERVED_SANDBOX_ENV_KEYS = new Set([
   'LLXPRT_LOG_HOME',
 ]);
 
-function pushSandboxEnvEntry(args: string[], env: string): void {
-  if (!env.includes('=')) {
-    throw new FatalSandboxError(
-      'SANDBOX_ENV must be a comma-separated list of key=value pairs',
-    );
+function parseSandboxEnvVars(): string[] {
+  const entries: string[] = [];
+  for (const raw of process.env.SANDBOX_ENV?.split(',') ?? []) {
+    const env = raw.trim();
+    if (env === '') {
+      continue;
+    }
+    if (!env.includes('=')) {
+      throw new FatalSandboxError(
+        'SANDBOX_ENV must be a comma-separated list of key=value pairs',
+      );
+    }
+    const envName = env.substring(0, env.indexOf('='));
+    if (RESERVED_SANDBOX_ENV_KEYS.has(envName)) {
+      throw new FatalSandboxError(
+        `SANDBOX_ENV may not override reserved key '${envName}' (pinned by sandbox infrastructure)`,
+      );
+    }
+    entries.push(env);
   }
-  const eqIdx = env.indexOf('=');
-  const envName = env.substring(0, eqIdx);
-  if (RESERVED_SANDBOX_ENV_KEYS.has(envName)) {
-    throw new FatalSandboxError(
-      `SANDBOX_ENV may not override reserved key '${envName}' (pinned by sandbox infrastructure)`,
-    );
-  }
-  debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
-  args.push('--env', env);
+  return entries;
+}
+
+/** Validates SANDBOX_ENV before sandbox image, network, or bridge side effects. */
+export function validateContainerSandboxEnv(): void {
+  parseSandboxEnvVars();
 }
 
 function addSandboxEnvVars(args: string[]): void {
-  for (const raw of process.env.SANDBOX_ENV!.split(',')) {
-    const env = raw.trim();
-    if (env !== '') {
-      pushSandboxEnvEntry(args, env);
-    }
+  const entries = parseSandboxEnvVars();
+  for (const env of entries) {
+    const envName = env.substring(0, env.indexOf('='));
+    debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
+    args.push('--env', env);
   }
 }
 
