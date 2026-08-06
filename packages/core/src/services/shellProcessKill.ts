@@ -67,7 +67,10 @@ export function boundedTaskkill(pid: number): Promise<TaskkillResult> {
     // through finish() (which also cancels the timer) and stop before attaching
     // listeners, since child was never assigned.
     try {
-      child = cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+      child = cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
+        stdio: 'ignore',
+      });
+      child.unref();
     } catch (e) {
       finish({
         ok: false,
