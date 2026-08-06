@@ -50,47 +50,40 @@ const { mockReadTodos, TodoStoreMock } = (() => {
   return { mockReadTodos, TodoStoreMock };
 })();
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+vi.mock('@vybestack/llxprt-code-tools', () => {
   return {
     ...actual,
     LocalTodoStore: TodoStoreMock,
   };
 });
 
-vi.mock('./chatSession.js', (importOriginal) => {
+const __actual = { ...(await import('./chatSession.js')) };
+vi.mock('./chatSession.js', () => {
   const apply = (actual: typeof import('./chatSession.js')) => ({
     ...actual,
     ChatSession: vi.fn(),
   });
-  const result = importOriginal() as
+  const result = __actual as
     | typeof import('./chatSession.js')
     | Promise<typeof import('./chatSession.js')>;
   return result instanceof Promise ? result.then(apply) : apply(result);
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/contentGenerator.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
-      >();
-    return {
-      ...actual,
-      createContentGenerator: vi.fn(),
-    };
-  },
-);
+const actual3 = {
+  ...(await import('@vybestack/llxprt-code-core/core/contentGenerator.js')),
+};
+vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => {
+  return {
+    ...actual3,
+    createContentGenerator: vi.fn(),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
 vi.mock('./nonInteractiveToolExecutor.js');
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
-    ...actual,
+    ...actual4,
     IdeClient: {
       getInstance: vi.fn().mockResolvedValue({
         getConnectionStatus: vi.fn(),
@@ -100,19 +93,15 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/prompts.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
-      >();
-    return {
-      ...actual,
-      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-    };
-  },
-);
+const actual5 = {
+  ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
+};
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
+  return {
+    ...actual5,
+    getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+  };
+});
 
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;

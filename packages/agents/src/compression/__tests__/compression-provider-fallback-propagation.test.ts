@@ -64,9 +64,8 @@ function makeLogger(): DebugLogger {
   } as unknown as DebugLogger;
 }
 
-vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+const original = { ...(await import('@vybestack/llxprt-code-settings')) };
+vi.mock('@vybestack/llxprt-code-settings', () => {
   return {
     ...original,
     Storage: {

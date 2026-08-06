@@ -9,11 +9,8 @@ import { IdeContextTracker } from './IdeContextTracker.js';
 import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
 
 // Mock the ideContext singleton from the ide-integration package
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual,
     ideContext: {

@@ -39,13 +39,14 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
+const actual = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
+  )),
+};
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
-      >();
+  () => {
     return {
       analyzeResponseOutcome: actual.analyzeResponseOutcome,
     };

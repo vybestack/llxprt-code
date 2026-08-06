@@ -120,16 +120,16 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+vi.mock('@vybestack/llxprt-code-tools', () => {
   return {
     ...actual,
     LocalTodoStore: mockTodoStoreConstructor,
   };
 });
-vi.mock('./turn', (importOriginal) => {
-  const result = importOriginal() as
+const __actual = { ...(await import('./turn')) };
+vi.mock('./turn', () => {
+  const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {
@@ -173,15 +173,12 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
-    ...actual,
+    ...actual3,
     ideContext: {
-      ...actual.ideContext,
+      ...actual3.ideContext,
       getIdeContext: vi.fn(),
       subscribeToIdeContext: vi.fn(),
       setIdeContext: vi.fn(),
@@ -189,26 +186,25 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
-    const tokenLimit = vi.fn();
-    return {
-      ...actual,
-      tokenLimit,
-      resolveEffectiveContextLimit: vi.fn(
-        (model: string, userCtx?: number, provCtx?: number) => {
-          const ok = (v: unknown): v is number =>
-            typeof v === 'number' && Number.isFinite(v) && v > 0;
-          if (ok(userCtx)) return userCtx;
-          if (ok(provCtx)) return provCtx;
-          return tokenLimit(model);
-        },
-      ),
-    };
-  },
-);
+const actual4 = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
+  return {
+    ...actual4,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),

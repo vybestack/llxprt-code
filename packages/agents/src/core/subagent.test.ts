@@ -22,11 +22,8 @@ import {
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual,
     IdeClient: {
@@ -38,19 +35,15 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/prompts.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
-      >();
-    return {
-      ...actual,
-      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-    };
-  },
-);
+const actual2 = {
+  ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
+};
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => {
+  return {
+    ...actual2,
+    getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+  };
+});
 
 describe('subagent.ts', () => {
   describe('ContextState', () => {

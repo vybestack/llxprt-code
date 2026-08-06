@@ -7,10 +7,8 @@
 import { beforeEach, describe, expect, it, vi } from '../testApi.js';
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-vi.mock('@vybestack/llxprt-code-auth', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@vybestack/llxprt-code-auth')
-  >('@vybestack/llxprt-code-auth');
+const actual = { ...(await import('@vybestack/llxprt-code-auth')) };
+vi.mock('@vybestack/llxprt-code-auth', () => {
   return {
     ...actual,
     flushRuntimeAuthScope: vi.fn(),

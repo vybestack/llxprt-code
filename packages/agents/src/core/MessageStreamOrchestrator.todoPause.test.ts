@@ -37,8 +37,11 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 
 const mockTurnRun = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', (importOriginal) => {
-  const result = importOriginal() as
+const __actual = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const result = __actual as
     | typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')
     | Promise<typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')>;
   const buildExports = (
@@ -68,8 +71,9 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', (importOriginal) => {
   return buildExports(result);
 });
 
-vi.mock('./turn.js', (importOriginal) => {
-  const result = importOriginal() as
+const __actual2 = { ...(await import('./turn.js')) };
+vi.mock('./turn.js', () => {
+  const result = __actual2 as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {

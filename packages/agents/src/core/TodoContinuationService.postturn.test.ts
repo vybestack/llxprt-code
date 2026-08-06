@@ -39,9 +39,8 @@ const {
   };
 })();
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+vi.mock('@vybestack/llxprt-code-tools', () => {
   return {
     ...actual,
     LocalTodoStore: mockTodoStoreConstructor,

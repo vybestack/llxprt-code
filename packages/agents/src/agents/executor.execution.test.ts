@@ -40,12 +40,13 @@ const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } = {
   mockExecuteToolCall: vi.fn(),
 };
 
-vi.mock('../core/chatSession.js', (importOriginal) => {
+const __actual = { ...(await import('../core/chatSession.js')) };
+vi.mock('../core/chatSession.js', () => {
   const apply = (actual: typeof import('../core/chatSession.js')) => ({
     ...actual,
     ChatSession: MockedChatSession,
   });
-  const result = importOriginal() as
+  const result = __actual as
     | typeof import('../core/chatSession.js')
     | Promise<typeof import('../core/chatSession.js')>;
   return result instanceof Promise ? result.then(apply) : apply(result);

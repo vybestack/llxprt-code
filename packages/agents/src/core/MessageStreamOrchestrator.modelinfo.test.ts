@@ -55,39 +55,38 @@ class RecordingTokenUsageLogger extends TokenUsageLogger {
   }
 }
 
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
-    const tokenLimit = vi.fn(
-      (_model: string, userContextLimit?: number) =>
-        userContextLimit ?? 1_000_000,
-    );
-    return {
-      ...actual,
-      tokenLimit,
-      resolveEffectiveContextLimit: vi.fn(
-        (model: string, userCtx?: number, provCtx?: number) => {
-          const ok = (v: unknown): v is number =>
-            typeof v === 'number' && Number.isFinite(v) && v > 0;
-          if (ok(userCtx)) return userCtx;
-          if (ok(provCtx)) return provCtx;
-          return tokenLimit(model);
-        },
-      ),
-    };
-  },
-);
+const actual = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn(
+    (_model: string, userContextLimit?: number) =>
+      userContextLimit ?? 1_000_000,
+  );
+  return {
+    ...actual,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+const actual2 = { ...(await import('./turn.js')) };
+vi.mock('./turn.js', () => {
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;
   }
   return {
-    ...actual,
-    Turn: MockTurn as unknown as typeof actual.Turn,
+    ...actual2,
+    Turn: MockTurn as unknown as typeof actual2.Turn,
   };
 });
 
