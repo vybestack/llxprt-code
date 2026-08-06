@@ -49,11 +49,13 @@ const NON_DECLARATION_WORKSPACES = new Set([
 ]);
 
 /**
- * npm's package-name grammar. Names reach a shell command line below, so a
- * name outside this grammar is rejected rather than interpolated.
+ * Characters an npm package name may contain. Names reach a shell command line
+ * below, so a name outside this grammar is rejected rather than interpolated.
+ * Uppercase is accepted: npm rejects it for *new* packages but still resolves
+ * legacy names that use it, and it is shell-safe either way.
  */
 const PACKAGE_NAME_PATTERN =
-  /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+  /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
  * Package names of the root `workspaces` entries, in declaration order. The

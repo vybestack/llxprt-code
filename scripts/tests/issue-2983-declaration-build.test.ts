@@ -250,6 +250,32 @@ describe('issue #2983 — build_package pipeline', () => {
   }, 240_000);
 });
 
+describe('issue #2983 — entry-point execution contract', () => {
+  // build_package.ts and build.ts now guard their bodies with
+  // `import.meta.main` so their helpers can be imported. Nothing in the repo
+  // imports either for side effects (this file imports build.ts purely for
+  // `declarationBuildWorkspaces`, and the suite performs no build as a
+  // result), but the spawned entry path must still run.
+  it('still runs build_package.ts when it is the entry point', () => {
+    const outsidePackages = mkdtempSync(join(tmpdir(), 'issue-2983-entry-'));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [join(REPO_ROOT, 'scripts', 'build_package.ts')],
+        { cwd: outsidePackages, encoding: 'utf8', timeout: 60_000 },
+      );
+      // The guarded body's first action is this cwd check, so reaching it
+      // proves `main()` ran.
+      expect(result.status).toBe(1);
+      expect(`${result.stdout ?? ''}${result.stderr ?? ''}`).toContain(
+        'must be invoked from a package directory',
+      );
+    } finally {
+      rmSync(outsidePackages, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
 describe('issue #2983 — declaration-only emit', () => {
   it('emits declarations and no JavaScript when declaration-only', () => {
     const result = compileFixture(true);
