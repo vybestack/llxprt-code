@@ -52,7 +52,8 @@ the single write path (`updateTodos`) calls it exactly once.
 ```
 updateTodos(newTodos)
   -> setTodos(newTodos)                 (optimistic UI)
-  -> store.writeTodos(newTodos)         (disk; fire-and-forget, failure -> error)
+  -> persistOrdered(newTodos)           (disk; fire-and-forget, but ordered — see below;
+                                          failure -> error)
   -> publishTodos(...)                  (records exact event in origin ref,
                                           then synchronously emits to observer + peer)
 ```
@@ -68,6 +69,27 @@ propagates to the caller). This issue does **not** broaden into converting every
 `updateTodos` caller to async, nor does it change persistence ordering relative
 to the tool path. We claim identical canonical event shape/channel only — not
 identical ordering to TodoWrite.
+
+### Per-provider ordered persistence (required by synchronous nesting)
+
+`persistOrdered` keeps persistence fire-and-forget (no caller becomes async),
+but it orders writes **per provider** so they reach disk in update call order.
+The hook holds an `inFlightWriteRef` (`Promise<void> | null`). The first write
+(ref null) starts immediately — before publication — preserving optimistic
+semantics; each subsequent write chains behind the in-flight one via
+`previous.then(write, write)` (the rejection branch runs the write anyway, so a
+failed write reports the save error but does not poison later writes). When the
+tail settles and is still current, the ref clears to null so the next write is a
+fresh immediate start.
+
+This is required, not optional: the synchronous, fail-fast publication means a
+prepended `todoEvents` listener can invoke a nested `updateTodos` while the
+outer publish is still on the stack. Without ordering, the outer and nested
+fire-and-forget writes race on the same store file and can complete out of
+order, leaving the stale outer data on disk (a real failure CI caught that
+local focused runs masked). Ordering does not await persistence before
+publishing and does not convert any caller to async; it only serializes the
+per-provider write chain.
 
 ### Per-provider echo suppression (issue #3052)
 
@@ -113,7 +135,7 @@ purpose and was removed; refresh behavior is restored close to HEAD (a plain
 try/catch read with no generation gating). Reactive runtime session handoff is
 also out of scope.
 
-### Persistence-ordering / async-persistence redesign — OUT OF SCOPE
+### Async API conversion (await persistence before publishing) — OUT OF SCOPE
 
 A recommendation to make the provider await persistence before publishing
 (equalizing ordering with the tool path) is intentionally **rejected**. It would
@@ -121,6 +143,19 @@ be a major API and call-graph expansion (every `updateTodos` caller would become
 async) far beyond the mutation-visibility bug, and it would change established
 optimistic semantics. The fix keeps the existing synchronous, optimistic,
 fire-and-forget persistence and makes documentation honest about the difference.
+
+### Per-provider ordered persistence — IN SCOPE (required)
+
+What **is** in scope — and required — is ordered fire-and-forget persistence
+*within one provider*. The synchronous, fail-fast publication means a prepended
+`todoEvents` listener can invoke a nested `updateTodos` while the outer publish
+is still on the stack. Two concurrent fire-and-forget `TodoStore` writes to the
+same file would then race and could complete out of order, leaving the stale
+outer data on disk — a real race CI caught that local focused runs masked. The
+fix (see "Per-provider ordered persistence" above) chains writes per provider so
+they reach disk in update call order, while keeping `updateTodos` synchronous and
+fire-and-forget. Async API conversion (awaiting persistence before publishing)
+remains out of scope; only the per-provider write chain is serialized.
 
 ## `/todo delete` is deliberately untouched
 
@@ -145,8 +180,13 @@ under test is real:
 The provider, React, the event emitter, and the observation seam stay real.
 Storage is isolated to a per-process temp dir by the manifest preloads; each
 test uses a unique sessionId. A peer provider is mounted in its own React root
-to assert peer delivery. There are no `readTodos`/storage spies (the previous
-deferred-read race fixtures were removed with the refresh publication).
+to assert peer delivery. The only place storage is intercepted is the
+nested-provider persistence test, which spies on `TodoStore`'s write boundary
+(`TodoStore.prototype.writeTodos`) solely to hold the outer write and prove the
+nested write is queued behind it, then invokes the real captured write — the
+provider, React, the event emitter, and the observation seam are not mocked.
+This makes that regression deterministic rather than dependent on the filesystem
+scheduler (CI caught a race local focused runs masked).
 
 Coverage:
 
@@ -165,6 +205,11 @@ Coverage:
 8. Origin echo suppression: a provider-originated publication still reaches a
    matching peer provider (per-instance flag), and a later authoritative
    external event is still applied (the flag is one-shot and does not leak).
+9. A synchronously nested provider update is the final list on disk. The test
+   holds the outer write via the `TodoStore` write-boundary spy, proves the
+   nested write is queued (only the outer write invoked, disk still seeded),
+   then releases the real captured outer write and asserts the nested write wins
+   on disk — deterministic, not filesystem-scheduler dependent.
 
 ## Manifest registration
 

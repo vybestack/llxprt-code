@@ -113,6 +113,22 @@ function storeFor(sessionId: string, agentId?: string): TodoStore {
 }
 
 /**
+ * Narrow an outer-write capture from its nullable holder. Kept as a helper so
+ * the null guard does not appear directly inside a test body.
+ */
+function unwrapOuterCapture(
+  capture: {
+    store: TodoStore;
+    todos: Todo[];
+  } | null,
+): { store: TodoStore; todos: Todo[] } {
+  if (capture === null) {
+    throw new Error('outer TodoStore write was not captured');
+  }
+  return capture;
+}
+
+/**
  * Drive the provider's refresh and settle its async read. `refreshTodos`
  * returns a real promise at runtime, but the context type declares `void`, so
  * it is wrapped to settle the read without an await-thenable violation.
@@ -747,6 +763,34 @@ describe('TodoProvider observation (issue #3052)', () => {
         [todo('np-seed', 'Seed')],
         agentId,
       );
+
+      // Spy ONLY on the TodoStore write boundary so the outer write can be held,
+      // making persistence ordering deterministic rather than dependent on the
+      // filesystem scheduler. The provider, React, the event emitter, and the
+      // observation seam stay real; only the storage write is intercepted, and
+      // the real captured write is invoked on release (no mock theater).
+      const realWriteTodos = TodoStore.prototype.writeTodos;
+      let outerCapture: { store: TodoStore; todos: Todo[] } | null = null;
+      let writeTodosCalls = 0;
+      let releaseOuterWrite: () => void = () => {};
+      const outerWriteHeld = new Promise<void>((resolve) => {
+        releaseOuterWrite = resolve;
+      });
+      TodoStore.prototype.writeTodos = function (
+        this: TodoStore,
+        todos: Todo[],
+      ): Promise<void> {
+        writeTodosCalls++;
+        if (outerCapture === null) {
+          outerCapture = { store: this, todos };
+          return outerWriteHeld;
+        }
+        return realWriteTodos.call(this, todos);
+      };
+      cleanups.push(() => {
+        TodoStore.prototype.writeTodos = realWriteTodos;
+      });
+
       const nested: Todo[] = [todo('np-nested', 'Nested provider update')];
       let nestedPublished = false;
       const publishNested = (): void => {
@@ -764,6 +808,23 @@ describe('TodoProvider observation (issue #3052)', () => {
       });
 
       expect(mounted.result.current.todos).toEqual(nested);
+
+      // The nested write is chained behind the held outer write, so it has not
+      // started: only the outer write was invoked, and disk still carries the
+      // seed. This proves the nested write is queued, not racing.
+      expect(writeTodosCalls).toBe(1);
+      expect(readDiskTodos(sessionId, agentId)).toEqual([
+        todo('np-seed', 'Seed'),
+      ]);
+
+      // Release: invoke the real captured outer write (persisting Origin), then
+      // unblock the chain so the queued nested write runs and wins on disk.
+      const capture = unwrapOuterCapture(outerCapture);
+      await realWriteTodos.call(capture.store, capture.todos);
+      expect(readDiskTodos(sessionId, agentId)).toEqual([
+        todo('np-origin', 'Origin'),
+      ]);
+      releaseOuterWrite();
       await waitFor(() => {
         expect(readDiskTodos(sessionId, agentId)).toEqual(nested);
       });

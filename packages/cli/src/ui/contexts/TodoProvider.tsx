@@ -148,6 +148,13 @@ function useTaskUpdates(
  * synchronously. The exact event object is recorded per provider so the
  * origin's own `todoEvents` listener skips only that event (issue #3052), while
  * external observers and any matching peer provider still receive it once.
+ *
+ * Persistence is ordered per provider: the first write starts immediately
+ * (before publication), and every subsequent write chains behind the in-flight
+ * one. This keeps `updateTodos` synchronous and fire-and-forget while ensuring
+ * writes reach disk in update call order — including a synchronously nested
+ * update invoked by a prepended `todoEvents` listener during the outer publish,
+ * which would otherwise race the outer write on the same store file.
  */
 function useTaskPersistence(
   sessionId: string,
@@ -156,24 +163,59 @@ function useTaskPersistence(
   setTodos: (todos: Todo[]) => void,
   setError: (error: string | null) => void,
 ) {
+  // Tail of this provider's fire-and-forget persistence chain. `null` means no
+  // write is in flight, so the next write starts immediately. A pending tail
+  // makes the next write chain behind it so persistence follows update call
+  // order. A failed write reports the save error but does not poison later
+  // chained writes.
+  const inFlightWriteRef = useRef<Promise<void> | null>(null);
+
   const updateTodos = useCallback(
     (newTodos: Todo[]) => {
       setTodos(newTodos);
 
-      const store = new TodoStore(
-        sessionId,
-        { dataDirResolver: () => Storage.getGlobalDataDir() },
-        agentId,
-      );
-      store.writeTodos(newTodos).catch((err) => {
-        setError(
-          `Failed to save todos: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      const writeNewTodos = (): Promise<void> => {
+        const store = new TodoStore(
+          sessionId,
+          { dataDirResolver: () => Storage.getGlobalDataDir() },
+          agentId,
         );
-      });
+        return store.writeTodos(newTodos);
+      };
+
+      const previous = inFlightWriteRef.current;
+      const next =
+        previous === null
+          ? writeNewTodos()
+          : previous.then(writeNewTodos, writeNewTodos);
+
+      const tail = next.then(
+        () => {
+          if (inFlightWriteRef.current === tail) {
+            inFlightWriteRef.current = null;
+          }
+        },
+        (err: unknown) => {
+          setError(
+            `Failed to save todos: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+          if (inFlightWriteRef.current === tail) {
+            inFlightWriteRef.current = null;
+          }
+        },
+      );
+      inFlightWriteRef.current = tail;
 
       publishTodos(sessionId, agentId, newTodos, originPublicationRef);
     },
-    [agentId, sessionId, originPublicationRef, setTodos, setError],
+    [
+      agentId,
+      inFlightWriteRef,
+      originPublicationRef,
+      sessionId,
+      setTodos,
+      setError,
+    ],
   );
 
   return { updateTodos };
