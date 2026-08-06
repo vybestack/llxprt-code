@@ -16,7 +16,8 @@ Chat/Responses builders all read that status. Two paths still discard it:
    inbound without `error`. Consumers: `contentGeneratorAdapters.ts` (Google code-assist
    request path — currently emits no failure signal at all) and
    `streamRequestHelpers.ts` (a `BeforeModel` hook that supplies `llm_request.messages`
-   round-trips history `toGeminiContents` -> `toIContents`, which strips the marker).
+   round-trips history `toGeminiContents` -> `toIContents`, which strips the marker). The
+   second of those two consumer claims does not hold — see "Verified facts" below.
 
 ## Verified facts
 
@@ -33,8 +34,17 @@ Chat/Responses builders all read that status. Two paths still discard it:
 - `GeminiMessageConverter.convertToolContentToGeminiContents` already establishes the
   project's canonical Gemini-shaped failure encoding: `functionResponse.response` is an
   envelope carrying `status`, `result` and `error`. Part 2 follows that precedent.
-- `#3063` (PR #3077) is not merged; this work does not depend on it. Both changes key off the
-  already-declared `ToolResponseBlock.error` field, and they touch disjoint files.
+- `#3063` (PR #3077) is now merged into `main`. `createErrorResponse` sets the top-level
+  `ToolResponseBlock.error` via `toolFailureMarker(...)`, so `buildToolResponsePayload` now
+  derives `status: 'error'` for a genuine tool failure and the blast radius of this change is
+  real: every genuine tool failure takes the new code paths.
+- `streamRequestHelpers.ts` is NOT a live consumer of the outbound encoding, contrary to the
+  issue text. It only round-trips when `hookProvidedMessages()` is true, and in exactly that
+  case `HookTranslator.fromHookLLMRequest` rebuilds contents as text-only `parts: [{ text }]`,
+  discarding the converted contents — so a `functionResponse` part never reaches `toIContents`
+  there. The only live outbound consumer is `contentGeneratorAdapters.ts` (the Google
+  code-assist request path). The inbound decoder exists for symmetry/losslessness and has no
+  other live consumer today.
 
 ## Decisions
 
@@ -51,26 +61,43 @@ reaches the model as the bare placeholder with no explanation.
 ### D2 — Canonical legacy (Gemini-shaped) encoding of a failed tool response
 
 `ContentConverters.toolResponseBlockToPart` emits, **and only when the block carries a
-failure marker**:
+failure marker**, a part that carries BOTH the model-facing envelope inside `functionResponse`
+AND a part-level discriminant `llxprtToolFailure: true`:
 
 ```
-functionResponse: {
-  name, id,
-  response: {
-    status: 'error',
-    error: <error string>,
-    result: <original block.result>,   // key omitted when result is undefined
+{
+  functionResponse: {
+    name: <toolName>,
+    response: {
+      status: 'error',
+      error: <error string>,
+      result: <original block.result>,   // key omitted when result is undefined
+    },
+    id: <callId>,
   },
+  llxprtToolFailure: true,
 }
 ```
 
-A successful tool response is encoded exactly as today (`response` is the raw result), so no
-existing success payload — on the wire to Google or anywhere else — changes.
+A successful tool response is encoded exactly as today (`response` is the raw result, no flag),
+so no existing success payload — on the wire to Google or anywhere else — changes.
 
-`ContentConverters.processFunctionResponsePart` decodes that envelope: when
-`functionResponse.response` is a plain object with `status === 'error'` and a string `error`,
-the reconstructed block gets `error` set and `result` restored verbatim from the envelope
-(`{}` when the `result` key is absent, matching the existing empty-response behaviour).
+`ContentConverters.processFunctionResponsePart` decodes that envelope **only when the part
+carries `llxprtToolFailure === true`**; a part without the flag keeps today's behaviour
+exactly, whatever its `response` shape. This is required because a SUCCESSFUL tool whose
+result merely happens to be `{ status: 'error', error: '...', ...payload }` (third-party MCP
+servers do produce such shapes, and `convertToFunctionResponse` copies them verbatim) would
+otherwise be misdecoded into a spurious failure with its payload destroyed, and it would also
+misdecode the different envelope produced by `GeminiMessageConverter` (whose `result` is a
+serialized string). The flag follows the existing `llxprt*` part-extension convention
+(`llxprtSourceField`, `llxprtThoughtBlockId`, …).
+
+**`result` null/undefined semantics (verified by full round trip):** the `result` key is
+omitted outbound only when `result === undefined`, and the decoder then yields `{}`. A
+`result` of `null` — exactly what `historyToolPairing.ts` / `historyToolNormalization.ts`
+produce on a failed block — is written through and comes back as `null` verbatim (NOT coerced
+to `{}`). The decoder does NOT therefore always yield `{}`; it yields `{}` only for the
+omitted/undefined case and `null` for the explicit-`null` case.
 
 **What the legacy representation preserves:** `callId`, `toolName`, `result`, and the failure
 marker `error`. **What it deliberately does not preserve:** `isComplete` and
@@ -95,8 +122,14 @@ relied on by the success path and is not what this issue is about.
   the same value as before (regression guard, including the empty-result placeholder case).
 - AC1.5 Round trip: `convertToVercelMessages` -> `convertFromVercelMessages` on a failed
   tool response yields a `tool_response` block that is still marked as a failure
-  (`isError === true` and a non-empty `error`), and a successful one yields a block with no
-  failure marker.
+  (`isError === true`). Note the pre-existing inbound decoder (`parseToolResultPart`) sets the
+  reconstructed `error` to the OUTPUT TEXT rather than the original error string, so the exact
+  error text is NOT preserved by this path; only the failure MARKER is. The test asserts the
+  exact observed values (`error === result === <output text>`).
+- AC1.6 One tool `IContent` with multiple `tool_response` blocks (mixed success/failure)
+  produces one tool message whose parts carry `error-text` and `text` respectively, in order.
+- AC1.7 A failed block with `result: null` (falls through to the empty-result placeholder)
+  yields the error text as the `error-text` value.
 
 ### Part 2 — `packages/core/src/services/history/ContentConverters.ts`
 
@@ -112,22 +145,45 @@ relied on by the success path and is not what this issue is about.
 - AC2.6 Full round trip `toGeminiContents` -> `toIContents` preserves the failure marker,
   the result, the tool name and the call id for a failed tool response, and preserves the
   absence of a marker for a successful one.
-- AC2.7 Boundary: an error envelope whose original result was `undefined` decodes to `{}`
-  (the pre-existing empty-response convention) and still carries the failure marker.
+- AC2.7 Full round trip of a failed block with `result: undefined`: `undefined` is omitted
+  outbound and decodes to `{}` (the pre-existing empty-response convention) and still carries
+  the failure marker.
+- AC2.8 Full round trip of a failed block with `result: null`: `null` is written through and
+  comes back as `null` verbatim (NOT `{}`), and the marker survives.
+- AC2.9 A SUCCESSFUL tool whose `result` is shaped like a failure envelope
+  (`{ status:'error', error:'...', ...payload }`) round-trips completely intact: no failure
+  marker, payload preserved. This is the F2 discriminant regression guard.
+- AC2.10 A failed block with a non-object `result` (a string and an array) round-trips with
+  the result preserved verbatim.
+- AC2.11 One `IContent` containing multiple `tool_response` blocks (mixed success/failure)
+  round-trips with each block's marker/absence correct (the discriminant is per-part).
+
+### Part 3 — `packages/core/src/code_assist/contentGeneratorAdapters.ts` (the only live outbound consumer)
+
+- AC3.1 `toGenerateContentParameters` on a request whose contents contain a failed
+  `tool_response` emits a `functionResponse` whose `response` carries the explicit failure
+  signal (`status: 'error'` and the error text).
+- AC3.2 The same for a SUCCESSFUL `tool_response`: the emitted `functionResponse.response` is
+  byte-identical to the raw result (regression guard).
+- AC3.3 `toCountTokensParameters` counts the same failure-shaped response.
 
 ## Test plan (behavioural, written first, no mock theatre)
 
 New Bun (`bun:test`) files — no existing Vitest suite is modified:
 
 1. `packages/providers/src/openai-vercel/messageConversion.toolFailure.test.ts`
-   covers AC1.1 – AC1.5 by driving the real exported converters with real `IContent`
+   covers AC1.1 – AC1.7 by driving the real exported converters with real `IContent`
    fixtures and asserting on the produced `ToolResultPart` / reconstructed blocks.
    Must be registered in `scripts/bun-test-manifest-data-providers.ts` (curated file list).
 2. `packages/core/src/services/history/ContentConverters.toolFailure.test.ts`
-   covers AC2.1 – AC2.7 by driving `toGeminiContent(s)` / `toIContent(s)` directly.
+   covers AC2.1 – AC2.11 by driving `toGeminiContent(s)` / `toIContent(s)` directly.
    The core workspace runner auto-discovers `*.test.ts`, so no manifest edit is needed.
+3. `packages/core/src/code_assist/contentGeneratorAdapters.toolFailure.test.ts`
+   covers AC3.1 – AC3.3 by driving the real adapter with real `ModelGenerationRequest` /
+   `CountTokensRequest` fixtures (no mocks of ContentConverters). The core workspace runner
+   auto-discovers `*.test.ts`, so no manifest edit is needed.
 
-No mocks are required in either file: both units are pure functions over plain data.
+No mocks are required in any file: all three units are pure functions over plain data.
 
 ## Out of scope
 

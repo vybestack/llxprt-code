@@ -36,15 +36,22 @@ function toolContent(...blocks: ToolResponseBlock[]): IContent {
   return { speaker: 'tool', blocks };
 }
 
-/** Drive convertToVercelMessages and return the first tool-result part's output. */
-function firstToolResultOutput(contents: IContent[]): ToolResultPart['output'] {
+/** Run convertToVercelMessages and return the parts of the (single) tool message. */
+function toolResultParts(contents: IContent[]): ToolResultPart[] {
   const messages = convertToVercelMessages(contents);
+  // The find predicate narrows the message to CoreToolMessage (TS find
+  // inference), so toolMessage.content is already ToolResultPart[].
   const toolMessage = messages.find((m) => m.role === 'tool');
   if (!toolMessage) {
     throw new Error('expected a tool message');
   }
-  const parts = toolMessage.content as unknown as ToolResultPart[];
-  if (!Array.isArray(parts) || parts.length === 0) {
+  return toolMessage.content;
+}
+
+/** Drive convertToVercelMessages and return the first tool-result part's output. */
+function firstToolResultOutput(contents: IContent[]): ToolResultPart['output'] {
+  const parts = toolResultParts(contents);
+  if (parts.length === 0) {
     throw new Error('expected at least one tool-result part');
   }
   return parts[0].output;
@@ -105,7 +112,6 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         result: { output: 'all good' },
       }),
     ]);
-    expect(successOutput.type).toBe('text');
     if (successOutput.type !== 'text') {
       throw new Error(`expected text output, got ${successOutput.type}`);
     }
@@ -119,14 +125,13 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         result: undefined,
       }),
     ]);
-    expect(emptyOutput.type).toBe('text');
     if (emptyOutput.type !== 'text') {
       throw new Error(`expected text output, got ${emptyOutput.type}`);
     }
     expect(emptyOutput.value).toBe('[no tool result]');
   });
 
-  it('AC1.5 — round trip convertTo -> convertFrom keeps failures failed and successes clean', () => {
+  it('AC1.5 — round trip convertTo -> convertFrom keeps failures marked failed and successes clean', () => {
     const contents: IContent[] = [
       toolContent({
         type: 'tool_response',
@@ -153,11 +158,56 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
       throw new Error('expected both a failed and a succeeded block');
     }
 
+    // The failure MARKER survives the round trip (isError stays true). The
+    // pre-existing inbound decoder (parseToolResultPart) sets the reconstructed
+    // `error` to the OUTPUT TEXT rather than the original error string, so the
+    // exact error text is NOT preserved here — but the marker is what #3076 is
+    // about, and that is preserved. Assert the exact observed values.
     expect((failed as { isError?: boolean }).isError).toBe(true);
-    expect(typeof failed.error).toBe('string');
-    expect(failed.error?.length ?? 0).toBeGreaterThan(0);
+    expect(failed.error).toBe('partial data');
+    expect(failed.result).toBe('partial data');
 
     expect((succeeded as { isError?: boolean }).isError).toBeUndefined();
     expect(succeeded.error).toBeUndefined();
+    expect(succeeded.result).toBe('all good');
+  });
+
+  it('AC1.6 — one tool message with multiple tool_response blocks keeps error-text/text parts in order', () => {
+    const outputs = toolResultParts([
+      toolContent(
+        {
+          type: 'tool_response',
+          callId: 'hist_tool_1',
+          toolName: 'failingTool',
+          result: { output: 'partial data' },
+          error: 'boom',
+        },
+        {
+          type: 'tool_response',
+          callId: 'hist_tool_2',
+          toolName: 'okTool',
+          result: { output: 'all good' },
+        },
+      ),
+    ]).map((part) => part.output);
+
+    expect(outputs[0]?.type).toBe('error-text');
+    expect(outputs[1]?.type).toBe('text');
+  });
+
+  it('AC1.7 — a failed block with result null yields the error text as the value', () => {
+    const output = firstToolResultOutput([
+      toolContent({
+        type: 'tool_response',
+        callId: 'hist_tool_1',
+        toolName: 'failingTool',
+        result: null,
+        error: 'the tool exploded',
+      }),
+    ]);
+    if (output.type !== 'error-text') {
+      throw new Error(`expected error-text output, got ${output.type}`);
+    }
+    expect(output.value).toBe('the tool exploded');
   });
 });

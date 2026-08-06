@@ -116,14 +116,17 @@ export class ContentConverters {
   /**
    * Canonical Gemini-shaped encoding of a failed tool response (issue #3076).
    *
-   * Why: the failure marker on a tool_response block would otherwise be lost on
-   * the Gemini wire path (it is read by contentGeneratorAdapters and the
-   * streamRequestHelpers round trip). Encoding it inside `functionResponse`
-   * mirrors the precedent already set by GeminiMessageConverter and lets the
-   * inbound decoder reconstruct the failure. It deliberately preserves only
-   * `callId`, `toolName`, `result` and the `error` marker — `isComplete` and
-   * `providerMetadata` are local bookkeeping with no Gemini representation and
-   * are intentionally dropped, never encoded.
+   * The only live consumer of this outbound encoding is the Google code-assist
+   * request path (contentGeneratorAdapters). The matching inbound decoder
+   * exists so the Gemini-shaped representation stays symmetric and lossless as
+   * #3076 requires; it has no other live consumer today. The part carries the
+   * `llxprtToolFailure` flag so a successful tool whose result merely happens
+   * to be shaped like `{ status: 'error', ... }` is never misdecoded.
+   *
+   * The legacy representation carries `callId`, `toolName`, `result` and the
+   * `error` marker and nothing else: `isComplete` and `providerMetadata` are
+   * local bookkeeping with no Gemini representation, so they are deliberately
+   * dropped rather than encoded into a payload the model would then see.
    */
   private static buildFailureFunctionResponse(
     toolResponse: Extract<ContentBlock, { type: 'tool_response' }>,
@@ -138,9 +141,10 @@ export class ContentConverters {
     return {
       functionResponse: {
         name: toolResponse.toolName,
-        id: toolResponse.callId,
         response,
+        id: toolResponse.callId,
       },
+      llxprtToolFailure: true,
     };
   }
 
@@ -452,22 +456,27 @@ export class ContentConverters {
         callId,
         resolvedToolName,
         part.functionResponse!.response,
+        part.llxprtToolFailure === true,
       ),
     ];
     return { blocks, responseIndex: responseIndex + 1 };
   }
 
   /**
-   * Build a tool_response block from a functionResponse payload, restoring a
-   * failure marker verbatim when the payload carries the issue #3076 envelope,
-   * otherwise falling back to the existing string/JSON coercion.
+   * Build a tool_response block from a functionResponse payload. The issue
+   * #3076 failure envelope is decoded verbatim ONLY when `isToolFailure` is
+   * true (the part carried the `llxprtToolFailure` flag); any other response
+   * shape keeps the existing string/JSON coercion unchanged.
    */
   private static buildToolResponseBlock(
     callId: string,
     toolName: string,
     response: unknown,
-  ): ContentBlock {
-    const failure = ContentConverters.decodeFailureEnvelope(response);
+    isToolFailure: boolean,
+  ): Extract<ContentBlock, { type: 'tool_response' }> {
+    const failure = isToolFailure
+      ? ContentConverters.decodeFailureEnvelope(response)
+      : null;
     if (failure) {
       return {
         type: 'tool_response',
