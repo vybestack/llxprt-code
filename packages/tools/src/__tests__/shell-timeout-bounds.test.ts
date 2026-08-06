@@ -270,6 +270,28 @@ describe('Issue #3031 — shell tool timeout ceiling semantics', () => {
     },
   );
 
+  // The complement of the gate above: win32 has no background jobs, and that
+  // rejection is the reason the clamp case cannot be exercised there. Asserting
+  // it keeps the platform covered rather than merely skipped.
+  it.skipIf(process.platform !== 'win32')(
+    'rejects a background job outright on Windows',
+    () => {
+      const host = createFakeHost({
+        max: 0.1,
+        defaultSeconds: 60,
+        behavior: 'complete',
+      });
+      const tool = new ShellTool(host);
+      expect(() =>
+        tool.build({
+          command: 'sleep 9999',
+          is_background: true,
+          timeout_seconds: 9999,
+        }),
+      ).toThrow(/is_background is not supported on Windows/);
+    },
+  );
+
   it('survives summarization and token limiting (durable clamp notice, Finding 4)', async () => {
     const host = createFakeHost({
       max: 0.1,

@@ -82,8 +82,9 @@ function resolveNodeExecutable(): string {
   if (fromNpm !== undefined && fromNpm !== '' && existsSync(fromNpm)) {
     return fromNpm;
   }
-  const names =
-    process.platform === 'win32' ? ['node.exe', 'node.cmd'] : ['node'];
+  // `node.exe` only: a `.cmd` shim cannot be spawned without `shell: true`
+  // (it fails EINVAL), and every real Windows Node install ships `node.exe`.
+  const names = process.platform === 'win32' ? ['node.exe'] : ['node'];
   const searchPath = process.env['PATH'] ?? '';
   for (const dir of searchPath.split(delimiter)) {
     if (dir === '') {

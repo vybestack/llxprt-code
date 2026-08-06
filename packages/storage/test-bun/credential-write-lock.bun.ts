@@ -25,7 +25,10 @@ import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { CredentialWriteLock } from '../src/secure-store/credential-write-lock.js';
+import {
+  CANONICAL_START_TIME_PLATFORMS,
+  CredentialWriteLock,
+} from '../src/secure-store/credential-write-lock.js';
 import { SecureStoreError } from '../src/secure-store/secure-store-errors.js';
 
 /**
@@ -40,15 +43,6 @@ function asSecureStoreError(error: unknown): SecureStoreError {
   }
   return error;
 }
-
-/**
- * Platforms that have a canonical process start-time source (`ps -o lstart=`).
- * This MUST mirror production's gate in `readProcessStartTimeMs`
- * (credential-write-lock.ts:256) exactly: the canonical mechanism exists only
- * here, and on every other platform production returns `null` and builds the
- * owner record with `startTimeSource: 'approximate'`.
- */
-const CANONICAL_START_TIME_PLATFORMS = ['darwin', 'linux', 'freebsd'];
 
 /**
  * Builds the start-time fields for a fabricated "stall" owner record, using the
@@ -868,7 +862,7 @@ describe('CredentialWriteLock', () => {
     expect(files.filter((f) => f.endsWith('.lock'))).toStrictEqual([]);
   });
 
-  describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
+  describe.skipIf(!CANONICAL_START_TIME_PLATFORMS.includes(process.platform))(
     'OS-observed subprocess owner identity',
     () => {
       // Runs under both Vitest and Bun. It previously had to be skipped under

@@ -180,13 +180,13 @@ export class CredentialProxyServer {
   }
 
   async stop(): Promise<void> {
-    // Gracefully half-close connections rather than abruptly destroying them.
-    // On POSIX an abrupt `destroy()` suffices, but on Windows named pipes
-    // `destroy()` does NOT reliably deliver an EOF/close to the client, so the
-    // peer's connection-loss detection never fires and its next request hangs
-    // to a timeout instead of rejecting. endAndDestroyAfter sends EOF via
-    // `socket.end()` (which a named-pipe peer reliably observes as 'close'),
-    // then force-destroys on a timer so teardown still completes.
+    // Close through `end()`, not `destroy()`, and stop reading first. The point
+    // is ORDERING: `server.close()` below only calls back once the connection
+    // count reaches zero, so ending here keeps `stop()` from returning before
+    // every peer has had an event-loop turn to observe the close. `destroy()`
+    // returned before that turn, leaving a client that still believed it was
+    // connected to hang its next request to the request timeout rather than
+    // report the loss (issue #3061).
     for (const socket of this.connections) {
       this.endAndDestroyAfter(socket, Buffer.alloc(0));
     }
@@ -1020,8 +1020,15 @@ export class CredentialProxyServer {
    * graceful close to avoid dangling references.
    */
   private endAndDestroyAfter(socket: net.Socket, frame: Buffer): void {
-    if (socket.destroyed) return;
-    socket.end(frame);
+    // `writableEnded` as well as `destroyed`: a socket ended by a handshake
+    // rejection stays open until its destroy timer fires, and calling `end()`
+    // on it again raises ERR_STREAM_WRITE_AFTER_END, which would surface as a
+    // spurious `socket_error` audit record during shutdown.
+    if (socket.destroyed || socket.writableEnded) return;
+    // `pause()` before `end()`: end half-closes the write side only, so an
+    // in-flight frame would otherwise still be decoded and dispatched on a
+    // connection this call has already decided to close.
+    socket.pause().end(frame);
     const timer = setTimeout(
       () => socket.destroy(),
       HANDSHAKE_DESTROY_TIMEOUT_MS,

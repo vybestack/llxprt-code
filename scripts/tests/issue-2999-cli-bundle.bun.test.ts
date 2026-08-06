@@ -63,8 +63,11 @@ function describeProcessFailure(
   return [
     `${label} failed (status ${proc.status}, signal ${proc.signal})`,
     proc.error ? `spawn error: ${String(proc.error)}` : '',
-    `stdout: ${proc.stdout}`,
-    `stderr: ${proc.stderr}`,
+    // Guarded: on a spawn failure these are null, not empty strings, so an
+    // unguarded template would print the literal "null" precisely when the
+    // spawn error is the whole story.
+    proc.stdout ? `stdout: ${proc.stdout}` : '',
+    proc.stderr ? `stderr: ${proc.stderr}` : '',
   ]
     .filter(Boolean)
     .join('\n  ');
@@ -101,7 +104,15 @@ describe.skipIf(!RUN_BUILD_TEST)(
       if (build.error !== undefined || build.status !== 0) {
         throw new Error(describeProcessFailure('bundle build', build));
       }
-      expect(existsSync(bundlePath)).toBe(true);
+      // Not `expect(existsSync(...))`: the build can exit 0 having built
+      // nothing (runBuilds skips the bundle when node_modules is absent), and a
+      // bare "expected false to be true" would discard the subprocess output
+      // that says which path was taken.
+      if (!existsSync(bundlePath)) {
+        throw new Error(
+          describeProcessFailure('bundle build produced no artifact', build),
+        );
+      }
 
       // Execute the artifact with the same Bun that resolves 4,274 modules
       // when running raw TypeScript. A 0 exit with version output proves the

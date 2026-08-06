@@ -60,9 +60,10 @@ Chronic since 2026-08-01.
 
 | Test | Defect |
 | --- | --- |
-| `packages/storage/test-bun/credential-write-lock.bun.ts:55` (2 tests) | Test helper `readCanonicalProcessStartTimeMs` runs `ps -o lstart= -p <pid>` unconditionally. Windows has no such `ps` (`ps: unknown option -- o`). Production `readProcessStartTimeMs` is gated to darwin/linux/freebsd and returns `null` elsewhere; the test does not mirror that gate. |
+| `packages/storage/test-bun/credential-write-lock.bun.ts:55` | Test helper `readCanonicalProcessStartTimeMs` runs `ps -o lstart= -p <pid>` unconditionally. Windows has no such `ps` (`ps: unknown option -- o`). Production `readProcessStartTimeMs` is gated to darwin/linux/freebsd and returns `null` elsewhere; the test does not mirror that gate. |
+| `packages/storage/test-bun/credential-write-lock.bun.ts` M4 test | Separate defect in the same file. It sabotaged the lock by removing the lock directory and writing a file in its place, which raises ENOTDIR on POSIX but ENOENT on Windows — where `readOwner` reads it as "absent" and logs nothing, so the release failure the test exists to catch was silently not exercised there. Replacing the lock file with a directory yields a non-ENOENT error everywhere. |
 | `packages/core/src/config/toolRegistryFactory.test.ts:403` | Compares a path built from `os.tmpdir()` (8.3 short form, `C:\Users\RUNNER~1\...`) against the tool's returned long path (`C:\Users\runneradmin\...`). No realpath normalisation. |
-| `packages/core/src/utils/getPty.test.ts:49` (2 tests) | `vi.doMock('node-pty', ...)` does not take effect on Windows: the assertion receives the real `Module {}` instead of the stub, i.e. the mock is bypassed and the genuine module loads. |
+| `packages/core/src/utils/getPty.test.ts:49` (2 tests) | The suite substituted `@lydell/node-pty` / `node-pty` in the module registry. `packages/core` runs exclusively under Bun, and `getPty` short-circuits to the Bun.Terminal adapter on Bun POSIX, so these cases only ever EXECUTE on Windows — the one platform where the substitution silently fails, because Bun's runner cannot reset the registry and evaluates a module-mock factory once, eagerly. The assertions therefore received the real `Module {}`. `getPty` now takes injectable backend loaders, so the selection logic is exercised the same way on every runtime and the tests run locally under Vitest as well. |
 | `packages/providers/src/auth/proxy/__tests__/e2e-credential-flow.test.ts` Scenario 7 | "throws connection error after proxy stops" times out at 30 s. Named-pipe teardown does not surface the connection error the way a Unix socket does. |
 | `packages/test-utils/src/process-run.test.ts:283` | Asserts `/ENOENT/`; Bun on Windows reports `Executable not found in $PATH: "..."`. |
 | `packages/test-utils/src/quota-guard-vitest-integration.test.ts` (2 tests) | Both tests spawn a real nested vitest run with `process.execPath`, which under this package's Bun-hosted suite is Bun. Vitest is a Node tool whose forks pool assumes a Node runtime; on Windows the nested run dies, so no sentinel is published and the second test's run exits 1 where 0 was expected. |
@@ -107,6 +108,41 @@ Dispatching the nightly on this branch (run 31031274495) after the
 
 Every dispatch of a failing nightly comments on this issue via the
 `notify_failure` job; that is expected while iterating on the branch.
+
+## Second dispatch (run 31039119968)
+
+- `CLI bundle builds and launches`, `E2E Full (windows)`, and every other leg —
+  **green**. Five of the six Windows defects and the #3050 regression are
+  confirmed fixed on the platform itself.
+- `Windows CI` — only `getPty` remained, exactly as reviewed. The module-registry
+  substitution could never work there; replaced with an injected seam.
+- `macOS CI` — failed at a *later* step that the canary failure had been masking:
+  `Run scripts-assignment Bun manifest (#2833)` invokes a workspace that #3014
+  deleted from `scripts/bun-test-manifest.ts` while leaving the step behind, so
+  it could never pass. Both of its test files are already covered by the
+  `scripts-tests` glob root and ran green in this same job's harness step, so
+  the dead step is removed rather than the workspace restored.
+
+Also applied from review, none of which change what any test proves:
+
+- `scripts/bun-build.config.ts` rendered a diagnostic's source position only for
+  `instanceof Error` values, but Bun attaches `BuildMessage`/`ResolveMessage`
+  objects, which are not Errors — so the file/line/column was always discarded.
+  Verified by probing Bun 1.3.14 directly.
+- The CLI bundle test's artifact check was an opaque `expect(existsSync(...))`,
+  though the build can exit 0 having built nothing; it now reports the
+  subprocess output.
+- The credential-proxy shutdown comment claimed a Windows named-pipe half-close
+  that libuv does not implement. What actually fixes it is ordering:
+  `server.close()` waits for the connection count to reach zero, so `stop()` can
+  no longer return before the peer observes the close. The comment now says so,
+  the socket is paused first (`end()` leaves the read side open, so an in-flight
+  frame would otherwise still mutate the token store during shutdown), and
+  `endAndDestroyAfter` guards `writableEnded` to avoid a double-`end()`.
+
+The e2e prompt was also reworded to be imperative. That is a hedge, not the fix —
+the `git init` addresses the evidenced cause — and it is recorded here so it is
+not mistaken for one.
 
 ## Verification
 

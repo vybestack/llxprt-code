@@ -182,18 +182,25 @@ export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
  */
 const DIAGNOSTIC_SEPARATOR = '\n  ';
 
-/** Renders one Bun diagnostic, keeping its source position when it carries one. */
+/**
+ * Renders one Bun diagnostic, keeping its source position when it carries one.
+ *
+ * Deliberately duck-typed rather than gated on `instanceof Error`: Bun attaches
+ * `BuildMessage`/`ResolveMessage` objects, which carry `position` but are NOT
+ * Errors, so an `instanceof` gate would discard the file/line/column that makes
+ * a bundle failure actionable.
+ */
 function renderDiagnostic(diagnostic: unknown): string {
-  if (!(diagnostic instanceof Error)) {
+  if (diagnostic === null || typeof diagnostic !== 'object') {
     return String(diagnostic);
   }
-  const { position } = diagnostic as Error & {
+  const { position } = diagnostic as {
     position?: { file?: string; line?: number; column?: number } | null;
   };
   const where = position?.file
     ? ` (${position.file}:${position.line ?? 0}:${position.column ?? 0})`
     : '';
-  return `${diagnostic.name}: ${diagnostic.message}${where}`;
+  return `${String(diagnostic)}${where}`;
 }
 
 /**
