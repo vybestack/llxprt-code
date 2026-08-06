@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock, mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -688,7 +680,7 @@ describe('settingsIntegration', () => {
       );
 
       const mockRepoRoot = '/Users/test/repo';
-      vi.doMock('./../../utils/gitUtils.js', () => ({
+      mock.module('./../../utils/gitUtils.js', () => ({
         getWorkspaceIdentity: vi.fn(() => mockRepoRoot),
       }));
 

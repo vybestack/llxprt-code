@@ -58,7 +58,8 @@ const mocks = (() => {
 // providerAliases.js with a stub whose writeProviderAliasConfig is a no-op.
 // Restore the genuine module, then re-export its real functions through the
 // composition.js mock that providerCommand.ts imports from.
-vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+// Bun runs each test file in its own process, so providerAliases is never
+// globally mocked and needs no unmocking here.
 
 vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
   // vi.importActual resolves the genuine module on both runners: Vitest

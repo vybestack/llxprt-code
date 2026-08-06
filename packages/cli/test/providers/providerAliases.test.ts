@@ -9,8 +9,9 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// This integration test needs real config files, not the global mock.
-vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+// This integration test needs the real config files. Bun runs each test file
+// in its own process and nothing mocks providerAliases here, so no unmocking
+// is required.
 
 // Loaded with top-level await rather than a static import so the modules that
 // consume providerAliases are evaluated AFTER the unmock above. Static imports

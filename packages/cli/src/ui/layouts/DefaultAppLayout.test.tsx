@@ -9,7 +9,8 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 // Unmock ink to use real Ink with ink-testing-library
 // The global mock in test-setup.ts conflicts with renderer behavior here.
-vi.unmock('ink');
+// Under Bun, ink is redirected to a stub by a resolution plugin rather than a
+// module mock, so there is nothing to unmock.
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
 import { useUIState } from '../contexts/UIStateContext.js';

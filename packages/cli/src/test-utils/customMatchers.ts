@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/// <reference types="vitest/globals" />
-
 import { expect } from 'bun:test';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 
@@ -52,12 +50,13 @@ expect.extend({
   toHaveOnlyValidCharacters,
 });
 
-// Extend Vitest's `expect` interface with the custom matcher's type definition.
-declare module 'vitest' {
-  interface Assertion<T> {
+// Declare the matcher on Bun's expect. Matchers and AsymmetricMatchers are
+// interfaces, so they accept declaration merging.
+declare module 'bun:test' {
+  interface Matchers<T> {
     toHaveOnlyValidCharacters(): T;
   }
-  interface AsymmetricMatchersContaining {
+  interface AsymmetricMatchers {
     toHaveOnlyValidCharacters(): void;
   }
 }

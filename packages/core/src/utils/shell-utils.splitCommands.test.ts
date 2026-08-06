@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, vi } from 'bun:test';
+import { expect, describe, it, beforeEach, vi, mock } from 'bun:test';
 import { splitCommands } from './shell-utils.js';
 
 describe('splitCommands', () => {
@@ -123,7 +123,7 @@ describe('splitCommands regex fallback', () => {
   // persists for the rest of this file. This is safe because the top-level
   // import already captured the real splitCommands before the mock registered.
   beforeEach(() => {
-    vi.doMock('./shell-parser.js', () => ({
+    mock.module('./shell-parser.js', () => ({
       isParserAvailable: () => false,
       parseShellCommand: () => null,
       extractCommandNames: () => [],

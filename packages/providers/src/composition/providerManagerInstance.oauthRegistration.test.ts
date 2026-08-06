@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach, mock } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
 
@@ -34,7 +34,7 @@ function makeWrapper(
   };
 }
 
-vi.doMock('../ProviderManager.js', () => {
+mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
     setConfig(): void {}
     setActiveProvider(): void {}
@@ -42,25 +42,25 @@ vi.doMock('../ProviderManager.js', () => {
   }
   return { ProviderManager: MockProviderManager };
 });
-vi.doMock('../gemini/GeminiProvider.js', () => {
+mock.module('../gemini/GeminiProvider.js', () => {
   class MockGeminiProvider {
     setConfig(): void {}
   }
   return { GeminiProvider: MockGeminiProvider };
 });
-vi.doMock('../openai/OpenAIProvider.js', () => ({
+mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
 }));
-vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
+mock.module('../openai-responses/OpenAIResponsesProvider.js', () => ({
   OpenAIResponsesProvider: makeWrapper(() => openaiResponsesCtorState),
 }));
-vi.doMock('../openai-vercel/index.js', () => ({
+mock.module('../openai-vercel/index.js', () => ({
   OpenAIVercelProvider: makeWrapper(() => openaiVercelCtorState),
 }));
-vi.doMock('../anthropic/AnthropicProvider.js', () => ({
+mock.module('../anthropic/AnthropicProvider.js', () => ({
   AnthropicProvider: makeWrapper(() => anthropicCtorState),
 }));
-vi.doMock('./oauth-provider-registration.js', () => ({
+mock.module('./oauth-provider-registration.js', () => ({
   ensureOAuthProviderRegistered: (...args: unknown[]) =>
     ensureOAuthProviderRegisteredState(...args),
   registerStandardOAuthProviders: (

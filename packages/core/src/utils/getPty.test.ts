@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, mock } from 'bun:test';
 import { isBunPosix } from './runtime.js';
 
 const PTY_BACKENDS = ['lydell-node-pty', 'node-pty'] as const;
@@ -21,10 +21,10 @@ describe('getPty unavailable backend handling', () => {
   it.skipIf(isBunPosix())(
     'returns null when no node-pty backend can be loaded',
     async () => {
-      vi.doMock('@lydell/node-pty', () => {
+      mock.module('@lydell/node-pty', () => {
         throw new Error('primary pty unavailable');
       });
-      vi.doMock('node-pty', () => {
+      mock.module('node-pty', () => {
         throw new Error('fallback pty unavailable');
       });
 
@@ -38,10 +38,10 @@ describe('getPty unavailable backend handling', () => {
     'falls back to node-pty when @lydell/node-pty cannot be loaded',
     async () => {
       const fallbackModule = { spawn: vi.fn() };
-      vi.doMock('@lydell/node-pty', () => {
+      mock.module('@lydell/node-pty', () => {
         throw new Error('primary pty unavailable');
       });
-      vi.doMock('node-pty', () => fallbackModule);
+      mock.module('node-pty', () => fallbackModule);
 
       const module = await import('./getPty.js');
       const pty = await module.getPty();
@@ -54,8 +54,8 @@ describe('getPty unavailable backend handling', () => {
     'uses @lydell/node-pty when the primary backend loads',
     async () => {
       const primaryModule = { spawn: vi.fn() };
-      vi.doMock('@lydell/node-pty', () => primaryModule);
-      vi.doMock('node-pty', () => {
+      mock.module('@lydell/node-pty', () => primaryModule);
+      mock.module('node-pty', () => {
         throw new Error('fallback pty should not be loaded');
       });
 

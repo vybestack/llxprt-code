@@ -8,7 +8,8 @@ import { render } from 'ink-testing-library';
 import { act } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'bun:test';
 
-vi.unmock('ink');
+// Under Bun, ink is redirected to a stub by a resolution plugin rather than a
+// module mock, so there is nothing to unmock.
 
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import {
