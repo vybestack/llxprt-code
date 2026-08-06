@@ -157,6 +157,19 @@ export interface ContentMetadata {
    * marker. NEVER serialized to a provider (#1721).
    */
   chronologyReplaced?: ChronologyReplacedSpan;
+
+  /**
+   * Marks this entry as the last item of the compression-preserved head — the
+   * cache anchor boundary (#3070). Providers that rely on explicit cache
+   * breakpoints (Anthropic) attach a `cache_control` breakpoint to the message
+   * derived from this entry, so the byte-stable head is READ from cache after a
+   * compression instead of re-billed at cache-WRITE pricing.
+   *
+   * Exactly one entry (or none) carries this flag at any time; it is stamped by
+   * `applyCompressionWithAnchor` and lives on the content itself so a wholesale
+   * history replacement drops it automatically. NEVER serialized to a provider.
+   */
+  cacheAnchor?: boolean;
 }
 
 export interface UsageStats {
