@@ -70,10 +70,16 @@ interface MountedProvider {
 const cleanups: Array<() => void> = [];
 
 afterEach(() => {
-  // Invoke cleaners LIFO so a cleaner added later runs before an earlier one
-  // (e.g. unmount), leaking nothing across tests.
+  const errors: unknown[] = [];
   while (cleanups.length > 0) {
-    cleanups.pop()?.();
+    try {
+      cleanups.pop()?.();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'TodoProvider test cleanup failed');
   }
 });
 
@@ -449,7 +455,7 @@ describe('TodoProvider observation (issue #3052)', () => {
       );
       const future = new Date('2099-01-01T00:00:00Z');
       fs.utimesSync(archivePath, future, future);
-      cleanups.push(() => fs.unlinkSync(archivePath));
+      cleanups.push(() => fs.rmSync(archivePath, { force: true }));
       const mounted = await seedDiskAndMount(sessionId, [
         todo('pre', 'Before load'),
       ]);
