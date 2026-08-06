@@ -673,6 +673,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+- **`security.disableOsKeyring`** (boolean):
+  - **Description:** Disable use of the OS keyring/keychain for credential storage and use the encrypted file fallback. Can also be set with the LLXPRT_DISABLE_OS_KEYRING=1 environment variable.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
 - **`security.enablePermanentToolApproval`** (boolean):
   - **Description:** Enable the "Allow for all future sessions" option in tool confirmation dialogs.
   - **Default:** `false`

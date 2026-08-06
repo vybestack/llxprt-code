@@ -28,15 +28,24 @@
 import {
   copyFileSync,
   existsSync,
-  mkdirSync,
-  readdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
+import { stageCliBundleAssets } from './copy_bundle_assets.js';
+
+/**
+ * Re-exported so the issue #3062 guard keeps its import path. The alias
+ * collection itself now lives with the rest of the bundle asset staging in
+ * `copy_bundle_assets.ts` (issue #3068), which subsumed the alias-only copy
+ * that used to live here: staging every bundle-relative asset in one place
+ * keeps a single implementation and a single fail-fast contract.
+ */
+export { collectAliasAssets } from './copy_bundle_assets.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
@@ -156,6 +165,13 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
 };
 
 /**
+ * Directory the published CLI bundle is written to. Single source of truth for
+ * both the Bun.build output location and the runtime-asset staging target
+ * (issue #3068), so the JS artifact and its data files can never diverge.
+ */
+export const CLI_BUNDLE_DIR = join(root, 'packages/cli/bundle');
+
+/**
  * CLI bundle (issue #2999): packages/cli/index.ts -> bundle/llxprt.js.
  *
  * `target: 'bun'` keeps the artifact compatible with the Bun runtime that
@@ -179,29 +195,9 @@ export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   // Absolute paths: `prepack` runs this from `packages/cli`, not the repo
   // root, so cwd-relative entrypoints would not resolve.
   entrypoints: [join(root, 'packages/cli/index.ts')],
-  outdir: join(root, 'packages/cli/bundle'),
+  outdir: CLI_BUNDLE_DIR,
   naming: 'llxprt.js',
 };
-
-/**
- * Built-in provider alias data (issue #3062).
- *
- * The bundled `providerAliases` loader computes its built-in directory as
- * `<bundleDir>/providers/aliases` (resolved from the bundle's own `__dirname`
- * at runtime). When the bundle was the only emitted artifact that directory did
- * not exist, so no built-in aliases registered and `--provider openai` failed
- * with "Provider 'openai' not found". The alias assets live as raw
- * `.config`/`.json` files in the providers package source; emit them verbatim
- * next to the bundle so the loader finds them exactly as in development.
- */
-const providerAliasSourceDir = join(
-  root,
-  'packages/providers/src/composition/aliases',
-);
-const providerAliasBundleDir = join(
-  root,
-  'packages/cli/bundle/providers/aliases',
-);
 
 /**
  * Runs a Bun.build target and exits non-zero on any failure (rejected promise
@@ -249,27 +245,20 @@ async function buildA2aServer(): Promise<readonly string[]> {
 }
 
 /**
- * Collects built-in provider alias asset names (`.config`/`.json`) from `dir`,
- * failing fast when none are found.
+ * Removes every entry in the bundle directory except the just-emitted build
+ * outputs, leaving a clean slate for asset staging.
  *
- * An empty result is a build-input error, not a silent no-op: the bundled
- * `providerAliases` loader would then register zero built-in providers and
- * `--provider openai` would fail at launch (issue #3062 regression). Surfacing
- * this at build time prevents shipping a bundle that silently dropped every
- * built-in alias.
+ * A no-op when the directory does not exist yet (the first build).
  */
-export function collectAliasAssets(dir: string): string[] {
-  const assets = readdirSync(dir).filter(
-    (name) => name.endsWith('.config') || name.endsWith('.json'),
-  );
-  if (assets.length === 0) {
-    throw new Error(
-      `cli-bundle build produced no built-in provider alias assets: ${dir} ` +
-        `contains no .config/.json files; the bundled providerAliases loader ` +
-        `would register no built-in providers.`,
-    );
+function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
+  if (!existsSync(bundleDir)) {
+    return;
   }
-  return assets;
+  for (const entry of readdirSync(bundleDir)) {
+    if (!keep.has(entry)) {
+      rmSync(join(bundleDir, entry), { recursive: true, force: true });
+    }
+  }
 }
 
 /**
@@ -299,24 +288,27 @@ export async function buildCliBundle(): Promise<readonly string[]> {
       `cli-bundle build completed with errors: ${detail || '(no details)'}`,
     );
   }
-
-  // Emit the built-in provider alias data next to the bundle (issue #3062).
-  // Replace any stale copy wholesale so removed/renamed alias files never leak
-  // into a publish artifact.
-  rmSync(providerAliasBundleDir, { recursive: true, force: true });
-  mkdirSync(providerAliasBundleDir, { recursive: true });
-  const aliasAssets = collectAliasAssets(providerAliasSourceDir);
-  for (const name of aliasAssets) {
-    copyFileSync(
-      join(providerAliasSourceDir, name),
-      join(providerAliasBundleDir, name),
-    );
-  }
-
-  return [
-    ...cliResult.outputs.map((o) => `${o.path}=${o.size}`),
-    ...aliasAssets.map((name) => join(providerAliasBundleDir, name)),
-  ];
+  const outputs = cliResult.outputs.map((o) => `${o.path}=${o.size}`);
+  // Drop stale assets only once the build has succeeded, so a transient build
+  // failure leaves the previous bundle intact instead of deleting it. Bun.build
+  // does not clean its outdir and the stager only writes — never deletes — so
+  // without this an alias, policy, or template removed from source would linger
+  // and ship. The freshly emitted artifacts are preserved by name.
+  pruneStaleBundleEntries(
+    CLI_BUNDLE_DIR,
+    new Set(cliResult.outputs.map((o) => basename(o.path))),
+  );
+  // Stage the runtime data assets the bundled code reads relative to the
+  // bundle directory (issue #3068). Throws on a missing required asset so a
+  // broken bundle can never be silently published; this propagates as a
+  // build failure because prepack runs this entry point. `repoRoot: root`
+  // keeps a single derivation of the repo root rather than letting the stager
+  // re-derive it from its own import.meta.url.
+  const staged = stageCliBundleAssets({
+    bundleDir: CLI_BUNDLE_DIR,
+    repoRoot: root,
+  });
+  return [...outputs, ...staged];
 }
 
 /**

@@ -74,7 +74,7 @@
     "build:all": "npm run build && npm run build:sandbox && npm run build:vscode",
     "build:packages": "npm run generate && npm run build --workspaces",
     "build:sandbox": "bun scripts/build_sandbox.ts --skip-npm-install-build",
-    "bundle": "npm run generate && bun scripts/bun-build.config.ts && bun scripts/copy_bundle_assets.ts",
+    "bundle": "npm run generate && bun scripts/bun-build.config.ts",
     "test": "npm run test --workspaces --if-present",
     "test:bun": "bun scripts/test.ts",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",

@@ -514,6 +514,14 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         statusCode: number | undefined;
         body: string;
       }>((resolve) => {
+        // The upstream sends 200 headers and then destroys the socket
+        // mid-body, so the client-visible failure can surface either on the
+        // response stream or as a request-level 'error', depending on which
+        // event loop turn the reset lands in. Record the status line as soon
+        // as headers arrive so the request-level path reports the status the
+        // client genuinely observed instead of racing to 0.
+        let observedStatus: number | undefined;
+        let observedChunks: Buffer[] = [];
         const proxyRequest = http.request(
           new URL(asString(resource.ready.proxy_url)),
           {
@@ -524,7 +532,9 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
             },
           },
           (response) => {
+            observedStatus = response.statusCode;
             const chunks: Buffer[] = [];
+            observedChunks = chunks;
             response.on('data', (chunk) => chunks.push(chunk));
             response.on('end', () =>
               resolve({
@@ -541,7 +551,13 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
           },
         );
         proxyRequest.once('error', () =>
-          resolve({ statusCode: 0, body: 'connection error' }),
+          resolve({
+            statusCode: observedStatus ?? 0,
+            body:
+              observedStatus === undefined
+                ? 'connection error'
+                : Buffer.concat(observedChunks).toString('utf8'),
+          }),
         );
         proxyRequest.end('{"test":true}');
       });
