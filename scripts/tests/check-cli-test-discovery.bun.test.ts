@@ -386,6 +386,20 @@ describe('duplicate discovery fails (AC3)', () => {
     expect(verdict.report).toContain('TEST_ROOTS');
   });
 
+  it('reports duplicates AND missing files together in one run', () => {
+    // Both halves of the contract can be broken at once; the reader should not
+    // have to fix one, re-run, and only then be told about the other.
+    const verdict = evaluateDiscovery(
+      ['src/a.test.ts', 'scripts/rogue.test.ts'],
+      ['src/a.test.ts', 'src/a.test.ts'],
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.report).toContain('more than once');
+    expect(verdict.report).toContain('src/a.test.ts');
+    expect(verdict.report).toContain('not discovered by run-bun-tests.ts');
+    expect(verdict.report).toContain('scripts/rogue.test.ts');
+  });
+
   it('the guard verdict ACCEPTS a fully covered, duplicate-free set', () => {
     const verdict = evaluateDiscovery(
       ['src/a.test.ts'],

@@ -192,6 +192,29 @@ const FIX_HINT =
   'parent directory to `TEST_ROOTS`. Never add it to an exclude list — the ' +
   'whole point of structural discovery is that nothing is excluded.';
 
+/** Renders the "discovered more than once" half of a failure report. */
+function describeDuplicates(duplicates: readonly string[]): string {
+  const plural = duplicates.length === 1 ? '' : 's';
+  return [
+    `\ncli-test-discovery guard FAILED: discoverTestFiles() returned ` +
+      `${duplicates.length} path${plural} more than once:\n`,
+    ...duplicates.map((d) => `  ${d}`),
+    '\nEach file must be discovered exactly once. Check for overlapping ' +
+      '`TEST_ROOTS` or nested roots in packages/cli/run-bun-tests.ts.',
+  ].join('\n');
+}
+
+/** Renders the "tracked but never discovered" half of a failure report. */
+function describeMissing(missing: readonly string[]): string {
+  const plural = missing.length === 1 ? '' : 's';
+  return [
+    `\ncli-test-discovery guard FAILED: ${missing.length} tracked CLI ` +
+      `test file${plural} not discovered by run-bun-tests.ts:\n`,
+    ...missing.map((m) => `  ${m}`),
+    `\n${FIX_HINT}`,
+  ].join('\n');
+}
+
 // ─── Decision (exported for behavioural tests) ──────────────────────────────
 
 export interface DiscoveryVerdict {
@@ -215,33 +238,21 @@ export function evaluateDiscovery(
   trackedTestFiles: readonly string[],
   discoveredFiles: readonly string[],
 ): DiscoveryVerdict {
+  // Both violations are computed before reporting, so a run that has duplicates
+  // AND missing files shows the whole contract breach at once instead of making
+  // the reader fix one, re-run, and only then learn about the other.
   const duplicates = findDuplicateDiscoveries(discoveredFiles);
-  if (duplicates.length > 0) {
-    const plural = duplicates.length === 1 ? '' : 's';
-    return {
-      ok: false,
-      report: [
-        `\ncli-test-discovery guard FAILED: discoverTestFiles() returned ` +
-          `${duplicates.length} path${plural} more than once:\n`,
-        ...duplicates.map((d) => `  ${d}`),
-        '\nEach file must be discovered exactly once. Check for overlapping ' +
-          '`TEST_ROOTS` or nested roots in packages/cli/run-bun-tests.ts.',
-      ].join('\n'),
-    };
-  }
-
   const missing = findUndiscoveredTestFiles(trackedTestFiles, discoveredFiles);
+
+  const sections: string[] = [];
+  if (duplicates.length > 0) {
+    sections.push(describeDuplicates(duplicates));
+  }
   if (missing.length > 0) {
-    const plural = missing.length === 1 ? '' : 's';
-    return {
-      ok: false,
-      report: [
-        `\ncli-test-discovery guard FAILED: ${missing.length} tracked CLI ` +
-          `test file${plural} not discovered by run-bun-tests.ts:\n`,
-        ...missing.map((m) => `  ${m}`),
-        `\n${FIX_HINT}`,
-      ].join('\n'),
-    };
+    sections.push(describeMissing(missing));
+  }
+  if (sections.length > 0) {
+    return { ok: false, report: sections.join('\n') };
   }
 
   // Both counts are reported because they answer different questions:
