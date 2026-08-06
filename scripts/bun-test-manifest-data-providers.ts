@@ -456,6 +456,7 @@ export const PROVIDERS_MANIFEST_ENTRY: BunTestWorkspaceEntry = {
     'src/runtime/__tests__/profileApplication.basics.test.ts',
     'src/runtime/__tests__/profileApplication.bucket-failover.spec.ts',
     'src/runtime/__tests__/profileApplication.failover.test.ts',
+    'src/runtime/__tests__/profileApplication.issue2916.bun.test.ts',
     'src/runtime/__tests__/profileApplication.lb.authkey.test.ts',
     'src/runtime/__tests__/profileApplication.lb.detection.test.ts',
     'src/runtime/__tests__/profileApplication.unavailableProvider.test.ts',
