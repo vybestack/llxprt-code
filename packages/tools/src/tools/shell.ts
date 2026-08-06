@@ -60,10 +60,6 @@ import {
 /** Throttle interval for shell output updates. */
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 
-/** Windows validation error for is_background. */
-const BACKGROUND_WINDOWS_ERROR =
-  'is_background is not supported on Windows. Start independent background processes with Start-Process instead.';
-
 export interface ShellToolParams {
   /** The shell command to execute. */
   command: string;
@@ -83,7 +79,7 @@ export interface ShellToolParams {
   grep_flags?: string[];
   /** Optional timeout in seconds (-1 for unlimited). */
   timeout_seconds?: number;
-  /** Start the command as a managed background job (non-Windows only). */
+  /** Start the command as a managed background job. */
   is_background?: boolean;
 }
 
@@ -804,9 +800,6 @@ export class ShellTool extends BaseDeclarativeTool<
     const timeoutError = validateTimeoutSeconds(params.timeout_seconds);
     if (timeoutError !== null) {
       return timeoutError;
-    }
-    if (params.is_background === true && os.platform() === 'win32') {
-      return BACKGROUND_WINDOWS_ERROR;
     }
     const commandCheck = this.host.isCommandAllowed(params.command);
     if (!commandCheck.allowed) {

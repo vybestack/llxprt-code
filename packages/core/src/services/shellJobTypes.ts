@@ -76,6 +76,8 @@ export interface ShellJobRecord {
   failureReason?: string;
   notifiedAt?: number;
   logPath: string;
+  /** Windows-only stderr log path (POSIX jobs do not set this). */
+  errLogPath?: string;
   child: ChildProcess;
   exited: Promise<ProcessExitInfo>;
   onError: (handler: (err: Error) => void) => void;

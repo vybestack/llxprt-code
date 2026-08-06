@@ -469,16 +469,17 @@ describe('is_background managed job behavior @plan:issue1995', () => {
     }
   });
 
-  it('Windows rejects is_background: true with a message naming Start-Process (T21)', () => {
+  it('Windows accepts is_background: true as a managed background job (T21)', () => {
     mockPlatform.mockReturnValue('win32');
     const tool = new ShellTool(
       createFakeShellService(new Map<string, ShellResult>()),
       createFakeMessageBus('proceed_once'),
     );
 
+    // Windows now supports managed background jobs — build() must NOT throw.
     expect(() =>
       tool.build({ command: 'echo started', is_background: true }),
-    ).toThrow(/Start-Process/);
+    ).not.toThrow();
   });
 
   it('background result does not reference any filesystem path (no .log, no tmpdir) (T22)', async () => {
