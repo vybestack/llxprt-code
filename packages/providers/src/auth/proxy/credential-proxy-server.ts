@@ -199,9 +199,8 @@ export class CredentialProxyServer {
       if (this.server !== null) {
         const srv = this.server;
         this.server = null;
-        await new Promise<void>((resolve) => {
-          srv.close(() => resolve());
-        });
+        await new Promise<void>((resolve) => srv.close(() => resolve()));
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
     } finally {
       // Windows named pipes are released when the server closes; there is no
