@@ -514,16 +514,17 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
       let monitorStopAttempted = false;
 
       try {
-        resource = await startEmbeddedMonitor(
+        const startedResource = await startEmbeddedMonitor(
           `http://127.0.0.1:${upstreamPort}/v1`,
         );
+        resource = startedResource;
         const result = await new Promise<{ statusCode: number; body: string }>(
           (resolve, reject) => {
             const chunks: Buffer[] = [];
             let terminatedCleanly = false;
             let settled = false;
             const proxyRequest = http.request(
-              new URL(asString(resource.ready.proxy_url)),
+              new URL(asString(startedResource.ready.proxy_url)),
               {
                 method: 'POST',
                 headers: {
@@ -594,7 +595,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
           },
         );
         monitorStopAttempted = true;
-        const telemetry = await stopEmbeddedMonitor(resource);
+        const telemetry = await stopEmbeddedMonitor(startedResource);
 
         expect(result.statusCode).toBe(200);
         expect(result.body).toBe(partialSentinel);
