@@ -12,8 +12,8 @@
  * Config escape hatch. Avoids leaking the raw LspServiceClient.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
+  LspConfig,
   LspServerConfig,
   ServerStatus,
 } from '@vybestack/llxprt-code-ide-integration';
@@ -25,12 +25,37 @@ import type {
 import { formatError } from './errorUtils.js';
 
 /**
- * Deps bundle injected by AgentImpl so LspControl can read the live Config
- * LSP surface.
+ * The LSP service surface this control reads. Structurally satisfied by
+ * ide-integration's LspServiceClient; declared here so the control depends on
+ * the three members it uses rather than on a concrete class with private
+ * state.
+ */
+export interface LspStatusClient {
+  isAlive(): boolean;
+  getUnavailableReason(): string | undefined;
+  status(): Promise<ServerStatus[]>;
+}
+
+/**
+ * The configuration surface this control reads.
+ *
+ * Structurally satisfied by core's `Config`, which is what composition roots
+ * still pass. Declaring the capability at the consumer — rather than importing
+ * the whole `Config` — means this module depends on two members instead of
+ * roughly two hundred, and needs no import from core at all.
+ */
+export interface LspStatusSource {
+  getLspConfig(): LspConfig | undefined;
+  getLspServiceClient(): LspStatusClient | undefined;
+}
+
+/**
+ * Deps bundle injected by AgentImpl so LspControl can read the live LSP
+ * surface.
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
  */
 export interface LspControlDeps {
-  readonly config: Config;
+  readonly config: LspStatusSource;
 }
 
 function unavailableServerStatus(
