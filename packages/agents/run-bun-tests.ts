@@ -41,6 +41,14 @@ import {
 import { join, relative } from 'node:path';
 import { availableParallelism, tmpdir } from 'node:os';
 
+/**
+ * Every path this runner touches — discovery, the child's working directory
+ * and the JUnit report — is anchored here rather than at `process.cwd()`, so
+ * the runner behaves identically no matter where it is invoked from.
+ */
+const WORKSPACE_ROOT = import.meta.dir;
+const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
+
 const TEST_ROOTS = ['src'] as const;
 
 /** Upper bound on file concurrency, regardless of how many cores are present. */
@@ -193,7 +201,7 @@ function runTestFile(file: string, reportPath: string): Promise<TestResult> {
         file,
       ],
       {
-        cwd: process.cwd(),
+        cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
         env: process.env,
       },
@@ -360,8 +368,9 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const root = import.meta.dir;
-  const testFiles = discoverTestFiles(root).map((file) => relative(root, file));
+  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
+    relative(WORKSPACE_ROOT, file),
+  );
   if (testFiles.length === 0) {
     console.error('No test files found under: ' + TEST_ROOTS.join(', '));
     process.exit(1);
@@ -423,7 +432,7 @@ async function main(): Promise<void> {
       (failed.length > 0 ? ` (${failed.length} failed)` : ''),
   );
 
-  writeFileSync('junit.xml', generateJUnit(results, reportPathFor));
+  writeFileSync(JUNIT_PATH, generateJUnit(results, reportPathFor));
   rmSync(reportDir, { recursive: true, force: true });
   process.exit(failed.length > 0 ? 1 : 0);
 }

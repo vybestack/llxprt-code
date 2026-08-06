@@ -12,6 +12,7 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -63,7 +64,10 @@ function writeFile(root: string, relative: string): string {
   const fullPath = join(root, relative);
   mkdirSync(dirname(fullPath), { recursive: true });
   writeFileSync(fullPath, '');
-  return fullPath;
+  // Coverage identities are canonical paths, so the fixture must report the
+  // canonical path too — on macOS the temp root is reached through a symlink
+  // (/var -> /private/var) and a lexical path would never compare equal.
+  return realpathSync(fullPath);
 }
 
 /** Builds an executor that scans a single workspace-relative directory. */
@@ -253,5 +257,24 @@ describe('findDoublyExecutedTestFiles', () => {
     ]);
 
     expect(duplicates).toEqual([]);
+  });
+
+  it('gives one real file a single coverage identity through a symlink alias', () => {
+    const real = writeFile(getDir(), 'packages/a/x.test.ts');
+    // `packages/alias` is another route to the same directory, so an executor
+    // scanning it claims the same real file under a different lexical path.
+    symlinkSync(join(getDir(), 'packages/a'), join(getDir(), 'packages/alias'));
+
+    const duplicates = findDoublyExecutedTestFiles(getDir(), [
+      scanningExecutor('executor-direct', 'packages/a'),
+      scanningExecutor('executor-alias', 'packages/alias'),
+    ]);
+
+    expect(duplicates).toHaveLength(1);
+    expect(duplicates[0]?.file).toBe(real);
+    expect(duplicates[0]?.executors).toEqual([
+      'executor-alias',
+      'executor-direct',
+    ]);
   });
 });

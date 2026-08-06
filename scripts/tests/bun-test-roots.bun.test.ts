@@ -583,6 +583,8 @@ describe('resolveBunTestFiles (real repository)', () => {
     const ordinary = files.find((f) =>
       f.file.endsWith('run_bun_tests.test.ts'),
     );
+    // Without this the negative case passes vacuously when the file is renamed.
+    expect(ordinary).toBeDefined();
     expect(ordinary?.timeout).toBeUndefined();
   });
 });

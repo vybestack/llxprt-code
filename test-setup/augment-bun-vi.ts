@@ -129,11 +129,12 @@ const realIsFakeTimers = (bunVi as BunViBase).isFakeTimers.bind(bunVi);
  * fallback resolves via the microtask anyway; the macrotask contributes
  * nothing.)
  *
- * Each `await Promise.resolve()` yields one microtask round; the bounded loop
- * drains arbitrarily deep async callback chains, and the final `queueMicrotask`
- * is the settling boundary (replacing the former `setImmediate`). The loop is
- * bounded so a callback that reschedules microtasks forever degrades to a
- * bounded delay rather than an infinite hang. (issue #2979)
+ * Each `await Promise.resolve()` yields one microtask round; the loop drains
+ * async callback chains for up to `MICROTASK_DRAIN_ROUNDS` rounds, and the
+ * final `queueMicrotask` is the settling boundary (replacing the former
+ * `setImmediate`). The bound is deliberate: a callback that reschedules
+ * microtasks forever degrades to a bounded delay rather than an infinite hang,
+ * and a chain deeper than the bound stays pending by design. (issue #2979)
  */
 const MICROTASK_DRAIN_ROUNDS = 20;
 const flushPendingTasks = async (): Promise<void> => {

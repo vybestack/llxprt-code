@@ -16,7 +16,15 @@ import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
-const PRELOAD = './bun-preload.ts';
+/**
+ * Every path this runner touches — discovery, the child's working directory,
+ * the preload and the JUnit report — is anchored here rather than at
+ * `process.cwd()`, so the runner behaves identically no matter where it is
+ * invoked from.
+ */
+const WORKSPACE_ROOT = import.meta.dir;
+const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');
+const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 const CONCURRENCY = Math.min(8, availableParallelism());
 const PER_FILE_TIMEOUT_MS = 60_000;
 
@@ -81,7 +89,7 @@ function runTestFile(file: string): Promise<TestResult> {
       process.execPath,
       ['test', '--preload', PRELOAD, file],
       {
-        cwd: process.cwd(),
+        cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
         env: process.env,
       },
@@ -150,8 +158,9 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const root = import.meta.dir;
-  const testFiles = discoverTestFiles(root).map((file) => relative(root, file));
+  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
+    relative(WORKSPACE_ROOT, file),
+  );
   if (testFiles.length === 0) {
     console.error('No test files found');
     process.exit(1);
@@ -185,7 +194,7 @@ async function main(): Promise<void> {
   );
 
   writeFileSync(
-    'junit.xml',
+    JUNIT_PATH,
     generateJUnit(results, testFiles.length, failed.length),
   );
 

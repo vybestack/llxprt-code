@@ -133,6 +133,9 @@ export const TEST_EXECUTORS: readonly TestExecutor[] = [
  * `__snapshots__` and any dot-prefixed directory — this also excludes the
  * `.integration-tests/` recording directory). Reuses the shared walker so
  * there is a single definition of "skip these directories".
+ *
+ * Paths are canonicalized so one real file has exactly one coverage identity,
+ * matching how executor claims are recorded.
  */
 export function discoverRepositoryTestFiles(
   repoRoot: string,
@@ -143,21 +146,28 @@ export function discoverRepositoryTestFiles(
     REPOSITORY_TEST_FILE_PATTERN,
     deps,
   );
-  return [...files].sort();
+  return [...files].map((file) => deps.realpath(file)).sort();
 }
 
 /**
  * Collects the union of absolute paths every executor claims, preserving each
  * file's claimants so duplicate execution can be reported.
+ *
+ * Paths are canonicalized so one real file has exactly one coverage identity:
+ * without it, a file reached through a symlink alias would look uncovered on
+ * one side of the comparison and a duplicate would go unnoticed on the other.
+ * `discoverRepositoryTestFiles` canonicalizes the same way.
  */
 function collectExecutorClaims(
   repoRoot: string,
   executors: readonly TestExecutor[],
+  deps: BunTestRootDependencies,
 ): { readonly files: Set<string>; readonly counts: Map<string, string[]> } {
   const files = new Set<string>();
   const counts = new Map<string, string[]>();
   for (const executor of executors) {
-    for (const file of executor.discover(repoRoot)) {
+    for (const discovered of executor.discover(repoRoot)) {
+      const file = deps.realpath(discovered);
       files.add(file);
       const claimants = counts.get(file);
       if (claimants === undefined) {
@@ -179,7 +189,7 @@ export function findUncoveredTestFiles(
   executors: readonly TestExecutor[] = TEST_EXECUTORS,
 ): readonly string[] {
   const onDisk = discoverRepositoryTestFiles(repoRoot, deps);
-  const { files: covered } = collectExecutorClaims(repoRoot, executors);
+  const { files: covered } = collectExecutorClaims(repoRoot, executors, deps);
   return [...onDisk].filter((file) => !covered.has(file)).sort();
 }
 
@@ -193,14 +203,18 @@ export interface DoublyExecutedFile {
  * Returns, sorted by path, every file claimed by more than one executor, each
  * with the sorted list of executors that claim it.
  *
- * This reads only the executors' own discovery, never the repository walk, so
- * it takes no filesystem dependency.
+ * This reads only the executors' own discovery, never the repository walk, but
+ * still canonicalizes their paths so two aliases of one real file are reported
+ * as the duplicate they are.
  */
 export function findDoublyExecutedTestFiles(
   repoRoot: string,
   executors: readonly TestExecutor[] = TEST_EXECUTORS,
+  deps: BunTestRootDependencies = defaultDependencies,
 ): readonly DoublyExecutedFile[] {
-  return toDoublyExecuted(collectExecutorClaims(repoRoot, executors).counts);
+  return toDoublyExecuted(
+    collectExecutorClaims(repoRoot, executors, deps).counts,
+  );
 }
 
 function toDoublyExecuted(
@@ -234,7 +248,11 @@ export function analyzeTestFileCoverage(
   executors: readonly TestExecutor[] = TEST_EXECUTORS,
 ): TestFileCoverageReport {
   const onDisk = discoverRepositoryTestFiles(repoRoot, deps);
-  const { files: covered, counts } = collectExecutorClaims(repoRoot, executors);
+  const { files: covered, counts } = collectExecutorClaims(
+    repoRoot,
+    executors,
+    deps,
+  );
   return {
     uncovered: [...onDisk].filter((file) => !covered.has(file)).sort(),
     doublyExecuted: toDoublyExecuted(counts),
