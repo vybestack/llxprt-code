@@ -71,7 +71,7 @@ function parseJsonResult(spy: StdoutSpy): Record<string, unknown> {
 
 let sharedConfig: Config | null = null;
 
-function getConfig(): Config {
+function getRetryDiscardConfig(): Config {
   if (sharedConfig === null) {
     const config = new Config({
       sessionId: 'retry-discard-session',
@@ -105,7 +105,7 @@ function createContext(overrides?: {
   const streamFormatter =
     overrides?.streamFormatter === undefined ? null : overrides.streamFormatter;
   return {
-    config: getConfig(),
+    config: getRetryDiscardConfig(),
     jsonOutput: overrides?.jsonOutput ?? false,
     streamJsonOutput: streamFormatter !== null,
     quiet: overrides?.quiet ?? false,
