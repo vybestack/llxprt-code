@@ -28,8 +28,8 @@ import type * as osActual from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 vi.mock('node:fs');
-vi.mock('node:os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
+const actualOs = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(),

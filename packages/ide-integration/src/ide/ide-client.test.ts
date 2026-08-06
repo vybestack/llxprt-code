@@ -24,8 +24,8 @@ import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   return {
     ...(actual as object),
     promises: {

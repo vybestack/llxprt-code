@@ -23,11 +23,8 @@ const mcpManager = {
   getMcpInstructions: vi.fn().mockReturnValue(''),
 };
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   return {
     ...actual,
     IdeClient: { getInstance: getIdeClient },

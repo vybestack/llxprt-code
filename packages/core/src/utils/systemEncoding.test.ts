@@ -19,12 +19,14 @@ import { detect as chardetDetect } from 'chardet';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
-vi.mock('child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('child_process');
+const __actual = { ...(await import('child_process')) };
+vi.mock('child_process', () => {
+  const actual = __actual as typeof import('child_process');
   return { ...actual, execSync: vi.fn() };
 });
-vi.mock('node:os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:os');
+const __actual2 = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
+  const actual = __actual2 as typeof import('node:os');
   const mockPlatform = vi.fn(() => actual.platform());
   const mockHomedir = vi.fn(() => actual.homedir());
   const mockExports = {
@@ -35,8 +37,9 @@ vi.mock('node:os', (importOriginal) => {
   // Source uses `import os from 'os'` (default import); provide default too
   return { ...mockExports, default: mockExports };
 });
-vi.mock('chardet', (importOriginal) => {
-  const actual = importOriginal() as typeof import('chardet');
+const __actual3 = { ...(await import('chardet')) };
+vi.mock('chardet', () => {
+  const actual = __actual3 as typeof import('chardet');
   return { ...actual, detect: vi.fn() };
 });
 

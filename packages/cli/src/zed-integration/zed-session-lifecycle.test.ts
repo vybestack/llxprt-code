@@ -32,8 +32,8 @@ const mockFromConfig = vi.fn();
 
 const mockDeleteSessionById = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...actual,
     fromConfig: (...args: unknown[]) => mockFromConfig(...args),
@@ -49,13 +49,13 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   setCliRuntimeContext: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
-    deleteSessionById: (...args: Parameters<typeof actual.deleteSessionById>) =>
-      mockDeleteSessionById(...args),
+    ...actualActual,
+    deleteSessionById: (
+      ...args: Parameters<typeof actualActual.deleteSessionById>
+    ) => mockDeleteSessionById(...args),
   };
 });
 

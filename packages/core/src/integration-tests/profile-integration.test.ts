@@ -15,9 +15,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('@vybestack/llxprt-code-settings', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-settings');
+const __actual = { ...(await import('@vybestack/llxprt-code-settings')) };
+vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = __actual as typeof import('@vybestack/llxprt-code-settings');
   return {
     ...actual,
     getSettingsService: vi.fn(),

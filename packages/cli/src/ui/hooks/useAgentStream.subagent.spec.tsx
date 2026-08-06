@@ -143,16 +143,15 @@ class MockedAgentClientClass {
   constructor(_config: unknown) {}
 }
 
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('./useReactToolScheduler.js')>();
-  const { mapToDisplay } = await import('./toolMapping.js');
-  return {
-    ...original,
-    useReactToolScheduler: vi.fn(),
-    mapToDisplay,
-  };
-});
+const originalReactToolScheduler = {
+  ...(await import('./useReactToolScheduler.js')),
+};
+const { mapToDisplay } = await import('./toolMapping.js');
+vi.mock('./useReactToolScheduler.js', () => ({
+  ...originalReactToolScheduler,
+  useReactToolScheduler: vi.fn(),
+  mapToDisplay,
+}));
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock<
   typeof useReactToolScheduler

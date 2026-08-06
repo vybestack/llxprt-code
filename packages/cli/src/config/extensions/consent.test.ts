@@ -42,8 +42,8 @@ vi.mock('node:readline', () => ({
   createInterface: mockReadline.createInterface,
 }));
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+const actual = { ...(await import('node:fs/promises')) };
+vi.mock('node:fs/promises', () => {
   originalReaddir.current = actual.readdir;
   return {
     ...actual,
@@ -51,11 +51,10 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
+const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
-    ...actual,
+    ...actualActual,
     debugLogger: {
       log: vi.fn(),
     },

@@ -27,8 +27,8 @@ const mockCheckCommandPermissions = vi.fn();
 
 const mockShellExecute = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original = await importOriginal<object>();
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     checkCommandPermissions: mockCheckCommandPermissions,

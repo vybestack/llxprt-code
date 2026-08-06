@@ -52,14 +52,15 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   setGlobalProxy: vi.fn(),
 }));
 
-vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
+const __actual = { ...(await import('fs')) };
+vi.mock('fs', () => buildFsMockBody(__actual));
 
-vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(importOriginal()),
-);
+const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
+vi.mock('@vybestack/llxprt-code-tools', () => buildToolsMockBody(__actual2));
 
-vi.mock('../core/contentGenerator.js', (importOriginal) =>
-  buildContentGeneratorMockBody(importOriginal()),
+const __actual3 = { ...(await import('../core/contentGenerator.js')) };
+vi.mock('../core/contentGenerator.js', () =>
+  buildContentGeneratorMockBody(__actual3),
 );
 
 vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
@@ -68,16 +69,20 @@ vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
 vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(importOriginal()),
+const __actual4 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+  buildIdeIntegrationMockBody(__actual4),
 );
 
 vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
-vi.mock('../utils/events.js', (importOriginal) =>
-  buildEventsMockBody(importOriginal(), hoistedConfigMocks),
+const __actual5 = { ...(await import('../utils/events.js')) };
+vi.mock('../utils/events.js', () =>
+  buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
 
 vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));

@@ -34,9 +34,8 @@ const debugLogger = {
   }),
 };
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     // discoverSkillsForConfig owns the session MessageBus + Config.initialize
@@ -52,11 +51,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 // list.ts logs through the telemetry-package debugLogger (its owner after
 // #2378), so mock THAT package here — not core — to capture the command's
 // output via the emitConsoleLog spy while core events stay real.
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  Object.assign(actual.debugLogger, debugLogger);
-  return actual;
+const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
+  Object.assign(actualActual.debugLogger, debugLogger);
+  return actualActual;
 });
 
 vi.mock('../../config/settings.js');

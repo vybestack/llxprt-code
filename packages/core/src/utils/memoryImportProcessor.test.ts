@@ -42,8 +42,9 @@ function testPath(...segments: string[]): string {
   return path.normalize(result);
 }
 
-vi.mock('fs/promises', (importOriginal) => {
-  const actual = importOriginal() as typeof import('fs/promises');
+const __actual = { ...(await import('fs/promises')) };
+vi.mock('fs/promises', () => {
+  const actual = __actual as typeof import('fs/promises');
   return {
     ...actual,
     access: vi.fn(),

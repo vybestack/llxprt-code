@@ -19,8 +19,8 @@ import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type { UiEvent } from '@vybestack/llxprt-code-telemetry';
 import { EVENT_API_RESPONSE } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+vi.mock('../contexts/SessionContext.js', () => {
   return {
     ...actual,
     useSessionStats: vi.fn(),

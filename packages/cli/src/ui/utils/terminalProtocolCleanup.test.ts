@@ -15,8 +15,8 @@ const { writeSyncMock } = {
   writeSyncMock: vi.fn(),
 };
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+const actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   const actualWithDefault = actual as typeof import('node:fs') & {
     default?: Record<string, unknown>;
   };

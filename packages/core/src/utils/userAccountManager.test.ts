@@ -13,10 +13,10 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-vi.mock('os', async (importOriginal) => {
-  const os = await importOriginal<typeof import('os')>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
-    ...os,
+    ...actualOs,
     homedir: vi.fn(),
   };
 });

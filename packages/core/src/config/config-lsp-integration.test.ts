@@ -28,8 +28,9 @@ function containsAllSubstrings(value: string, parts: string[]): boolean {
 }
 
 // Mock dependencies
-vi.mock('fs', (importOriginal) => {
-  const actual = importOriginal() as typeof import('fs');
+const __actual = { ...(await import('fs')) };
+vi.mock('fs', () => {
+  const actual = __actual as typeof import('fs');
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
@@ -40,9 +41,8 @@ vi.mock('fs', (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+vi.mock('@vybestack/llxprt-code-tools', () => {
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -100,9 +100,9 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('../core/contentGenerator.js', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('../core/contentGenerator.js');
+const __actual2 = { ...(await import('../core/contentGenerator.js')) };
+vi.mock('../core/contentGenerator.js', () => {
+  const actual = __actual2 as typeof import('../core/contentGenerator.js');
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -115,9 +115,12 @@ vi.mock('../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) => {
+const __actual3 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration');
+    __actual3 as typeof import('@vybestack/llxprt-code-ide-integration');
   return {
     ...actual,
     IdeClient: {
@@ -241,10 +244,10 @@ vi.mock('../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/events.js')>();
-  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
-  return actual;
+const actualActual = { ...(await import('../utils/events.js')) };
+vi.mock('../utils/events.js', () => {
+  vi.spyOn(actualActual.coreEvents, 'emit').mockReturnValue(true);
+  return actualActual;
 });
 
 describe('Config LSP Integration (P33)', () => {

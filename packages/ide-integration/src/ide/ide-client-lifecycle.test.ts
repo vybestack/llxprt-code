@@ -23,8 +23,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 import * as os from 'node:os';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   return {
     ...(actual as object),
     promises: {

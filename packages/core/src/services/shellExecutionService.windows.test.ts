@@ -8,8 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { spawn } from 'child_process';
 
 const mockPlatform = vi.fn(() => 'win32');
-vi.mock('os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('os');
+const __actual = { ...(await import('os')) };
+vi.mock('os', () => {
+  const actual = __actual as typeof import('os');
   return { ...actual, platform: mockPlatform };
 });
 

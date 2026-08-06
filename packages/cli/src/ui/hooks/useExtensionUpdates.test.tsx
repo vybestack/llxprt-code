@@ -28,8 +28,8 @@ import {
 } from '../../config/extensions/update.js';
 import { ExtensionUpdateState } from '../state/extensions.js';
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
+const mockedOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),

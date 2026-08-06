@@ -15,8 +15,8 @@ const { homedirMock } = {
   homedirMock: vi.fn<[], string | undefined>(),
 };
 
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('os')>();
+const actual = { ...(await import('os')) };
+vi.mock('os', () => {
   return { ...actual, homedir: homedirMock };
 });
 

@@ -110,8 +110,8 @@ vi.mock('update-notifier', () => ({
   })),
 }));
 
-vi.mock('./utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/events.js')>();
+const actual = { ...(await import('./utils/events.js')) };
+vi.mock('./utils/events.js', () => {
   return {
     ...actual,
     appEvents: {
@@ -126,10 +126,10 @@ vi.mock('./utils/sandbox.js', () => ({
 }));
 
 // Mock bootstrap utilities for deferred init tests
-vi.mock('./utils/bootstrap.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/bootstrap.js')>();
+const actualActual = { ...(await import('./utils/bootstrap.js')) };
+vi.mock('./utils/bootstrap.js', () => {
   return {
-    ...actual,
+    ...actualActual,
     shouldRelaunchForMemory: vi.fn(() => []),
     isDebugMode: vi.fn(() => false),
   };
@@ -179,11 +179,10 @@ const { preflightAgentActivationMock } = {
     infoMessages: [],
   }),
 };
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
+vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
-    ...actual,
+    ...actualActual2,
     preflightAgentActivation: preflightAgentActivationMock,
   };
 });
@@ -205,11 +204,10 @@ vi.mock('./ui/utils/mouse.js', () => ({
 const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
 };
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actualActual3 = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
+    ...actualActual3,
     writeToStdout: mockWriteToStdout,
     writeToStderr: vi.fn().mockReturnValue(true),
     patchStdio: vi.fn(() => vi.fn()),

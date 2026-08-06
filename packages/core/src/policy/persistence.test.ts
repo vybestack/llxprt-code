@@ -22,8 +22,9 @@ import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as debugLoggerModule from '../utils/debugLogger.js';
 
-vi.mock('node:fs/promises', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:fs/promises');
+const __actual = { ...(await import('node:fs/promises')) };
+vi.mock('node:fs/promises', () => {
+  const actual = __actual as typeof import('node:fs/promises');
   const mockExports = {
     ...actual,
     mkdir: vi.fn(),
@@ -39,9 +40,9 @@ vi.mock('node:fs/promises', (importOriginal) => {
   // Source uses `import fs from 'node:fs/promises'` (default import)
   return { ...mockExports, default: mockExports };
 });
-vi.mock('@vybestack/llxprt-code-settings', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-settings');
+const __actual2 = { ...(await import('@vybestack/llxprt-code-settings')) };
+vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = __actual2 as typeof import('@vybestack/llxprt-code-settings');
   return {
     ...actual,
     getSettingsService: vi.fn(),

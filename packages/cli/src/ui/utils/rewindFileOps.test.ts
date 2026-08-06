@@ -28,9 +28,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 vi.mock('node:fs/promises');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     coreEvents: {

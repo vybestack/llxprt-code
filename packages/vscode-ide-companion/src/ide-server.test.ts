@@ -52,8 +52,8 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(() => Promise.resolve(undefined)),
 }));
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
+const actual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actual,
     tmpdir: vi.fn(() => '/tmp'),

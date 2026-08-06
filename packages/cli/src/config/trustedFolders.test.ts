@@ -6,8 +6,8 @@
 
 // Mock 'os' first.
 import * as osActual from 'os';
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
@@ -15,8 +15,8 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     getIdeTrust: vi.fn(),
@@ -57,8 +57,8 @@ function createErrorWithCode(message: string, code: string): Error {
 
 const TRUSTED_FOLDERS_FILE_MODE = 0o600;
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof fs>();
+const actualFs = { ...(await import('fs')) };
+vi.mock('fs', () => {
   return {
     ...actualFs,
     existsSync: vi.fn(),

@@ -12,8 +12,8 @@ import { vi, type Mock } from 'bun:test';
 import { useStdin, useStdout } from 'ink';
 
 // Mock the ink hooks
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
+const original = { ...(await import('ink')) };
+vi.mock('ink', () => {
   return {
     ...original,
     useStdin: vi.fn(),

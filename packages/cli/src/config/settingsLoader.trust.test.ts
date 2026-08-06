@@ -21,8 +21,8 @@ import {
 import { loadSettings, USER_SETTINGS_PATH } from './settings.js';
 import { resetTrustedFoldersForTesting, TrustLevel } from './trustedFolders.js';
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
@@ -30,8 +30,8 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof fs>();
+const actualFs = { ...(await import('fs')) };
+vi.mock('fs', () => {
   return {
     ...actualFs,
     existsSync: vi.fn(),
@@ -50,9 +50,8 @@ const mockCoreEvents = {
   emitSettingsChanged: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     coreEvents: mockCoreEvents,

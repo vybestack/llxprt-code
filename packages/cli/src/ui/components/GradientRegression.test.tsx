@@ -14,9 +14,8 @@ import { ModelsDialog } from './ModelDialog.js';
 import { StatsDisplay } from './StatsDisplay.js';
 
 // Mock the theme module
-vi.mock('../semantic-colors.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('../semantic-colors.js')>();
+const original = { ...(await import('../semantic-colors.js')) };
+vi.mock('../semantic-colors.js', () => {
   return {
     ...original,
     theme: {
@@ -30,8 +29,8 @@ vi.mock('../semantic-colors.js', async (importOriginal) => {
 });
 
 // Mock the context to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+vi.mock('../contexts/SessionContext.js', () => {
   return {
     ...actual,
     useSessionStats: vi.fn(),

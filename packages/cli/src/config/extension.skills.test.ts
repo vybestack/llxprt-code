@@ -24,27 +24,26 @@ import {
 import { createExtension } from '../test-utils/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
+const mockedOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
   };
 });
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
+const actual = { ...(await import('./trustedFolders.js')) };
+vi.mock('./trustedFolders.js', () => {
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
+    ...actualActual,
     logExtensionEnable: vi.fn(),
     logExtensionInstallEvent: vi.fn(),
     logExtensionUninstall: vi.fn(),

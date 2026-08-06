@@ -22,8 +22,8 @@ import path from 'node:path';
 import { randomUUID } from 'crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+const actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   return {
     ...actual,
     readFileSync: vi.fn(actual.readFileSync),
@@ -31,16 +31,16 @@ vi.mock('node:fs', async (importOriginal) => {
   } as typeof actual;
 });
 
-vi.mock('os', async (importOriginal) => {
-  const os = await importOriginal<typeof import('os')>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
-    ...os,
+    ...actualOs,
     homedir: vi.fn(),
   };
 });
 
-vi.mock('crypto', async (importOriginal) => {
-  const crypto = await importOriginal<typeof import('crypto')>();
+const crypto = { ...(await import('crypto')) };
+vi.mock('crypto', () => {
   return {
     ...crypto,
     randomUUID: vi.fn(),

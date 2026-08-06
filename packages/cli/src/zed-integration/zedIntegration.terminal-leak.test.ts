@@ -25,18 +25,18 @@ import { RecordingConnection } from './zed-test-helpers.js';
 const mockFromConfig = vi.fn();
 const mockBuildZedTerminalSetup = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...actual,
     fromConfig: (...args: unknown[]) => mockFromConfig(...args),
   };
 });
 
-vi.mock('./zed-terminal-setup.js', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actualActual = { ...(await import('./zed-terminal-setup.js')) };
+vi.mock('./zed-terminal-setup.js', () => {
   return {
-    ...actual,
+    ...actualActual,
     buildZedTerminalSetup: (...args: unknown[]) =>
       mockBuildZedTerminalSetup(...args),
   };

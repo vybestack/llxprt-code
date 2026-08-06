@@ -29,8 +29,8 @@ import { ToolErrorType } from '../types/tool-error.js';
 import type { IStorageService } from '../interfaces/index.js';
 
 // Mock dependencies
-vi.mock('fs/promises', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('fs/promises')) };
+vi.mock('fs/promises', () => {
   return {
     ...actual,
     mkdir: vi.fn(),

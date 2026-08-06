@@ -21,16 +21,16 @@ import * as path from 'node:path';
 import { SpawnSyncReturns } from 'child_process';
 
 // execSync is mocked for getReleaseVersion internals; subprocess tests guard that spawnSync stays real.
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:child_process')>();
+const actual = { ...(await import('node:child_process')) };
+vi.mock('node:child_process', () => {
   return {
     ...actual,
     execSync: vi.fn(),
   };
 });
 
-vi.mock('node:fs', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('node:fs')>();
+const mod = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   const readFileSyncMock = vi.fn();
   return {
     ...mod,

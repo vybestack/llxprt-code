@@ -9,8 +9,8 @@
 // Mock 'os' first.
 import * as osActual from 'os';
 import * as pathActual from 'node:path'; // Import for type info for the mock factory
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => '/mock/home/user'),
@@ -75,9 +75,10 @@ const MOCK_WORKSPACE_SETTINGS_PATH = pathActual.join(
   'settings.json',
 );
 
-vi.mock('fs', async (importOriginal) => {
+const __actual = { ...(await import('fs')) };
+vi.mock('fs', () => {
   // Get all the functions from the real 'fs' module
-  const actualFs = await importOriginal<typeof fs>();
+  const actualFs = __actual;
 
   return {
     ...actualFs, // Keep all the real functions
@@ -95,9 +96,8 @@ const mockCoreEvents = {
   emitSettingsChanged: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     coreEvents: mockCoreEvents,

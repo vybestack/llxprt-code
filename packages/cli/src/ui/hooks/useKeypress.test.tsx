@@ -14,8 +14,8 @@ import { EventEmitter } from 'node:events';
 import type { Mock } from 'bun:test';
 
 // Mock the 'ink' module to control stdin
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
+const original = { ...(await import('ink')) };
+vi.mock('ink', () => {
   return {
     ...original,
     useStdin: vi.fn(),

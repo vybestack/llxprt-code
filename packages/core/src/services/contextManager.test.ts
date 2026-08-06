@@ -20,9 +20,9 @@ const mockLoadJitSubdirectoryMemory = vi.fn();
 const mockLoadCoreMemory = vi.fn();
 
 // Mock memoryDiscovery module
-vi.mock('../utils/memoryDiscovery.js', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('../utils/memoryDiscovery.js');
+const __actual = { ...(await import('../utils/memoryDiscovery.js')) };
+vi.mock('../utils/memoryDiscovery.js', () => {
+  const actual = __actual as typeof import('../utils/memoryDiscovery.js');
   return {
     ...actual,
     loadGlobalMemory: mockLoadGlobalMemory,

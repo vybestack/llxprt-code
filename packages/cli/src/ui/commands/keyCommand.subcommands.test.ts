@@ -86,9 +86,8 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 
 let mockStorage: ProviderKeyStorage;
 
-vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-storage')>();
+const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
+vi.mock('@vybestack/llxprt-code-storage', () => {
   return {
     ...actual,
     getProviderKeyStorage: () => mockStorage,
@@ -99,13 +98,12 @@ vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
 // Mock the factory to use our test storage. The credential-store factory now
 // lives in the providers package and is consumed via its "./auth.js" barrel,
 // so the mock must target that module to intercept keyCommand's import.
-vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-providers/auth.js')
-    >();
+const actualActual = {
+  ...(await import('@vybestack/llxprt-code-providers/auth.js')),
+};
+vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
   return {
-    ...actual,
+    ...actualActual,
     createProviderKeyStorage: () => mockStorage,
     createTokenStore: () => ({}),
     resetFactorySingletons: () => {},

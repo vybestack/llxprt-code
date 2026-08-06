@@ -14,9 +14,8 @@ const { mockLog, mockDebugLoggerError } = {
   mockDebugLoggerError: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     DebugLogger: vi.fn().mockImplementation(() => ({

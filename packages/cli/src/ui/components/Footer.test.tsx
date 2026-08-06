@@ -19,8 +19,8 @@ vi.mock('../utils/responsive.js', () => ({
   ),
 }));
 
-vi.mock('node:process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:process')>();
+const actual = { ...(await import('node:process')) };
+vi.mock('node:process', () => {
   // Under Bun, require('node:process') returns the process namespace
   // directly (no .default wrapper), so normalize the shape.
   const actualDefault =

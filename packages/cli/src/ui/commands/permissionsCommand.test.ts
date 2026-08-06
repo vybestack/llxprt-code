@@ -33,18 +33,18 @@ const mockRules: Array<{
   trustLevel: trustedFolders.TrustLevel;
 }> = [];
 
-vi.mock('node:process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:process')>();
+const actual = { ...(await import('node:process')) };
+vi.mock('node:process', () => {
   return {
     ...actual,
     cwd: mockedCwd,
   };
 });
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
+const actualActual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
-    ...actual,
+    ...actualActual,
     homedir: mockedHomedir,
   };
 });

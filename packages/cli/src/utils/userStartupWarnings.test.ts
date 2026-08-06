@@ -25,10 +25,8 @@ import {
 // Mock os.homedir to control the home directory in tests
 const mockHomedir = vi.fn();
 
-vi.mock('node:os', async (importOriginal) => {
-  const actualOs = await importOriginal<
-    typeof import('node:os') & { default?: unknown }
-  >();
+const actualOs = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actualOs,
     ...(actualOs.default !== null &&

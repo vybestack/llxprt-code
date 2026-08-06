@@ -20,9 +20,9 @@ import { initializeTestConfig } from '../../test-utils/config.js';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('@vybestack/llxprt-code-tools', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-tools');
+const __actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+vi.mock('@vybestack/llxprt-code-tools', () => {
+  const actual = __actual as typeof import('@vybestack/llxprt-code-tools');
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -77,9 +77,9 @@ vi.mock('@vybestack/llxprt-code-tools', (importOriginal) => {
       ),
   };
 });
-vi.mock('../../core/contentGenerator.js', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('../../core/contentGenerator.js');
+const __actual2 = { ...(await import('../../core/contentGenerator.js')) };
+vi.mock('../../core/contentGenerator.js', () => {
+  const actual = __actual2 as typeof import('../../core/contentGenerator.js');
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -92,9 +92,12 @@ vi.mock('../../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) => {
+const __actual3 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration');
+    __actual3 as typeof import('@vybestack/llxprt-code-ide-integration');
   return {
     ...actual,
     IdeClient: {
@@ -224,8 +227,8 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/events.js')>();
+const actual = { ...(await import('../../utils/events.js')) };
+vi.mock('../../utils/events.js', () => {
   // Spy on emit rather than replacing the whole object — spreading loses the
   // EventEmitter prototype chain (on, listenerCount, emitFeedback, etc.)
   vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);

@@ -59,16 +59,16 @@ vi.mock('simple-git', () => ({
   }),
 }));
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
+const mockedOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),
   };
 });
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
+const actual = { ...(await import('./trustedFolders.js')) };
+vi.mock('./trustedFolders.js', () => {
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn(),
@@ -79,11 +79,10 @@ const mockLogExtensionEnable = vi.fn();
 const mockLogExtensionInstallEvent = vi.fn();
 const mockLogExtensionUninstall = vi.fn();
 const mockLogExtensionDisable = vi.fn();
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
+    ...actualActual,
 
     logExtensionEnable: mockLogExtensionEnable,
     logExtensionInstallEvent: mockLogExtensionInstallEvent,
@@ -96,10 +95,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('child_process')>();
+const actualActual2 = { ...(await import('child_process')) };
+vi.mock('child_process', () => {
   return {
-    ...actual,
+    ...actualActual2,
     execSync: vi.fn(),
   };
 });

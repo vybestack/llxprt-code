@@ -19,9 +19,8 @@ import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     getErrorMessage: vi.fn((error: unknown) => {
@@ -41,11 +40,12 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('../../config/environmentLoader.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('../../config/environmentLoader.js')>();
+const actualOriginal = {
+  ...(await import('../../config/environmentLoader.js')),
+};
+vi.mock('../../config/environmentLoader.js', () => {
   return {
-    ...original,
+    ...actualOriginal,
     loadHierarchicalLlxprtMemory: vi.fn(),
   };
 });

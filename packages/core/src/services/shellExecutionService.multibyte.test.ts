@@ -6,8 +6,8 @@
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 const mockSpawn = vi.fn();
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('child_process')) };
+vi.mock('child_process', () => {
   return {
     ...actual,
     spawn: mockSpawn,

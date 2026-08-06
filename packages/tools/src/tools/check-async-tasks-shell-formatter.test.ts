@@ -8,8 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
 let mockPlatform: NodeJS.Platform = 'win32';
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
+const actual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actual,
     default: {

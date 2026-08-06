@@ -9,8 +9,9 @@ import { CodeAssistServer } from './server.js';
 import { OAuth2Client } from 'google-auth-library';
 import { UserTierId } from './types.js';
 
-vi.mock('google-auth-library', (importOriginal) => {
-  const actual = importOriginal() as typeof import('google-auth-library');
+const __actual = { ...(await import('google-auth-library')) };
+vi.mock('google-auth-library', () => {
+  const actual = __actual as typeof import('google-auth-library');
   return {
     ...actual,
     OAuth2Client: vi.fn().mockImplementation(() => ({})),

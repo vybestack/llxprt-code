@@ -56,17 +56,17 @@ const mockClearcutLogger = {
   mockClearcutLogger;
 
 const mockIsTelemetrySdkInitialized = vi.fn(() => true);
-vi.mock(
-  '@vybestack/llxprt-code-telemetry/telemetry/sdk.js',
-  (importOriginal) => {
-    const actual =
-      importOriginal() as typeof import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js');
-    return {
-      ...actual,
-      isTelemetrySdkInitialized: mockIsTelemetrySdkInitialized,
-    };
-  },
-);
+const __actual = {
+  ...(await import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js')),
+};
+vi.mock('@vybestack/llxprt-code-telemetry/telemetry/sdk.js', () => {
+  const actual =
+    __actual as typeof import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js');
+  return {
+    ...actual,
+    isTelemetrySdkInitialized: mockIsTelemetrySdkInitialized,
+  };
+});
 
 const {
   logHookCall,

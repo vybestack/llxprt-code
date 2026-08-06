@@ -46,9 +46,9 @@ vi.mock('./sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+vi.mock('fs', () => {
   const mockHome = pathMod.resolve(pathMod.sep, 'mock', 'home', 'user');
   const MOCK_CWD1 = process.cwd();
   const MOCK_CWD2 = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
@@ -78,8 +78,8 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),

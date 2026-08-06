@@ -43,8 +43,8 @@ vi.mock('../utils/gitUtils.js', () => ({
 }));
 
 const hoistedMockHomedir = vi.fn();
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
+const actual = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actual,
     homedir: hoistedMockHomedir,

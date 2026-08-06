@@ -21,9 +21,8 @@ const mockIsBinary = vi.fn();
 const mockShellExecutionService = vi.fn();
 const mockIsActivePty = vi.fn();
 const mockGetLastActivePtyId = vi.fn();
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     ShellExecutionService: {
@@ -36,8 +35,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 });
 vi.mock('fs');
 // Mock os to always return 'linux' for consistent testing across platforms
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('os')>();
+const actual = { ...(await import('os')) };
+vi.mock('os', () => {
   const mockedOs = {
     ...actual,
     platform: vi.fn(() => 'linux'),

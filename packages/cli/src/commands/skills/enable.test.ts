@@ -28,20 +28,18 @@ const debugLogger = {
   }),
 };
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     debugLogger,
   };
 });
 
-vi.mock('../../config/settings.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/settings.js')>();
+const actualActual = { ...(await import('../../config/settings.js')) };
+vi.mock('../../config/settings.js', () => {
   return {
-    ...actual,
+    ...actualActual,
     loadSettings: vi.fn(),
     isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
   };

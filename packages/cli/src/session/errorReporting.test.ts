@@ -7,9 +7,8 @@ const { writeToStderr } = {
   writeToStderr: vi.fn(),
 };
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return { ...actual, writeToStderr };
 });
 

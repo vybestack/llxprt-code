@@ -33,8 +33,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
+const mockedOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...mockedOs,
     homedir: vi.fn(),

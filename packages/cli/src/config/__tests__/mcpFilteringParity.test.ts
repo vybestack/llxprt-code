@@ -60,8 +60,8 @@ vi.mock('../sandboxConfig.js', () => ({
 
 const reloadSettingsState = vi.hoisted<{ current?: Settings }>(() => ({}));
 
-vi.mock('../settings.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../settings.js')>();
+const actual = { ...(await import('../settings.js')) };
+vi.mock('../settings.js', () => {
   return {
     ...actual,
     loadSettings: vi.fn((cwd: string) =>
@@ -72,9 +72,9 @@ vi.mock('../settings.js', async (importOriginal) => {
   };
 });
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([MOCK_CWD, process.cwd()]);
   return {
@@ -91,8 +91,8 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),

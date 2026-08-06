@@ -29,18 +29,18 @@ vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   stopProxy: authMocks.stopProxy,
   getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
-vi.mock('./sandbox-ssh.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./sandbox-ssh.js')>();
+const original = { ...(await import('./sandbox-ssh.js')) };
+vi.mock('./sandbox-ssh.js', () => {
   return {
     ...original,
     setupCredentialProxyDockerMacOS:
       bridgeMocks.setupCredentialProxyDockerMacOS,
   };
 });
-vi.mock('./sandbox-podman.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./sandbox-podman.js')>();
+const actualOriginal = { ...(await import('./sandbox-podman.js')) };
+vi.mock('./sandbox-podman.js', () => {
   return {
-    ...original,
+    ...actualOriginal,
     setupCredentialProxyPodmanMacOS:
       bridgeMocks.setupCredentialProxyPodmanMacOS,
   };

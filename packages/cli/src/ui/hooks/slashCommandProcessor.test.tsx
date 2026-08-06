@@ -64,8 +64,8 @@ const reactStub = (() => {
   };
 })();
 
-vi.mock('react', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react')>();
+const actual = { ...(await import('react')) };
+vi.mock('react', () => {
   return {
     ...actual,
     ...reactStub.module,
@@ -145,11 +145,10 @@ const sessionStatsMock = {
   updateHistoryTokenCount: vi.fn(),
 };
 
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../contexts/SessionContext.js')>();
+const actualActual = { ...(await import('../contexts/SessionContext.js')) };
+vi.mock('../contexts/SessionContext.js', () => {
   return {
-    ...actual,
+    ...actualActual,
     useSessionStats: vi.fn(() => sessionStatsMock),
   };
 });

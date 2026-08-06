@@ -10,8 +10,9 @@ import { DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 
-vi.mock('node:fs', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:fs');
+const __actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
+  const actual = __actual as typeof import('node:fs');
   const mockExistsSync = vi.fn();
   const mockStatSync = vi.fn();
   const mockExports = {

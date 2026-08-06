@@ -23,8 +23,8 @@ const mockGetPty = vi.fn();
 vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('child_process')) };
+vi.mock('child_process', () => {
   return {
     ...actual,
     spawn: mockCpSpawn,

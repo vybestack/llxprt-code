@@ -31,8 +31,8 @@ vi.mock('../hooks/useMouse.js', async () => {
   };
 });
 
-vi.mock('ink', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('ink')>();
+const actual = { ...(await import('ink')) };
+vi.mock('ink', () => {
   return {
     ...actual,
     getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),

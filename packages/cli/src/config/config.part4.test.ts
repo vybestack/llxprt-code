@@ -45,9 +45,9 @@ vi.mock('./sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+vi.mock('fs', () => {
   const mockHome = pathMod.resolve(pathMod.sep, 'mock', 'home', 'user');
   const MOCK_CWD1 = process.cwd();
   const MOCK_CWD2 = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
@@ -77,8 +77,8 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
@@ -106,154 +106,144 @@ const runtimeSettingsState = {
   oauthManager: null as unknown,
 };
 
-vi.mock(
-  '@vybestack/llxprt-code-providers/runtime.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-providers/runtime.js')
-      >();
-    const getProviderManager = () =>
-      runtimeSettingsState.providerManager ??
-      ({
-        listProviders: vi.fn(() => []),
-        getActiveProviderName: vi.fn(() => null),
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => undefined),
-        getAvailableModels: vi.fn(async () => []),
-      } as unknown as ServerConfig.RuntimeProviderManager);
+const actual = {
+  ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
+};
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+  const getProviderManager = () =>
+    runtimeSettingsState.providerManager ??
+    ({
+      listProviders: vi.fn(() => []),
+      getActiveProviderName: vi.fn(() => null),
+      setActiveProvider: vi.fn(),
+      getActiveProvider: vi.fn(() => undefined),
+      getAvailableModels: vi.fn(async () => []),
+    } as unknown as ServerConfig.RuntimeProviderManager);
 
-    return {
-      registerAgentRuntimeFactories: vi.fn(),
-      resetAgentRuntimeFactories: vi.fn(),
-      ephemeralSettingHelp: actual.ephemeralSettingHelp,
-      parseEphemeralSettingValue: vi.fn(actual.parseEphemeralSettingValue),
-      applyCliSetArguments: vi.fn(actual.applyCliSetArguments),
-      applyProfileSnapshot: vi.fn(
-        async (profile: {
-          provider?: string;
-          model?: string;
-          baseUrl?: string;
-        }) => ({
-          providerName: profile.provider ?? '',
-          modelName: profile.model ?? '',
-          baseUrl: profile.baseUrl,
-          warnings: [],
-        }),
-      ),
-      getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-      setCliRuntimeContext: vi.fn(
-        (
-          settingsService: SettingsService,
-          config?: ServerConfig.Config,
-          options: {
-            metadata?: Record<string, unknown>;
-            runtimeId?: string;
-          } = {},
-        ) => {
-          runtimeSettingsState.context = {
-            settingsService,
-            config: config ?? null,
-            runtimeId: options.runtimeId ?? 'mock-runtime',
-            metadata: options.metadata ?? {},
-          };
-        },
-      ),
-      switchActiveProvider: vi.fn(async () => ({
-        changed: true,
-        previousProvider: null,
-        nextProvider: 'mock-provider',
-        infoMessages: [],
-      })),
-      registerCliProviderInfrastructure: vi.fn(
-        (
-          manager: ServerConfig.RuntimeProviderManager,
-          oauthManager: unknown,
-        ) => {
-          runtimeSettingsState.providerManager = manager;
-          runtimeSettingsState.oauthManager = oauthManager ?? null;
-        },
-      ),
-      applyCliArgumentOverrides: vi.fn(async () => {}),
-      getCliRuntimeConfig: vi.fn(
-        () => runtimeSettingsState.context?.config ?? null,
-      ),
-      getCliRuntimeServices: vi.fn(() => ({
-        config: runtimeSettingsState.context?.config ?? null,
-        settingsService:
-          runtimeSettingsState.context?.settingsService ??
-          new SettingsService(),
-        providerManager: getProviderManager(),
-      })),
-      getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-      getCliOAuthManager: vi.fn(
-        () => runtimeSettingsState.oauthManager ?? null,
-      ),
-      getActiveProviderStatus: vi.fn(() => ({
-        name:
-          runtimeSettingsState.providerManager?.getActiveProviderName() ??
-          runtimeSettingsState.context?.config?.getProvider() ??
-          null,
-      })),
-      listProviders: vi.fn(() => getProviderManager().listProviders()),
-      getActiveProviderName: vi.fn(() =>
-        getProviderManager().getActiveProviderName(),
-      ),
-      setActiveModel: vi.fn(async () => ({
-        changed: false,
-        previousModel: null,
-        nextModel: null,
-        infoMessages: [],
-      })),
-      listAvailableModels: vi.fn(async () =>
-        getProviderManager().getAvailableModels(),
-      ),
-      getActiveModelName: vi.fn(() => null),
-      getActiveProfileName: vi.fn(() => null),
-      getActiveModelParams: vi.fn(() => ({})),
-      getEphemeralSettings: vi.fn(() => ({})),
-      getEphemeralSetting: vi.fn(() => undefined),
-      setEphemeralSetting: vi.fn(),
-      setActiveModelParam: vi.fn(),
-      clearActiveModelParam: vi.fn(),
-      saveProfileSnapshot: vi.fn(async () => undefined),
-      saveLoadBalancerProfile: vi.fn(async () => undefined),
-      loadProfileByName: vi.fn(async () => undefined),
-      deleteProfileByName: vi.fn(async () => undefined),
-      listSavedProfiles: vi.fn(() => []),
-      getProfileByName: vi.fn(() => undefined),
-      setDefaultProfileName: vi.fn(),
-      updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-      updateActiveProviderApiKey: vi.fn(async () => undefined),
-      getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-      getActiveToolFormatState: vi.fn(() => ({})),
-      setActiveToolFormatOverride: vi.fn(),
-      getActiveProviderMetrics: vi.fn(() => undefined),
-      getSessionTokenUsage: vi.fn(() => undefined),
-      getLoadBalancerStats: vi.fn(() => undefined),
-      getLoadBalancerLastSelected: vi.fn(() => undefined),
-      getAllLoadBalancerStats: vi.fn(() => ({})),
-      assembleCliProviderRuntime: vi.fn(
-        (input: {
-          settingsService: unknown;
-          config: unknown;
-          runtimeId: string;
+  return {
+    registerAgentRuntimeFactories: vi.fn(),
+    resetAgentRuntimeFactories: vi.fn(),
+    ephemeralSettingHelp: actual.ephemeralSettingHelp,
+    parseEphemeralSettingValue: vi.fn(actual.parseEphemeralSettingValue),
+    applyCliSetArguments: vi.fn(actual.applyCliSetArguments),
+    applyProfileSnapshot: vi.fn(
+      async (profile: {
+        provider?: string;
+        model?: string;
+        baseUrl?: string;
+      }) => ({
+        providerName: profile.provider ?? '',
+        modelName: profile.model ?? '',
+        baseUrl: profile.baseUrl,
+        warnings: [],
+      }),
+    ),
+    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
+    setCliRuntimeContext: vi.fn(
+      (
+        settingsService: SettingsService,
+        config?: ServerConfig.Config,
+        options: {
           metadata?: Record<string, unknown>;
-        }) => ({
-          runtime: {
-            settingsService: input.settingsService,
-            config: input.config,
-            runtimeId: input.runtimeId,
-            metadata: input.metadata,
-          },
-          runtimeMessageBus: { kind: 'session-bus' },
-          providerManager: getProviderManager(),
-          oauthManager: { id: 'oauth-manager' },
-        }),
-      ),
-    };
-  },
-);
+          runtimeId?: string;
+        } = {},
+      ) => {
+        runtimeSettingsState.context = {
+          settingsService,
+          config: config ?? null,
+          runtimeId: options.runtimeId ?? 'mock-runtime',
+          metadata: options.metadata ?? {},
+        };
+      },
+    ),
+    switchActiveProvider: vi.fn(async () => ({
+      changed: true,
+      previousProvider: null,
+      nextProvider: 'mock-provider',
+      infoMessages: [],
+    })),
+    registerCliProviderInfrastructure: vi.fn(
+      (manager: ServerConfig.RuntimeProviderManager, oauthManager: unknown) => {
+        runtimeSettingsState.providerManager = manager;
+        runtimeSettingsState.oauthManager = oauthManager ?? null;
+      },
+    ),
+    applyCliArgumentOverrides: vi.fn(async () => {}),
+    getCliRuntimeConfig: vi.fn(
+      () => runtimeSettingsState.context?.config ?? null,
+    ),
+    getCliRuntimeServices: vi.fn(() => ({
+      config: runtimeSettingsState.context?.config ?? null,
+      settingsService:
+        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
+      providerManager: getProviderManager(),
+    })),
+    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
+    getCliOAuthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
+    getActiveProviderStatus: vi.fn(() => ({
+      name:
+        runtimeSettingsState.providerManager?.getActiveProviderName() ??
+        runtimeSettingsState.context?.config?.getProvider() ??
+        null,
+    })),
+    listProviders: vi.fn(() => getProviderManager().listProviders()),
+    getActiveProviderName: vi.fn(() =>
+      getProviderManager().getActiveProviderName(),
+    ),
+    setActiveModel: vi.fn(async () => ({
+      changed: false,
+      previousModel: null,
+      nextModel: null,
+      infoMessages: [],
+    })),
+    listAvailableModels: vi.fn(async () =>
+      getProviderManager().getAvailableModels(),
+    ),
+    getActiveModelName: vi.fn(() => null),
+    getActiveProfileName: vi.fn(() => null),
+    getActiveModelParams: vi.fn(() => ({})),
+    getEphemeralSettings: vi.fn(() => ({})),
+    getEphemeralSetting: vi.fn(() => undefined),
+    setEphemeralSetting: vi.fn(),
+    setActiveModelParam: vi.fn(),
+    clearActiveModelParam: vi.fn(),
+    saveProfileSnapshot: vi.fn(async () => undefined),
+    saveLoadBalancerProfile: vi.fn(async () => undefined),
+    loadProfileByName: vi.fn(async () => undefined),
+    deleteProfileByName: vi.fn(async () => undefined),
+    listSavedProfiles: vi.fn(() => []),
+    getProfileByName: vi.fn(() => undefined),
+    setDefaultProfileName: vi.fn(),
+    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
+    updateActiveProviderApiKey: vi.fn(async () => undefined),
+    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
+    getActiveToolFormatState: vi.fn(() => ({})),
+    setActiveToolFormatOverride: vi.fn(),
+    getActiveProviderMetrics: vi.fn(() => undefined),
+    getSessionTokenUsage: vi.fn(() => undefined),
+    getLoadBalancerStats: vi.fn(() => undefined),
+    getLoadBalancerLastSelected: vi.fn(() => undefined),
+    getAllLoadBalancerStats: vi.fn(() => ({})),
+    assembleCliProviderRuntime: vi.fn(
+      (input: {
+        settingsService: unknown;
+        config: unknown;
+        runtimeId: string;
+        metadata?: Record<string, unknown>;
+      }) => ({
+        runtime: {
+          settingsService: input.settingsService,
+          config: input.config,
+          runtimeId: input.runtimeId,
+          metadata: input.metadata,
+        },
+        runtimeMessageBus: { kind: 'session-bus' },
+        providerManager: getProviderManager(),
+        oauthManager: { id: 'oauth-manager' },
+      }),
+    ),
+  };
+});
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualServer = await vi.importActual<typeof ServerConfig>(

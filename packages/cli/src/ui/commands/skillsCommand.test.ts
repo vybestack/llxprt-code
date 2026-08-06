@@ -26,9 +26,8 @@ import {
   type MergedSettings,
 } from '../../config/settings.js';
 
-vi.mock('../../config/settings.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/settings.js')>();
+const actual = { ...(await import('../../config/settings.js')) };
+vi.mock('../../config/settings.js', () => {
   return {
     ...actual,
     isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),

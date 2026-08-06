@@ -9,9 +9,8 @@ import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
-vi.mock('@vybestack/llxprt-code-providers', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-providers')>();
+const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
+vi.mock('@vybestack/llxprt-code-providers', () => {
   return {
     ...actual,
     dumpRequestContext: vi.fn().mockResolvedValue({

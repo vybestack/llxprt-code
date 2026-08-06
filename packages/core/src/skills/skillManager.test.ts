@@ -22,8 +22,9 @@ let realGetBuiltinSkillsDir: typeof import('./skillLoader.js').getBuiltinSkillsD
 const mockLoadSkillsFromDir = vi.fn();
 const mockGetBuiltinSkillsDir = vi.fn();
 
-vi.mock('./skillLoader.js', (importOriginal) => {
-  const actual = importOriginal() as typeof import('./skillLoader.js');
+const __actual = { ...(await import('./skillLoader.js')) };
+vi.mock('./skillLoader.js', () => {
+  const actual = __actual as typeof import('./skillLoader.js');
   realLoadSkillsFromDir = actual.loadSkillsFromDir;
   realGetBuiltinSkillsDir = actual.getBuiltinSkillsDir;
   mockLoadSkillsFromDir.mockImplementation(actual.loadSkillsFromDir);

@@ -39,11 +39,10 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => runtimeMocks,
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-providers/auth.js')
-    >();
+const actual = {
+  ...(await import('@vybestack/llxprt-code-providers/auth.js')),
+};
+vi.mock('@vybestack/llxprt-code-providers/auth.js', () => {
   return {
     ...actual,
     createTokenStore: () => ({ listBuckets: tokenStoreMocks.listBuckets }),

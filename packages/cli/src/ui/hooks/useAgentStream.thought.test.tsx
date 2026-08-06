@@ -39,8 +39,10 @@ import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
+const actualSchedulerModule = {
+  ...(await import('./useReactToolScheduler.js')),
+};
+vi.mock('./useReactToolScheduler.js', () => {
   return {
     ...actualSchedulerModule,
     useReactToolScheduler: vi.fn(),

@@ -29,9 +29,9 @@ vi.mock('node:os', () => ({
 }));
 
 // Mock external dependencies
-vi.mock('@vybestack/llxprt-code-mcp', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-mcp');
+const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+vi.mock('@vybestack/llxprt-code-mcp', () => {
+  const actual = __actual as typeof import('@vybestack/llxprt-code-mcp');
   class MockKeychainTokenStorage {
     readToken = vi.fn();
     writeToken = vi.fn();

@@ -19,8 +19,8 @@ const { mockPlatform } = {
   mockPlatform: vi.fn(() => 'darwin'),
 };
 
-void vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => {
   return {
     default: { platform: mockPlatform, EOL: actual.EOL },
     platform: mockPlatform,

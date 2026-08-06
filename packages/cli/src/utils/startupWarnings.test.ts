@@ -10,8 +10,8 @@ import fs from 'fs/promises';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
 vi.mock('fs/promises');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     getErrorMessage: vi.fn(),

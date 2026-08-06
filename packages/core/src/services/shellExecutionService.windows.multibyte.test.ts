@@ -15,12 +15,14 @@ import type { ChildProcess } from 'child_process';
 const mockPlatform = vi.fn(() => 'win32');
 const mockSpawn = vi.fn();
 
-vi.mock('os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('os');
+const __actual = { ...(await import('os')) };
+vi.mock('os', () => {
+  const actual = __actual as typeof import('os');
   return { ...actual, platform: mockPlatform };
 });
-vi.mock('child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('child_process');
+const __actual2 = { ...(await import('child_process')) };
+vi.mock('child_process', () => {
+  const actual = __actual2 as typeof import('child_process');
   return { ...actual, spawn: mockSpawn };
 });
 vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));

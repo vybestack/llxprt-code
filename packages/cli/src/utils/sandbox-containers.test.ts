@@ -45,8 +45,9 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 // real, because sandbox-containers.ts evaluates promisify(exec) at module
 // scope; a stub there would produce an execAsync that never settles and
 // would hang the first test to reach that path.
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual: typeof import('node:child_process') = await importOriginal();
+const __actual = { ...(await import('node:child_process')) };
+vi.mock('node:child_process', () => {
+  const actual: typeof import('node:child_process') = __actual;
   return {
     ...actual,
     execSync: vi.fn(),

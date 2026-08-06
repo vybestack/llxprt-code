@@ -13,8 +13,8 @@ import { EventEmitter } from 'node:events';
 import { MouseProvider, useMouseContext } from './MouseContext.js';
 import { useMouse } from '../hooks/useMouse.js';
 
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
+const original = { ...(await import('ink')) };
+vi.mock('ink', () => {
   return {
     ...original,
     useStdin: vi.fn(),

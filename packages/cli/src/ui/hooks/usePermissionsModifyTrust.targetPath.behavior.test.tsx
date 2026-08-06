@@ -68,8 +68,8 @@ vi.mock('./useIdeTrustListener.js', () => ({
   useIdeTrustListener: () => ({ isIdeTrusted: mockedIdeTrust.value }),
 }));
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
+const actual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actual,
     homedir: () => '/mock/home/user',

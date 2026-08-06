@@ -44,8 +44,8 @@ vi.mock('./updateEventEmitter.js', async () => {
   };
 });
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof fs>();
+const actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   return {
     ...actual,
     existsSync: vi.fn(),
@@ -62,10 +62,10 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
+const actualActual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
-    ...actual,
+    ...actualActual,
     homedir: vi.fn(),
   };
 });

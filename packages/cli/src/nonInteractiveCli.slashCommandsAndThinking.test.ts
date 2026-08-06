@@ -73,9 +73,8 @@ function makeBootstrapProfileArgs(
   };
 }
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+const original = { ...(await import('@vybestack/llxprt-code-agents')) };
+vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...original,
     fromConfig: vi.fn(),
@@ -84,11 +83,10 @@ vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
 
 // Mock core modules
 vi.mock('./ui/hooks/atCommandProcessor.js');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...original,
+    ...actualOriginal,
     shutdownTelemetry: vi.fn(),
     isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
   };

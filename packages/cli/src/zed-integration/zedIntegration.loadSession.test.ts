@@ -72,8 +72,8 @@ function recordedFilesLister(...sessionIds: string[]): ChatSessionFileLister {
 
 const mockFromConfig = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
     ...actual,
     fromConfig: (...args: unknown[]) => mockFromConfig(...args),

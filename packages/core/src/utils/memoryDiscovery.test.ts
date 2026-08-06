@@ -26,8 +26,8 @@ import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
+const actualOs = { ...(await import('os')) };
+vi.mock('os', () => {
   return {
     ...actualOs,
     homedir: vi.fn(),

@@ -21,8 +21,8 @@ import { type Settings, createTestMergedSettings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
+const actual = { ...(await import('./trustedFolders.js')) };
+vi.mock('./trustedFolders.js', () => {
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),
@@ -30,11 +30,10 @@ vi.mock('./trustedFolders.js', async (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
+    ...actualActual,
     loadServerHierarchicalMemory: vi.fn(),
   };
 });

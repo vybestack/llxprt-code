@@ -6,8 +6,8 @@
 
 import { vi } from 'bun:test';
 
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('node:child_process')) };
+vi.mock('node:child_process', () => {
   return {
     ...actual,
     execSync: vi.fn(),

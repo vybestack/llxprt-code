@@ -20,8 +20,8 @@ import { loadCliConfig } from './config.js';
 import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     Config: vi.fn().mockImplementation((params) => {

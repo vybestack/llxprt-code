@@ -49,9 +49,8 @@ vi.mock('../../services/McpPromptLoader.js', () => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
+const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+vi.mock('@vybestack/llxprt-code-mcp', () => {
   return {
     ...actual,
     addMCPStatusChangeListener: vi.fn(),
@@ -59,11 +58,10 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
+    ...actualActual,
     IdeClient: {
       getInstance: () =>
         Promise.resolve({

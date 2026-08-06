@@ -16,8 +16,8 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actual,
     isRipgrepAvailable: vi.fn().mockResolvedValue(true),

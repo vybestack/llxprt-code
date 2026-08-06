@@ -26,16 +26,15 @@ import { assertDefined } from '../../test-utils/assertions.js';
 const mockKeyfileStore = new Map<string, string>();
 const mockedHomedir = vi.fn();
 
-vi.mock('node:os', async (importOriginal) => {
-  const original = await importOriginal<typeof import('node:os')>();
+const original = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return { ...original, homedir: mockedHomedir };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...original,
+    ...actualOriginal,
     ToolKeyStorage: class MockToolKeyStorage {
       async setKeyfilePath(toolName: string, filePath: string): Promise<void> {
         mockKeyfileStore.set(toolName, filePath);

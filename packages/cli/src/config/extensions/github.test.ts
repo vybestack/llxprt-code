@@ -27,8 +27,8 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const mockPlatform = vi.fn();
 const mockArch = vi.fn();
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
+const actual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actual,
     platform: mockPlatform,

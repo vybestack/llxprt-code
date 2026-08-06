@@ -42,8 +42,8 @@ vi.mock('@vybestack/llxprt-code-settings', async () => ({
 }));
 
 // Mock OS methods that might be causing issues
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
+const actual = { ...(await import('node:os')) };
+vi.mock('node:os', () => {
   return {
     ...actual,
     hostname: vi.fn().mockReturnValue('test-hostname'),

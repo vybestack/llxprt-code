@@ -43,8 +43,8 @@ import {
   SessionLockedError,
 } from './SessionLockManager.js';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+const actual = { ...(await import('node:fs/promises')) };
+vi.mock('node:fs/promises', () => {
   return {
     ...actual,
     writeFile: vi.fn(actual.writeFile),

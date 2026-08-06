@@ -27,17 +27,16 @@ vi.mock('fs/promises', () => ({
 }));
 vi.mock('os');
 vi.mock('crypto');
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
+const actualFs = { ...(await import('fs')) };
+vi.mock('fs', () => {
   return {
     ...actualFs,
     mkdirSync: vi.fn(),
   };
 });
-vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  const pathModule = await import('path');
+const pathModule = await import('path');
+const actual = { ...(await import('@vybestack/llxprt-code-settings')) };
+vi.mock('@vybestack/llxprt-code-settings', () => {
   class Storage {
     getProjectTempDir(): string {
       return pathModule.join('/test/home/', '.llxprt', 'tmp', 'mocked_hash');

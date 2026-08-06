@@ -51,8 +51,8 @@ export const mockParseAndFormatApiError = coreMocks.mockParseAndFormatApiError;
 export const mockSendMessageStream = coreMocks.mockSendMessageStream;
 export const mockStartChat = coreMocks.mockStartChat;
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = await importOriginal<Record<string, unknown>>();
+const actualCoreModule = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...actualCoreModule,
     GitService: vi.fn(),

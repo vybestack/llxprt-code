@@ -73,8 +73,8 @@ vi.mock('update-notifier', () => ({
   default: vi.fn(() => ({ notify: vi.fn() })),
 }));
 
-vi.mock('./utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/events.js')>();
+const actual = { ...(await import('./utils/events.js')) };
+vi.mock('./utils/events.js', () => {
   return { ...actual, appEvents: { emit: vi.fn() } };
 });
 
@@ -83,16 +83,16 @@ vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
-vi.mock('./utils/bootstrap.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/bootstrap.js')>();
+const actualActual = { ...(await import('./utils/bootstrap.js')) };
+vi.mock('./utils/bootstrap.js', () => {
   return {
-    ...actual,
+    ...actualActual,
     shouldRelaunchForMemory: vi.fn(() => []),
     isDebugMode: vi.fn(() => false),
     computeSandboxMemoryArgs: vi.fn(
-      (..._args: Parameters<typeof actual.computeSandboxMemoryArgs>) =>
+      (..._args: Parameters<typeof actualActual.computeSandboxMemoryArgs>) =>
         ['-m', '4096'] as unknown as ReturnType<
-          typeof actual.computeSandboxMemoryArgs
+          typeof actualActual.computeSandboxMemoryArgs
         >,
     ),
   };
@@ -127,11 +127,10 @@ vi.mock('ink', () => ({
 
 // Mock the provider-activation executor so main() does not invoke real
 // providers-runtime mutators that require a wired CLI runtime context.
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
+const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
+vi.mock('@vybestack/llxprt-code-agents', () => {
   return {
-    ...actual,
+    ...actualActual2,
     executeProviderActivation: vi.fn().mockResolvedValue({
       authFailed: false,
       infoMessages: [],
@@ -153,11 +152,10 @@ vi.mock('./ui/utils/mouse.js', () => ({
 const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
 };
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+const actualActual3 = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
-    ...actual,
+    ...actualActual3,
     writeToStdout: mockWriteToStdout,
     writeToStderr: vi.fn().mockReturnValue(true),
     patchStdio: vi.fn(() => vi.fn()),

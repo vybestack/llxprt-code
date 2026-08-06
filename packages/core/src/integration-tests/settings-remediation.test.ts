@@ -18,8 +18,8 @@ import {
 import process from 'process';
 import { performance } from 'node:perf_hooks';
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('fs')) };
+vi.mock('fs', () => {
   return {
     ...actual,
     existsSync: vi.fn(() => true),

@@ -19,9 +19,8 @@ vi.mock('../../contexts/RuntimeContext.js', () => ({
 
 let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
 
-vi.mock('../../utils/autoPromptGenerator.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../utils/autoPromptGenerator.js')>();
+const actual = { ...(await import('../../utils/autoPromptGenerator.js')) };
+vi.mock('../../utils/autoPromptGenerator.js', () => {
   // Capture the real function before mock.module patches the namespace
   // in place — otherwise actual.generateAutoPrompt becomes the override
   // itself, causing infinite recursion.

@@ -15,8 +15,8 @@ import {
 } from './StatsDisplay.testHelpers.js';
 
 // Mock the context to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+vi.mock('../contexts/SessionContext.js', () => {
   return {
     ...actual,
     useSessionStats: vi.fn(),

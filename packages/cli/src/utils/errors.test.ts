@@ -16,10 +16,8 @@ import {
 } from './errors.js';
 
 // Mock the core modules
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+vi.mock('@vybestack/llxprt-code-core', () => {
   return {
     ...original,
     parseAndFormatApiError: vi.fn((error: unknown) => {

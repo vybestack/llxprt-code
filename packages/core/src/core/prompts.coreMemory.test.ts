@@ -36,8 +36,8 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 
 const PROJECT_DIR = path.resolve('/my/project');
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+const actual = { ...(await import('node:fs/promises')) };
+vi.mock('node:fs/promises', () => {
   return {
     ...actual,
     readFile: vi

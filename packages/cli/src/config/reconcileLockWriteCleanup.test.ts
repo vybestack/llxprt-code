@@ -17,8 +17,8 @@ let fsyncSyncError: Error | null = null;
 let unlinkSyncError: Error | null = null;
 let closeSyncError: Error | null = null;
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+const actual = { ...(await import('node:fs')) };
+vi.mock('node:fs', () => {
   return {
     ...actual,
     writeSync: vi.fn((...args: Parameters<typeof fs.writeSync>) => {

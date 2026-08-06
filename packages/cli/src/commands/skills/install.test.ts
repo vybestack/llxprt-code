@@ -12,8 +12,8 @@ vi.mock('../../utils/skillUtils.js', () => ({
   installSkill: mockInstallSkill,
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual = await importOriginal();
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...(actual as object),
     debugLogger: { log: vi.fn(), error: vi.fn() },
