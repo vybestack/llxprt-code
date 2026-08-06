@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { simpleGit } from 'simple-git';
 import { SettingScope, loadSettings } from './settings.js';
+import { getLoadSettings } from './extensionLoaderSettingsRef.js';
 import {
   isWorkspaceTrusted,
   loadTrustedFolders,
@@ -324,7 +325,7 @@ const extensionLoaderDeps = {
   fallbackConfigFileName: EXTENSIONS_CONFIG_FILENAME_FALLBACK,
   installMetadataFileName: INSTALL_METADATA_FILENAME,
   fallbackInstallMetadataFileName: INSTALL_METADATA_FILENAME_FALLBACK,
-  loadSettings,
+  loadSettings: (workspaceDir: string) => getLoadSettings()(workspaceDir),
   validateName,
   reportError: (message: string) => globalThis.console.error(message),
   reportWarning: (message: string) => globalThis.console.warn(message),

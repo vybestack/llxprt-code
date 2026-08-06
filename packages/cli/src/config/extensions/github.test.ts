@@ -14,7 +14,7 @@ import {
   tryParseGithubUrl,
   downloadFromGitHubRelease,
 } from './github.js';
-import { simpleGit, type SimpleGit } from 'simple-git';
+import { type SimpleGit } from 'simple-git';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
@@ -41,7 +41,10 @@ vi.mock('node:https', () => ({
   get: mockHttpsGet,
 }));
 
-vi.mock('simple-git');
+const mockSimpleGit = vi.hoisted(() => vi.fn());
+vi.mock('simple-git', () => ({
+  simpleGit: mockSimpleGit,
+}));
 
 const mockLoadExtension = vi.hoisted(() => vi.fn());
 vi.mock('../extension.js', () => ({
@@ -62,7 +65,7 @@ describe('git extension helpers', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(simpleGit).mockReturnValue(mockGit as unknown as SimpleGit);
+      mockSimpleGit.mockReturnValue(mockGit as unknown as SimpleGit);
     });
 
     it('should clone, fetch and checkout a repo', async () => {
@@ -162,7 +165,7 @@ describe('git extension helpers', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(simpleGit).mockReturnValue(mockGit as unknown as SimpleGit);
+      mockSimpleGit.mockReturnValue(mockGit as unknown as SimpleGit);
     });
 
     it('should return NOT_UPDATABLE for non-git extensions', async () => {

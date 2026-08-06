@@ -28,7 +28,7 @@ describe('<MaxSizedBox />', () => {
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals('Hello, World!');
+    expect(lastFrame()).toBe('Hello, World!');
   });
 
   it('hides lines when content exceeds maxHeight', () => {
@@ -47,7 +47,7 @@ describe('<MaxSizedBox />', () => {
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals(`... first 2 lines hidden ...
+    expect(lastFrame()).toBe(`... first 2 lines hidden ...
 Line 3`);
   });
 
@@ -67,7 +67,7 @@ Line 3`);
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals(`Line 1
+    expect(lastFrame()).toBe(`Line 1
 ... last 2 lines hidden ...`);
   });
 
@@ -84,7 +84,7 @@ Line 3`);
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(`This is a
+    expect(lastFrame()).toBe(`This is a
 long line
 of text`);
   });
@@ -115,7 +115,7 @@ And has a line break.
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(
+    expect(lastFrame()).toBe(
       `Example
 No Wrap: This part
          will wrap
@@ -147,7 +147,7 @@ Longer No Wrap: This
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(`... …
+    expect(lastFrame()).toBe(`... …
 istic
 expia
 lidoc
@@ -167,7 +167,7 @@ ious`);
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals(`Line 1
+    expect(lastFrame()).toBe(`Line 1
 Line 2`);
   });
 
@@ -187,7 +187,7 @@ Line 2`);
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals(`... first 2 lines hidden ...
+    expect(lastFrame()).toBe(`... first 2 lines hidden ...
 Line 3`);
   });
 
@@ -207,7 +207,7 @@ Line 3`);
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals(`Line 1
+    expect(lastFrame()).toBe(`Line 1
 ... last 2 lines hidden ...`);
   });
 
@@ -219,7 +219,7 @@ Line 3`);
     );
     // Expect an empty string or a box with nothing in it.
     // Ink renders an empty box as an empty string.
-    expect(lastFrame()).equals('');
+    expect(lastFrame()).toBe('');
   });
 
   it('wraps text with multi-byte unicode characters correctly', () => {
@@ -237,7 +237,7 @@ Line 3`);
 
     // "你好" has a visual width of 4. "世界" has a visual width of 4.
     // With maxWidth=5, it should wrap after the second character.
-    expect(lastFrame()).equals(`你好
+    expect(lastFrame()).toBe(`你好
 世界`);
   });
 
@@ -246,17 +246,19 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={5} maxHeight={5}>
           <Box>
-            <Text color={Colors.Foreground} wrap="wrap"></Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              🐶🐶🐶🐶🐶
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
     );
 
-    // Each "" has a visual width of 2.
+    // Each "🐶" has a visual width of 2.
     // With maxWidth=5, it should wrap every 2 emojis.
-    expect(lastFrame()).equals(`
-
-`);
+    expect(lastFrame()).toBe(`🐶🐶
+🐶🐶
+🐶`);
   });
 
   it('falls back to an ellipsis when width is extremely small', () => {
@@ -273,7 +275,7 @@ Line 3`);
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals('N…');
+    expect(lastFrame()).toBe('N…');
   });
 
   it('truncates long non-wrapping text with ellipsis', () => {
@@ -290,7 +292,7 @@ Line 3`);
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals('AB…');
+    expect(lastFrame()).toBe('AB…');
   });
 
   it('truncates non-wrapping text containing line breaks', () => {
@@ -307,7 +309,7 @@ Line 3`);
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(`A\n…`);
+    expect(lastFrame()).toBe(`A\n…`);
   });
 
   it('truncates emoji characters correctly with ellipsis', () => {
@@ -315,7 +317,7 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={3} maxHeight={2}>
           <Box>
-            <Text color={Colors.Foreground}></Text>
+            <Text color={Colors.Foreground}>🐶🐶🐶</Text>
             <Text color={Colors.Foreground} wrap="wrap">
               wrap
             </Text>
@@ -324,7 +326,7 @@ Line 3`);
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(`…`);
+    expect(lastFrame()).toBe(`🐶…`);
   });
 
   it('shows ellipsis for multiple rows with long non-wrapping text', () => {
@@ -353,7 +355,7 @@ Line 3`);
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(`AA…\nBB…\nCC…`);
+    expect(lastFrame()).toBe(`AA…\nBB…\nCC…`);
   });
 
   it('accounts for additionalHiddenLinesCount', () => {
@@ -373,7 +375,7 @@ Line 3`);
       </OverflowProvider>,
     );
     // 1 line is hidden by overflow, 5 are additionally hidden.
-    expect(lastFrame()).equals(`... first 7 lines hidden ...
+    expect(lastFrame()).toBe(`... first 7 lines hidden ...
 Line 3`);
   });
 
@@ -395,7 +397,7 @@ Line 3`);
         </MaxSizedBox>
       </OverflowProvider>,
     );
-    expect(lastFrame()).equals(`Line 1 from Fragment
+    expect(lastFrame()).toBe(`Line 1 from Fragment
 Line 2 from Fragment
 Line 3 direct child`);
   });
@@ -421,7 +423,7 @@ Line 3 direct child`);
       ...Array.from({ length: 9 }, (_, i) => `Line ${22 + i}`),
     ].join('\n');
 
-    expect(lastFrame()).equals(expected);
+    expect(lastFrame()).toBe(expected);
   });
 
   it('clips a long single text child from the bottom', () => {
@@ -445,6 +447,6 @@ Line 3 direct child`);
       '... last 21 lines hidden ...',
     ].join('\n');
 
-    expect(lastFrame()).equals(expected);
+    expect(lastFrame()).toBe(expected);
   });
 });

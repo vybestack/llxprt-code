@@ -10,10 +10,24 @@ import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../ui/commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
+// Ephemeral settings are written through the runtime API rather than Config.
+// The real accessor resolves the CLI runtime scope, which this test does not
+// establish, so the bridge is supplied here and asserted on directly.
+const setEphemeralSetting = vi.fn();
+vi.mock('../ui/contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => ({
+    setEphemeralSetting,
+    getEphemeralSettings: () => ({}),
+    setActiveModelParam: vi.fn(),
+    clearActiveModelParam: vi.fn(),
+  }),
+}));
+
 describe('retry settings integration tests', () => {
   let context: CommandContext;
 
   beforeEach(() => {
+    setEphemeralSetting.mockClear();
     const mockConfig = {
       setEphemeralSetting: vi.fn(),
     } as unknown as Config;
@@ -28,10 +42,7 @@ describe('retry settings integration tests', () => {
   it('should set retries as ephemeral setting', async () => {
     const result = await setCommand.action!(context, 'retries 3');
 
-    expect(context.services.config?.setEphemeralSetting).toHaveBeenCalledWith(
-      'retries',
-      3,
-    );
+    expect(setEphemeralSetting).toHaveBeenCalledWith('retries', 3);
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -44,10 +55,7 @@ describe('retry settings integration tests', () => {
   it('should set retrywait as ephemeral setting', async () => {
     const result = await setCommand.action!(context, 'retrywait 10000');
 
-    expect(context.services.config?.setEphemeralSetting).toHaveBeenCalledWith(
-      'retrywait',
-      10000,
-    );
+    expect(setEphemeralSetting).toHaveBeenCalledWith('retrywait', 10000);
 
     expect(result).toStrictEqual({
       type: 'message',

@@ -89,12 +89,22 @@ describe('useAtCompletion', () => {
         expect(result.current.suggestions.length).toBeGreaterThan(0);
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
-        'src/',
-        'src/components/',
-        'src/index.js',
-        'src/components/Button.tsx',
-      ]);
+      const values = result.current.suggestions.map((s) => s.value);
+      // Exactly these entries match the pattern.
+      expect([...values].sort()).toStrictEqual(
+        [
+          'src/',
+          'src/components/',
+          'src/index.js',
+          'src/components/Button.tsx',
+        ].sort(),
+      );
+      // Ranking that is actually specified: the directory itself first, and the
+      // nested file last. `src/components/` and `src/index.js` are siblings
+      // with equal scores, so their relative order comes from crawl order and
+      // is not part of the contract.
+      expect(values[0]).toBe('src/');
+      expect(values[values.length - 1]).toBe('src/components/Button.tsx');
     });
 
     it('should append a trailing slash to directory paths in suggestions', async () => {

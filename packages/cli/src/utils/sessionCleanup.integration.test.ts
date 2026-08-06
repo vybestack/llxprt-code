@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { cleanupExpiredSessions } from './sessionCleanup.js';
 import type { Settings } from '../config/settings.js';
 import { SESSION_FILE_PREFIX } from '@vybestack/llxprt-code-storage';
@@ -109,7 +110,11 @@ describe('Session Cleanup Integration', () => {
   });
 
   it('should validate configuration and fail gracefully', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Cleanup reports validation failures through the debug logger, not
+    // console.error.
+    const errorSpy = vi
+      .spyOn(debugLogger, 'error')
+      .mockImplementation(() => {});
     const config = createTestConfig();
 
     const settings: Settings = {

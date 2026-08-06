@@ -551,7 +551,9 @@ describe('Provider-backed content generator path reachable through runtime', () 
       model: 'test-model',
     });
 
-    // Wire the provider manager to config
+    // Wire the provider manager to config. initializeContentGeneratorConfig
+    // now requires the agent factories, which initializeTestConfig attaches.
+    await initializeTestConfig(config);
     config.setProviderManager(manager);
     await config.initializeContentGeneratorConfig();
 
@@ -605,6 +607,8 @@ describe('Provider-backed content generator path reachable through runtime', () 
       model: 'test-model',
     });
 
+    // initializeContentGeneratorConfig needs the agent factories attached.
+    await initializeTestConfig(config);
     config.setProviderManager(manager);
     await config.initializeContentGeneratorConfig();
 

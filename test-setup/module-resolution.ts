@@ -33,13 +33,28 @@ const callerPath = (): string => {
   throw new Error('Unable to determine the caller for a relative module path');
 };
 
+/**
+ * TypeScript sources are imported with a `.js` suffix throughout this
+ * repository, so a `.js` specifier may map to either a `.ts` or a `.tsx`
+ * source file (React components use `.tsx`).
+ */
+const TYPESCRIPT_SOURCE_EXTENSIONS = ['.ts', '.tsx'] as const;
+
 const resolveFromCaller = (specifier: string, caller: string): string => {
   const directory = dirname(caller);
   try {
     return Bun.resolveSync(specifier, directory);
   } catch (error: unknown) {
     if (!specifier.endsWith('.js')) throw error;
-    return Bun.resolveSync(`${specifier.slice(0, -3)}.ts`, directory);
+    const base = specifier.slice(0, -3);
+    for (const extension of TYPESCRIPT_SOURCE_EXTENSIONS) {
+      try {
+        return Bun.resolveSync(`${base}${extension}`, directory);
+      } catch {
+        // Try the next candidate extension.
+      }
+    }
+    throw error;
   }
 };
 

@@ -356,6 +356,28 @@ describe('Configuration Integration Tests', () => {
       }
     });
 
+    /**
+     * yargs terminates the process on a validation failure. Under Bun the test file
+     * *is* the process, so the run would die instead of failing the assertion.
+     * Converting the exit into a throw lets the rejection be asserted without
+     * changing how the CLI behaves for real users.
+     */
+    async function parseArgumentsWithExitAsThrow(): Promise<unknown> {
+      const realExit = process.exit;
+      const realStdoutWrite = process.stdout.write;
+      process.exit = ((code?: number) => {
+        throw new Error(`process.exit(${code ?? 0}) during argument parsing`);
+      }) as typeof process.exit;
+      // yargs prints the full help text on failure; keep it out of the report.
+      process.stdout.write = (() => true) as typeof process.stdout.write;
+      try {
+        return await parseArguments({} as Settings);
+      } finally {
+        process.exit = realExit;
+        process.stdout.write = realStdoutWrite;
+      }
+    }
+
     it('should reject invalid approval mode values during argument parsing', async () => {
       const originalArgv = process.argv;
 
@@ -363,7 +385,7 @@ describe('Configuration Integration Tests', () => {
         process.argv = ['node', 'script.js', '--approval-mode', 'invalid_mode'];
 
         // Should throw during argument parsing due to yargs validation
-        await expect(parseArguments({} as Settings)).rejects.toThrow(Error);
+        await expect(parseArgumentsWithExitAsThrow()).rejects.toThrow(Error);
       } finally {
         process.argv = originalArgv;
       }
@@ -382,7 +404,7 @@ describe('Configuration Integration Tests', () => {
         ];
 
         // Should throw during argument parsing due to conflict validation
-        await expect(parseArguments({} as Settings)).rejects.toThrow(Error);
+        await expect(parseArgumentsWithExitAsThrow()).rejects.toThrow(Error);
       } finally {
         process.argv = originalArgv;
       }

@@ -82,8 +82,10 @@ vi.mock('./utils/bootstrap.js', async (importOriginal) => {
     shouldRelaunchForMemory: vi.fn(() => []),
     isDebugMode: vi.fn(() => false),
     computeSandboxMemoryArgs: vi.fn(
-      (...args: Parameters<typeof actual.computeSandboxMemoryArgs>) =>
-        actual.computeSandboxMemoryArgs(...args),
+      (..._args: Parameters<typeof actual.computeSandboxMemoryArgs>) =>
+        ['-m', '4096'] as unknown as ReturnType<
+          typeof actual.computeSandboxMemoryArgs
+        >,
     ),
   };
 });

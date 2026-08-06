@@ -101,6 +101,9 @@ describe('Runtime model parameter isolation', () => {
       providerManager,
       {
         runtimeMessageBus,
+        // applyProfileSnapshot schedules proactive OAuth renewals, so the stub
+        // has to expose the hook it calls.
+        configureProactiveRenewalsForProfile: async () => {},
       } as unknown as OAuthManager,
       {
         messageBus: runtimeMessageBus,
@@ -135,7 +138,12 @@ describe('Runtime model parameter isolation', () => {
 
     await switchActiveProvider('beta');
     expect(getActiveModelParams()).toStrictEqual({});
-    expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.8);
+    // Switching providers clears the previous provider's settings by design
+    // (clearPreviousProviderSettings, PLAN-20260603-ISSUE1584.P14), so alpha no
+    // longer retains its temperature.
+    expect(
+      settingsService.getProviderSettings('alpha').temperature,
+    ).toBeUndefined();
 
     setActiveModelParam('temperature', 0.35);
     expect(getActiveModelParams()).toStrictEqual({ temperature: 0.35 });
@@ -145,7 +153,10 @@ describe('Runtime model parameter isolation', () => {
     expect(
       settingsService.getProviderSettings('alpha').temperature,
     ).toBeUndefined();
-    expect(settingsService.getProviderSettings('beta').temperature).toBe(0.35);
+    // beta's settings are cleared in turn when switching away from it.
+    expect(
+      settingsService.getProviderSettings('beta').temperature,
+    ).toBeUndefined();
   });
 
   it('builds runtime profile snapshots with provider-scoped params', () => {

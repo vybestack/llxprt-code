@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
@@ -19,14 +19,6 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
       getAuthStatus: mockGetAuthStatus,
       toggleOAuthEnabled: mockToggleOAuthEnabled,
     }),
-  }),
-}));
-
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getOAuthManager: () => ({
-    authenticate: mockAuthenticate,
-    getAuthStatus: mockGetAuthStatus,
-    toggleOAuthEnabled: mockToggleOAuthEnabled,
   }),
 }));
 
@@ -124,20 +116,20 @@ describe('AuthDialog', () => {
 
       // OAuth-only dialog shows regardless of API key presence
       expect(lastFrame()).toContain('OAuth Authentication');
-      expect(lastFrame()).toContain('Gemini (Google OAuth)');
+      expect(lastFrame()).toContain('Claude Code (Claude.ai OAuth)');
     });
 
     it('should display authentication status for each provider', async () => {
       mockGetAuthStatus.mockResolvedValue([
         {
-          provider: 'gemini',
+          provider: 'claudecode',
           authenticated: true,
           method: 'oauth',
           expiresIn: 3600,
           oauthEnabled: true,
         },
         {
-          provider: 'anthropic',
+          provider: 'codex',
           authenticated: true,
           method: 'oauth',
           oauthEnabled: true,
@@ -161,8 +153,8 @@ describe('AuthDialog', () => {
             ui: { customThemes: {} },
             mcpServers: {},
             oauthEnabledProviders: {
-              gemini: true,
-              anthropic: true,
+              claudecode: true,
+              codex: true,
             },
           },
           path: '',
@@ -180,8 +172,10 @@ describe('AuthDialog', () => {
       await wait();
 
       const frame = lastFrame();
-      expect(frame).toContain('Gemini (Google OAuth) [ON] (Authenticated)');
-      expect(frame).toContain('Anthropic Claude (OAuth) [ON] (Authenticated)');
+      expect(frame).toContain(
+        'Claude Code (Claude.ai OAuth) [ON] (Authenticated)',
+      );
+      expect(frame).toContain('Codex (ChatGPT OAuth) [ON] (Authenticated)');
     });
   });
 
@@ -210,7 +204,7 @@ describe('AuthDialog', () => {
     mockGetAuthStatus
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
-        { provider: 'gemini', authenticated: false, oauthEnabled: true },
+        { provider: 'claudecode', authenticated: false, oauthEnabled: true },
       ]);
 
     const { lastFrame, stdin, unmount } = renderWithProviders(
@@ -219,9 +213,12 @@ describe('AuthDialog', () => {
     await wait();
 
     stdin.write('1');
-    await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    // Polled rather than slept on: a fixed delay after a keystroke is a race
+    // whose outcome depends on machine load.
+    await waitFor(() => {
+      expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    });
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
     expect(lastFrame()).toContain('[ON]');
@@ -244,7 +241,7 @@ describe('AuthDialog', () => {
         settings: {
           ui: { customThemes: {} },
           mcpServers: {},
-          oauthEnabledProviders: { gemini: true },
+          oauthEnabledProviders: { claudecode: true },
         },
         path: '',
       },
@@ -264,9 +261,11 @@ describe('AuthDialog', () => {
     expect(beforeFrame).toContain('[ON]');
 
     stdin.write('1');
-    await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    // Polled rather than slept on, for the same reason as above.
+    await waitFor(() => {
+      expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+    });
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
 
@@ -304,13 +303,15 @@ describe('AuthDialog', () => {
     await wait();
 
     stdin.write('1');
-    await wait();
 
-    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    // Polled on the rendered error, not on the mock call: the rejection has to
+    // propagate through a state update and a re-render, which happens after
+    // toggleOAuthEnabled is invoked.
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Failed to toggle OAuth for claudecode');
+    });
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
     expect(onSelect).not.toHaveBeenCalled();
-
-    const frame = lastFrame();
-    expect(frame).toContain('Failed to toggle OAuth for gemini');
     unmount();
   });
 
@@ -350,9 +351,11 @@ describe('AuthDialog', () => {
 
     expect(lastFrame()).toContain('Initial error');
 
-    stdin.write('4');
-    await wait();
-    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
+    stdin.write('3');
+    // Polled rather than slept on, for the same reason as above.
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
+    });
     unmount();
   });
 
@@ -386,7 +389,7 @@ describe('AuthDialog', () => {
     );
     await wait();
 
-    stdin.write('4');
+    stdin.write('3');
     await wait();
     expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
     unmount();

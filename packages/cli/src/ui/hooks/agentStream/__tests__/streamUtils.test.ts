@@ -327,12 +327,9 @@ describe('deduplicateToolCallRequests', () => {
 
 // ─── buildSplitContent ────────────────────────────────────────────────────────
 
+// findLastSafeSplitPoint is mocked at the top of this file to return
+// text.length, so no split ever occurs in these cases.
 describe('buildSplitContent', () => {
-  beforeEach(() => {
-    // findLastSafeSplitPoint is mocked to return text.length (no split)
-    vi.resetModules();
-  });
-
   it('returns fullTextItem when no split needed (splitPoint equals length)', () => {
     const result = buildSplitContent(
       'hello world',

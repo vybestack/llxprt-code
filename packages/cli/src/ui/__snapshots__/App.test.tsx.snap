@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`App UI > should render the initial UI correctly 1`] = `
+exports[`App UI should render the initial UI correctly 1`] = `
 "
  The first rule of Fight Club is: you do not talk about Fight Club. (esc to cancel, 0s)
 

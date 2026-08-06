@@ -534,6 +534,16 @@ export function parseInlineProfile(
   if (isProfileValidationResult(obj)) {
     return obj;
   }
+  // A load-balancer profile carries no provider or model of its own — both are
+  // resolved at runtime from the profiles it references — so it must be
+  // validated on its own terms rather than against the standard-profile rules.
+  if (obj['type'] === LOADBALANCER_PROFILE_TYPE) {
+    return (
+      validateProfileDepth(parsed) ??
+      validateDangerousProfileFields(parsed) ??
+      validateInlineLoadBalancerProfile(obj)
+    );
+  }
   const providerName = validateRequiredProfileString(obj, 'provider');
   if (typeof providerName !== 'string') {
     return providerName;
@@ -550,6 +560,41 @@ export function parseInlineProfile(
     return validationError;
   }
   return { providerName, modelName, warnings: [] };
+}
+
+/** Profile discriminator for a load-balancer profile. */
+const LOADBALANCER_PROFILE_TYPE = 'loadbalancer';
+
+/**
+ * Validates an inline load-balancer profile against the same invariants the
+ * settings package enforces for the file-based form: version 1, and a non-empty
+ * list of non-empty profile names.
+ */
+function validateInlineLoadBalancerProfile(
+  obj: Record<string, unknown>,
+): ProfileApplicationResult {
+  if (obj['version'] !== 1) {
+    return {
+      providerName: null,
+      modelName: null,
+      warnings: [],
+      error: 'unsupported profile version',
+    };
+  }
+  const profiles = obj['profiles'];
+  if (
+    !Array.isArray(profiles) ||
+    profiles.length === 0 ||
+    !profiles.every((profile) => typeof profile === 'string' && profile !== '')
+  ) {
+    return {
+      providerName: null,
+      modelName: null,
+      warnings: [],
+      error: 'LoadBalancer profile must reference at least one profile',
+    };
+  }
+  return { providerName: null, modelName: null, warnings: [] };
 }
 
 /**

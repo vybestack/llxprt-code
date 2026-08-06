@@ -16,6 +16,7 @@ import {
   guardUnconfiguredProvider,
   UNCONFIGURED_PROVIDER_MESSAGE,
 } from './unconfiguredProviderGuard.js';
+import { buildImageModeFlags } from './config/imageModeDispatch.js';
 
 function makeConfig(hasActive: boolean, interactive: boolean): Config {
   return {
@@ -77,6 +78,8 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     redirectConsoleForAcp: () => {},
     rejectPromptInteractiveWithPipedStdin: async () => {},
     throwIfSettingsErrors: () => {},
+    validateDnsResolutionOrder: () => {},
+    registerDynamicToolSettings: () => {},
     ParsedCliArgs: {} as never,
   }));
   vi.doMock('./utils/cleanup.js', () => ({
@@ -183,25 +186,24 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.resetModules();
   });
 
   async function runMainWithConfig(config: Config): Promise<void> {
-    vi.resetModules();
-    vi.doMock('./unconfiguredProviderGuard.js', async (importOriginal) => {
-      const actual =
-        await importOriginal<typeof import('./unconfiguredProviderGuard.js')>();
-      return {
-        ...actual,
-        guardUnconfiguredProvider: async (
-          cfg: Config,
-          runCleanup: () => Promise<void>,
-        ) => {
-          callOrder.push('guard');
-          return actual.guardUnconfiguredProvider(cfg, runCleanup);
-        },
-      };
-    });
+    // Capture the real guard function BEFORE mocking. Bun's mock.module
+    // patches the module namespace in-place, so any reference obtained after
+    // mocking would point to the mock and recurse. We snapshot the function
+    // reference itself (not the namespace) before registration.
+    const realGuard = guardUnconfiguredProvider;
+    vi.doMock('./unconfiguredProviderGuard.js', () => ({
+      guardUnconfiguredProvider: async (
+        cfg: Config,
+        runCleanup: () => Promise<void>,
+      ) => {
+        callOrder.push('guard');
+        return realGuard(cfg, runCleanup);
+      },
+      UNCONFIGURED_PROVIDER_MESSAGE,
+    }));
     setupCommonMainMocks(callOrder, config);
     const { main } = await import('./cli.js');
     await main();
@@ -257,11 +259,9 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.resetModules();
   });
 
   async function runMainConfigured(config: Config): Promise<void> {
-    vi.resetModules();
     vi.doMock('@vybestack/llxprt-code-providers/auth.js', () => ({
       createTokenStore: () => {
         callOrder.push('createTokenStore');
@@ -332,7 +332,6 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.resetModules();
     // Restore a TTY-like stdin so other suites are unaffected.
     Object.defineProperty(process.stdin, 'isTTY', {
       value: true,
@@ -342,7 +341,6 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
   });
 
   async function runMainImageMode(config: Config): Promise<void> {
-    vi.resetModules();
     // Simulate non-TTY stdin (piped / /dev/null) so the stdin guard WOULD
     // fire if not bypassed.
     Object.defineProperty(process.stdin, 'isTTY', {
@@ -414,6 +412,8 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       redirectConsoleForAcp: () => {},
       rejectPromptInteractiveWithPipedStdin: async () => {},
       throwIfSettingsErrors: () => {},
+      validateDnsResolutionOrder: () => {},
+      registerDynamicToolSettings: () => {},
       ParsedCliArgs: {} as never,
     }));
     vi.doMock('./utils/cleanup.js', () => ({
@@ -451,10 +451,8 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     // Track whether image-mode dispatch is reached. The REAL
     // buildImageModeFlags is preserved so the stdin-guard bypass decision is
     // exercised against the real flag-detection logic, not a stub.
-    vi.doMock('./config/imageModeDispatch.js', async (importOriginal) => ({
-      ...(await importOriginal<
-        typeof import('./config/imageModeDispatch.js')
-      >()),
+    vi.doMock('./config/imageModeDispatch.js', () => ({
+      buildImageModeFlags,
       runDirectImageModeAndExit: async () => {
         callOrder.push('image-dispatch');
         return 0;

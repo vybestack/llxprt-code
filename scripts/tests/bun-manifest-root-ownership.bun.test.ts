@@ -45,6 +45,10 @@ const COVERED_BY_BESPOKE_RUNNER: Readonly<Record<string, string>> = {
   // packages/core/run-bun-tests.ts scans src/ and test/, which includes the
   // single file the manifest lists for `core`.
   core: 'packages/core/run-bun-tests.ts',
+  // packages/cli/run-bun-tests.ts discovers every test file in the workspace
+  // (issue #2843), which subsumes the files the manifest used to list for
+  // `cli`.
+  cli: 'packages/cli/run-bun-tests.ts',
 };
 
 /**

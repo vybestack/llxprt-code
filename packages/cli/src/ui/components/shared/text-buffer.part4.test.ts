@@ -87,7 +87,7 @@ const createTestState = (
 
 describe('Input Sanitization', () => {
   const createInput = (sequence: string) => ({
-    name: '',
+    name: 'paste',
     ctrl: false,
     meta: false,
     shift: false,
@@ -144,7 +144,7 @@ describe('Input Sanitization', () => {
 
     act(() =>
       result.current.handleInput({
-        name: '',
+        name: 'paste',
         ctrl: false,
         meta: false,
         shift: false,
@@ -177,7 +177,7 @@ describe('Input Sanitization', () => {
 
     act(() =>
       result.current.handleInput({
-        name: '',
+        name: 'paste',
         ctrl: false,
         meta: false,
         shift: false,
@@ -200,7 +200,7 @@ describe('Input Sanitization', () => {
     const emojis = '🐍🐳🦀🦄';
     act(() =>
       result.current.handleInput({
-        name: '',
+        name: 'paste',
         ctrl: false,
         meta: false,
         shift: false,

@@ -8,11 +8,15 @@ import { vi } from 'vitest';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+// Imported from the MCP package rather than through the core re-export:
+// diagnosticsTokens.ts imports it from '@vybestack/llxprt-code-mcp', and under
+// Bun the two specifiers can resolve to different module instances, so the
+// injected token store would otherwise not be the one the command reads.
 import {
   MCPOAuthTokenStorage,
-  type MCPOAuthCredentials,
-} from '@vybestack/llxprt-code-core';
-import type { TokenStorage } from '@vybestack/llxprt-code-mcp';
+  type TokenStorage,
+} from '@vybestack/llxprt-code-mcp';
+import type { MCPOAuthCredentials } from '@vybestack/llxprt-code-core';
 import type { OAuthToken } from '@vybestack/llxprt-code-providers/auth.js';
 
 export function createTestToken(expiryInSeconds: number): OAuthToken {

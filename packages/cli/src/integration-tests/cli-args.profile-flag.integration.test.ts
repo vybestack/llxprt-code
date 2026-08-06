@@ -290,7 +290,9 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
 
       const fullOutput = result.stdout + result.stderr;
       expect(result.exitCode).not.toBe(-1);
-      expectGeminiProviderAttempt(fullOutput);
+      // A missing profile named by LLXPRT_PROFILE no longer silently falls back
+      // to a default provider; the CLI now asks for one explicitly.
+      expect(fullOutput).toContain('No provider is configured');
     });
   });
 

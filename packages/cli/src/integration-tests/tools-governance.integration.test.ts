@@ -12,6 +12,7 @@ import {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -28,7 +29,10 @@ describe('tools governance integration', () => {
     originalHome = process.env.HOME;
     tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'tools-governance-'));
     process.env.HOME = tempHome;
-    profilesDir = path.join(tempHome, '.llxprt', 'profiles');
+    // Profiles live under the isolated storage root, not $HOME/.llxprt: the
+    // test preload points LLXPRT_CONFIG_HOME at a per-process directory and
+    // ProfileManager resolves Storage.getGlobalConfigDir().
+    profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
     await fs.mkdir(profilesDir, { recursive: true });
   });
 
@@ -77,25 +81,29 @@ describe('tools governance integration', () => {
     const exported = await settings.exportForProfile();
     expect(exported.tools.disabled).toStrictEqual(['code-editor']);
 
-    const mockToolRegistry = {
-      getAllTools: () => [
-        {
-          name: 'file-reader',
-          displayName: 'File Reader',
-          description: 'Reads files',
-          schema: {},
-        },
-        {
-          name: 'code-editor',
-          displayName: 'Code Editor',
-          description: 'Edits files',
-          schema: {},
-        },
-      ],
-    };
+    const registeredTools = [
+      {
+        name: 'file-reader',
+        displayName: 'File Reader',
+        description: 'Reads files',
+        schema: {},
+      },
+      {
+        name: 'code-editor',
+        displayName: 'Code Editor',
+        description: 'Edits files',
+        schema: {},
+      },
+    ];
+
+    // The command reads the tool list from the agent now, not from the config's
+    // tool registry.
+    const agentStub = {
+      tools: { list: () => registeredTools },
+    } as unknown as NonNullable<typeof context.services.agent>;
 
     const configStub = {
-      getToolRegistry: () => mockToolRegistry,
+      getToolRegistry: () => ({ getAllTools: () => registeredTools }),
       getSettingsService: () => settings,
       getEphemeralSetting: (key: string) => settings.get(key),
       getEphemeralSettings: () => settings.getAllGlobalSettings(),
@@ -105,7 +113,7 @@ describe('tools governance integration', () => {
 
     const uiAddItem = vi.fn();
     const context = createMockCommandContext({
-      services: { config: configStub },
+      services: { config: configStub, agent: agentStub },
       ui: { addItem: uiAddItem },
     });
 

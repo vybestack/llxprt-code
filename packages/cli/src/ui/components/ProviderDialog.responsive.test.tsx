@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
+import { renderWithProviders as render } from '../../test-utils/render.js';
 import {
   describe,
   it,

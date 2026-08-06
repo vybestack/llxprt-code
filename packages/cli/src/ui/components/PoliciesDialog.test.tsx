@@ -6,6 +6,7 @@
 
 /** @vitest-environment jsdom */
 
+import { act } from 'react';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -89,25 +90,30 @@ describe('PoliciesDialog', () => {
     );
   });
 
-  function renderDialog(config: ReturnType<typeof createMockConfig>) {
-    return renderWithProviders(
+  async function renderDialog(config: ReturnType<typeof createMockConfig>) {
+    const result = renderWithProviders(
       <PoliciesDialog
         config={config}
         addItem={mockAddItem as never}
         onExit={vi.fn()}
       />,
     );
+    // The dialog loads policies asynchronously; settling that here keeps the
+    // resulting state update inside act() instead of letting it land after
+    // the test has returned.
+    await act(async () => {});
+    return result;
   }
 
   it('renders the Policy Manager title', async () => {
-    const { lastFrame } = renderDialog(createMockConfig());
+    const { lastFrame } = await renderDialog(createMockConfig());
     await waitFor(() => {
       expect(lastFrame()).toContain('Policy Manager');
     });
   });
 
   it('shows a message when no user overrides exist', async () => {
-    const { lastFrame } = renderDialog(createMockConfig());
+    const { lastFrame } = await renderDialog(createMockConfig());
     await waitFor(() => {
       expect(lastFrame()).toContain('No user overrides yet');
     });
@@ -126,7 +132,7 @@ describe('PoliciesDialog', () => {
         priority: 50,
       },
     ]);
-    const { lastFrame } = renderDialog(createMockConfig());
+    const { lastFrame } = await renderDialog(createMockConfig());
     await waitFor(() => {
       const frame = lastFrame();
       expect(frame).toContain('edit');
@@ -151,7 +157,9 @@ describe('PoliciesDialog', () => {
         source: 'Default: defaults.toml',
       },
     ];
-    const { lastFrame, stdin } = renderDialog(createMockConfig(engineRules));
+    const { lastFrame, stdin } = await renderDialog(
+      createMockConfig(engineRules),
+    );
 
     await waitFor(() => {
       expect(lastFrame()).toContain('Add new rule');
@@ -185,7 +193,7 @@ describe('PoliciesDialog', () => {
   });
 
   it('warns that default and system tiers are read-only', async () => {
-    const { lastFrame } = renderDialog(createMockConfig());
+    const { lastFrame } = await renderDialog(createMockConfig());
     await waitFor(() => {
       const frame = lastFrame();
       expect(frame).toContain('read-only');
@@ -193,42 +201,49 @@ describe('PoliciesDialog', () => {
   });
 
   it('navigates the Add Rule form and saves with defaults', async () => {
-    const { lastFrame, stdin } = renderDialog(createMockConfig());
+    const { lastFrame, stdin } = await renderDialog(createMockConfig());
 
     await waitFor(() => {
       expect(lastFrame()).toContain('Add new rule');
     });
 
     // [0] is already "Add new rule", press Enter
-    stdin.write('\r');
-
+    await act(async () => {
+      stdin.write('\r');
+    });
     // Step 0: tool name — type a single char then Enter
     // (ink-testing-library batches multi-char writes; full keyboard typing
     // is validated via the tmux integration harness for UI changes)
     await waitFor(() => {
       expect(lastFrame()).toContain('Tool name');
     });
-    stdin.write('g');
-    stdin.write('\r');
-
+    await act(async () => {
+      stdin.write('g');
+    });
+    await act(async () => {
+      stdin.write('\r');
+    });
     // Step 1: decision — press Enter for default (allow)
     await waitFor(() => {
       expect(lastFrame()).toContain('Decision');
     });
-    stdin.write('\r');
-
+    await act(async () => {
+      stdin.write('\r');
+    });
     // Step 2: args pattern — leave empty, press Enter
     await waitFor(() => {
       expect(lastFrame()).toContain('Args regex');
     });
-    stdin.write('\r');
-
+    await act(async () => {
+      stdin.write('\r');
+    });
     // Step 3: priority — press Enter for default (100)
     await waitFor(() => {
       expect(lastFrame()).toContain('Priority');
     });
-    stdin.write('\r');
-
+    await act(async () => {
+      stdin.write('\r');
+    });
     await waitFor(() => {
       expect(mockAddEditableRule).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -241,7 +256,7 @@ describe('PoliciesDialog', () => {
   });
 
   it('records a history item after adding a rule', async () => {
-    const { lastFrame, stdin } = renderDialog(createMockConfig());
+    const { lastFrame, stdin } = await renderDialog(createMockConfig());
 
     await waitFor(() => {
       expect(lastFrame()).toContain('Add new rule');
@@ -249,15 +264,24 @@ describe('PoliciesDialog', () => {
 
     stdin.write('\r'); // Add new rule
     await waitFor(() => expect(lastFrame()).toContain('Tool name'));
-    stdin.write('g');
-    stdin.write('\r');
+    await act(async () => {
+      stdin.write('g');
+    });
+    await act(async () => {
+      stdin.write('\r');
+    });
     await waitFor(() => expect(lastFrame()).toContain('Decision'));
-    stdin.write('\r');
+    await act(async () => {
+      stdin.write('\r');
+    });
     await waitFor(() => expect(lastFrame()).toContain('Args regex'));
-    stdin.write('\r');
+    await act(async () => {
+      stdin.write('\r');
+    });
     await waitFor(() => expect(lastFrame()).toContain('Priority'));
-    stdin.write('\r');
-
+    await act(async () => {
+      stdin.write('\r');
+    });
     await waitFor(() => {
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({ type: MessageType.INFO }),

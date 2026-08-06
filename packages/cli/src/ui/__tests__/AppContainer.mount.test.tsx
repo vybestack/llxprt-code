@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock heavy dependencies first before importing component
-vi.mock('../../hooks/agentStream/index.js', () => ({
+vi.mock('../hooks/agentStream/index.js', () => ({
   useAgentStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('../../hooks/agentStream/index.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useConsoleMessages.js', () => ({
+vi.mock('../hooks/useConsoleMessages.js', () => ({
   useConsoleMessages: vi.fn(() => ({
     consoleMessages: [],
     handleNewMessage: vi.fn(),
@@ -34,7 +34,7 @@ vi.mock('../../hooks/useConsoleMessages.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useHistoryManager.js', () => ({
+vi.mock('../hooks/useHistoryManager.js', () => ({
   useHistory: vi.fn(() => ({
     history: [],
     addItem: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('../../hooks/useHistoryManager.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useAuthCommand.js', () => ({
+vi.mock('../hooks/useAuthCommand.js', () => ({
   useAuthCommand: vi.fn(() => ({
     isAuthDialogOpen: false,
     openAuthDialog: vi.fn(),
@@ -51,28 +51,28 @@ vi.mock('../../hooks/useAuthCommand.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useFolderTrust.js', () => ({
+vi.mock('../hooks/useFolderTrust.js', () => ({
   useFolderTrust: vi.fn(() => ({
     isFolderTrustDialogOpen: false,
     handleFolderTrustSelect: vi.fn(),
   })),
 }));
 
-vi.mock('../../hooks/useFocus.js', () => ({
+vi.mock('../hooks/useFocus.js', () => ({
   useFocus: vi.fn(() => true),
 }));
 
-vi.mock('../../hooks/useIdeTrustListener.js', () => ({
+vi.mock('../hooks/useIdeTrustListener.js', () => ({
   useIdeTrustListener: vi.fn(() => ({ isIdeTrusted: undefined })),
 }));
 
-vi.mock('../../hooks/useLogger.js', () => ({
+vi.mock('../hooks/useLogger.js', () => ({
   useLogger: vi.fn(() => ({
     getPreviousUserMessages: vi.fn().mockResolvedValue([]),
   })),
 }));
 
-vi.mock('../../hooks/useInputHistoryStore.js', () => ({
+vi.mock('../hooks/useInputHistoryStore.js', () => ({
   useInputHistoryStore: vi.fn(() => ({
     inputHistory: [],
     addInput: vi.fn(),
@@ -80,7 +80,7 @@ vi.mock('../../hooks/useInputHistoryStore.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useThemeCommand.js', () => ({
+vi.mock('../hooks/useThemeCommand.js', () => ({
   useThemeCommand: vi.fn(() => ({
     isThemeDialogOpen: false,
     openThemeDialog: vi.fn(),
@@ -89,7 +89,7 @@ vi.mock('../../hooks/useThemeCommand.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useSettingsCommand.js', () => ({
+vi.mock('../hooks/useSettingsCommand.js', () => ({
   useSettingsCommand: vi.fn(() => ({
     isSettingsDialogOpen: false,
     openSettingsDialog: vi.fn(),
@@ -97,7 +97,7 @@ vi.mock('../../hooks/useSettingsCommand.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useEditorSettings.js', () => ({
+vi.mock('../hooks/useEditorSettings.js', () => ({
   useEditorSettings: vi.fn(() => ({
     isEditorDialogOpen: false,
     openEditorDialog: vi.fn(),
@@ -106,7 +106,7 @@ vi.mock('../../hooks/useEditorSettings.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useProviderDialog.js', () => ({
+vi.mock('../hooks/useProviderDialog.js', () => ({
   useProviderDialog: vi.fn(() => ({
     showDialog: false,
     openDialog: vi.fn(),
@@ -117,7 +117,7 @@ vi.mock('../../hooks/useProviderDialog.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useLoadProfileDialog.js', () => ({
+vi.mock('../hooks/useLoadProfileDialog.js', () => ({
   useLoadProfileDialog: vi.fn(() => ({
     showDialog: false,
     openDialog: vi.fn(),
@@ -127,7 +127,7 @@ vi.mock('../../hooks/useLoadProfileDialog.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useCreateProfileDialog.js', () => ({
+vi.mock('../hooks/useCreateProfileDialog.js', () => ({
   useCreateProfileDialog: vi.fn(() => ({
     showDialog: false,
     openDialog: vi.fn(),
@@ -136,7 +136,7 @@ vi.mock('../../hooks/useCreateProfileDialog.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useProfileManagement.js', () => ({
+vi.mock('../hooks/useProfileManagement.js', () => ({
   useProfileManagement: vi.fn(() => ({
     showListDialog: false,
     showDetailDialog: false,
@@ -161,7 +161,7 @@ vi.mock('../../hooks/useProfileManagement.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useToolsDialog.js', () => ({
+vi.mock('../hooks/useToolsDialog.js', () => ({
   useToolsDialog: vi.fn(() => ({
     showDialog: false,
     openDialog: vi.fn(),
@@ -173,7 +173,7 @@ vi.mock('../../hooks/useToolsDialog.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useWelcomeOnboarding.js', () => ({
+vi.mock('../hooks/useWelcomeOnboarding.js', () => ({
   useWelcomeOnboarding: vi.fn(() => ({
     showWelcome: false,
     state: { step: 'provider' },
@@ -187,7 +187,7 @@ vi.mock('../../hooks/useWelcomeOnboarding.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useExtensionUpdates.js', () => ({
+vi.mock('../hooks/useExtensionUpdates.js', () => ({
   useExtensionUpdates: vi.fn(() => ({
     extensionsUpdateState: new Map(),
     dispatchExtensionStateUpdate: vi.fn(),
@@ -196,7 +196,7 @@ vi.mock('../../hooks/useExtensionUpdates.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useWorkspaceMigration.js', () => ({
+vi.mock('../hooks/useWorkspaceMigration.js', () => ({
   useWorkspaceMigration: vi.fn(() => ({
     showWorkspaceMigrationDialog: false,
     workspaceLlxprtExtensions: [],
@@ -205,54 +205,54 @@ vi.mock('../../hooks/useWorkspaceMigration.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useHookDisplayState.js', () => ({
+vi.mock('../hooks/useHookDisplayState.js', () => ({
   useHookDisplayState: vi.fn(() => []),
 }));
 
-vi.mock('../../hooks/useMemoryMonitor.js', () => ({
+vi.mock('../hooks/useMemoryMonitor.js', () => ({
   useMemoryMonitor: vi.fn(),
 }));
 
-vi.mock('../../hooks/useTodoPausePreserver.js', () => ({
+vi.mock('../hooks/useTodoPausePreserver.js', () => ({
   shouldClearTodos: vi.fn(() => false),
 }));
 
-vi.mock('../../hooks/useAutoAcceptIndicator.js', () => ({
+vi.mock('../hooks/useAutoAcceptIndicator.js', () => ({
   useAutoAcceptIndicator: vi.fn(() => false),
 }));
 
-vi.mock('../../hooks/useExtensionAutoUpdate.js', () => ({
+vi.mock('../hooks/useExtensionAutoUpdate.js', () => ({
   useExtensionAutoUpdate: vi.fn(),
 }));
 
-vi.mock('../../hooks/useStaticHistoryRefresh.js', () => ({
+vi.mock('../hooks/useStaticHistoryRefresh.js', () => ({
   useStaticHistoryRefresh: vi.fn(),
 }));
 
-vi.mock('../../hooks/useBracketedPaste.js', () => ({
+vi.mock('../hooks/useBracketedPaste.js', () => ({
   useBracketedPaste: vi.fn(),
 }));
 
-vi.mock('../../hooks/useResponsive.js', () => ({
+vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: vi.fn(() => ({ isNarrow: false })),
 }));
 
-vi.mock('../../hooks/useTerminalSize.js', () => ({
+vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(() => ({ rows: 24, columns: 120 })),
 }));
 
-vi.mock('../../hooks/useGitBranchName.js', () => ({
+vi.mock('../hooks/useGitBranchName.js', () => ({
   useGitBranchName: vi.fn(() => null),
 }));
 
-vi.mock('../../hooks/useLoadingIndicator.js', () => ({
+vi.mock('../hooks/useLoadingIndicator.js', () => ({
   useLoadingIndicator: vi.fn(() => ({
     elapsedTime: 0,
     currentLoadingPhrase: 'Thinking...',
   })),
 }));
 
-vi.mock('../../hooks/slashCommandProcessor.js', () => ({
+vi.mock('../hooks/slashCommandProcessor.js', () => ({
   useSlashCommandProcessor: vi.fn(() => ({
     handleSlashCommand: vi.fn(),
     slashCommands: [],
@@ -262,33 +262,33 @@ vi.mock('../../hooks/slashCommandProcessor.js', () => ({
   })),
 }));
 
-vi.mock('../../hooks/useVim.js', () => ({
+vi.mock('../hooks/vim.js', () => ({
   useVim: vi.fn(() => ({ handleInput: vi.fn() })),
 }));
 
-vi.mock('../../hooks/useFlickerDetector.js', () => ({
+vi.mock('../hooks/useFlickerDetector.js', () => ({
   useFlickerDetector: vi.fn(),
 }));
 
-vi.mock('../../hooks/useMouseSelection.js', () => ({
+vi.mock('../hooks/useMouseSelection.js', () => ({
   useMouseSelection: vi.fn(),
 }));
 
-vi.mock('../../contexts/SessionContext.js', () => ({
+vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({
     stats: { historyTokenCount: 0 },
     updateHistoryTokenCount: vi.fn(),
   })),
 }));
 
-vi.mock('../../contexts/TodoContext.js', () => ({
+vi.mock('../contexts/TodoContext.js', () => ({
   useTodoContext: vi.fn(() => ({
     todos: [],
     updateTodos: vi.fn(),
   })),
 }));
 
-vi.mock('../../contexts/VimModeContext.js', () => ({
+vi.mock('../contexts/VimModeContext.js', () => ({
   useVimMode: vi.fn(() => ({
     vimEnabled: false,
     vimMode: 'normal',
@@ -296,7 +296,7 @@ vi.mock('../../contexts/VimModeContext.js', () => ({
   })),
 }));
 
-vi.mock('../../contexts/RuntimeContext.js', () => ({
+vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: vi.fn(() => ({
     getCliOAuthManager: vi.fn(),
     getActiveModelName: vi.fn(() => 'test-model'),
@@ -305,7 +305,7 @@ vi.mock('../../contexts/RuntimeContext.js', () => ({
   })),
 }));
 
-vi.mock('../../utils/mouse.js', () => ({
+vi.mock('../utils/mouse.js', () => ({
   isMouseEventsActive: vi.fn(() => false),
   setMouseEventsActive: vi.fn(),
   disableMouseEvents: vi.fn(),
@@ -326,8 +326,8 @@ vi.mock('../../config/config.js', () => ({
   }),
 }));
 
-vi.mock('../../../config/settings.js', async () => {
-  const actual = await vi.importActual('../../../config/settings.js');
+vi.mock('../../config/settings.js', async () => {
+  const actual = await vi.importActual('../../config/settings.js');
   return {
     ...actual,
     SettingScope: { User: 'user', Workspace: 'workspace', System: 'system' },

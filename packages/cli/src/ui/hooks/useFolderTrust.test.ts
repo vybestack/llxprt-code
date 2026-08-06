@@ -22,22 +22,26 @@ import * as trustedFolders from '../../config/trustedFolders.js';
 import { createDeferred } from '../../test-utils/async.js';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
-const mockedExit = vi.hoisted(() =>
-  vi.fn((code: number) => {
-    throw new Error(`process.exit unexpectedly called with "${code}"`);
-  }),
-);
+// Records the requested exit code instead of throwing. The hook schedules its
+// exit from a timer callback, and throwing from there escapes as an unhandled
+// error rather than something a test can await; asserting on the recorded call
+// tests the same behaviour directly.
+const mockedExit = vi.hoisted(() => vi.fn((_code: number) => undefined));
 const temporaryDirectories: string[] = [];
 
 vi.mock('node:process', async () => {
   const actual =
     await vi.importActual<typeof import('node:process')>('node:process');
-  return {
+  const mockedProcess = {
     ...actual,
     cwd: mockedCwd,
     exit: mockedExit,
     platform: 'linux',
   };
+  // useFolderTrust imports the DEFAULT binding of node:process, and spreading
+  // `actual` carries the real process through as `default`. Declare it
+  // explicitly so the mocked cwd/exit are the ones the hook actually calls.
+  return { ...mockedProcess, default: mockedProcess };
 });
 
 describe('useFolderTrust', () => {
@@ -300,7 +304,7 @@ describe('useFolderTrust', () => {
     });
 
     expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
-      process.cwd(),
+      mockedCwd(),
       TrustLevel.TRUST_FOLDER,
     );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
@@ -364,9 +368,12 @@ describe('useFolderTrust', () => {
         expect.any(Number),
       );
       expect(mockedExit).not.toHaveBeenCalled();
-      await expect(vi.advanceTimersByTimeAsync(100)).rejects.toThrow(
-        `process.exit unexpectedly called with "${ExitCodes.FATAL_CONFIG_ERROR}"`,
-      );
+
+      // Asserted on the mock rather than on a rejection: the behaviour under
+      // test is that the deferred exit calls process.exit with the fatal
+      // config code, not how a throw inside a timer callback propagates.
+      await vi.advanceTimersByTimeAsync(100);
+      expect(mockedExit).toHaveBeenCalledWith(ExitCodes.FATAL_CONFIG_ERROR);
     } finally {
       vi.useRealTimers();
     }

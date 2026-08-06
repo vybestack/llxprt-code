@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import * as fs from 'fs/promises';
 import type {
   Profile,
@@ -63,6 +64,11 @@ async function runCli(
       child.stdin.end();
     }
 
+    // Spawning the CLI runs TypeScript from source, which costs roughly ten
+    // seconds on a cold CI runner against well under a second locally. A 10s
+    // budget expired before the child could answer, so every assertion saw
+    // exit code -1. Sized as a hang guard, well inside the runner's 120s
+    // per-case budget for integration files.
     const timeout = setTimeout(() => {
       child.kill();
       resolve({
@@ -70,7 +76,7 @@ async function runCli(
         stderr,
         exitCode: -1,
       });
-    }, 10000);
+    }, 60_000);
 
     child.on('close', (code) => {
       clearTimeout(timeout);
@@ -86,16 +92,26 @@ async function runCli(
 describe('LoadBalancer Integration Tests', () => {
   let tempDir: string;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
     originalHome = process.env.HOME;
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
     process.env.HOME = tempDir;
+    process.env.LLXPRT_CONFIG_HOME = tempDir;
   });
 
   afterEach(async () => {
-    if (originalHome) {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
       process.env.HOME = originalHome;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env.LLXPRT_CONFIG_HOME;
+    } else {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
     }
     await cleanupTempDirectory(tempDir);
   });
@@ -120,7 +136,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -166,17 +182,20 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
+      // The profile having been applied is evidenced by the CLI attempting the
+      // load-balancer provider, rather than by a debug log line.
       expect(fullOutput).toMatch(
-        testRegex(
-          'Loaded profile.*lb-profile|Loading profile.*lb-profile',
-          'i',
-        ),
+        testRegex('load-balancer|Loaded profile.*lb-profile', 'i'),
       );
     });
 
@@ -192,7 +211,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -215,6 +234,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -222,7 +245,7 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        testRegex('profile.*not found|failed.*load', 'i'),
+        testRegex('profile.*not found|non-existent profile|failed.*load', 'i'),
       );
     });
 
@@ -238,7 +261,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -260,6 +283,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -295,7 +322,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -331,6 +358,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -348,6 +379,10 @@ describe('LoadBalancer Integration Tests', () => {
         ['--profile', invalidJson, '--prompt', 'test'],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -367,7 +402,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -407,6 +442,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 
@@ -439,7 +478,7 @@ describe('LoadBalancer Integration Tests', () => {
         ephemeralSettings: {},
       };
 
-      const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
+      const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
 
       await fs.writeFile(
@@ -485,6 +524,10 @@ describe('LoadBalancer Integration Tests', () => {
         ],
         {
           HOME: tempDir,
+          // Debug output defaults to a file target; these assertions read
+          // stdout/stderr, so redirect it the documented way.
+          DEBUG: 'llxprt:*',
+          DEBUG_OUTPUT: 'stderr',
         },
       );
 

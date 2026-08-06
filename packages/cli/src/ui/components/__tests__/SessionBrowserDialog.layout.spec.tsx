@@ -25,9 +25,8 @@ import { render } from 'ink-testing-library';
 import { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Unmock ink to use real Ink with ink-testing-library
-// The global mock in test-setup.ts conflicts with ink-testing-library's reconciler
-vi.unmock('ink');
+// Under Bun, ink is redirected to the stub via a resolution plugin (not
+// vi.mock), so vi.unmock('ink') is not needed and not supported.
 
 import { SessionBrowserDialog } from '../SessionBrowserDialog.js';
 import type { SessionBrowserDialogProps } from '../SessionBrowserDialog.js';

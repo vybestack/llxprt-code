@@ -1541,11 +1541,11 @@ jobs:
       - name: 'Download CLI coverage (cli shard)'
         # Issue #2707: coverage is now per-shard. The composite action consumes
         # the cli + core coverage summaries, produced by their respective shards.
-        # continue-on-error is not needed here: post_coverage_comment already
-        # has continue-on-error: true at the job level, so a missing artifact
-        # will fail this step but not block PR merges. The job's own `if`
-        # condition gates on needs.test.result == 'success', which means the
-        # cli/core shards passed and their coverage artifacts exist.
+        # CLI tests migrated to Bun's native runner (issue #2843) and no longer
+        # upload a Vitest coverage artifact, exactly as core did in #2842.
+        # Continue-on-error lets the post-coverage-comment action report "N/A"
+        # for cli instead of failing the job on a missing artifact.
+        continue-on-error: true
         uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: 'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}'
