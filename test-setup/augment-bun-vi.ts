@@ -106,33 +106,42 @@ const realClearAllTimers = (bunVi as BunViBase).clearAllTimers.bind(bunVi);
 const realIsFakeTimers = (bunVi as BunViBase).isFakeTimers.bind(bunVi);
 
 /**
- * Captured before any fake-timer activation so async timer helpers can await
- * a real event-loop turn to drain recursively queued microtasks. Under Bun's
- * fake timers, `setImmediate` itself is faked and will not advance the real
- * event loop, so the captured reference is used instead.
- */
-const realSetImmediate: (callback: () => void) => NodeJS.Immediate =
-  setImmediate;
-
-/**
- * Drains recursively queued microtasks from async timer callbacks.
+ * Drains microtasks queued by async timer callbacks between fake-clock
+ * advances.
  *
- * On macOS, `setImmediate` fires promptly even under Bun's fake timers, so a
- * single macrotask boundary suffices. On Linux CI, `setImmediate` may not
- * fire under fake timers, causing tests that rely on async timer advancement
- * (e.g. proactive-renewal) to hang indefinitely.
+ * IMPORTANT: the settling boundary MUST be a microtask, never a macrotask.
+ * Under Bun's fake timers on Linux, macrotask primitives stop firing after
+ * certain advance operations: once a fake timer has fired and the clock is
+ * then advanced via `advanceTimersByTime` with no pending timers, a
+ * subsequent `setImmediate` (and likewise `setTimeout(_, 0)`) is gated by the
+ * fake-timer scheduler and never becomes "due", so awaiting it hangs until the
+ * fake timers are torn down. This was the root cause of issue #2979: every
+ * `packages/providers` test using `vi.advanceTimersByTimeAsync` timed out at
+ * exactly the per-test timeout on Linux CI while passing on macOS (where the
+ * macrotask happens to keep firing). It is a hang, not slowness, at any
+ * timeout.
  *
- * The portable approach drains microtasks via chained `Promise.resolve()`
- * calls first (each yielding one microtask round), then yields to a real
- * macrotask via `setImmediate` as a final settling boundary. This works on
- * both platforms without depending on `setImmediate` firing under fake timers.
+ * Microtasks are never gated this way — they drain synchronously within the
+ * current macrotask, before the fake-timer scheduler regains control — so a
+ * microtask boundary is both sufficient to settle async callback continuations
+ * and guaranteed not to stall on either platform. (Note: a microtask always
+ * preempts a queued macrotask, so racing a macrotask against a microtask
+ * fallback resolves via the microtask anyway; the macrotask contributes
+ * nothing.)
+ *
+ * Each `await Promise.resolve()` yields one microtask round; the loop drains
+ * async callback chains for up to `MICROTASK_DRAIN_ROUNDS` rounds, and the
+ * final `queueMicrotask` is the settling boundary (replacing the former
+ * `setImmediate`). The bound is deliberate: a callback that reschedules
+ * microtasks forever degrades to a bounded delay rather than an infinite hang,
+ * and a chain deeper than the bound stays pending by design. (issue #2979)
  */
 const MICROTASK_DRAIN_ROUNDS = 20;
 const flushPendingTasks = async (): Promise<void> => {
   for (let i = 0; i < MICROTASK_DRAIN_ROUNDS; i++) {
     await Promise.resolve();
   }
-  await new Promise<void>((resolve) => realSetImmediate(resolve));
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
 };
 
 const MAX_TIMER_ADVANCE = 4_294_967_295;

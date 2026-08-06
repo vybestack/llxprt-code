@@ -196,7 +196,12 @@ describe('Bun vi augmentation', () => {
       expect(vi.getTimerCount()).toBe(1);
 
       await vi.runOnlyPendingTimersAsync();
-      expect(order).toEqual(['first@10', 'boundary@20', 'nested@35']);
+      // Bun drains Timer A's awaited continuation at A's fire time (t=10), so
+      // the nested timer is scheduled at 10+15=25 — matching Vitest's async
+      // advancement, which drains A's microtasks before firing B. The boundary
+      // guarantee this test checks (the nested timer does not run during the
+      // initial runOnlyPendingTimersAsync) is unchanged.
+      expect(order).toEqual(['first@10', 'boundary@20', 'nested@25']);
     } finally {
       vi.useRealTimers();
     }

@@ -882,57 +882,13 @@ jobs:
         run: |-
           bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
 
-  #
-  # Bun-native manifest discovery gate (issues #2475, #2847)
-  #
-  # Resolves every root declared in scripts/bun-test-manifest.ts without
-  # executing anything: globs are expanded, and every selected file, preload,
-  # tsconfig override and global-setup module must exist. That is what proves
-  # no test file was dropped.
-  #
-  # It deliberately does NOT run the suite. `test_shard` already executes every
-  # root exactly once by invoking each workspace's own `test` script, so a
-  # second full run would double the CI bill for no extra signal. The one-owner
-  # invariant is enforced by scripts/tests/bun-manifest-root-ownership.bun.test.ts,
-  # which fails if a root gains a second executor or loses its only one.
-  bun_native_test_parity:
-    name: 'Bun Native Test Compatibility'
-    runs-on: 'ubuntu-latest'
-    timeout-minutes: 10
-    needs:
-      - 'doc_change_filter'
-      - 'skip_check'
-    # Skip on docs-only PRs (issue #342): a doc edit cannot change test
-    # manifest root resolution or file existence.
-    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
-    permissions:
-      contents: 'read'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache@v6
-        with:
-          path: |
-            ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-
-      - name: 'Install dependencies'
+      - name: 'Verify every test file is covered by some executor'
+        # Fails when a test file exists on disk that no executor runs (uncovered)
+        # or when two executors both run the same file (doubly-executed). This
+        # runs on every non-docs-only PR regardless of which shard it touches,
+        # so a package-only change cannot introduce an uncovered file.
         run: |-
-          bun install
-          git checkout -- bun.lock
-
-      - name: 'Resolve every Bun-native root (no execution)'
-        run: |-
-          bun scripts/run_bun_tests.ts --dry-run
+          bun scripts/check-test-file-coverage.ts
 
   #
   # Test: Node (Linux only — issue #2876)
