@@ -12,7 +12,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -244,5 +250,25 @@ describe('parseCaseCounts', () => {
   it('strips CSI sequences', () => {
     const esc = String.fromCharCode(27);
     expect(stripAnsi(`${esc}[32mgreen${esc}[0m`)).toBe('green');
+  });
+});
+
+describe('discoverTestFiles symlink safety', () => {
+  it('terminates when a directory symlink forms a cycle', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bun-runner-cycle-'));
+    try {
+      const src = join(root, 'src');
+      const nested = join(src, 'nested');
+      mkdirSync(nested, { recursive: true });
+      writeFileSync(join(nested, 'thing.test.ts'), 'export {};');
+      // nested/loop -> src, so a naive walk would recurse forever.
+      symlinkSync(src, join(nested, 'loop'), 'dir');
+
+      const found = discoverTestFiles(root);
+
+      expect(found).toContain('src/nested/thing.test.ts');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

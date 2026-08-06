@@ -22,7 +22,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
@@ -111,7 +111,11 @@ export function isTestFile(fileName: string): boolean {
   return TEST_FILE_PATTERN.test(fileName);
 }
 
-function collectTestFiles(dir: string, results: string[]): void {
+function collectTestFiles(
+  dir: string,
+  results: string[],
+  visited: Set<string> = new Set(),
+): void {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -124,7 +128,14 @@ function collectTestFiles(dir: string, results: string[]): void {
     }
     const fullPath = join(dir, entry);
     if (statSync(fullPath).isDirectory()) {
-      collectTestFiles(fullPath, results);
+      // statSync follows symlinks, so a cycle such as src/utils -> src would
+      // recurse until the process dies. Descend by real path and only once.
+      const realPath = realpathSync(fullPath);
+      if (visited.has(realPath)) {
+        continue;
+      }
+      visited.add(realPath);
+      collectTestFiles(fullPath, results, visited);
     } else if (isTestFile(entry)) {
       results.push(fullPath);
     }
@@ -133,8 +144,9 @@ function collectTestFiles(dir: string, results: string[]): void {
 
 export function discoverTestFiles(root: string): string[] {
   const results: string[] = [];
+  const visited = new Set<string>();
   for (const testRoot of TEST_ROOTS) {
-    collectTestFiles(join(root, testRoot), results);
+    collectTestFiles(join(root, testRoot), results, visited);
   }
   return results
     .map((file) => relative(root, file).split('\\').join('/'))
