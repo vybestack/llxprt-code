@@ -39,6 +39,3 @@ packages/providers/src/tokenizers/official/assets/**/*.bpe -diff
 # files, which silently breaks the published Windows entry point (issue #2978).
 *.cmd eol=crlf
 *.bat eol=crlf
-
-# The published POSIX launcher must stay LF, matching its packages/cli twin.
-packages/llxprt-cli-posix/bin/llxprt eol=lf

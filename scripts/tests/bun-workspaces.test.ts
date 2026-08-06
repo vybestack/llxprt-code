@@ -168,19 +168,16 @@ interface BunLock {
 }
 /**
  * Packages that exist on disk under a workspace root but must NOT be declared
- * as npm workspaces (issue #2978).
+ * as npm workspaces.
  *
- * npm installs every declared workspace unconditionally and enforces each
- * one's `os` field, so declaring these platform-gated launcher packages makes
- * `npm install` fail with EBADPLATFORM on EVERY platform: the posix launcher
- * is unusable on win32 and the win32 launcher is unusable everywhere else.
- * They are published from their own directories and consumed by packages/cli
- * as optionalDependencies, which npm DOES filter per-platform correctly.
+ * Deliberately empty: every package on disk is a declared workspace. An
+ * os-gated launcher package cannot be a workspace (npm installs every declared
+ * workspace unconditionally and enforces its `os` field, failing EBADPLATFORM
+ * on every platform), so an entry here means someone reintroduced that shape.
+ * Issue #2978 is instead solved at launch time by packages/cli/bin/llxprt.mjs,
+ * which resolves the bundled Bun from the @oven/bun-<platform> packages.
  */
-const INTENTIONALLY_UNDECLARED_PACKAGES: readonly string[] = [
-  'packages/llxprt-cli-posix',
-  'packages/llxprt-cli-win32',
-];
+const INTENTIONALLY_UNDECLARED_PACKAGES: readonly string[] = [];
 
 const DEPENDENCY_SECTIONS: ReadonlyArray<
   keyof Pick<

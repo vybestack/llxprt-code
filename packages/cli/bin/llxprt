@@ -227,8 +227,8 @@ _llxprt_verify_workspace_root() {
   # launcher's package at packages/<name>, where <name> is derived from the
   # launcher's own resolved location (basename of the package dir one level
   # above this script's bin/ dir) instead of hardcoded. This lets the same
-  # launcher run from packages/cli (the dev bin target) and
-  # packages/llxprt-cli-posix (the published package). Both sides of the
+  # launcher run from packages/cli (the dev bin target) and from an installed
+  # copy under node_modules. Both sides of the
   # comparison are canonicalized via cd && pwd so symlinked components,
   # redundant separators, or ./.. segments cannot cause a false mismatch.
   _llxprt_pkg_subdir=$(basename -- "$_llxprt_pkg_root")
@@ -259,12 +259,11 @@ if [ -z "$_llxprt_entry" ]; then
   _llxprt_entry="$_llxprt_pkg_root/index.ts"
 fi
 
-# Issue #2978: the os-gated launcher package ships only bin/llxprt, so when
-# the launcher runs from node_modules/@vybestack/llxprt-cli-posix the entry
-# lives in the SIBLING @vybestack/llxprt-code package. Walk up the tree
-# looking for it, mirroring the win32 launcher :find_main loop.
-# _llxprt_pkg_root is left untouched; Bun resolution still keys off the
-# launcher package root.
+# Fallback for layouts where the launcher does not sit inside the package that
+# owns the entry point (for example a bin linked out of a nested node_modules
+# tree). Walk up looking for @vybestack/llxprt-code, mirroring the win32
+# launcher :find_main loop. _llxprt_pkg_root is left untouched; Bun resolution
+# still keys off the launcher package root.
 if [ ! -f "$_llxprt_entry" ]; then
   _llxprt_walk=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || _llxprt_walk=""
   # The walk MUST be bounded. POSIX permits pwd to report a leading "//" as a

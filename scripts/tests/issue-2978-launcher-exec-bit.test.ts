@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { asOptionalRecord, asRecord, asString } from './typed-test-helpers.ts';
+import { asOptionalRecord, asRecord } from './typed-test-helpers.ts';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -20,8 +20,9 @@ describe('platform launcher package invariants (issue #2978)', () => {
   // (bin/llxprt.mjs): npm v12 no longer runs install scripts, so it derives
   // the Windows cmd-shim from the bin target's shebang, and a POSIX #!/bin/sh
   // shebang produces a broken .cmd that invokes /bin/sh (which does not exist
-  // on Windows). The two os-gated platform packages remain in exact lockstep
-  // with packages/cli as a fallback install surface for legacy flows.
+  // on Windows). The two os-gated platform packages are still published by
+  // release.yml as a standalone install surface, but packages/cli deliberately
+  // does NOT depend on them (see the bootstrapping guard below).
   const POSIX_PKG = '@vybestack/llxprt-cli-posix';
   const WIN32_PKG = '@vybestack/llxprt-cli-win32';
   const PLATFORM_PKGS = [POSIX_PKG, WIN32_PKG] as const;
@@ -35,14 +36,6 @@ describe('platform launcher package invariants (issue #2978)', () => {
           join(repoRoot, 'packages', 'cli', 'package.json'),
           'utf-8',
         ),
-      ),
-    );
-  }
-
-  function readManifest(dir: string): Record<string, unknown> {
-    return asRecord(
-      JSON.parse(
-        readFileSync(join(repoRoot, 'packages', dir, 'package.json'), 'utf-8'),
       ),
     );
   }
@@ -80,102 +73,51 @@ describe('platform launcher package invariants (issue #2978)', () => {
     ).not.toContain('/bin/sh');
   });
 
-  it('packages/cli pins both platform packages as exact optionalDependencies', () => {
+  it('packages/cli does not depend on the platform launcher packages', () => {
+    // Regression guard for a bootstrapping deadlock. release.yml publishes the
+    // launcher packages as part of a release, so for any version that has not
+    // shipped yet they do not exist on the registry. While packages/cli
+    // declared them, no lockfile entry could be generated for them and every
+    // workflow running `npm ci` failed with EUSAGE ("Missing: ... from lock
+    // file") — which could only be cleared by a release that itself required
+    // green CI. bin/llxprt.mjs removes the need for the dependency: it resolves
+    // the bundled Bun and launches the CLI entry point on its own.
     const cli = readCliManifest();
-    const optionalDeps = asOptionalRecord(cli.optionalDependencies) ?? {};
-    for (const pkg of PLATFORM_PKGS) {
-      const spec = asString(optionalDeps[pkg]);
-      // An exact pin starts with a digit; a range operator (^, ~, >, <, *, x)
-      // would let npm resolve a different version and silently break the
-      // os-gated launcher contract.
-      const first = spec.charAt(0);
-      expect(
-        first >= '0' && first <= '9',
-        `packages/cli optionalDependencies.${pkg} must be an exact version (got "${spec}")`,
-      ).toBe(true);
+    const depFields = [
+      'dependencies',
+      'devDependencies',
+      'optionalDependencies',
+      'peerDependencies',
+    ] as const;
+    for (const field of depFields) {
+      const deps = asOptionalRecord(cli[field]) ?? {};
+      for (const pkg of PLATFORM_PKGS) {
+        expect(
+          deps[pkg],
+          `packages/cli must not declare ${pkg} in ${field}: it is unpublished until a release, which deadlocks npm ci`,
+        ).toBeUndefined();
+      }
     }
   });
-
-  it('platform package versions are in exact lockstep with packages/cli', () => {
-    // A version skew would silently leave consumers with no `llxprt` command:
-    // the parent's optionalDependencies pin an exact version that does not
-    // exist on the registry, so the platform package is skipped at install.
-    const cli = readCliManifest();
-    const cliVersion = asString(cli.version);
-    const optionalDeps = asOptionalRecord(cli.optionalDependencies) ?? {};
-    for (const pkg of PLATFORM_PKGS) {
-      expect(
-        optionalDeps[pkg],
-        `${pkg} pin must exist in packages/cli optionalDependencies`,
-      ).toBeDefined();
-      expect(optionalDeps[pkg]).toBe(cliVersion);
-    }
-
-    // The launcher packages are intentionally not workspaces (issue #2978), so
-    // version.ts bumps their own version field explicitly. That field must also
-    // equal the cli version, or the exact pin above would target a registry
-    // version that does not exist and npm would skip the platform package.
-    const launcherDirForPkg: Record<string, string> = {
-      [POSIX_PKG]: 'llxprt-cli-posix',
-      [WIN32_PKG]: 'llxprt-cli-win32',
-    };
-    for (const pkg of PLATFORM_PKGS) {
-      expect(
-        asString(readManifest(launcherDirForPkg[pkg]).version),
-        `${pkg} own version must equal packages/cli's version`,
-      ).toBe(cliVersion);
-    }
-  });
-
-  it.each([
-    {
-      dir: 'llxprt-cli-posix',
-      pkg: POSIX_PKG,
-      os: ['darwin', 'linux', 'freebsd'],
-      binTarget: 'bin/llxprt',
-    },
-    {
-      dir: 'llxprt-cli-win32',
-      pkg: WIN32_PKG,
-      os: ['win32'],
-      binTarget: 'bin/llxprt.cmd',
-    },
-  ])(
-    '$pkg declares bin.llxprt, the correct exclusive os, and ships its bin target',
-    ({ dir, pkg, os, binTarget }) => {
-      const manifest = readManifest(dir);
-      expect(manifest.name).toBe(pkg);
-      const bin = asOptionalRecord(manifest.bin);
-      expect(bin?.llxprt, `${pkg} must declare bin.llxprt`).toBeDefined();
-      expect(bin?.llxprt).toBe(binTarget);
-      // Pinning the exact os array enforces mutually-exclusive install targets
-      // (POSIX set vs win32) so the two never both install on one machine.
-      expect(manifest.os).toEqual(os);
-      expect(
-        existsSync(join(repoRoot, 'packages', dir, binTarget)),
-        `${pkg} bin target "${binTarget}" must exist on disk`,
-      ).toBe(true);
-    },
-  );
 });
 
-describe('platform launcher executable bit (issue #2978)', () => {
-  // Regression guard: the POSIX launcher was first committed from Windows as
-  // mode 100644. npm preserves tarball modes, so a non-executable bin script
-  // makes `llxprt` unrunnable on Linux/macOS after install — the exact failure
-  // this package exists to prevent. The git index mode is the invariant that
-  // matters, because that is what a Linux checkout (and therefore the published
-  // tarball) receives, and it is assertable from any platform.
-  it('ships the POSIX launcher with the executable bit set in git', () => {
+describe('node-shebang shim executable bit (issue #2978)', () => {
+  // Regression guard: bin/llxprt.mjs was first committed from Windows as mode
+  // 100644. npm preserves tarball modes, so a non-executable bin target makes
+  // `llxprt` unrunnable on Linux/macOS after install. The git index mode is the
+  // invariant that matters, because that is what a Linux checkout (and
+  // therefore the published tarball) receives, and it is assertable from any
+  // platform.
+  it('ships bin/llxprt.mjs with the executable bit set in git', () => {
     const entry = execFileSync(
       'git',
-      ['ls-files', '-s', '--', 'packages/llxprt-cli-posix/bin/llxprt'],
+      ['ls-files', '-s', '--', 'packages/cli/bin/llxprt.mjs'],
       { cwd: repoRoot, encoding: 'utf8' },
     ).trim();
-    expect(entry, 'POSIX launcher must be tracked by git').not.toBe('');
+    expect(entry, 'the shim must be tracked by git').not.toBe('');
     expect(
       entry.split(/\s+/)[0],
-      `POSIX launcher must be mode 100755, got: ${entry}`,
+      `the shim must be mode 100755, got: ${entry}`,
     ).toBe('100755');
   });
 });

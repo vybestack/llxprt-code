@@ -567,22 +567,6 @@ describe('published package no-compile runtime contract (S6)', () => {
       }
     }
 
-    // Issue #2978: the os-gated launcher packages are published from THIS repo
-    // but are deliberately not root workspaces — npm installs every declared
-    // workspace unconditionally and enforces its `os` field, which would fail
-    // with EBADPLATFORM on every platform. They are therefore first-party, not
-    // external, and must not be required to appear in the root manifest.
-    for (const dir of ['llxprt-cli-posix', 'llxprt-cli-win32']) {
-      const manifestPath = join(repoRoot, 'packages', dir, 'package.json');
-      if (!existsSync(manifestPath)) continue;
-      const manifest = asRecord(
-        JSON.parse(readFileSync(manifestPath, 'utf-8')),
-      );
-      if (manifest.name !== undefined) {
-        internalPackages.add(asString(manifest.name));
-      }
-    }
-
     // Build the package-name→workspace-directory map and a real protocol
     // resolver (F5) so file:/workspace:/link: specifiers are validated
     // against the actual workspace name→directory map, not just the name set.

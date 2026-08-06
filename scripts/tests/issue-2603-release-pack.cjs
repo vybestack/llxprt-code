@@ -288,28 +288,12 @@ function runBindReleaseDeps(workCopy) {
   }
 }
 
-/**
- * The os-gated launcher packages (issue #2978) deliberately are NOT root npm
- * workspaces: npm enforces a workspace's `os` field, so listing them would fail
- * EBADPLATFORM on every platform. packages/cli depends on them as exact
- * optionalDependencies. They must still be packed here, or npm cannot resolve
- * them from the offline replica, silently skips the optional dep, and the
- * install produces no `llxprt` bin at all.
- */
-const CLI_LAUNCHER_PLATFORM_PACKAGE_DIRS = [
-  'packages/llxprt-cli-posix',
-  'packages/llxprt-cli-win32',
-];
-
 function collectInternalPackages(workCopy) {
   const rootPkg = JSON.parse(
     readFileSync(join(workCopy, 'package.json'), 'utf8'),
   );
   const internal = [];
-  for (const ws of [
-    ...rootPkg.workspaces,
-    ...CLI_LAUNCHER_PLATFORM_PACKAGE_DIRS,
-  ]) {
+  for (const ws of rootPkg.workspaces) {
     const pkgPath = join(workCopy, ws, 'package.json');
     if (!existsSync(pkgPath)) continue;
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

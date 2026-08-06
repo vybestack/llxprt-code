@@ -251,6 +251,9 @@
     "packages/cli": {
       "name": "@vybestack/llxprt-code",
       "version": "0.11.0",
+      "bin": {
+        "llxprt": "bin/llxprt.mjs",
+      },
       "dependencies": {
         "@agentclientprotocol/sdk": "^1.2.1",
         "@anthropic-ai/sdk": "^0.55.1",
@@ -347,8 +350,6 @@
         "@oven/bun-windows-aarch64": "1.3.14",
         "@oven/bun-windows-x64": "1.3.14",
         "@oven/bun-windows-x64-baseline": "1.3.14",
-        "@vybestack/llxprt-cli-posix": "0.11.0",
-        "@vybestack/llxprt-cli-win32": "0.11.0",
       },
     },
     "packages/core": {

@@ -158,75 +158,6 @@ function updateSandboxImageUri(
   writeJson(packageJsonPath, packageJson);
 }
 
-/**
- * Whether a value is a plain string-keyed record (the shape of a dependency
- * section). Mirrors the narrowing style of {@link isPackageJson}.
- */
-function isDependencyRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * The os-gated CLI launcher platform packages (issue #2978). packages/cli
- * declares these as exact-pinned optionalDependencies so npm's os filtering
- * installs the right launcher per platform. Their versions MUST stay in exact
- * lockstep with @vybestack/llxprt-code: a skew would make the parent reference a
- * platform package version that does not exist on the registry, so npm silently
- * skips it and the consumer is left with no `llxprt` command. The version bump
- * rewrites the pins to the new release version so they cannot drift.
- */
-const CLI_LAUNCHER_PLATFORM_PACKAGES = [
-  '@vybestack/llxprt-cli-posix',
-  '@vybestack/llxprt-cli-win32',
-] as const;
-
-function updateCliLauncherPlatformPins(
-  packageJsonPath: string,
-  version: string,
-): void {
-  const packageJson = readJson(packageJsonPath);
-  const optionalDeps = packageJson.optionalDependencies;
-  if (!isDependencyRecord(optionalDeps)) {
-    return;
-  }
-  let changed = false;
-  for (const pkg of CLI_LAUNCHER_PLATFORM_PACKAGES) {
-    if (optionalDeps[pkg] !== undefined && optionalDeps[pkg] !== version) {
-      optionalDeps[pkg] = version;
-      changed = true;
-    }
-  }
-  if (changed) {
-    console.log(`Pinned CLI launcher platform packages to v${version}`);
-    writeJson(packageJsonPath, packageJson);
-  }
-}
-
-const CLI_LAUNCHER_PLATFORM_PACKAGE_DIRS = [
-  'packages/llxprt-cli-posix',
-  'packages/llxprt-cli-win32',
-] as const;
-
-/**
- * Bumps the `version` field of the os-gated launcher packages themselves.
- * These packages are intentionally NOT npm workspaces (an `os` field on a
- * workspace makes `npm install` EBADPLATFORM on every platform), so the
- * workspace-driven bump never reaches them (issue #2978). Their own version
- * MUST stay in exact lockstep with packages/cli's optionalDependencies pin, or
- * that pin references a registry version that does not exist and npm silently
- * skips the platform package — leaving the consumer with no `llxprt` command.
- */
-function updateCliLauncherPackageVersions(version: string): void {
-  for (const dir of CLI_LAUNCHER_PLATFORM_PACKAGE_DIRS) {
-    const packageJsonPath = resolve(process.cwd(), dir, 'package.json');
-    const packageJson = readJson(packageJsonPath);
-    if (packageJson.version !== version) {
-      packageJson.version = version;
-      writeJson(packageJsonPath, packageJson);
-    }
-  }
-}
-
 // 5. Update sandboxImageUri values in publishable package metadata.
 const cliPackageJsonPath = resolve(process.cwd(), 'packages/cli/package.json');
 updateSandboxImageUri(rootPackageJsonPath, 'root package.json', newVersion);
@@ -235,16 +166,6 @@ updateSandboxImageUri(
   'packages/cli/package.json',
   newVersion,
 );
-
-// 5b. Re-pin the os-gated CLI launcher platform packages in lockstep with the
-// release version so packages/cli's optionalDependencies can never reference a
-// version that does not exist on the registry (issue #2978).
-updateCliLauncherPlatformPins(cliPackageJsonPath, newVersion);
-
-// 5c. Bump the os-gated launcher packages' own version field. They are not
-// workspaces (issue #2978), so the workspace-driven bump does not reach them;
-// their own version must stay in lockstep with packages/cli's pin.
-updateCliLauncherPackageVersions(newVersion);
 
 // 6. Update package-lock.json without reinstalling node_modules.
 try {

@@ -420,22 +420,6 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-agents --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
-      # #2978: Publish the os-gated CLI launcher platform packages BEFORE the
-      # parent. @vybestack/llxprt-code pins these as exact optionalDependencies,
-      # so they must already exist on the registry when the parent is published,
-      # or a consumer's `npm install` would skip the missing platform package
-      # and leave no `llxprt` command on disk.
-      - name: Publish @vybestack/llxprt-cli-posix
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        # Not a workspace (issue #2978); publish from the package dir directly.
-        working-directory: packages/llxprt-cli-posix
-        run: npm publish --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
-
-      - name: Publish @vybestack/llxprt-cli-win32
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        working-directory: packages/llxprt-cli-win32
-        run: npm publish --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
-
       - name: Publish @vybestack/llxprt-code
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
