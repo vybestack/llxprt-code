@@ -78,6 +78,28 @@ async function reapSurvivor(pid: number): Promise<void> {
   });
 }
 
+async function removeWindowsTestDir(dir: string): Promise<void> {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code =
+        error !== null && typeof error === 'object' && 'code' in error
+          ? error.code
+          : undefined;
+      if (
+        Date.now() >= deadline ||
+        (code !== 'EBUSY' && code !== 'EPERM' && code !== 'ENOTEMPTY')
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 // These tests are Windows-only: they depend on tasklist/taskkill for process
 // inspection and tree-kill, and on PowerShell (Start-Process, Start-Sleep)
 // process semantics that do not exist on POSIX.
@@ -143,12 +165,7 @@ describe.skipIf(os.platform() !== 'win32')(
           await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h2Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(h2Dir);
       }
     }, 45000);
 
@@ -194,12 +211,7 @@ describe.skipIf(os.platform() !== 'win32')(
           await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h3Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(h3Dir);
       }
     }, 30000);
 
@@ -242,12 +254,7 @@ describe.skipIf(os.platform() !== 'win32')(
           await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h3Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(h3Dir);
       }
     }, 30000);
 
@@ -293,12 +300,7 @@ describe.skipIf(os.platform() !== 'win32')(
           }
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h5Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(h5Dir);
       }
     }, 45000);
 
@@ -359,12 +361,7 @@ describe.skipIf(os.platform() !== 'win32')(
           await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(i2Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(i2Dir);
       }
     }, 30000);
 
@@ -408,12 +405,7 @@ describe.skipIf(os.platform() !== 'win32')(
           await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(gateDir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(gateDir);
       }
     }, 30000);
 
@@ -479,12 +471,7 @@ describe.skipIf(os.platform() !== 'win32')(
           await reapSurvivor(survivorPid);
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(microDir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await removeWindowsTestDir(microDir);
       }
     }, 30000);
   },

@@ -544,6 +544,28 @@ async function forceReapWindows(pid: number): Promise<void> {
   });
 }
 
+async function removeWindowsTestDir(dir: string): Promise<void> {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code =
+        error !== null && typeof error === 'object' && 'code' in error
+          ? error.code
+          : undefined;
+      if (
+        Date.now() >= deadline ||
+        (code !== 'EBUSY' && code !== 'EPERM' && code !== 'ENOTEMPTY')
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 async function waitForPidFile(
   filePath: string,
   timeoutMs: number,
@@ -777,7 +799,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
           err instanceof Error ? err.message : String(err),
         );
       } finally {
-        fs.rmSync(failDir, { recursive: true, force: true });
+        await removeWindowsTestDir(failDir);
       }
     }
   });
