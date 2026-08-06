@@ -123,7 +123,7 @@ describe('splitCommands regex fallback', () => {
   // persists for the rest of this file. This is safe because the top-level
   // import already captured the real splitCommands before the mock registered.
   beforeEach(() => {
-    mock.module('./shell-parser.js', () => ({
+    void mock.module('./shell-parser.js', () => ({
       isParserAvailable: () => false,
       parseShellCommand: () => null,
       extractCommandNames: () => [],

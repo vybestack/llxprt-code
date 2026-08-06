@@ -60,7 +60,7 @@ export const secureBrowserMocks: SecureBrowserMockHolder = {
 
 // Register mocks using Bun's native mock.module BEFORE any source imports.
 // This runs during the import phase, before the source module is loaded.
-mock.module('node:child_process', () => {
+void mock.module('node:child_process', () => {
   const actual = localRequire(
     'node:child_process',
   ) as typeof ChildProcessModule;
@@ -87,7 +87,7 @@ mock.module('node:child_process', () => {
   };
 });
 
-mock.module('node:fs/promises', () => {
+void mock.module('node:fs/promises', () => {
   const actual = localRequire('node:fs/promises') as typeof FsPromisesModule;
   return {
     ...actual,
@@ -95,7 +95,7 @@ mock.module('node:fs/promises', () => {
   };
 });
 
-mock.module('node:os', () => {
+void mock.module('node:os', () => {
   const actual = localRequire('node:os') as typeof OsModule;
   return {
     ...actual,

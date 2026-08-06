@@ -39,7 +39,7 @@ function makeWrapper(
   };
 }
 
-mock.module('../ProviderManager.js', () => {
+void mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
     setConfig(): void {}
     setActiveProvider(): void {}
@@ -47,25 +47,25 @@ mock.module('../ProviderManager.js', () => {
   }
   return { ProviderManager: MockProviderManager };
 });
-mock.module('../gemini/GeminiProvider.js', () => {
+void mock.module('../gemini/GeminiProvider.js', () => {
   class MockGeminiProvider {
     setConfig(): void {}
   }
   return { GeminiProvider: MockGeminiProvider };
 });
-mock.module('../openai/OpenAIProvider.js', () => ({
+void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
 }));
-mock.module('../openai-responses/OpenAIResponsesProvider.js', () => ({
+void mock.module('../openai-responses/OpenAIResponsesProvider.js', () => ({
   OpenAIResponsesProvider: class {},
 }));
-mock.module('../openai-vercel/index.js', () => ({
+void mock.module('../openai-vercel/index.js', () => ({
   OpenAIVercelProvider: class {},
 }));
-mock.module('../anthropic/AnthropicProvider.js', () => ({
+void mock.module('../anthropic/AnthropicProvider.js', () => ({
   AnthropicProvider: class {},
 }));
-mock.module('./oauth-provider-registration.js', () => ({
+void mock.module('./oauth-provider-registration.js', () => ({
   ensureOAuthProviderRegistered: vi.fn(),
   registerStandardOAuthProviders: vi.fn(),
   isOAuthProviderRegistered: vi.fn(),

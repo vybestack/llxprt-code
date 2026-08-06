@@ -69,7 +69,7 @@ function compositeKey(service: string, account: string): string {
 
 let controller: FakeKeyringController = createFreshController();
 
-mock.module('@napi-rs/keyring', () => ({
+void mock.module('@napi-rs/keyring', () => ({
   AsyncEntry: class {
     constructor(
       private readonly service: string,

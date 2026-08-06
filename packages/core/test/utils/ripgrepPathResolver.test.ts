@@ -41,7 +41,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
 
     // Mock package to be available
-    mock.module('@lvce-editor/ripgrep', () => ({
+    void mock.module('@lvce-editor/ripgrep', () => ({
       rgPath: '/mock/package/path/rg',
     }));
 
@@ -65,12 +65,12 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     });
     vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
 
-    mock.module('@lvce-editor/ripgrep', () => ({
+    void mock.module('@lvce-editor/ripgrep', () => ({
       rgPath: '/mock/package/path/rg',
     }));
 
     const mockExecSync = vi.fn().mockReturnValue('/usr/local/bin/rg\n');
-    mock.module('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -86,7 +86,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
   });
   it('should fall back to system ripgrep when package not available', async () => {
     // Mock package to fail
-    mock.module(
+    void mock.module(
       '@lvce-editor/ripgrep',
       () =>
         new Proxy(
@@ -101,7 +101,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
 
     // Mock system ripgrep available
     const mockExecSync = vi.fn().mockReturnValue('/usr/local/bin/rg\n');
-    mock.module('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -123,7 +123,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     (os.platform as unknown) = mockPlatform;
 
     // Mock package and system ripgrep to fail
-    mock.module(
+    void mock.module(
       '@lvce-editor/ripgrep',
       () =>
         new Proxy(
@@ -139,7 +139,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    mock.module('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -163,7 +163,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     (os.platform as unknown) = mockPlatform;
 
     // Mock package and system ripgrep to fail
-    mock.module(
+    void mock.module(
       '@lvce-editor/ripgrep',
       () =>
         new Proxy(
@@ -179,7 +179,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    mock.module('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -201,7 +201,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     (process.pkg as unknown) = { entrypoint: '/path/to/bundle' };
 
     // Mock package and system ripgrep to fail
-    mock.module(
+    void mock.module(
       '@lvce-editor/ripgrep',
       () =>
         new Proxy(
@@ -217,7 +217,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    mock.module('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -243,7 +243,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
 
   it('should provide helpful error message when ripgrep not found', async () => {
     // Mock all ripgrep sources to fail
-    mock.module(
+    void mock.module(
       '@lvce-editor/ripgrep',
       () =>
         new Proxy(
@@ -259,7 +259,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    mock.module('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 

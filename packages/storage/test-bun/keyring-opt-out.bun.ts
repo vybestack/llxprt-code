@@ -44,7 +44,7 @@ const TEST_ENV_KEY = 'LLXPRT_TEST_DISABLE_OS_KEYRING';
 // import @napi-rs/keyring and must produce an adapter. The real module may be
 // absent or may touch the developer's real keychain, so a fake guarantees that
 // "not opted out" is observable as a non-null adapter without side effects.
-mock.module('@napi-rs/keyring', () => ({
+void mock.module('@napi-rs/keyring', () => ({
   AsyncEntry: class {
     async getPassword(): Promise<string | null> {
       return 'mocked-value';

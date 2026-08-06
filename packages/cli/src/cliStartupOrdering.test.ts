@@ -37,7 +37,7 @@ function makeConfig(hasActive: boolean, interactive: boolean): Config {
 }
 
 function setupCommonMainMocks(callOrder: string[], config: Config): void {
-  mock.module('./cliProviderInit.js', () => ({
+  void mock.module('./cliProviderInit.js', () => ({
     activateConfiguredProvider: async () => {
       callOrder.push('activation');
       return { authFailed: false, token: undefined, intent: undefined };
@@ -48,38 +48,38 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       callOrder.push('acp-activated');
     },
   }));
-  mock.module('./cliTerminalSession.js', () => ({
+  void mock.module('./cliTerminalSession.js', () => ({
     constructAgentWithSpinner: async () => {
       callOrder.push('agent-construction');
       return {};
     },
     prepareTerminalSession: async () => {},
   }));
-  mock.module('./cliSessionBootstrap.js', () => ({
+  void mock.module('./cliSessionBootstrap.js', () => ({
     bootstrapRuntimeAndConfig: async () => ({
       config,
       runtimeSettingsService: {},
     }),
     setupSessionRecording: async () => undefined,
   }));
-  mock.module('./session/nonInteractiveSession.js', () => ({
+  void mock.module('./session/nonInteractiveSession.js', () => ({
     dispatchInteractiveOrNonInteractive: async () => {
       callOrder.push('dispatch');
     },
   }));
-  mock.module('./cliSandbox.js', () => ({
+  void mock.module('./cliSandbox.js', () => ({
     maybeHopIntoSandbox: async () => {},
   }));
-  mock.module('./config/cliArgParser.js', () => ({
+  void mock.module('./config/cliArgParser.js', () => ({
     parseArguments: async () => ({ prompt: 'hello' }),
   }));
-  mock.module('./config/settings.js', () => ({
+  void mock.module('./config/settings.js', () => ({
     loadSettings: () => {
       callOrder.push('loadSettings');
       return { merged: { ui: { unicode: 'auto' } }, errors: [] };
     },
   }));
-  mock.module('./cliBootstrap.js', () => ({
+  void mock.module('./cliBootstrap.js', () => ({
     configureEarlyDebugLogging: () => {},
     createMemoizedStdinReader: () => async () => '',
     ensureStdinOrPromptProvided: async () => {},
@@ -92,33 +92,33 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     registerDynamicToolSettings: () => {},
     ParsedCliArgs: {} as never,
   }));
-  mock.module('./utils/cleanup.js', () => ({
+  void mock.module('./utils/cleanup.js', () => ({
     cleanupCheckpoints: async () => {},
     runExitCleanup: async () => {},
     registerSyncCleanup: () => {},
   }));
-  mock.module('./utils/sessionCleanup.js', () => ({
+  void mock.module('./utils/sessionCleanup.js', () => ({
     cleanupExpiredSessions: async () => {},
   }));
-  mock.module('./zed-integration/zedIntegration.js', () => ({
+  void mock.module('./zed-integration/zedIntegration.js', () => ({
     runZedIntegration: async () => {},
   }));
-  mock.module('./config/pathMigration.js', () => ({
+  void mock.module('./config/pathMigration.js', () => ({
     runStartupMigration: () => ({ migrated: false }),
     reportStartupResult: () => ({ messages: [], needsLegacyFallback: false }),
   }));
-  mock.module('./session/errorReporting.js', () => ({
+  void mock.module('./session/errorReporting.js', () => ({
     formatNonInteractiveError: () => '',
   }));
-  mock.module('./session/outputListeners.js', () => ({
+  void mock.module('./session/outputListeners.js', () => ({
     initializeOutputListenersAndFlush: () => {},
   }));
-  mock.module('./session/signalHandlers.js', () => ({
+  void mock.module('./session/signalHandlers.js', () => ({
     installNonInteractiveSigintHandler: () => {},
     setupUnhandledRejectionHandler: () => {},
     __resetUnhandledRejectionStateForTesting: () => {},
   }));
-  mock.module('./session/interactiveUI.js', () => ({
+  void mock.module('./session/interactiveUI.js', () => ({
     startInteractiveUI: async () => {},
   }));
 }
@@ -204,7 +204,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     // mocking would point to the mock and recurse. We snapshot the function
     // reference itself (not the namespace) before registration.
     const realGuard = guardUnconfiguredProvider;
-    mock.module('./unconfiguredProviderGuard.js', () => ({
+    void mock.module('./unconfiguredProviderGuard.js', () => ({
       guardUnconfiguredProvider: async (
         cfg: Config,
         runCleanup: () => Promise<void>,
@@ -272,18 +272,18 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
   });
 
   async function runMainConfigured(config: Config): Promise<void> {
-    mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
+    void mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
       createTokenStore: () => {
         callOrder.push('createTokenStore');
         return {};
       },
     }));
-    mock.module('./utils/sandbox-bashrc.js', () => ({
+    void mock.module('./utils/sandbox-bashrc.js', () => ({
       applySandboxBashrc: () => {
         callOrder.push('applySandboxBashrc');
       },
     }));
-    mock.module('./unconfiguredProviderGuard.js', () => ({
+    void mock.module('./unconfiguredProviderGuard.js', () => ({
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
@@ -359,17 +359,17 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       configurable: true,
     });
 
-    mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
+    void mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
       createTokenStore: () => ({}),
     }));
-    mock.module('./utils/sandbox-bashrc.js', () => ({
+    void mock.module('./utils/sandbox-bashrc.js', () => ({
       applySandboxBashrc: () => {},
     }));
-    mock.module('./unconfiguredProviderGuard.js', () => ({
+    void mock.module('./unconfiguredProviderGuard.js', () => ({
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
-    mock.module('./cliProviderInit.js', () => ({
+    void mock.module('./cliProviderInit.js', () => ({
       activateConfiguredProvider: async () => ({
         authFailed: false,
         token: undefined,
@@ -379,38 +379,38 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       connectIdeClientIfEnabled: async () => {},
       ensureAcpProviderActivated: () => {},
     }));
-    mock.module('./cliTerminalSession.js', () => ({
+    void mock.module('./cliTerminalSession.js', () => ({
       constructAgentWithSpinner: async () => ({}),
       prepareTerminalSession: async () => {},
     }));
-    mock.module('./cliSessionBootstrap.js', () => ({
+    void mock.module('./cliSessionBootstrap.js', () => ({
       bootstrapRuntimeAndConfig: async () => ({
         config,
         runtimeSettingsService: {},
       }),
       setupSessionRecording: async () => undefined,
     }));
-    mock.module('./session/nonInteractiveSession.js', () => ({
+    void mock.module('./session/nonInteractiveSession.js', () => ({
       dispatchInteractiveOrNonInteractive: async () => {},
     }));
-    mock.module('./cliSandbox.js', () => ({
+    void mock.module('./cliSandbox.js', () => ({
       maybeHopIntoSandbox: async () => {},
     }));
     // parseArguments returns image-mode flags with NO conversational prompt.
-    mock.module('./config/cliArgParser.js', () => ({
+    void mock.module('./config/cliArgParser.js', () => ({
       parseArguments: async () => ({
         imageOutput: 'out.png',
         imagePrompt: 'draw a cat',
         experimentalAcp: false,
       }),
     }));
-    mock.module('./config/settings.js', () => ({
+    void mock.module('./config/settings.js', () => ({
       loadSettings: () => ({
         merged: { ui: { unicode: 'auto' } },
         errors: [],
       }),
     }));
-    mock.module('./cliBootstrap.js', () => ({
+    void mock.module('./cliBootstrap.js', () => ({
       configureEarlyDebugLogging: () => {},
       createMemoizedStdinReader: () => async () => '',
       // Track whether the guard is invoked.
@@ -426,42 +426,42 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       registerDynamicToolSettings: () => {},
       ParsedCliArgs: {} as never,
     }));
-    mock.module('./utils/cleanup.js', () => ({
+    void mock.module('./utils/cleanup.js', () => ({
       cleanupCheckpoints: async () => {},
       runExitCleanup: async () => {},
       registerSyncCleanup: () => {},
     }));
-    mock.module('./utils/sessionCleanup.js', () => ({
+    void mock.module('./utils/sessionCleanup.js', () => ({
       cleanupExpiredSessions: async () => {},
     }));
-    mock.module('./zed-integration/zedIntegration.js', () => ({
+    void mock.module('./zed-integration/zedIntegration.js', () => ({
       runZedIntegration: async () => {},
     }));
-    mock.module('./config/pathMigration.js', () => ({
+    void mock.module('./config/pathMigration.js', () => ({
       runStartupMigration: () => ({ migrated: false }),
       reportStartupResult: () => ({
         messages: [],
         needsLegacyFallback: false,
       }),
     }));
-    mock.module('./session/errorReporting.js', () => ({
+    void mock.module('./session/errorReporting.js', () => ({
       formatNonInteractiveError: () => '',
     }));
-    mock.module('./session/outputListeners.js', () => ({
+    void mock.module('./session/outputListeners.js', () => ({
       initializeOutputListenersAndFlush: () => {},
     }));
-    mock.module('./session/signalHandlers.js', () => ({
+    void mock.module('./session/signalHandlers.js', () => ({
       installNonInteractiveSigintHandler: () => {},
       setupUnhandledRejectionHandler: () => {},
       __resetUnhandledRejectionStateForTesting: () => {},
     }));
-    mock.module('./session/interactiveUI.js', () => ({
+    void mock.module('./session/interactiveUI.js', () => ({
       startInteractiveUI: async () => {},
     }));
     // Track whether image-mode dispatch is reached. The REAL
     // buildImageModeFlags is preserved so the stdin-guard bypass decision is
     // exercised against the real flag-detection logic, not a stub.
-    mock.module('./config/imageModeDispatch.js', () => ({
+    void mock.module('./config/imageModeDispatch.js', () => ({
       buildImageModeFlags,
       runDirectImageModeAndExit: async () => {
         callOrder.push('image-dispatch');

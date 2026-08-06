@@ -687,7 +687,7 @@ describe('settingsIntegration', () => {
       );
 
       const mockRepoRoot = '/Users/test/repo';
-      mock.module('./../../utils/gitUtils.js', () => ({
+      void mock.module('./../../utils/gitUtils.js', () => ({
         getWorkspaceIdentity: vi.fn(() => mockRepoRoot),
       }));
 

@@ -41,7 +41,7 @@ describe('auth import isolation @issue:2417', () => {
         'ActivateSkillTool module was loaded during auth import — import isolation broken (#2417)',
       );
     });
-    mock.module(
+    void mock.module(
       '@vybestack/llxprt-code-tools/tools/activate-skill.js',
       activateSkillSpy,
     );
@@ -51,7 +51,7 @@ describe('auth import isolation @issue:2417', () => {
         '@ast-grep/napi was loaded during auth import — import isolation broken (#2417)',
       );
     });
-    mock.module('@ast-grep/napi', napiSpy);
+    void mock.module('@ast-grep/napi', napiSpy);
 
     // Dynamically import the auth entry from source (not dist) to verify
     // the source-level import graph does not reach tool implementations.
