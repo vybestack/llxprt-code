@@ -41,13 +41,11 @@ function createHostOnlyDir(): string {
   try {
     fs.mkdirSync(hostOnlyDir, { mode: 0o700 });
     dirCreated = true;
-    if (process.platform !== 'win32') {
-      const dirFd = fs.openSync(hostOnlyDir, 'r');
-      try {
-        fs.fchmodSync(dirFd, 0o700);
-      } finally {
-        fs.closeSync(dirFd);
-      }
+    const dirFd = fs.openSync(hostOnlyDir, 'r');
+    try {
+      if (process.platform !== 'win32') fs.fchmodSync(dirFd, 0o700);
+    } finally {
+      fs.closeSync(dirFd);
     }
   } catch (err) {
     const errors: unknown[] = [err];
