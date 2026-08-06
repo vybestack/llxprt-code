@@ -20,8 +20,6 @@
     "packages/providers",
     "packages/agents",
     "packages/cli",
-    "packages/llxprt-cli-posix",
-    "packages/llxprt-cli-win32",
     "packages/a2a-server",
     "packages/test-utils",
     "packages/vscode-ide-companion"
