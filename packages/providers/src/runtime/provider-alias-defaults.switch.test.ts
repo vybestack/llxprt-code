@@ -8,15 +8,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-const { aliasEntries } = vi.hoisted(() => ({
+const { aliasEntries } = {
   aliasEntries: [] as Array<Record<string, unknown>>,
-}));
+};
 
 const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
-} = vi.hoisted(() => {
+} = (() => {
   class StubSettingsService {
     providers: Record<string, Record<string, unknown>> = {};
     global: Record<string, unknown> = {};
@@ -138,7 +138,7 @@ const {
   }
 
   return { StubSettingsService, StubConfig, StubProvider };
-});
+})();
 
 type StubSettingsServiceInstance = InstanceType<
   typeof StubSettingsServiceClass

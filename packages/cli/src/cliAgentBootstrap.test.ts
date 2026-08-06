@@ -23,9 +23,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
-const { fromConfigMock } = vi.hoisted(() => ({
+const { fromConfigMock } = {
   fromConfigMock: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-agents', () => ({
   fromConfig: fromConfigMock,

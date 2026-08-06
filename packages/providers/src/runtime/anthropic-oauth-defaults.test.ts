@@ -18,7 +18,7 @@ const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
-} = vi.hoisted(() => {
+} = (() => {
   class StubSettingsService {
     providers: Record<string, Record<string, unknown>> = {};
     global: Record<string, unknown> = {};
@@ -141,7 +141,7 @@ const {
   }
 
   return { StubSettingsService, StubConfig, StubProvider };
-});
+})();
 
 type StubSettingsServiceInstance = InstanceType<
   typeof StubSettingsServiceClass

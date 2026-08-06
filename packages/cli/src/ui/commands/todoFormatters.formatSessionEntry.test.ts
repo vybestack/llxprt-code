@@ -16,9 +16,9 @@ import type { TodoSessionFile } from './todoOperations.js';
 // vi.mock is hoisted above imports — the factory must not reference any
 // top-level variable. vi.hoisted gives us a stable mock function that is
 // available both inside the factory and in the test body.
-const { readFileSyncMock } = vi.hoisted(() => ({
+const { readFileSyncMock } = {
   readFileSyncMock: vi.fn(),
-}));
+};
 
 vi.mock('fs', () => ({
   readFileSync: readFileSyncMock,

@@ -14,12 +14,12 @@ import type { HookRegistry, HookRegistryEntry } from './hookRegistry.js';
 import { HookEventName, HookType } from './types.js';
 
 // Mock DebugLogger using vi.hoisted
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
 vi.mock('../debug/index.js', () => ({
   DebugLogger: {

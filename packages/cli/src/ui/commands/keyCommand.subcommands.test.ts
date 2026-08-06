@@ -75,10 +75,10 @@ function createTestStorage(
 
 // ─── Mock for Runtime + ProviderKeyStorage ──────────────────────────────────
 
-const mockRuntime = vi.hoisted(() => ({
+const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
   getActiveProviderStatus: vi.fn(),
-}));
+};
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => mockRuntime,

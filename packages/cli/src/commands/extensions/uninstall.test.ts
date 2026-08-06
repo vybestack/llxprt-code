@@ -19,7 +19,7 @@ import yargs from 'yargs';
 import type * as extensionModule from '../../config/extension.js';
 
 const mockUninstallExtension: Mock<typeof extensionModule.uninstallExtension> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 
 vi.mock('../../config/extension.js', async (importOriginal) => {
   const actual =

@@ -36,7 +36,7 @@ import type { HistoryItemAi } from '../types.js';
 import { MessageType, StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
-const inkMock = vi.hoisted(() => {
+const inkMock = (() => {
   const write = vi.fn();
   const exit = vi.fn();
   const setRawMode = vi.fn();
@@ -73,7 +73,7 @@ const inkMock = vi.hoisted(() => {
   };
   (module as Record<string, unknown>).default = module;
   return module;
-});
+})();
 
 vi.mock('ink', () => inkMock);
 

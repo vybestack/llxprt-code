@@ -17,10 +17,10 @@ import { InvalidStreamError, StreamEventType } from './chatSession.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),

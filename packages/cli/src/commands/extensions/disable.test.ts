@@ -24,7 +24,7 @@ vi.mock('../utils.js', () => ({
 }));
 
 const mockDisableExtension: Mock<typeof extensionModule.disableExtension> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 
 vi.mock('../../config/extension.js', async (importOriginal) => {
   const actual =

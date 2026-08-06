@@ -164,13 +164,13 @@ vi.mock('./cliAgentBootstrap.js', () => ({
 
 // Mock the public activation preflight so main() does not invoke real provider
 // runtime mutators. These tests verify surrounding CLI orchestration.
-const { preflightAgentActivationMock } = vi.hoisted(() => ({
+const { preflightAgentActivationMock } = {
   preflightAgentActivationMock: vi.fn().mockResolvedValue({
     authFailed: false,
     activeProvider: 'gemini',
     infoMessages: [],
   }),
-}));
+};
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
@@ -194,9 +194,9 @@ vi.mock('./ui/utils/mouse.js', () => ({
 // Mock writeToStdout/writeToStderr so exit-handler tests can observe calls
 // (the real writeToStdout captures process.stdout.write at module load and
 // would bypass vi.spyOn on process.stdout.write).
-const { mockWriteToStdout } = vi.hoisted(() => ({
+const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
-}));
+};
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();

@@ -15,7 +15,7 @@ import {
 } from '../config/trustedFolders.js';
 
 // Mock os.homedir to control the home directory in tests
-const mockHomedir = vi.hoisted(() => vi.fn());
+const mockHomedir = vi.fn();
 
 vi.mock('node:os', async (importOriginal) => {
   const actualOs = await importOriginal<

@@ -19,9 +19,8 @@ import type * as extensionModule from '../../config/extension.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
-  vi.hoisted(() => vi.fn());
-const mockToOutputString: Mock<typeof extensionModule.toOutputString> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
+const mockToOutputString: Mock<typeof extensionModule.toOutputString> = vi.fn();
 
 vi.mock('../../config/extension.js', async (importOriginal) => {
   const actual =

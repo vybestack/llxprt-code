@@ -20,7 +20,7 @@ import {
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
-const mockMessagesCreate = vi.hoisted(() => vi.fn());
+const mockMessagesCreate = vi.fn();
 
 // Mock the ToolFormatter
 vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({

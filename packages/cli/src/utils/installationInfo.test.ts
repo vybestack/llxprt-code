@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as childProcess from 'child_process';
 import { isGitRepository } from '@vybestack/llxprt-code-core';
 
-const { mockDebugLogger } = vi.hoisted(() => ({
+const { mockDebugLogger } = {
   mockDebugLogger: {
     debug: vi.fn(),
     warn: vi.fn(),
@@ -19,7 +19,7 @@ const { mockDebugLogger } = vi.hoisted(() => ({
     log: vi.fn(),
     info: vi.fn(),
   },
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core', () => ({
   isGitRepository: vi.fn(),

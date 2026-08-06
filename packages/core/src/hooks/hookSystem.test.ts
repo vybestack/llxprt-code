@@ -15,12 +15,12 @@ import type { Config } from '../config/config.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 
 // Mock DebugLogger
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
 vi.mock('../debug/index.js', () => {
   // Create a constructor function that returns the mock

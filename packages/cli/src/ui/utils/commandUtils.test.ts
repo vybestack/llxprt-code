@@ -30,7 +30,7 @@ vi.mock('clipboardy', () => ({
 
 // Mock child_process — provide an explicit factory so spawn is a vi.fn()
 // under Bun (automocking of builtins differs from Vitest).
-const mockSpawnHoisted = vi.hoisted(() => vi.fn());
+const mockSpawnHoisted = vi.fn();
 vi.mock('node:child_process', () => ({
   spawn: mockSpawnHoisted,
   exec: vi.fn(),
@@ -39,11 +39,11 @@ vi.mock('node:child_process', () => ({
 }));
 
 // fs (for /dev/tty)
-const mockFs = vi.hoisted(() => ({
+const mockFs = {
   createWriteStream: vi.fn(),
   writeSync: vi.fn(),
   constants: { W_OK: 2 },
-}));
+};
 vi.mock('node:fs', () => ({
   default: mockFs,
 }));
@@ -53,7 +53,7 @@ vi.mock('node:fs', () => ({
 // getter persists across nested describe beforeEach hooks. vi.stubGlobal
 // restores the original process in afterEach, causing the stub to be lost
 // before nested describe beforeEach runs.
-const mockProcess = vi.hoisted(() => ({ platform: 'darwin' }));
+const mockProcess = { platform: 'darwin' };
 
 // The per-test hooks below replace process.stdout / process.stderr with mock
 // writables. Under Bun the test file IS the process, so the real streams must

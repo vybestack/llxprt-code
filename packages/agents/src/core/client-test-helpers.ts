@@ -8,11 +8,11 @@
  * Shared helpers for client test files. Extracted from the original
  * monolithic client.test.ts so no file-level max-lines disable is needed.
  *
- * IMPORTANT: vi.mock() calls are file-scoped and hoisted by the test runner above
- * all imports. Each test file that exercises AgentClient must declare its
- * own vi.mock() calls and vi.hoisted() mock-fn references at the top of
- * the file. The setup function below receives those mock fns as arguments
- * so it can wire them into the shared Config/GoogleGenAI mock.
+ * IMPORTANT: vi.mock() registrations are file-scoped. Each test file that
+ * exercises AgentClient must declare its own vi.mock() calls and the mock fns
+ * they reference at the top of the file, before the module under test is
+ * imported. The setup function below receives those mock fns as arguments so
+ * it can wire them into the shared Config/GoogleGenAI mock.
  */
 
 import { vi } from '../testApi.js';

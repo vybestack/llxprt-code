@@ -20,17 +20,15 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const mockChatCompletionsCreate = vi.hoisted(() => vi.fn());
+const mockChatCompletionsCreate = vi.fn();
 
-const mockOpenAIConstructor = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: mockChatCompletionsCreate,
-      },
+const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
+  chat: {
+    completions: {
+      create: mockChatCompletionsCreate,
     },
-  })),
-);
+  },
+}));
 
 vi.mock('openai', () => ({
   default: mockOpenAIConstructor,
@@ -44,13 +42,13 @@ vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
   createCodeAssistContentGenerator: vi.fn(),
 }));
 
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(

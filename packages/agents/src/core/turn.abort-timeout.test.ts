@@ -14,10 +14,10 @@ import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { flushEventLoop } from '../test-utils/eventLoop.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
 function waitForAbort(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();

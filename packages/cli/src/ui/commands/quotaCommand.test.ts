@@ -10,9 +10,9 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
-const { mockConsumeCodexRateLimitResetCredit } = vi.hoisted(() => ({
+const { mockConsumeCodexRateLimitResetCredit } = {
   mockConsumeCodexRateLimitResetCredit: vi.fn(),
-}));
+};
 
 const getCliOAuthManagerMock = vi.fn();
 const maybeGetCliOAuthManagerMock = vi.fn();

@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-const mockGetBuiltinSkillsDir = vi.hoisted(() => vi.fn());
+const mockGetBuiltinSkillsDir = vi.fn();
 
 vi.mock('./skillLoader.js', (importOriginal) => {
   const actual = importOriginal() as typeof import('./skillLoader.js');

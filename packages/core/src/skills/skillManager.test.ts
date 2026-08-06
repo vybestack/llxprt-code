@@ -19,8 +19,8 @@ import { debugLogger } from '../utils/debugLogger.js';
 let realLoadSkillsFromDir: typeof import('./skillLoader.js').loadSkillsFromDir;
 let realGetBuiltinSkillsDir: typeof import('./skillLoader.js').getBuiltinSkillsDir;
 
-const mockLoadSkillsFromDir = vi.hoisted(() => vi.fn());
-const mockGetBuiltinSkillsDir = vi.hoisted(() => vi.fn());
+const mockLoadSkillsFromDir = vi.fn();
+const mockGetBuiltinSkillsDir = vi.fn();
 
 vi.mock('./skillLoader.js', (importOriginal) => {
   const actual = importOriginal() as typeof import('./skillLoader.js');

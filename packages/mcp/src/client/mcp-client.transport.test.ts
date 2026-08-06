@@ -27,13 +27,13 @@ vi.mock('../auth/oauth-provider.js');
 vi.mock('../auth/oauth-token-storage.js');
 vi.mock('../auth/oauth-utils.js');
 
-const { MockGoogleAuth } = vi.hoisted(() => {
+const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {
     constructor(..._args: unknown[]) {}
   }
   MockGoogleAuth.prototype.getClient = vi.fn();
   return { MockGoogleAuth };
-});
+})();
 vi.mock('google-auth-library', () => ({
   GoogleAuth: MockGoogleAuth,
 }));

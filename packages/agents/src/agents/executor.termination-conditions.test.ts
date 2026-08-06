@@ -27,12 +27,11 @@ import {
 } from './executor-test-helpers.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 
-const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
-  vi.hoisted(() => ({
-    MockedChatSession: vi.fn(),
-    mockSendMessageStream: vi.fn(),
-    mockExecuteToolCall: vi.fn(),
-  }));
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } = {
+  MockedChatSession: vi.fn(),
+  mockSendMessageStream: vi.fn(),
+  mockExecuteToolCall: vi.fn(),
+};
 
 vi.mock('../core/chatSession.js', (importOriginal) => {
   const apply = (actual: typeof import('../core/chatSession.js')) => ({

@@ -20,8 +20,8 @@ import { SHELL_COMMAND_NAME, TOOL_STATUS } from '../../constants.js';
 import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 import type { ShellState } from '../../cliUiRuntime.js';
 
-const isActivePtyMock = vi.hoisted(() => vi.fn());
-const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
+const isActivePtyMock = vi.fn();
+const getLastActivePtyIdMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<

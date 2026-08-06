@@ -14,8 +14,8 @@ import {
   type ResolvedTrustRule,
 } from '../../config/trustedFolders.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteValue = vi.hoisted(() => vi.fn());
+const mockedSetValue = vi.fn();
+const mockedDeleteValue = vi.fn();
 const mockedUserConfig = vi.hoisted<{
   value: Record<string, TrustLevel>;
 }>(() => ({ value: {} }));
@@ -24,11 +24,11 @@ const mockedResolvePathTrust = vi.hoisted<
     typeof vi.fn<(folderPath: string) => ResolvedTrustRule | undefined>
   >
 >(() => vi.fn(() => undefined));
-const mockedGetValue = vi.hoisted(() =>
-  vi.fn((folderPath: string) => mockedUserConfig.value[folderPath]),
+const mockedGetValue = vi.fn(
+  (folderPath: string) => mockedUserConfig.value[folderPath],
 );
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
 const mockedIdeTrust = vi.hoisted<{ value: boolean | undefined }>(() => ({
   value: undefined,
 }));

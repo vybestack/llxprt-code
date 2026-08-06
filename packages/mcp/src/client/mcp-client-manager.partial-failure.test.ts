@@ -14,9 +14,9 @@ import { McpClientManager } from './mcp-client-manager.js';
 import type { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
 
-const { mockMcpClient } = vi.hoisted(() => ({
+const { mockMcpClient } = {
   mockMcpClient: vi.fn(),
-}));
+};
 vi.mock('./mcp-client.js', () => ({
   McpClient: mockMcpClient,
   MCPDiscoveryState: {

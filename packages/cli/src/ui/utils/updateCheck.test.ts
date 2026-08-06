@@ -8,16 +8,16 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
-const getPackageJson = vi.hoisted(() => vi.fn());
-const debugLogger = vi.hoisted(() => ({
+const getPackageJson = vi.fn();
+const debugLogger = {
   warn: vi.fn(),
-}));
+};
 vi.mock('@vybestack/llxprt-code-core', () => ({
   getPackageJson,
   debugLogger,
 }));
 
-const updateNotifier = vi.hoisted(() => vi.fn());
+const updateNotifier = vi.fn();
 vi.mock('update-notifier', () => ({
   default: updateNotifier,
 }));

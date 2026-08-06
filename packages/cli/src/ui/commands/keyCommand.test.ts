@@ -9,10 +9,10 @@ import { keyCommand } from './keyCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 
-const mockRuntime = vi.hoisted(() => ({
+const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
   getActiveProviderStatus: vi.fn(),
-}));
+};
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => mockRuntime,

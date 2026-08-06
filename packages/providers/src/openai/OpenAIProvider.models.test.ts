@@ -5,9 +5,9 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 // factory runs in. This avoids referencing a module-scoped binding from
 // inside the factory (a fragile pattern under parallel/multi-file runs) and
 // gives each run a cleanly resettable instance.
-const { mockModelsList } = vi.hoisted(() => ({
+const { mockModelsList } = {
   mockModelsList: vi.fn(),
-}));
+};
 
 vi.mock('openai', () => ({
   default: class MockOpenAI {

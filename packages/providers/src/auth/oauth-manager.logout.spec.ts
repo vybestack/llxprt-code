@@ -7,7 +7,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
+const { flushMockRef, providerManagerRef, providerRef } = {
   flushMockRef: {
     current: undefined as ReturnType<typeof vi.fn> | undefined,
   },
@@ -19,7 +19,7 @@ const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   providerRef: {
     current: undefined as unknown,
   },
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-auth', () => {
   const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(

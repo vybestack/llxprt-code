@@ -32,10 +32,10 @@ import type {
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
-const { mockPlatform, mockTmpdir } = vi.hoisted(() => ({
+const { mockPlatform, mockTmpdir } = {
   mockPlatform: vi.fn(() => 'darwin'),
   mockTmpdir: vi.fn(() => '/tmp'),
-}));
+};
 
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal();

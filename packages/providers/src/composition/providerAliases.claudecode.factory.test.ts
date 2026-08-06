@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 // Stub the Anthropic SDK at the HTTP boundary so the real alias factory +
 // AnthropicProvider can exercise the dynamic /models listing path without a
 // network call. We capture the constructor args to prove API-key wiring.
-const mockBetaModelsList = vi.hoisted(() => vi.fn());
+const mockBetaModelsList = vi.fn();
 const sdkConstructorCalls = vi.hoisted<
   Array<{ apiKey?: string; authToken?: string }>
 >(() => []);

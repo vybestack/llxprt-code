@@ -11,8 +11,8 @@ import { ToolCallStatus } from '../../../types.js';
 import { SHELL_COMMAND_NAME } from '../../../constants.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 
-const isActivePtyMock = vi.hoisted(() => vi.fn());
-const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
+const isActivePtyMock = vi.fn();
+const getLastActivePtyIdMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<

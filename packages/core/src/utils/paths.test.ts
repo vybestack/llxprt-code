@@ -9,7 +9,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 // Controllable platform mock
-const mockPlatform = vi.hoisted(() => vi.fn(() => process.platform));
+const mockPlatform = vi.fn(() => process.platform);
 
 vi.mock('os', (importOriginal) => {
   const actual = importOriginal() as typeof import('node:os');

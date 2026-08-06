@@ -13,13 +13,13 @@ const {
   streamMessageReaderMock,
   streamMessageWriterMock,
   sendRequestMock,
-} = vi.hoisted(() => ({
+} = {
   spawnMock: vi.fn(),
   createMessageConnectionMock: vi.fn(),
   streamMessageReaderMock: vi.fn(),
   streamMessageWriterMock: vi.fn(),
   sendRequestMock: vi.fn(),
-}));
+};
 
 const createLocatorProcess = () => {
   const proc = new EventEmitter() as EventEmitter & { stdout: PassThrough };

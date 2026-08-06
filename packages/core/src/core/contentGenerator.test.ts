@@ -11,8 +11,8 @@ import {
 } from './contentGenerator.js';
 import type { Config } from '../config/config.js';
 
-const mockGoogleGenAIWrapperConstructor = vi.hoisted(() => vi.fn());
-const mockGoogleGenAIWrapperInstance = vi.hoisted(() => ({
+const mockGoogleGenAIWrapperConstructor = vi.fn();
+const mockGoogleGenAIWrapperInstance = {
   generateContent: async (): Promise<unknown> => ({}),
   generateContentStream: async (): Promise<AsyncGenerator<unknown>> => {
     async function* emptyStream(): AsyncGenerator<unknown> {
@@ -22,7 +22,7 @@ const mockGoogleGenAIWrapperInstance = vi.hoisted(() => ({
   },
   countTokens: async (): Promise<unknown> => ({}),
   embedContent: async (): Promise<unknown> => ({}),
-}));
+};
 
 vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
   GoogleGenAIWrapper: vi

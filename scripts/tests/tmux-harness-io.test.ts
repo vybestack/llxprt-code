@@ -28,9 +28,9 @@ const SOCKET_FLAG = IS_WIN32 ? '-L' : '-S';
 
 // Capture spawnSync calls. The module under test imports `spawnSync` from
 // `node:child_process`, so we mock that specifier.
-const { spawnSyncMock } = vi.hoisted(() => ({
+const { spawnSyncMock } = {
   spawnSyncMock: vi.fn(),
-}));
+};
 
 vi.mock('node:child_process', () => ({
   spawnSync: (...args: unknown[]) => spawnSyncMock(...args),

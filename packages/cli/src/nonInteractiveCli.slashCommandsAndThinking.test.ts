@@ -26,7 +26,7 @@ import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 // Captures the resolved query handed to the fake Agent's stream(), and the
 // AgentEvents it should emit. Reset per-test in beforeEach.
-const agentState = vi.hoisted(() => ({
+const agentState = {
   // runNonInteractive passes the resolved query to agent.stream(); typed as
   // AgentInput | null (matching the stream() parameter type) so assertions get
   // compile-time checking instead of the looser `unknown`.
@@ -35,7 +35,7 @@ const agentState = vi.hoisted(() => ({
   // tests can assert runNonInteractive still forwards prompt_id and maxTurns.
   streamOpts: null as TurnOptions | null,
   events: [] as AgentEvent[],
-}));
+};
 
 // Activation params (_profileModelParams, _cliModelParams, _bootstrapArgs) have
 // no public setter API on Config — production code reads/writes them via the
@@ -86,8 +86,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-const mockGetCommands = vi.hoisted(() => vi.fn());
-const mockCommandServiceCreate = vi.hoisted(() => vi.fn());
+const mockGetCommands = vi.fn();
+const mockCommandServiceCreate = vi.fn();
 vi.mock('./services/CommandService.js', () => ({
   CommandService: {
     create: mockCommandServiceCreate,

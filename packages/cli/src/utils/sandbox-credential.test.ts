@@ -10,18 +10,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 
-const authMocks = vi.hoisted(() => ({
+const authMocks = {
   createAndStartProxy: vi.fn(),
   getProxySocketPath: vi.fn(),
   stopProxy: vi.fn(),
   getProxyCapabilityToken: vi.fn(),
-}));
-const bridgeMocks = vi.hoisted(() => ({
+};
+const bridgeMocks = {
   setupCredentialProxyDockerMacOS: vi.fn(),
   setupCredentialProxyPodmanMacOS: vi.fn(),
   dockerCleanup: vi.fn(),
   podmanCleanup: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,

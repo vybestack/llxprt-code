@@ -20,13 +20,13 @@ import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockInstallOrUpdateExtension: Mock<
   typeof extensionModule.installOrUpdateExtension
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadExtensionByName: Mock<
   typeof extensionModule.loadExtensionByName
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockRequestConsentNonInteractive: Mock<
   typeof extensionModule.requestConsentNonInteractive
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 
 vi.mock('../../config/extension.js', async (importOriginal) => {
   const actual =

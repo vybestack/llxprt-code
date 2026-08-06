@@ -21,9 +21,9 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
 
-const { mockWarn } = vi.hoisted(() => ({
+const { mockWarn } = {
   mockWarn: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
   const actual =

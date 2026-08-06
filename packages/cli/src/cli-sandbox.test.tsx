@@ -142,9 +142,9 @@ vi.mock('./ui/utils/mouse.js', () => ({
   DISABLE_MOUSE_EVENTS: '',
 }));
 
-const { mockWriteToStdout } = vi.hoisted(() => ({
+const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
-}));
+};
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();

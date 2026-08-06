@@ -14,10 +14,10 @@ import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import type { MemoryLoadResult } from '../utils/memoryDiscovery.js';
 
-const mockLoadGlobalMemory = vi.hoisted(() => vi.fn());
-const mockLoadEnvironmentMemory = vi.hoisted(() => vi.fn());
-const mockLoadJitSubdirectoryMemory = vi.hoisted(() => vi.fn());
-const mockLoadCoreMemory = vi.hoisted(() => vi.fn());
+const mockLoadGlobalMemory = vi.fn();
+const mockLoadEnvironmentMemory = vi.fn();
+const mockLoadJitSubdirectoryMemory = vi.fn();
+const mockLoadCoreMemory = vi.fn();
 
 // Mock memoryDiscovery module
 vi.mock('../utils/memoryDiscovery.js', (importOriginal) => {

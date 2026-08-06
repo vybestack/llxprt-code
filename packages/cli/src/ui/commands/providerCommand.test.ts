@@ -31,7 +31,7 @@ interface AgentDouble {
   setProvider: Mock;
 }
 
-const mocks = vi.hoisted(() => {
+const mocks = (() => {
   const runtimeApi = {
     getActiveProviderName: vi.fn(),
     getActiveModelName: vi.fn(),
@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => {
     getRuntimeApiMock: vi.fn(() => runtimeApi),
     agent,
   };
-});
+})();
 
 // This test writes real alias files, but the workspace test preload replaces
 // providerAliases.js with a stub whose writeProviderAliasConfig is a no-op.

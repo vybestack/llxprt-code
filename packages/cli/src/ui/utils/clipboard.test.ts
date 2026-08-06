@@ -11,7 +11,7 @@ import {
   writeOsc52ToTerminal,
 } from './clipboard.js';
 
-const copyToClipboard = vi.hoisted(() => vi.fn(async () => undefined));
+const copyToClipboard = vi.fn(async () => undefined);
 vi.mock('./commandUtils.js', () => ({
   copyToClipboard,
 }));

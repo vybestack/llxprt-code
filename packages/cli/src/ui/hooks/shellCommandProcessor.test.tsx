@@ -16,10 +16,10 @@ import {
   type Mock,
 } from 'bun:test';
 
-const mockIsBinary = vi.hoisted(() => vi.fn());
-const mockShellExecutionService = vi.hoisted(() => vi.fn());
-const mockIsActivePty = vi.hoisted(() => vi.fn());
-const mockGetLastActivePtyId = vi.hoisted(() => vi.fn());
+const mockIsBinary = vi.fn();
+const mockShellExecutionService = vi.fn();
+const mockIsActivePty = vi.fn();
+const mockGetLastActivePtyId = vi.fn();
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();

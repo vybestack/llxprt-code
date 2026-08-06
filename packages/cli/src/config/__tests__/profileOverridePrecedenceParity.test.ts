@@ -118,9 +118,10 @@ vi.mock('../profileBootstrap.js', async () => {
 // config.ts imports applyProfileSnapshot from
 // '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', which resolves
 // to packages/providers/src/runtime/profileSnapshot.js
-const profileSnapshotCalls = vi.hoisted(
-  () => [] as Array<{ provider?: string; profileName?: string }>,
-);
+const profileSnapshotCalls = [] as Array<{
+  provider?: string;
+  profileName?: string;
+}>;
 
 vi.mock('@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', () => ({
   applyProfileSnapshot: vi.fn(
@@ -144,7 +145,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', () => ({
 
 // Track switchActiveProvider calls
 // config.ts: import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js'
-const switchProviderCalls = vi.hoisted(() => [] as string[]);
+const switchProviderCalls = [] as string[];
 
 vi.mock('@vybestack/llxprt-code-providers/runtime/providerSwitch.js', () => ({
   switchActiveProvider: vi.fn(async (providerName: string) => {
@@ -159,7 +160,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/providerSwitch.js', () => ({
 }));
 
 // config.ts: import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js'
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -168,7 +169,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
   resetCliProviderInfrastructure: vi.fn(),

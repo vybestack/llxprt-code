@@ -14,9 +14,9 @@ import {
   type DiagnosticsTestSetup,
 } from './diagnosticsCommand-test-helpers.js';
 
-const runtimeMocks = vi.hoisted(() => ({
+const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),
-}));
+};
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: runtimeMocks.getRuntimeApiMock,

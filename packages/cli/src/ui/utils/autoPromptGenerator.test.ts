@@ -8,8 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 
-const runWithScopeMock = vi.hoisted(() => vi.fn());
-const createDetachedAutoPromptClientMock = vi.hoisted(() => vi.fn());
+const runWithScopeMock = vi.fn();
+const createDetachedAutoPromptClientMock = vi.fn();
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: () => ({

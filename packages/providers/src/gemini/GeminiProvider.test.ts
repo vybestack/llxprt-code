@@ -15,15 +15,13 @@ import {
   type SettingsService,
 } from '@vybestack/llxprt-code-settings';
 
-const generateContentStreamMock = vi.hoisted(() => vi.fn());
+const generateContentStreamMock = vi.fn();
 
-const googleGenAIConstructor = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
-    models: {
-      generateContentStream: generateContentStreamMock,
-    },
-  })),
-);
+const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
+  models: {
+    generateContentStream: generateContentStreamMock,
+  },
+}));
 
 vi.mock('@google/genai', () => ({
   GoogleGenAI: googleGenAIConstructor,
@@ -34,13 +32,13 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(

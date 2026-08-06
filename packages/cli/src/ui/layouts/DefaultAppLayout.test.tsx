@@ -21,10 +21,10 @@ import {
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
 
-const { dialogManagerRenderSpy, composerRenderSpy } = vi.hoisted(() => ({
+const { dialogManagerRenderSpy, composerRenderSpy } = {
   dialogManagerRenderSpy: vi.fn(() => null),
   composerRenderSpy: vi.fn(() => null),
-}));
+};
 
 vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(),

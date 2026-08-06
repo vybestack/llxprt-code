@@ -9,8 +9,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 
-const useRuntimeApiMock = vi.hoisted(() => vi.fn());
-const setTokenTrackingMetricsMock = vi.hoisted(() => vi.fn());
+const useRuntimeApiMock = vi.fn();
+const setTokenTrackingMetricsMock = vi.fn();
 
 vi.mock('../../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,

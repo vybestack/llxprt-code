@@ -9,10 +9,10 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 // Mock DebugLogger
-const { mockLog, mockDebugLoggerError } = vi.hoisted(() => ({
+const { mockLog, mockDebugLoggerError } = {
   mockLog: vi.fn(),
   mockDebugLoggerError: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
   const actual =

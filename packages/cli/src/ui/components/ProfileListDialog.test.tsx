@@ -21,7 +21,7 @@ enum TerminalKeys {
   ESCAPE = '\u001B',
 }
 
-const mockIsNarrow = vi.hoisted(() => ({ value: false }));
+const mockIsNarrow = { value: false };
 vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: () => ({
     width: mockIsNarrow.value ? 60 : 120,

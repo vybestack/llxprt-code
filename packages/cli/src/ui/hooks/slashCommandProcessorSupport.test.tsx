@@ -13,11 +13,11 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
 
-const loaderState = vi.hoisted(() => ({
+const loaderState = {
   builtinCommands: [] as SlashCommand[],
   fileCommands: [] as SlashCommand[],
   mcpCommands: [] as SlashCommand[],
-}));
+};
 
 vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: class {

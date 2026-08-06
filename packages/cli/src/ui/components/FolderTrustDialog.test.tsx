@@ -13,7 +13,7 @@ import { act, StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
-const mockedExit = vi.hoisted(() => vi.fn());
+const mockedExit = vi.fn();
 const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
 vi.mock('node:process', async () => {

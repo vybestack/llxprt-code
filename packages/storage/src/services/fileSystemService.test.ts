@@ -7,10 +7,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { StandardFileSystemService } from './fileSystemService.js';
 
-const { mockReadFile, mockWriteFile } = vi.hoisted(() => ({
+const { mockReadFile, mockWriteFile } = {
   mockReadFile: vi.fn(),
   mockWriteFile: vi.fn(),
-}));
+};
 
 vi.mock('fs/promises', () => ({
   default: { readFile: mockReadFile, writeFile: mockWriteFile },

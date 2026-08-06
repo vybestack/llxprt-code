@@ -51,9 +51,9 @@ import {
 } from './submitQueryTestFixtures.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
-const prepareQueryForAgentMock = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ queryToSend: 'test-query', shouldProceed: true }),
-);
+const prepareQueryForAgentMock = vi
+  .fn()
+  .mockResolvedValue({ queryToSend: 'test-query', shouldProceed: true });
 vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     displayUserMessage: vi.fn(),
@@ -74,7 +74,7 @@ vi.mock('../turnPreparation.js', () => ({
 }));
 
 // Mock streamUtils so we can assert whether handleSubmissionError is called.
-const handleSubmissionErrorMock = vi.hoisted(() => vi.fn());
+const handleSubmissionErrorMock = vi.fn();
 vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: handleSubmissionErrorMock,
   processSlashCommandResult: vi.fn(),

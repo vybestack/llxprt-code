@@ -26,13 +26,13 @@ import {
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+const { mockReadTodos, TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
   return { mockReadTodos, TodoStoreMock };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const actual =

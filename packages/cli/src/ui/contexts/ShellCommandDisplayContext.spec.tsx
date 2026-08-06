@@ -15,9 +15,9 @@ import type { KeypressHandler } from './KeypressContext.js';
 import { ToolCallStatus } from '../types.js';
 import { useShellCommandDisplay } from './ShellCommandDisplayContext.js';
 
-const keypress = vi.hoisted(() => ({
+const keypress = {
   handler: undefined as KeypressHandler | undefined,
-}));
+};
 
 vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (handler: KeypressHandler): void => {

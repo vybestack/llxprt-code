@@ -6,7 +6,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
+const { mockChatCreate, mockOpenAIConstructor } = (() => {
   const chatCreate = vi.fn();
   const constructor = vi.fn().mockImplementation(() => ({
     chat: {
@@ -16,7 +16,7 @@ const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
     },
   }));
   return { mockChatCreate: chatCreate, mockOpenAIConstructor: constructor };
-});
+})();
 let settingsServiceRef: { current: SettingsService } = {
   current: new SettingsService(),
 };

@@ -20,7 +20,7 @@ const {
   mockCreateHistogramFn,
   mockMeterInstance,
   mockGetMeterFn,
-} = vi.hoisted(() => {
+} = (() => {
   const counterAdd = vi.fn();
   const histogramRecord = vi.fn();
   const createCounter = vi.fn();
@@ -41,7 +41,7 @@ const {
     mockMeterInstance: meterInstance,
     mockGetMeterFn: getMeter,
   };
-});
+})();
 
 vi.mock('@opentelemetry/api', () => ({
   metrics: {

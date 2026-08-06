@@ -8,7 +8,7 @@ import type { Mock } from 'bun:test';
 import { vi, describe, beforeEach, it, expect } from 'bun:test';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
-const { MockGoogleAuth } = vi.hoisted(() => {
+const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {
     static mockConstructor = vi.fn();
     constructor(...args: unknown[]) {
@@ -17,7 +17,7 @@ const { MockGoogleAuth } = vi.hoisted(() => {
   }
   MockGoogleAuth.prototype.getClient = vi.fn();
   return { MockGoogleAuth };
-});
+})();
 
 vi.mock('google-auth-library', () => ({
   GoogleAuth: MockGoogleAuth,

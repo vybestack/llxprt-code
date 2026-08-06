@@ -4,7 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, type MockInstance, type Mock } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  type MockInstance,
+  type Mock,
+} from 'bun:test';
 
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
@@ -15,14 +22,14 @@ import type { Stats } from 'node:fs';
 
 const mockInstallOrUpdateExtension: Mock<
   typeof extensionModule.installOrUpdateExtension
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadExtensionByName: Mock<
   typeof extensionModule.loadExtensionByName
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockRequestConsentNonInteractive: Mock<
   typeof extensionModule.requestConsentNonInteractive
-> = vi.hoisted(() => vi.fn());
-const mockStat: Mock<typeof fs.stat> = vi.hoisted(() => vi.fn());
+> = vi.fn();
+const mockStat: Mock<typeof fs.stat> = vi.fn();
 
 vi.mock('../../config/extension.js', async (importOriginal) => {
   const actual =

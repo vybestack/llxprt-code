@@ -24,10 +24,10 @@ import type { Config } from '@vybestack/llxprt-code-core';
 // so the spy intercepts the SAME singleton the production code writes to; a
 // stale mock on the core re-export would observe a different object and never
 // see the warn call.
-const debugLoggerMock = vi.hoisted(() => ({
+const debugLoggerMock = {
   warn: vi.fn(),
   error: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
   const actual =

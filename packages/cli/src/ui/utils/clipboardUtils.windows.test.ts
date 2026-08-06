@@ -12,9 +12,9 @@ import { saveClipboardImage } from './clipboardUtils.js';
 // Mock dependencies
 vi.mock('fs/promises');
 
-const { mockSpawn } = vi.hoisted(() => ({
+const { mockSpawn } = {
   mockSpawn: vi.fn(),
-}));
+};
 
 // Must use a synchronous factory — async factories with importOriginal cause
 // the module under test to capture the real spawn before the mock resolves.

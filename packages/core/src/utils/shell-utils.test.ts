@@ -24,8 +24,8 @@ import { initializeParser as initializeShellParsers } from './shell-parser.js';
 import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockHomedir = vi.hoisted(() => vi.fn());
+const mockPlatform = vi.fn();
+const mockHomedir = vi.fn();
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
@@ -35,7 +35,7 @@ vi.mock('os', () => ({
   homedir: mockHomedir,
 }));
 
-const mockQuote = vi.hoisted(() => vi.fn());
+const mockQuote = vi.fn();
 vi.mock('shell-quote', () => ({
   quote: mockQuote,
 }));

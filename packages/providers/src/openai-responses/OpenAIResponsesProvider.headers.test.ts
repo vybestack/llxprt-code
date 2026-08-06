@@ -4,7 +4,7 @@ import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   setProviderSetting: vi.fn(),
@@ -12,15 +12,13 @@ const mockSettingsService = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
+};
 
-const parseResponsesStreamMock = vi.hoisted(() =>
-  vi.fn(async function* () {
-    // No streamed messages for these assertions
-  }),
-);
+const parseResponsesStreamMock = vi.fn(async function* () {
+  // No streamed messages for these assertions
+});
 
-const fetchMock = vi.hoisted(() => vi.fn());
+const fetchMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(

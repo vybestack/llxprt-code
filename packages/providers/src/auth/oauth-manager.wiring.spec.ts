@@ -13,7 +13,7 @@ import type {
   TokenStore,
 } from './types.js';
 
-const wiring = vi.hoisted(() => {
+const wiring = (() => {
   const state = {
     providerRegistry: {} as Record<string, unknown>,
     proactiveRenewalManager: {} as Record<string, unknown>,
@@ -50,7 +50,7 @@ const wiring = vi.hoisted(() => {
     getAllCodexRateLimitResetCredits,
     getHigherPriorityAuth,
   };
-});
+})();
 
 vi.mock('./provider-registry.js', () => ({
   ProviderRegistry: wiring.ProviderRegistry,

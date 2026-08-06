@@ -15,9 +15,9 @@ import {
   singleQuoteForShell,
 } from '../tools/shell-helpers.js';
 
-const { mockPlatform } = vi.hoisted(() => ({
+const { mockPlatform } = {
   mockPlatform: vi.fn(() => 'darwin'),
-}));
+};
 
 void vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal();

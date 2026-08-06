@@ -56,12 +56,12 @@ vi.mock('node:child_process', (importOriginal) => {
 });
 
 // Mock debugLogger using vi.hoisted
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
 vi.mock('../debug/index.js', () => {
   // Create a constructor function that returns the mock

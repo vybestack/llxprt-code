@@ -10,13 +10,13 @@ import { renderHook } from '../../../../test-utils/render.js';
 import type { Key } from '../../../hooks/useKeypress.js';
 import { useKeybindings } from './useKeybindings.js';
 
-const useKeypressMock = vi.hoisted(() => vi.fn());
-const isMouseEventsActiveMock = vi.hoisted(() => vi.fn());
-const setMouseEventsActiveMock = vi.hoisted(() => vi.fn());
-const disableMouseEventsMock = vi.hoisted(() => vi.fn());
-const enableMouseEventsMock = vi.hoisted(() => vi.fn());
-const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
-const isActivePtyMock = vi.hoisted(() => vi.fn());
+const useKeypressMock = vi.fn();
+const isMouseEventsActiveMock = vi.fn();
+const setMouseEventsActiveMock = vi.fn();
+const disableMouseEventsMock = vi.fn();
+const enableMouseEventsMock = vi.fn();
+const getLastActivePtyIdMock = vi.fn();
+const isActivePtyMock = vi.fn();
 
 vi.mock('../../../hooks/useKeypress.js', async () => {
   const actual = await vi.importActual<

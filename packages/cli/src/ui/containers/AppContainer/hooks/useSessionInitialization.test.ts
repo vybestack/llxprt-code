@@ -14,9 +14,7 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 // (agent.hooks.triggerSessionStart), so the raw core triggerSessionStartHook is
 // no longer imported by the SUT and does not need to be mocked here.
 
-const iContentToHistoryItemsMock = vi.hoisted(() =>
-  vi.fn().mockReturnValue([]),
-);
+const iContentToHistoryItemsMock = vi.fn().mockReturnValue([]);
 vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
   iContentToHistoryItems: iContentToHistoryItemsMock,
 }));

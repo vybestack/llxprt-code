@@ -1,4 +1,4 @@
-const reactStub = vi.hoisted(() => {
+const reactStub = (() => {
   let stateCursor = 0;
   const states: unknown[] = [];
   const setters: Array<(value: unknown) => void> = [];
@@ -62,7 +62,7 @@ const reactStub = vi.hoisted(() => {
     listeners,
     runEffects,
   };
-});
+})();
 
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
@@ -79,7 +79,7 @@ import { CommandKind } from '../commands/types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
-const coreMocks = vi.hoisted(() => {
+const coreMocks = (() => {
   const logSlashCommand = vi.fn();
   class StubLogger {
     debug = vi.fn();
@@ -136,14 +136,14 @@ const coreMocks = vi.hoisted(() => {
       FolderTrustChanged: 'folder-trust-changed',
     },
   };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-core', () => coreMocks);
 
-const sessionStatsMock = vi.hoisted(() => ({
+const sessionStatsMock = {
   stats: {},
   updateHistoryTokenCount: vi.fn(),
-}));
+};
 
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   const actual =
@@ -154,7 +154,7 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   };
 });
 
-const loaderMocks = vi.hoisted(() => {
+const loaderMocks = (() => {
   const builtinLoaderInstance = { loadCommands: vi.fn() };
   const fileLoaderInstance = { loadCommands: vi.fn() };
   const mcpLoaderInstance = { loadCommands: vi.fn() };
@@ -168,7 +168,7 @@ const loaderMocks = vi.hoisted(() => {
     FileCommandLoader: vi.fn().mockImplementation(() => fileLoaderInstance),
     McpPromptLoader: vi.fn().mockImplementation(() => mcpLoaderInstance),
   };
-});
+})();
 
 vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: loaderMocks.BuiltinCommandLoader,

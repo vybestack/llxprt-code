@@ -17,9 +17,9 @@ import {
   removeMCPStatusChangeListener,
 } from './mcp-status.js';
 
-const { mockMcpClient } = vi.hoisted(() => ({
+const { mockMcpClient } = {
   mockMcpClient: vi.fn(),
-}));
+};
 vi.mock('./mcp-client.js', () => ({
   McpClient: mockMcpClient,
   MCPDiscoveryState: {

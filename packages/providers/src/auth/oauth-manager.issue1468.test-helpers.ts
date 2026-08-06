@@ -26,10 +26,10 @@ import type * as SettingsPackage from '@vybestack/llxprt-code-settings';
 import type * as Providers from '@vybestack/llxprt-code-providers';
 
 // Hoisted mocks used by module factories
-const { mockLoadProfile, mockFetchAnthropicUsage } = vi.hoisted(() => ({
+const { mockLoadProfile, mockFetchAnthropicUsage } = {
   mockLoadProfile: vi.fn(),
   mockFetchAnthropicUsage: vi.fn(),
-}));
+};
 
 export { mockFetchAnthropicUsage, mockLoadProfile };
 

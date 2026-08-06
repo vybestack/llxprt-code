@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 
-const { registerSpy, mockLang } = vi.hoisted(() => {
+const { registerSpy, mockLang } = (() => {
   const mockLang = {
     TypeScript: 'TypeScript',
     JavaScript: 'JavaScript',
@@ -26,7 +26,7 @@ const { registerSpy, mockLang } = vi.hoisted(() => {
     }),
     mockLang,
   };
-});
+})();
 
 vi.mock('@ast-grep/napi', () => ({
   __esModule: true,

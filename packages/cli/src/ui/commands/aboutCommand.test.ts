@@ -20,9 +20,9 @@ import { USER_SETTINGS_PATH } from '../../config/settings.js';
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { assertDefined } from '../../test-utils/assertions.js';
 
-const runtimeMocks = vi.hoisted(() => ({
+const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),
-}));
+};
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: runtimeMocks.getRuntimeApiMock,

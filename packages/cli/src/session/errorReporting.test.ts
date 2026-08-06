@@ -3,9 +3,9 @@ import { OutputFormat } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { markMachineErrorReported } from './machineErrorReporting.js';
 
-const { writeToStderr } = vi.hoisted(() => ({
+const { writeToStderr } = {
   writeToStderr: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

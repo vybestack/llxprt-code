@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
-const mockUninstallSkill = vi.hoisted(() => vi.fn());
+const mockUninstallSkill = vi.fn();
 
 vi.mock('../../utils/skillUtils.js', () => ({
   uninstallSkill: mockUninstallSkill,

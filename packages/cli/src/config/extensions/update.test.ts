@@ -59,8 +59,8 @@ vi.mock('../trustedFolders.js', async (importOriginal) => {
   };
 });
 
-const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
-const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
+const mockLogExtensionInstallEvent = vi.fn();
+const mockLogExtensionUninstall = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

@@ -16,11 +16,11 @@ import { TrustFormAction } from '../trustDialogHelpers.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 import { usePermissionsTrustDialogFlow } from './usePermissionsTrustDialogFlow.js';
 
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteRuleByKey = vi.hoisted(() => vi.fn());
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
-const mockedResolvePathTrust = vi.hoisted(() => vi.fn());
+const mockedSetValue = vi.fn();
+const mockedDeleteRuleByKey = vi.fn();
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
+const mockedResolvePathTrust = vi.fn();
 const mockedTrustedConfig = vi.hoisted<{
   value: Record<string, TrustLevel>;
 }>(() => ({ value: {} }));

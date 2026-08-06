@@ -62,7 +62,7 @@ vi.mock('../turnPreparation.js', () => ({
 
 // Mock streamUtils so we can assert whether handleSubmissionError is called
 // (i.e. the activation error is surfaced to the user).
-const handleSubmissionErrorMock = vi.hoisted(() => vi.fn());
+const handleSubmissionErrorMock = vi.fn();
 vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: handleSubmissionErrorMock,
   processSlashCommandResult: vi.fn(),

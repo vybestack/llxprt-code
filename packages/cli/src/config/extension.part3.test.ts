@@ -67,10 +67,10 @@ vi.mock('./trustedFolders.js', async (importOriginal) => {
   };
 });
 
-const mockLogExtensionEnable = vi.hoisted(() => vi.fn());
-const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
-const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
-const mockLogExtensionDisable = vi.hoisted(() => vi.fn());
+const mockLogExtensionEnable = vi.fn();
+const mockLogExtensionInstallEvent = vi.fn();
+const mockLogExtensionUninstall = vi.fn();
+const mockLogExtensionDisable = vi.fn();
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
@@ -96,7 +96,7 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-const mockLoadSettings = vi.hoisted(() => vi.fn());
+const mockLoadSettings = vi.fn();
 
 vi.mock('./settings.js', () => ({
   loadSettings: mockLoadSettings,

@@ -70,7 +70,7 @@ function recordedFilesLister(...sessionIds: string[]): ChatSessionFileLister {
   return async () => names;
 }
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();

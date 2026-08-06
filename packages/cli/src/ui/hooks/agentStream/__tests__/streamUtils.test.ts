@@ -40,7 +40,7 @@ type TestPart = Parameters<typeof splitPartsByRole>[0][number];
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-const mockGetCodeAssistServer = vi.hoisted(() => vi.fn());
+const mockGetCodeAssistServer = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');

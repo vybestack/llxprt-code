@@ -19,12 +19,12 @@ vi.mock('node:fs', () => ({
 }));
 
 // Mock DebugLogger using vi.hoisted
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
 vi.mock('../debug/index.js', () => ({
   DebugLogger: {
@@ -33,11 +33,11 @@ vi.mock('../debug/index.js', () => ({
 }));
 
 // Mock TrustedHooksManager
-const mockTrustManager = vi.hoisted(() => ({
+const mockTrustManager = {
   load: vi.fn(),
   getUntrustedHooks: vi.fn().mockReturnValue([]),
   trustHooks: vi.fn(),
-}));
+};
 
 vi.mock('./trustedHooks.js', () => ({
   TrustedHooksManager: vi.fn(() => mockTrustManager),

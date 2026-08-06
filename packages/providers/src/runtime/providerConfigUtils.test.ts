@@ -5,7 +5,7 @@ const {
   needsSanitizationMock,
   updateActiveProviderApiKeyMock,
   updateActiveProviderBaseUrlMock,
-} = vi.hoisted(() => ({
+} = {
   sanitizeForByteStringMock: vi.fn((value: string) => `sanitized-${value}`),
   needsSanitizationMock: vi.fn(() => false),
   updateActiveProviderApiKeyMock: vi.fn(async () => ({
@@ -15,7 +15,7 @@ const {
   updateActiveProviderBaseUrlMock: vi.fn(async () => ({
     message: 'Base URL set',
   })),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core', () => ({
   sanitizeForByteString: sanitizeForByteStringMock,

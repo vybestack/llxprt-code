@@ -27,7 +27,7 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
-const mockShellProcess = vi.hoisted(() => vi.fn());
+const mockShellProcess = vi.fn();
 
 vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({

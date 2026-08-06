@@ -34,13 +34,13 @@ import {
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
 
-const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+const { mockReadTodos, TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
   return { mockReadTodos, TodoStoreMock };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const actual =

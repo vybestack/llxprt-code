@@ -21,9 +21,9 @@ import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
 import type { CliProviderManager } from './cliProviderInit.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 
-const { preflightAgentActivationMock } = vi.hoisted(() => ({
+const { preflightAgentActivationMock } = {
   preflightAgentActivationMock: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const actual =

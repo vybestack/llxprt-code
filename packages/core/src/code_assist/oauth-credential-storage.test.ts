@@ -23,7 +23,7 @@ import { coreEvents } from '../utils/events.js';
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
 
-const mockHomedir = vi.hoisted(() => vi.fn(() => '/mock/home'));
+const mockHomedir = vi.fn(() => '/mock/home');
 vi.mock('node:os', () => ({
   homedir: mockHomedir,
 }));

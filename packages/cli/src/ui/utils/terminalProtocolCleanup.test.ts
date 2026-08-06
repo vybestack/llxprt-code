@@ -11,9 +11,9 @@ import {
   TERMINAL_PROTOCOL_RESTORE_SEQUENCES,
 } from './terminalProtocolCleanup.js';
 
-const { writeSyncMock } = vi.hoisted(() => ({
+const { writeSyncMock } = {
   writeSyncMock: vi.fn(),
-}));
+};
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();

@@ -18,13 +18,13 @@ import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
-const saveProfileMock = vi.hoisted(() => vi.fn());
+const saveProfileMock = vi.fn();
 
-const runtimeServicesState = vi.hoisted(() => ({
+const runtimeServicesState = {
   activeProviderName: 'load-balancer' as string,
   lbConfig: null as unknown,
   ephemerals: {} as Record<string, unknown>,
-}));
+};
 
 vi.mock('../runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({

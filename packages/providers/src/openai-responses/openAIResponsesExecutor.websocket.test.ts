@@ -17,9 +17,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 
-const getCoreSystemPromptAsyncSpy = vi.hoisted(() =>
-  vi.fn().mockResolvedValue('system prompt'),
-);
+const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,

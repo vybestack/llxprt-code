@@ -45,10 +45,10 @@ vi.mock('fs', async (importOriginal) => {
 const realFs = await vi.importActual<typeof import('fs')>('fs');
 const realOs = await vi.importActual<typeof import('os')>('os');
 
-const mockCoreEvents = vi.hoisted(() => ({
+const mockCoreEvents = {
   emitFeedback: vi.fn(),
   emitSettingsChanged: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

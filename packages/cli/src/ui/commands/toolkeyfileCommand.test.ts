@@ -24,7 +24,7 @@ import { assertDefined } from '../../test-utils/assertions.js';
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
 
 const mockKeyfileStore = new Map<string, string>();
-const mockedHomedir = vi.hoisted(() => vi.fn());
+const mockedHomedir = vi.fn();
 
 vi.mock('node:os', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:os')>();

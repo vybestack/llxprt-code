@@ -18,18 +18,18 @@ import {
 } from './PoliciesDialog.js';
 import { MessageType } from '../types.js';
 
-const PolicyDecision = vi.hoisted(() => ({
+const PolicyDecision = {
   ALLOW: 'allow',
   DENY: 'deny',
   ASK_USER: 'ask_user',
-})) as unknown as typeof import('@vybestack/llxprt-code-core').PolicyDecision;
+} as unknown as typeof import('@vybestack/llxprt-code-core').PolicyDecision;
 
-const mockListEditableRules = vi.hoisted(() => vi.fn());
-const mockAddEditableRule = vi.hoisted(() => vi.fn());
-const mockUpdateEditableRule = vi.hoisted(() => vi.fn());
-const mockDeleteEditableRule = vi.hoisted(() => vi.fn());
-const mockDuplicateEditableRule = vi.hoisted(() => vi.fn());
-const mockReloadUserPolicyRules = vi.hoisted(() => vi.fn());
+const mockListEditableRules = vi.fn();
+const mockAddEditableRule = vi.fn();
+const mockUpdateEditableRule = vi.fn();
+const mockDeleteEditableRule = vi.fn();
+const mockDuplicateEditableRule = vi.fn();
+const mockReloadUserPolicyRules = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

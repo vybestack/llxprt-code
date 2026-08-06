@@ -11,8 +11,8 @@ import type { Readable } from 'stream';
 import { ShellExecutionService } from './shellExecutionService.js';
 import type { ChildProcess } from 'child_process';
 
-const mockPlatform = vi.hoisted(() => vi.fn(() => 'win32'));
-const mockSpawn = vi.hoisted(() => vi.fn());
+const mockPlatform = vi.fn(() => 'win32');
+const mockSpawn = vi.fn();
 
 vi.mock('os', (importOriginal) => {
   const actual = importOriginal() as typeof import('os');

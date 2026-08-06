@@ -25,17 +25,17 @@ import type { ExtensionConfig } from '../extension.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core';
 
-const mockReadline = vi.hoisted(() => ({
+const mockReadline = {
   createInterface: vi.fn().mockReturnValue({
     question: vi.fn(),
     close: vi.fn(),
   }),
-}));
+};
 
-const mockReaddir = vi.hoisted(() => vi.fn());
-const originalReaddir = vi.hoisted(() => ({
+const mockReaddir = vi.fn();
+const originalReaddir = {
   current: null as typeof fs.readdir | null,
-}));
+};
 
 vi.mock('node:readline', () => ({
   default: mockReadline,

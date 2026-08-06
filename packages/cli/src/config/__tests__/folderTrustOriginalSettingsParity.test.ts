@@ -119,7 +119,7 @@ vi.mock('../profileBootstrap.js', async () => {
 let capturedTrustCheckSettings: Settings | undefined;
 let capturedTrustCheckWorkingDirectory: string | undefined;
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -128,7 +128,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>

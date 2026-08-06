@@ -40,9 +40,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   setGlobalProxy: vi.fn(),
 }));
 
-const initializeShellParser = vi.hoisted(() =>
-  vi.fn(() => Promise.resolve(true)),
-);
+const initializeShellParser = vi.fn(() => Promise.resolve(true));
 
 vi.mock('../utils/shell-parser.js', () => ({
   initializeParser: initializeShellParser,

@@ -9,13 +9,13 @@
 
 import { vi } from 'bun:test';
 
-const mockOpenBrowserSecurely = vi.hoisted(() => vi.fn());
-const mockHttpServer = vi.hoisted(() => ({
+const mockOpenBrowserSecurely = vi.fn();
+const mockHttpServer = {
   listen: vi.fn(),
   close: vi.fn(),
   on: vi.fn(),
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
   openBrowserSecurely: mockOpenBrowserSecurely,

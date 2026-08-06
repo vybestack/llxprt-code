@@ -10,11 +10,11 @@ import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
 // Hoisted Mocks
-const mockPtySpawn = vi.hoisted(() => vi.fn());
-const mockCpSpawn = vi.hoisted(() => vi.fn());
-const mockIsBinary = vi.hoisted(() => vi.fn());
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockGetPty = vi.hoisted(() => vi.fn());
+const mockPtySpawn = vi.fn();
+const mockCpSpawn = vi.fn();
+const mockIsBinary = vi.fn();
+const mockPlatform = vi.fn();
+const mockGetPty = vi.fn();
 
 // Top-level Mocks
 vi.mock('@lydell/node-pty', () => ({

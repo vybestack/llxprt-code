@@ -149,12 +149,10 @@ vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
-const preflightAgentActivationMock = vi.hoisted(() =>
-  vi.fn(async () => ({
-    authFailed: false,
-    token: { established: true },
-  })),
-);
+const preflightAgentActivationMock = vi.fn(async () => ({
+  authFailed: false,
+  token: { established: true },
+}));
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const actual =

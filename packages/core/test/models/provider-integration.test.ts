@@ -39,9 +39,9 @@ vi.mock('node:fs', (importOriginal) => {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-const registryState = vi.hoisted(() => ({
+const registryState = {
   instance: null as ModelRegistry | null,
-}));
+};
 
 // Reset singleton between tests
 vi.mock('../../src/models/registry.js', (importOriginal) => {

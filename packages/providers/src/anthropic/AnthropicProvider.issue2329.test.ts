@@ -19,7 +19,7 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
-const mockMessagesCreate = vi.hoisted(() => vi.fn());
+const mockMessagesCreate = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(

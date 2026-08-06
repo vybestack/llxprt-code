@@ -13,12 +13,12 @@ import {
   type LoadedSettings,
 } from '../../config/settings.js';
 
-const emitConsoleLog = vi.hoisted(() => vi.fn());
-const debugLogger = vi.hoisted(() => ({
+const emitConsoleLog = vi.fn();
+const debugLogger = {
   log: vi.fn((message, ...args) => {
     emitConsoleLog('log', format(message, ...args));
   }),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
   const actual =

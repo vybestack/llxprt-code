@@ -44,13 +44,13 @@ vi.mock('../utils.js', () => ({
   }),
 }));
 
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   error: vi.fn(),
   warn: vi.fn(),
   info: vi.fn(),
   log: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-telemetry', async () => {
   const actual = await vi.importActual<

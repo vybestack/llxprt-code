@@ -11,9 +11,9 @@ import * as path from 'node:path';
 // vi.spyOn. Instead we mock the entire `os` module, spreading the real
 // implementation and overriding only `homedir`. `vi.hoisted` ensures the mock
 // fn is available inside the hoisted vi.mock factory.
-const { homedirMock } = vi.hoisted(() => ({
+const { homedirMock } = {
   homedirMock: vi.fn<[], string | undefined>(),
-}));
+};
 
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('os')>();

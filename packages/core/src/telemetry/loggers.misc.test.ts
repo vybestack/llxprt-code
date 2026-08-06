@@ -54,7 +54,7 @@ const mockClearcutLogger = {
 (globalThis as { ClearcutLogger?: typeof mockClearcutLogger }).ClearcutLogger =
   mockClearcutLogger;
 
-const mockIsTelemetrySdkInitialized = vi.hoisted(() => vi.fn(() => true));
+const mockIsTelemetrySdkInitialized = vi.fn(() => true);
 vi.mock(
   '@vybestack/llxprt-code-telemetry/telemetry/sdk.js',
   (importOriginal) => {

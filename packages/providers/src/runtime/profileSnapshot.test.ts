@@ -43,7 +43,7 @@ vi.mock('./profileApplication.js', () => ({
   ),
 }));
 
-const profileManagerLoadProfileMock = vi.hoisted(() => vi.fn());
+const profileManagerLoadProfileMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-settings', () => {
   const actual = importActualSync<

@@ -57,13 +57,13 @@ vi.mock('vscode', () => ({
   })),
 }));
 
-const { mockDetectIdeFromEnv } = vi.hoisted(() => {
+const { mockDetectIdeFromEnv } = (() => {
   const mock = vi.fn(() => ({
     name: 'vscode',
     displayName: 'VS Code',
   }));
   return { mockDetectIdeFromEnv: mock };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-ide-integration', async () => {
   const actual = await vi.importActual<

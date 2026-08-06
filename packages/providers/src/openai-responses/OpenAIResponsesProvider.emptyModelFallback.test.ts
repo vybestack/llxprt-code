@@ -28,9 +28,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
-const getCoreSystemPromptAsyncSpy = vi.hoisted(() =>
-  vi.fn().mockResolvedValue('system prompt'),
-);
+const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
 vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,

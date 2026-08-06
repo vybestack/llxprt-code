@@ -40,13 +40,13 @@ import {
   waitForConditionInRealTime,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
-const { TodoStoreMock } = vi.hoisted(() => {
+const { TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
   return { mockReadTodos, TodoStoreMock };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const actual =

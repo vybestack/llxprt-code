@@ -25,13 +25,13 @@ import {
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSessionConfig } from './chatSession.js';
-const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+const { mockReadTodos, TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
   return { mockReadTodos, TodoStoreMock };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const actual =

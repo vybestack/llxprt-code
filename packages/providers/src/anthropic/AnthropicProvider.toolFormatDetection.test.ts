@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { AnthropicProvider } from './AnthropicProvider.js';
 
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   setProviderSetting: vi.fn(),
@@ -10,7 +10,7 @@ const mockSettingsService = vi.hoisted(() => ({
   getProviderSettings: vi.fn(),
   updateSettings: vi.fn(),
   settings: { providers: { anthropic: {} } },
-}));
+};
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn(),

@@ -13,14 +13,14 @@ import type * as utilsModule from './utils.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 const mockGetEnvContents: Mock<
   typeof settingsIntegrationModule.getEnvContents
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockGetExtensionAndConfig: Mock<
   typeof utilsModule.getExtensionAndConfig
-> = vi.hoisted(() => vi.fn());
-const mockLoadSettings: Mock = vi.hoisted(() => vi.fn());
+> = vi.fn();
+const mockLoadSettings: Mock = vi.fn();
 
 vi.mock('../../config/extensions/settingsIntegration.js', async () => ({
   updateSetting: mockUpdateSetting,

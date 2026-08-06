@@ -18,14 +18,14 @@ import { ideContext } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
 
-const mockedExit = vi.hoisted(() => vi.fn());
-const mockedCwd = vi.hoisted(() => vi.fn());
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteValue = vi.hoisted(() => vi.fn());
-const mockedGetValue = vi.hoisted(() => vi.fn());
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
-const mockedResolvePathTrust = vi.hoisted(() => vi.fn());
+const mockedExit = vi.fn();
+const mockedCwd = vi.fn();
+const mockedSetValue = vi.fn();
+const mockedDeleteValue = vi.fn();
+const mockedGetValue = vi.fn();
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
+const mockedResolvePathTrust = vi.fn();
 const mockedTrustedConfig = vi.hoisted<Record<string, TrustLevel>>(() => ({}));
 
 vi.mock('node:process', async () => {

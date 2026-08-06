@@ -6,7 +6,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
+const { mockChatCreate, mockOpenAIConstructor } = (() => {
   const chatCreate = vi.fn();
   const openAIConstructorMock = vi.fn().mockImplementation(() => ({
     chat: {
@@ -19,7 +19,7 @@ const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
     mockChatCreate: chatCreate,
     mockOpenAIConstructor: openAIConstructorMock,
   };
-});
+})();
 
 let settingsServiceRef: { current: SettingsService } = {
   current: new SettingsService(),

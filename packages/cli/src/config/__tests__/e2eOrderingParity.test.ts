@@ -124,9 +124,9 @@ vi.mock('../profileBootstrap.js', async () => {
  * Shared call log — populated by mock implementations below.
  * Used to assert temporal ordering between critical lifecycle steps.
  */
-const callLog = vi.hoisted(() => ({ entries: [] as string[] }));
+const callLog = { entries: [] as string[] };
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -135,7 +135,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
 // Mock applyProfileSnapshot (static import in config.ts from profileSnapshot.js)
 vi.mock('@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', () => ({

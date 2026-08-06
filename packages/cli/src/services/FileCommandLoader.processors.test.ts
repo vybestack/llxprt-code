@@ -29,8 +29,8 @@ import type { CommandContext } from '../ui/commands/types.js';
 type PromptPipelineContent = Array<{ text: string }>;
 
 const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
-const mockShellProcess = vi.hoisted(() => vi.fn());
-const mockAtFileProcess = vi.hoisted(() => vi.fn());
+const mockShellProcess = vi.fn();
+const mockAtFileProcess = vi.fn();
 
 // The settings mock must be available before vi.mock runs (Bun evaluates the
 // factory eagerly at vi.mock() call time). Use vi.hoisted with createRequire
@@ -40,7 +40,7 @@ const settingsMockHoisted: {
   ctx?: InstanceType<
     typeof import('./__testhelpers__/mockFs.js').FsMockContext
   >;
-} = vi.hoisted(() => ({}));
+} = {};
 
 vi.mock('@vybestack/llxprt-code-settings', async () => {
   // Resolved with vi.importActual inside the factory: it returns the genuine

@@ -11,9 +11,9 @@ import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { mockRandomBytes } = vi.hoisted(() => ({
+const { mockRandomBytes } = {
   mockRandomBytes: vi.fn(),
-}));
+};
 
 vi.mock('node:crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:crypto')>();

@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 
-const { schemaHandlerSpy, createHandlerMock } = vi.hoisted(() => {
+const { schemaHandlerSpy, createHandlerMock } = (() => {
   const schemaHandlerSpy = vi.fn().mockResolvedValue({
     suggestions: [
       { value: 'alpha', description: 'alpha option' },
@@ -19,7 +19,7 @@ const { schemaHandlerSpy, createHandlerMock } = vi.hoisted(() => {
   });
   const createHandlerMock = vi.fn(() => schemaHandlerSpy);
   return { schemaHandlerSpy, createHandlerMock };
-});
+})();
 
 vi.mock('../schema/index.js', () => ({
   createCompletionHandler: createHandlerMock,

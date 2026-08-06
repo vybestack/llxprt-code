@@ -16,15 +16,15 @@ import {
 } from '@vybestack/llxprt-code-core';
 import chalk from 'chalk';
 
-const emitConsoleLog = vi.hoisted(() => vi.fn());
-const debugLogger = vi.hoisted(() => ({
+const emitConsoleLog = vi.fn();
+const debugLogger = {
   log: vi.fn((message, ...args) => {
     emitConsoleLog('log', format(message, ...args));
   }),
   error: vi.fn((message, ...args) => {
     emitConsoleLog('error', format(message, ...args));
   }),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

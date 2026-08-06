@@ -15,7 +15,7 @@ const {
   mockFetchCodexRateLimitResetCredits,
   mockGetSettingsService,
   mockSettingsServiceRef,
-} = vi.hoisted(() => {
+} = (() => {
   const settingsServiceRef = { current: { get: vi.fn(() => false) } };
   return {
     mockFetchAnthropicUsage: vi.fn(),
@@ -24,7 +24,7 @@ const {
     mockGetSettingsService: vi.fn(() => settingsServiceRef.current),
     mockSettingsServiceRef: settingsServiceRef,
   };
-});
+})();
 
 vi.mock('@vybestack/llxprt-code-providers', () => {
   const actual = importActualSync<

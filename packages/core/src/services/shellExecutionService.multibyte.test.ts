@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
-const mockSpawn = vi.hoisted(() => vi.fn());
+const mockSpawn = vi.fn();
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -20,17 +20,17 @@ import { type ChildProcess } from 'child_process';
 import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
-const mockIsBinary = vi.hoisted(() => vi.fn());
+const mockIsBinary = vi.fn();
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
 
-const mockGetPty = vi.hoisted(() => vi.fn());
+const mockGetPty = vi.fn();
 vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
-const mockPlatform = vi.hoisted(() => vi.fn());
+const mockPlatform = vi.fn();
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,

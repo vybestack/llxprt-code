@@ -85,7 +85,7 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -94,7 +94,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ServerConfig.ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>

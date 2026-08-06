@@ -7,7 +7,7 @@
 import { expect, describe, it, beforeEach, afterEach, vi } from 'bun:test';
 import { escapeShellArg, getShellConfiguration } from './shell-utils.js';
 
-const mockQuote = vi.hoisted(() => vi.fn());
+const mockQuote = vi.fn();
 vi.mock('shell-quote', () => ({
   quote: mockQuote,
 }));

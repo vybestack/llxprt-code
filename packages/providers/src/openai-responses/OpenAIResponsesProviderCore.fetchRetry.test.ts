@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   setProviderSetting: vi.fn(),
@@ -12,18 +12,16 @@ const mockSettingsService = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
+};
 
-const parseResponsesStreamMock = vi.hoisted(() =>
-  vi.fn(async function* () {
-    yield {
-      role: 'assistant',
-      content: [{ type: 'output_text', text: 'Hello from retry!' }],
-    };
-  }),
-);
+const parseResponsesStreamMock = vi.fn(async function* () {
+  yield {
+    role: 'assistant',
+    content: [{ type: 'output_text', text: 'Hello from retry!' }],
+  };
+});
 
-const fetchMock = vi.hoisted(() => vi.fn());
+const fetchMock = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(

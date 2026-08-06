@@ -25,8 +25,8 @@ import * as archiver from 'archiver';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockArch = vi.hoisted(() => vi.fn());
+const mockPlatform = vi.fn();
+const mockArch = vi.fn();
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal<typeof os>();
   return {
@@ -36,17 +36,17 @@ vi.mock('node:os', async (importOriginal) => {
   };
 });
 
-const mockHttpsGet = vi.hoisted(() => vi.fn());
+const mockHttpsGet = vi.fn();
 vi.mock('node:https', () => ({
   get: mockHttpsGet,
 }));
 
-const mockSimpleGit = vi.hoisted(() => vi.fn());
+const mockSimpleGit = vi.fn();
 vi.mock('simple-git', () => ({
   simpleGit: mockSimpleGit,
 }));
 
-const mockLoadExtension = vi.hoisted(() => vi.fn());
+const mockLoadExtension = vi.fn();
 vi.mock('../extension.js', () => ({
   loadExtension: mockLoadExtension,
 }));

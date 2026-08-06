@@ -38,9 +38,9 @@ import {
   hasFunctionResponse,
 } from './agenticLoop-test-helpers.js';
 
-const { modifyWithEditorMock } = vi.hoisted(() => ({
+const { modifyWithEditorMock } = {
   modifyWithEditorMock: vi.fn(),
-}));
+};
 vi.mock('@vybestack/llxprt-code-tools', async (importActual) => {
   const actual =
     await importActual<typeof import('@vybestack/llxprt-code-tools')>();

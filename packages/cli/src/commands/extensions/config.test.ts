@@ -16,25 +16,25 @@ import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import type { ExtensionSetting } from '../../config/extensions/extensionSettings.js';
 
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 const mockGetScopedEnvContents: Mock<
   typeof settingsIntegrationModule.getScopedEnvContents
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadExtensionSettingsFromManifest: Mock<
   typeof settingsIntegrationModule.loadExtensionSettingsFromManifest
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockGetExtensionAndConfig: Mock<
   typeof utilsModule.getExtensionAndConfig
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 const mockLoadExtensionConfig: Mock<
   typeof extensionModule.loadExtensionConfig
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockPromptForSetting: Mock<typeof settingsModule.promptForSetting> =
-  vi.hoisted(() => vi.fn());
-const mockConfirmOverwrite: Mock = vi.hoisted(() => vi.fn());
-const mockLoadSettings: Mock = vi.hoisted(() => vi.fn());
+  vi.fn();
+const mockConfirmOverwrite: Mock = vi.fn();
+const mockLoadSettings: Mock = vi.fn();
 
 // Mock readline module to control confirmOverwrite
 vi.mock('node:readline', () => ({

@@ -39,7 +39,7 @@ import type { QueuedSubmission } from '../types.js';
 // Stable spy for displayUserMessage so tests can assert the documented
 // contract (the user message IS displayed). vi.hoisted keeps the same
 // reference across the module mock factory and the test body.
-const displayUserMessageMock = vi.hoisted(() => vi.fn());
+const displayUserMessageMock = vi.fn();
 
 vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({

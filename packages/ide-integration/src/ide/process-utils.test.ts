@@ -14,17 +14,17 @@ import {
   beforeEach,
 } from 'bun:test';
 
-const mockedExec = vi.hoisted(() => vi.fn());
+const mockedExec = vi.fn();
 vi.mock('node:util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
 vi.mock('util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
-const mockedOs = vi.hoisted(() => ({
+const mockedOs = {
   platform: vi.fn(),
   homedir: vi.fn(),
-}));
+};
 vi.mock('node:os', () => ({ default: mockedOs, ...mockedOs }));
 vi.mock('os', () => ({ default: mockedOs, ...mockedOs }));
 

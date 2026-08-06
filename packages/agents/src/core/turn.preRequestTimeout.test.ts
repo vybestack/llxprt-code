@@ -25,10 +25,10 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { flushEventLoop } from '../test-utils/eventLoop.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),

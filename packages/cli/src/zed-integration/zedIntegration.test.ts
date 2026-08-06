@@ -11,7 +11,7 @@ import {
 } from './zedIntegration.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {

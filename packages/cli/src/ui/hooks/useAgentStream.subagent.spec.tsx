@@ -34,7 +34,7 @@ import {
   type StreamRuntimeTestOverrides,
 } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 
-const inkMock = vi.hoisted(() => {
+const inkMock = (() => {
   const noop = vi.fn(() => null);
   const write = vi.fn();
   const exit = vi.fn();
@@ -67,7 +67,7 @@ const inkMock = vi.hoisted(() => {
   };
   (module as Record<string, unknown>).default = module;
   return module;
-});
+})();
 
 vi.mock('ink', () => inkMock);
 

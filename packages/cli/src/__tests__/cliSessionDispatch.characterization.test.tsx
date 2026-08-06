@@ -30,9 +30,9 @@ import {
   vi,
 } from 'bun:test';
 
-const { mockWriteToStderr } = vi.hoisted(() => ({
+const { mockWriteToStderr } = {
   mockWriteToStderr: vi.fn<(chunk: string | Uint8Array) => boolean>(() => true),
-}));
+};
 
 import {
   coreEvents,

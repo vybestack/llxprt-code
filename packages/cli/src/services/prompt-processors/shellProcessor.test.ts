@@ -23,9 +23,9 @@ function getExpectedEscapedArgForPlatform(arg: string): string {
   return escapeShellArg(arg, shell);
 }
 
-const mockCheckCommandPermissions = vi.hoisted(() => vi.fn());
+const mockCheckCommandPermissions = vi.fn();
 
-const mockShellExecute = vi.hoisted(() => vi.fn());
+const mockShellExecute = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original = await importOriginal<object>();

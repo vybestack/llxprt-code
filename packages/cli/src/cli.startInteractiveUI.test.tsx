@@ -12,9 +12,9 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from './config/settings.js';
 
 // Mock writeToStdout for exit-handler tests
-const { mockWriteToStdout } = vi.hoisted(() => ({
+const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =

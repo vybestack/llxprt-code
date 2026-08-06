@@ -14,8 +14,8 @@ import * as trustedFolders from '../../config/trustedFolders.js';
 import { createMockCommandContext as createBaseMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
-const mockedCwd = vi.hoisted(() => vi.fn());
-const mockedHomedir = vi.hoisted(() => vi.fn(() => '/mock/home/user'));
+const mockedCwd = vi.fn();
+const mockedHomedir = vi.fn(() => '/mock/home/user');
 const mockSetValue = vi.fn();
 const mockSnapshotValue = vi.fn();
 const mockRestoreSnapshot = vi.fn();

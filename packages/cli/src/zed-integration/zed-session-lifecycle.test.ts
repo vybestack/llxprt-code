@@ -28,9 +28,9 @@ function makeTmpRoot(): string {
 
 const emptyChatsLister: ChatSessionFileLister = async () => [];
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
 
-const mockDeleteSessionById = vi.hoisted(() => vi.fn());
+const mockDeleteSessionById = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();

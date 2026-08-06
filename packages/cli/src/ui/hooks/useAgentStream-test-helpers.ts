@@ -14,7 +14,7 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { mapStreamEvent } from '@vybestack/llxprt-code-agents';
 
-const coreMocks = vi.hoisted(() => {
+const coreMocks = (() => {
   const mockSendMessageStream = vi
     .fn()
     .mockReturnValue((async function* () {})());
@@ -44,7 +44,7 @@ const coreMocks = vi.hoisted(() => {
     mockSendMessageStream,
     mockStartChat,
   };
-});
+})();
 
 export const MockedAgentClientClass = coreMocks.MockedAgentClientClass;
 export const mockParseAndFormatApiError = coreMocks.mockParseAndFormatApiError;

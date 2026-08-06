@@ -31,12 +31,12 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 // Hoisted mocks for auth module — used by AC12 setupCredentialProxy/wireCleanupHandlers tests
-const authMocks = vi.hoisted(() => ({
+const authMocks = {
   createAndStartProxy: vi.fn(),
   getProxySocketPath: vi.fn(),
   stopProxy: vi.fn(),
   getProxyCapabilityToken: vi.fn(),
-}));
+};
 
 vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,

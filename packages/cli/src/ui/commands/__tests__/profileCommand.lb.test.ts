@@ -14,11 +14,11 @@ import type { CommandContext } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import { testRegex } from '../../../test-utils/regex.js';
 
-const runtimeMocks = vi.hoisted(() => ({
+const runtimeMocks = {
   saveLoadBalancerProfile: vi.fn(),
   listSavedProfiles: vi.fn(),
   getEphemeralSettings: vi.fn(),
-}));
+};
 
 vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => runtimeMocks,
