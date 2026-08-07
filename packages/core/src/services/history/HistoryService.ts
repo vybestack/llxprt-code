@@ -588,10 +588,15 @@ export class HistoryService
   }
 
   /**
-   * Add multiple contents to the history
+   * Add multiple contents to the history.
+   *
+   * Iterates a snapshot because `add` appends to `this.history`: if `contents`
+   * aliases the backing array (`getRawHistory()`), a live iterator would keep
+   * consuming its own appends and never terminate. `replaceAll` is already
+   * immune the same way — its `filter` produces a fresh array before use.
    */
   addAll(contents: readonly IContent[], modelName?: string): void {
-    for (const content of contents) {
+    for (const content of [...contents]) {
       this.add(content, modelName);
     }
   }

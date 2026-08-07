@@ -194,6 +194,12 @@ awaiting-approval path."
 | 12 | Add an assertion pinning that mutating `raw1[0].blocks[0].text` DOES corrupt live history | **Reject** | `dev-docs/RULES.md` forbids writing a passing test that enshrines undesirable behavior as specification — it would make a future hardening (deep-readonly, freezing) look like a regression. The detection this asks for already exists without that cost: the reference-identity assertions (`expect(raw1[i]).toBe(raw2[i])`, plus the AC1 tests) fail if a deep clone or entry-level copy-on-read is reintroduced. Verified by reinstating `structuredClone` locally — 4 tests went red. |
 | 13-14 | `AgentClientContract.generateJson` / `generateContent` still take `IContent[]`, not `readonly IContent[]` | **Defer** | Those take caller-supplied content, not history from `getHistory()`; nothing in this ripple reaches them and OCR confirms "No correctness bug." Widening them is adjacent cleanup outside this issue. |
 
+### CodeRabbit triage (PR #3125)
+
+| # | Finding | Class | Action |
+| --- | --- | --- | --- |
+| 15 | Widening `HistoryService.addAll` to `readonly IContent[]` made `addAll(getRawHistory())` type-check, and `add` appends to the array being iterated — a non-terminating loop | **In-scope-Fix** | Valid, and specifically a barrier this PR removed: `getRawHistory()` already returned `readonly IContent[]`, so before the widening that call was a type error. Fixed by iterating a snapshot (`[...contents]`), matching how `replaceAll` is already immune (its `filter` yields a fresh array). Rejected CodeRabbit's suggested `contents === this.history ? [...contents] : contents` identity check — an ad-hoc guard that only covers one aliasing source, where an unconditional snapshot is simpler and uniform. Pinned by `HistoryService.addAll.test.ts`; verified RED (the test hangs without the snapshot). |
+
 ### Known-flaky local suite
 
 `packages/agents/src/core/__tests__/subagentOrchestrator-loadBalancer.test.ts`
