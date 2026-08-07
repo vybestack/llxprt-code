@@ -86,7 +86,12 @@ export function isWorkspaceSpecifier(spec: string): boolean {
 function walk(dir: string, out: string[] = []): string[] {
   let entries;
   try {
-    entries = readdirSync(dir, { withFileTypes: true });
+    // readdirSync order is filesystem-dependent. Sort so the emitted record
+    // order — and therefore tmp/census-ast.json — is reproducible across runs
+    // and machines.
+    entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   } catch {
     return out;
   }
@@ -249,7 +254,10 @@ function collectRecords(pkgDirs: string[]): {
   const unreadable: string[] = [];
   for (const pkg of pkgDirs) {
     for (const abs of walk(join(PACKAGES, pkg))) {
-      const rel = relative(ROOT, abs);
+      // Normalise separators at the source: `relative` yields platform
+      // separators, and every downstream consumer — the stored record, the
+      // test classifier, the reports — treats paths as POSIX.
+      const rel = relative(ROOT, abs).split('\\').join('/');
       let source: string;
       try {
         source = readFileSync(abs, 'utf8');
@@ -266,7 +274,8 @@ function collectRecords(pkgDirs: string[]): {
 function main(): void {
   const pkgDirs = readdirSync(PACKAGES, { withFileTypes: true })
     .filter((d) => d.isDirectory())
-    .map((d) => d.name);
+    .map((d) => d.name)
+    .sort((a, b) => a.localeCompare(b));
 
   const { records, unreadable } = collectRecords(pkgDirs);
   if (unreadable.length > 0) {
@@ -315,9 +324,10 @@ function main(): void {
   // Denominator is NAMED BINDINGS only. Namespace imports, default imports,
   // dynamic imports, side-effect imports and export-star carry no named
   // bindings and are excluded — this is not a percentage of statements.
-  const unnamed = deep.filter(
-    (r) => r.specifiers.length === 0 && !r.statementTypeOnly,
-  ).length;
+  // Every statement carrying no named binding, including type-only namespace
+  // and default forms — an earlier version excluded statementTypeOnly, which
+  // contradicted the printed label.
+  const unnamed = deep.filter((r) => r.specifiers.length === 0).length;
   console.log(
     `\nnamed symbol bindings (deep): ${totalSpec}  type-only=${typeSpec} (${typeOnlyPct} of named bindings)  value=${valueSpec}`,
   );
@@ -334,7 +344,8 @@ function main(): void {
     byPkg.set(r.targetPkg, e);
   }
   for (const [k, v] of [...byPkg.entries()].sort(
-    (a, b) => b[1].p + b[1].t - (a[1].p + a[1].t),
+    // Total descending, then package name so equal totals order stably.
+    (a, b) => b[1].p + b[1].t - (a[1].p + a[1].t) || a[0].localeCompare(b[0]),
   )) {
     console.log(
       `  ${k.padEnd(26)} total=${String(v.p + v.t).padStart(5)}  prod=${String(v.p).padStart(5)}  test=${String(v.t).padStart(5)}`,

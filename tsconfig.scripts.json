@@ -8,6 +8,8 @@
     "types": ["node", "bun"]
   },
   "include": [
+    "scripts/api-census.ts",
+    "scripts/config-contract.ts",
     "scripts/agents-neutral-gate.ts",
     "scripts/agents-neutral-gate-config.ts",
     "scripts/agents-neutral-gate-ast.ts",
