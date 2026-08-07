@@ -280,9 +280,10 @@ export function buildWindowsBackgroundBootstrap(
  * Spawn a Windows background job using Start-Process semantics.
  *
  * The outer PowerShell process is spawned WITHOUT `detached: true` (which is
- * broken on Windows — see file header) but `unref()`'d with all-stdio ignored
- * so it never holds the parent open. The inner command runs via Start-Process
- * with -EncodedCommand, writing stdout and stderr to separate log files.
+ * broken on Windows — see file header) with all stdio ignored, then immediately
+ * unreferenced so background work cannot keep the parent event loop alive. Its
+ * exit listener continues to observe completion. The inner command runs via
+ * Start-Process with -EncodedCommand, writing stdout and stderr to separate logs.
  *
  * The returned `pid` is the outer PowerShell PID; `taskkill /T /F /PID <pid>`
  * reliably reaps the entire process tree.
@@ -315,8 +316,11 @@ export function spawnWindowsBackground(
     },
   );
 
-  // Detach the child from the parent's event loop so background jobs do not
-  // keep the process alive.
+  // Detach the child from the parent's event loop immediately so background
+  // jobs do not keep the process alive — matching the production default-unref
+  // contract in spawnWithNodeChildProcess. On Windows, unref leaves the exit
+  // listener active; it only removes the child from the reference count. Bun's
+  // POSIX exit-event workaround remains in spawnDetached above.
   child.unref();
 
   const exited = new Promise<ProcessExitInfo>((resolve) => {

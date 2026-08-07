@@ -711,18 +711,27 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
     }
   });
 
-  it('covers the resolved config dir with an emitted --volume destination', () => {
-    // The original bug: the destination the CLI resolved inside the container
-    // was NOT covered by any --volume mount. Compute the expectation via the
-    // REAL resolver (independent of the argv the function just produced), then
-    // assert the resolver's answer is present among the volume destinations.
-    const args = buildArgs(fixturePath);
-    const emitted = envValue(args, 'LLXPRT_CONFIG_HOME');
-    expect(emitted).toBeDefined();
-    process.env.LLXPRT_CONFIG_HOME = emitted;
-    const resolved = Storage.getGlobalConfigDir();
-    expect(volumeDestinations(args)).toContain(resolved);
-  });
+  // POSIX-only: the resolver is used here as a stand-in for how the path will
+  // resolve INSIDE the container, which is always Linux. On a Windows host it
+  // rewrites the container's POSIX destination into a host path (turning
+  // /c/Users/... into D:\c\Users\...), so it cannot model the container there.
+  // Windows keeps the sibling assertions above, which pin the emitted mount
+  // pair and env value directly.
+  it.skipIf(process.platform === 'win32')(
+    'covers the resolved config dir with an emitted --volume destination',
+    () => {
+      // The original bug: the destination the CLI resolved inside the container
+      // was NOT covered by any --volume mount. Compute the expectation via the
+      // REAL resolver (independent of the argv the function just produced),
+      // then assert the resolver's answer is among the volume destinations.
+      const args = buildArgs(fixturePath);
+      const emitted = envValue(args, 'LLXPRT_CONFIG_HOME');
+      expect(emitted).toBeDefined();
+      process.env.LLXPRT_CONFIG_HOME = emitted;
+      const resolved = Storage.getGlobalConfigDir();
+      expect(volumeDestinations(args)).toContain(resolved);
+    },
+  );
 
   it('emitted LLXPRT_CONFIG_HOME satisfies Storage.isNonEmptyAbsoluteOverride', () => {
     // That override check is what short-circuits the phantom in-container

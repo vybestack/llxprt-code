@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as vscode from 'vscode';
 import {
   IdeClient,
@@ -30,8 +30,27 @@ const companionDir = path.dirname(srcDir);
 const packagesDir = path.dirname(companionDir);
 const repositoryRoot = path.dirname(packagesDir);
 const readmePath = path.join(repositoryRoot, 'README.md');
+const originalEnvironment = new Map<string, string | undefined>();
 
-vi.mock('vscode', () => {
+function setTestEnvironment(variable: string, value: string): void {
+  if (!originalEnvironment.has(variable)) {
+    originalEnvironment.set(variable, process.env[variable]);
+  }
+  process.env[variable] = value;
+}
+
+function restoreTestEnvironment(): void {
+  for (const [variable, value] of originalEnvironment) {
+    if (value === undefined) {
+      delete process.env[variable];
+    } else {
+      process.env[variable] = value;
+    }
+  }
+  originalEnvironment.clear();
+}
+
+await vi.mock('vscode', () => {
   class TestEventEmitter<T> {
     private readonly listeners = new Set<(event: T) => unknown>();
 
@@ -132,7 +151,7 @@ function createExtensionContext(): vscode.ExtensionContext {
     environmentVariableCollection: {
       replace: (variable: string, value: string) => {
         environmentVariables.add(variable);
-        vi.stubEnv(variable, value);
+        setTestEnvironment(variable, value);
       },
       clear: () => {
         for (const variable of environmentVariables) {
@@ -206,7 +225,7 @@ async function buildConnectedStack(): Promise<{
   diffManager: DiffManager;
   context: vscode.ExtensionContext;
 }> {
-  vi.stubEnv('TERM_PROGRAM', 'vscode');
+  setTestEnvironment('TERM_PROGRAM', 'vscode');
   seedActiveEditor();
   const context = createExtensionContext();
   const diffManager = new DiffManager(
@@ -283,7 +302,7 @@ describe('IdeClient with the VS Code companion server', () => {
       configurable: true,
       value: true,
     });
-    vi.unstubAllEnvs();
+    restoreTestEnvironment();
   });
 
   it('stores initial editor context before connect resolves (no polling)', async () => {
@@ -487,7 +506,7 @@ describe('IdeClient with the VS Code companion server', () => {
     ideClient = undefined;
   });
 
-  it('server.stop resolves promptly while a client is still connected and closes the endpoint', async () => {
+  it('server.stop resolves promptly while a client is still connected and stops listening', async () => {
     const stack = await buildConnectedStack();
     ideClient = stack.ideClient;
     ideServer = stack.ideServer;
@@ -499,8 +518,10 @@ describe('IdeClient with the VS Code companion server', () => {
       IDEConnectionStatus.Connected,
     );
 
-    // Capture the port before stop clears the env.
-    const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'] ?? 'unknown';
+    // Capture the allocated port BEFORE stop() clears the server field.
+    const port = Number(process.env['LLXPRT_CODE_IDE_SERVER_PORT']);
+    expect(Number.isFinite(port)).toBe(true);
+    expect(port).toBeGreaterThan(0);
 
     // Stop the server FIRST while the client is still connected. This must
     // resolve within a bounded time — proving active SSE streams and keep-alive
@@ -513,31 +534,48 @@ describe('IdeClient with the VS Code companion server', () => {
     ]);
     expect(stopResult).toBe('stopped');
 
-    // The former endpoint no longer accepts connections. `stop()` resolving
-    // means the server relinquished the socket, but releasing the listening
-    // descriptor is the runtime's job and is not necessarily complete on the
-    // very next turn — poll within a bounded budget rather than racing it.
-    const probeEndpoint = (): Promise<string> =>
-      new Promise<string>((resolve) => {
-        const req = http.request(
-          `http://127.0.0.1:${port}/mcp`,
-          { method: 'POST' },
-          (res) => {
-            res.destroy();
-            resolve(`responded-${res.statusCode}`);
-          },
+    // Assert EXTERNAL behavior: after stop(), a fresh server can bind the
+    // same loopback port — the strongest proof that no listener remains.
+    // ECONNREFUSED/ECONNRESET probes are not proof (ECONNRESET can occur
+    // while a server is still listening). A successful bind of a fresh
+    // server is deterministic: it can only succeed when the port is free.
+    // Retry boundedly because the OS may take a few ms to release the
+    // socket after server.close() resolves (EADDRINUSE during that window
+    // is a transient OS condition, not a test failure).
+    const rebindDeadline = Date.now() + 5000;
+    let boundServer: http.Server | undefined;
+    for (;;) {
+      const candidate = http.createServer();
+      const rebindResult = await new Promise<
+        'listening' | NodeJS.ErrnoException
+      >((resolve) => {
+        candidate.once('listening', () => resolve('listening'));
+        candidate.once('error', (error: NodeJS.ErrnoException) =>
+          resolve(error),
         );
-        req.on('error', () => resolve('rejected'));
-        req.end();
+        candidate.listen(port, '127.0.0.1');
       });
-
-    const deadline = Date.now() + 5000;
-    let endpointCheck = await probeEndpoint();
-    while (endpointCheck !== 'rejected' && Date.now() < deadline) {
+      if (rebindResult === 'listening') {
+        boundServer = candidate;
+        externalHttpServers.push(boundServer);
+        break;
+      }
+      // EADDRINUSE is transient during OS port release; retry within the
+      // deadline. Any other error is a real failure.
+      await new Promise<void>((resolve) => candidate.close(() => resolve()));
+      if (rebindResult.code !== 'EADDRINUSE') {
+        throw rebindResult;
+      }
+      if (Date.now() >= rebindDeadline) {
+        throw new Error(
+          `Port ${port} was not released by ideServer.stop() within 5000ms`,
+        );
+      }
       await new Promise((resolve) => setTimeout(resolve, 25));
-      endpointCheck = await probeEndpoint();
     }
-    expect(endpointCheck).toBe('rejected');
+    // Deterministic closure/cleanup of the rebind probe.
+    await new Promise<void>((resolve) => boundServer.close(() => resolve()));
+    externalHttpServers.splice(externalHttpServers.indexOf(boundServer), 1);
 
     // The client can still be disconnected without hanging.
     await ideClient.disconnect();
@@ -556,7 +594,7 @@ describe('IdeClient with the VS Code companion server', () => {
     // NOT cause a false Connected state. The client must end Disconnected.
     // The test timeout must exceed the client's internal context-receipt
     // timeout (5s) so the Disconnected result is observable.
-    vi.stubEnv('TERM_PROGRAM', 'vscode');
+    setTestEnvironment('TERM_PROGRAM', 'vscode');
     seedActiveEditor();
 
     // Create a bare MCP server (no ping interception, no ide/contextUpdate).
@@ -619,9 +657,9 @@ describe('IdeClient with the VS Code companion server', () => {
       typeof bareAddress === 'object' && bareAddress ? bareAddress.port : 0;
 
     // Make IdeClient connect to the bare server via env (no port file).
-    vi.stubEnv('LLXPRT_CODE_IDE_SERVER_PORT', String(barePort));
-    vi.stubEnv('LLXPRT_CODE_IDE_AUTH_TOKEN', authToken);
-    vi.stubEnv('LLXPRT_CODE_IDE_WORKSPACE_PATH', repositoryRoot);
+    setTestEnvironment('LLXPRT_CODE_IDE_SERVER_PORT', String(barePort));
+    setTestEnvironment('LLXPRT_CODE_IDE_AUTH_TOKEN', authToken);
+    setTestEnvironment('LLXPRT_CODE_IDE_WORKSPACE_PATH', repositoryRoot);
 
     IdeClient.resetInstance();
     ideClient = await IdeClient.getInstance();

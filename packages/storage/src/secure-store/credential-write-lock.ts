@@ -253,11 +253,24 @@ let cachedCurrentProcessStartTime:
   | { readonly startTimeMs: number; readonly startTimeSource: 'canonical' }
   | undefined;
 
+/**
+ * Platforms with a canonical process start-time source (`ps -o lstart=`).
+ *
+ * Exported because the tests must fabricate owner records whose
+ * `startTimeSource` matches what this module would really write; a second,
+ * hand-copied list could drift from this one silently.
+ */
+export const CANONICAL_START_TIME_PLATFORMS: readonly string[] = [
+  'darwin',
+  'linux',
+  'freebsd',
+];
+
 async function readProcessStartTimeMs(
   pid: number,
   timeoutMs: number = PROCESS_PROBE_TIMEOUT_MS,
 ): Promise<number | null> {
-  if (!['darwin', 'linux', 'freebsd'].includes(process.platform)) {
+  if (!CANONICAL_START_TIME_PLATFORMS.includes(process.platform)) {
     return null;
   }
   try {

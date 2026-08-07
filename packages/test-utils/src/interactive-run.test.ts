@@ -7,7 +7,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { spawnTestPty } from './pty-backend.js';
 import { createDiagnosticsSink } from './diagnostics.js';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
@@ -157,6 +157,7 @@ describe('InteractiveRun quota guard integration', () => {
         keepAliveScript('HTTP 429 Too Many Requests'),
         true,
       );
+      await run.expectText('HTTP 429 Too Many Requests', 5000);
 
       const error = await captureRejection(
         run.expectText('this-text-never-appears', 800),

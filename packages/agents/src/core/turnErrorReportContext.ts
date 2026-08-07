@@ -14,7 +14,7 @@ const TURN_REPORT_HISTORY_TAIL = 8;
  * @pseudocode lines 300-322
  */
 export function buildErrorReportContext(
-  history: IContent[],
+  history: readonly IContent[],
   request: string | object | readonly unknown[],
 ): Record<string, unknown> {
   return {

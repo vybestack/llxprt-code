@@ -24,7 +24,7 @@ export const LOG_CAP_POLL_INTERVAL_MS = 2000;
 
 export type ShellJobState = 'running' | 'completed' | 'failed' | 'cancelled';
 
-export type ShellJobPhase = 'starting' | 'cancelling' | null;
+export type ShellJobPhase = 'starting' | 'cancelling' | 'capping' | null;
 
 export interface ShellJob {
   id: string;

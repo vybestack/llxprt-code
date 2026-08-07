@@ -43,7 +43,7 @@ function createHostOnlyDir(): string {
     dirCreated = true;
     const dirFd = fs.openSync(hostOnlyDir, 'r');
     try {
-      fs.fchmodSync(dirFd, 0o700);
+      if (process.platform !== 'win32') fs.fchmodSync(dirFd, 0o700);
     } finally {
       fs.closeSync(dirFd);
     }
@@ -93,7 +93,7 @@ function writeCapabilityEnvFile(
   let writeError: unknown;
   try {
     fs.writeSync(fd, `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}\n`, 0, 'utf8');
-    fs.fchmodSync(fd, 0o600);
+    if (process.platform !== 'win32') fs.fchmodSync(fd, 0o600);
   } catch (err) {
     writeError = err;
   }

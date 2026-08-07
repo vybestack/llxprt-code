@@ -220,6 +220,30 @@ export function buildContainerRunArgs(
   return args;
 }
 
+export function parseCustomMount(
+  spec: string,
+): readonly [string, string?, string?] {
+  const fromStart = /^[A-Za-z]:[\\/]/.test(spec) ? 2 : 0;
+  const fromEnd = spec.indexOf(':', fromStart);
+  if (fromEnd === -1) return [spec];
+
+  const from = spec.slice(0, fromEnd);
+  const remainder = spec.slice(fromEnd + 1);
+  const mode = /:(ro|rw)$/.exec(remainder);
+  if (mode !== null) {
+    return [from, remainder.slice(0, -mode[0].length), mode[1]];
+  }
+
+  const targetStart = /^[A-Za-z]:[\\/]/.test(remainder) ? 2 : 0;
+  const unsupportedMode = remainder.indexOf(':', targetStart);
+  if (unsupportedMode !== -1) {
+    throw new FatalSandboxError(
+      `Unsupported mount mode '${remainder.slice(unsupportedMode + 1)}' in '${spec}'; expected 'ro' or 'rw'`,
+    );
+  }
+  return [from, remainder];
+}
+
 /** Adds custom SANDBOX_MOUNTS volume flags. */
 function addCustomMounts(
   args: string[],
@@ -229,10 +253,7 @@ function addCustomMounts(
   for (let mount of mountsEnv.split(',')) {
     const trimmed = mount.trim();
     if (trimmed !== '') {
-      const parts = trimmed.split(':');
-      const from = parts.at(0) ?? '';
-      const target = parts.at(1);
-      const options = parts.at(2);
+      const [from, target, options] = parseCustomMount(trimmed);
       const to = target !== undefined && target !== '' ? target : from;
       const opts = options !== undefined && options !== '' ? options : 'ro';
       mount = `${from}:${to}:${opts}`;

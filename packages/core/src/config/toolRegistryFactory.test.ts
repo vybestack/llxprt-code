@@ -329,8 +329,16 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
   let tempWorkspace: string;
 
   beforeEach(async () => {
-    tempWorkspace = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'llxprt-registry-image-'),
+    // Resolve through realpath so the workspace root uses the canonical long
+    // path. On the Windows runner `os.tmpdir()` returns an 8.3 short form
+    // (e.g. C:\Users\RUNNER~1\...), while the image tool reports the resolved
+    // long path (C:\Users\runneradmin\...); normalising here keeps both sides
+    // speaking the same path so the strict "saved at the exact requested path"
+    // assertion is meaningful rather than a false mismatch.
+    tempWorkspace = await fs.promises.realpath(
+      await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-registry-image-'),
+      ),
     );
   });
 

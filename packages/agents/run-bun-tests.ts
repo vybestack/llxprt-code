@@ -54,20 +54,22 @@ const TEST_ROOTS = ['src'] as const;
 /** Upper bound on file concurrency, regardless of how many cores are present. */
 const MAX_CONCURRENCY = 4;
 
-/** Lower bound, so a single-core reporting environment still makes progress. */
-const MIN_CONCURRENCY = 2;
+/** Lower bound: small CI runners need one free core for each Bun child. */
+const MIN_CONCURRENCY = 1;
 
 /**
  * Number of test files executed at once.
  *
- * Deliberately half the core count, clamped to [2, 4]. Each file is a fresh
+ * Deliberately half the core count, clamped to [1, 4]. Each file is a fresh
  * `bun test` process that re-executes the whole agents module graph, and many
  * suites under `src/api/__tests__/` additionally build a real Agent (tool
  * registry, provider bootstrap, settings) per test. Saturating every core with
  * that work starves individual tests past the 30s budget, which surfaces as a
  * different file failing on each run rather than as an honestly slow run.
  * Leaving headroom matters most on small CI runners, where the core count is
- * roughly the concurrency an unclamped default would pick.
+ * roughly the concurrency an unclamped default would pick. macOS CI runs one
+ * file at a time because its virtual cores repeatedly starve one process past
+ * the test budget even at half-concurrency.
  *
  * `LLXPRT_AGENTS_TEST_CONCURRENCY` overrides this.
  */
@@ -80,6 +82,9 @@ function resolveConcurrency(): number {
       );
     }
     return Number.parseInt(override.trim(), 10);
+  }
+  if (process.platform === 'darwin' && process.env.CI === 'true') {
+    return MIN_CONCURRENCY;
   }
   const half = Math.floor(availableParallelism() / 2);
   return Math.min(MAX_CONCURRENCY, Math.max(MIN_CONCURRENCY, half));

@@ -813,44 +813,57 @@ describe('Machine Secret Provider — read-only not blocked by write lock (F2)',
         });
         return { promise, resolve: resolveFn };
       })();
-    let externalHoldsLock = false;
-    const externalOp = externalLock
-      .withLock('llxprt-code-machine-secret', 'default', async () => {
-        externalHoldsLock = true;
-        await releaseGate.promise;
-      })
-      .catch(() => undefined);
-
-    // Wait for the external holder to genuinely hold the lock file on disk.
-    const lockPath = externalLock.lockFilePath(
+    let signalAcquired = (): void => undefined;
+    let acquisitionTimeout: ReturnType<typeof setTimeout> | undefined;
+    const acquired = new Promise<void>((resolve, reject) => {
+      signalAcquired = resolve;
+      // Fail promptly if external lock acquisition rejects or never enters
+      // its callback: without a bounded gate the test would hang until the
+      // suite timeout and mask the real cause.
+      acquisitionTimeout = setTimeout(
+        () =>
+          reject(
+            new Error(
+              'External lock acquisition did not enter its callback within 10s',
+            ),
+          ),
+        10_000,
+      );
+    });
+    const externalOp = externalLock.withLock(
       'llxprt-code-machine-secret',
       'default',
+      async () => {
+        clearTimeout(acquisitionTimeout);
+        signalAcquired();
+        await releaseGate.promise;
+      },
     );
-    for (let i = 0; i < 100; i++) {
-      try {
-        await fs.readFile(lockPath, 'utf8');
-        break;
-      } catch {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
+
+    try {
+      await Promise.race([
+        acquired,
+        externalOp.then(() => {
+          throw new Error('External lock operation ended before acquisition');
+        }),
+      ]);
+
+      // The read-only resolution must NOT be blocked by the external lock
+      // holder. It reads the file directly and returns the secret.
+      const secret = await getMachineSecret({
+        filePath: tempFilePath,
+        keyringLoader: async () => null,
+        generateIfMissing: false,
+        lockDir,
+      });
+
+      expect(secret).not.toBeNull();
+      expect(Buffer.compare(secret!, existing)).toBe(0);
+    } finally {
+      clearTimeout(acquisitionTimeout);
+      releaseGate.resolve();
+      await externalOp;
     }
-    expect(externalHoldsLock).toBe(true);
-
-    // The read-only resolution must NOT be blocked by the external lock
-    // holder. It reads the file directly and returns the secret.
-    const secret = await getMachineSecret({
-      filePath: tempFilePath,
-      keyringLoader: async () => null,
-      generateIfMissing: false,
-      lockDir,
-    });
-
-    expect(secret).not.toBeNull();
-    expect(Buffer.compare(secret!, existing)).toBe(0);
-
-    // Release the external lock holder.
-    releaseGate.resolve();
-    await externalOp;
   });
 });
 
