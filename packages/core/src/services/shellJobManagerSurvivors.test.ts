@@ -388,7 +388,9 @@ describe.skipIf(os.platform() !== 'win32')(
         await disposalPromise.catch(() => {
           // Survivor disposal may reject — acceptable here.
         });
-        survivorPid = 0;
+        // Do NOT zero survivorPid: dispose may have failed to reap the
+        // survivor, and zeroing would discard the only known PID. Only
+        // discard ownership after cleanup proves exit (in finally).
       } finally {
         await reapAndRemoveWindowsTestDir(gateDir, gateManager, [survivorPid]);
       }
@@ -450,7 +452,8 @@ describe.skipIf(os.platform() !== 'win32')(
         await disposalPromise.catch(() => {
           // Survivor disposal may reject — acceptable here.
         });
-        survivorPid = 0;
+        // Do NOT zero survivorPid: dispose may have failed to reap.
+        // Only discard ownership after cleanup proves exit (in finally).
       } finally {
         await reapAndRemoveWindowsTestDir(microDir, microManager, [
           survivorPid,

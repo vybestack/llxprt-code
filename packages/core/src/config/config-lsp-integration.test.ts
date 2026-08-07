@@ -10,7 +10,7 @@
  * @pseudocode config-integration.md lines 39-114
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';

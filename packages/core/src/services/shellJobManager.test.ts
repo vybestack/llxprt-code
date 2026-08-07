@@ -18,11 +18,13 @@ import {
 } from './shellJobManager.js';
 import type { ShellJob } from './shellJobManager.js';
 import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
-import { debugLogger } from '../utils/debugLogger.js';
 import {
   buildInnerPidMarkerCommand,
+  disposeAndCleanupWindowsTest,
   reapAndRemoveWindowsTestDir,
   readInnerPidFromMarker,
+  waitForPidFile,
+  waitForPidStateWindows,
 } from '../../test/utils/shellJobTestCleanup.js';
 
 /**
@@ -520,48 +522,11 @@ function isPidAliveWindows(pid: number): boolean {
   return result.stdout.includes(String(pid));
 }
 
-/**
- * Poll until a PID is confirmed gone on Windows. Immediate checks after
- * taskkill /F /T can race with handle release, so callers must poll.
- */
-async function waitForPidStateWindows(
-  pid: number,
-  alive: boolean,
-  timeoutMs = 10000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (isPidAliveWindows(pid) === alive) return;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(
-    `PID ${pid} did not become ${alive ? 'alive' : 'gone'} within ${timeoutMs}ms`,
-  );
-}
-
 async function waitForPidGoneWindows(
   pid: number,
   timeoutMs = 10000,
 ): Promise<void> {
   await waitForPidStateWindows(pid, false, timeoutMs);
-}
-
-async function waitForPidFile(
-  filePath: string,
-  timeoutMs: number,
-): Promise<number> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf8').trim();
-      const pid = parseInt(content, 10);
-      if (!Number.isNaN(pid) && pid > 0) {
-        return pid;
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`PID file ${filePath} did not appear within ${timeoutMs}ms`);
 }
 
 describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
@@ -575,16 +540,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
     // dispose() owns its temp dir (ShellJobLogStore.destroy() removes it with
     // a bounded retry). An explicit rmSync here is redundant and, on Windows,
     // races with redirected-log handle release right after taskkill /F /T.
-    // dispose() rejects by design when survivors are retained — catch so
-    // teardown does not mask real test results or leak processes.
-    try {
-      await manager.dispose();
-    } catch (err) {
-      debugLogger.warn(
-        '[shellJobManager.test] dispose() rejected during Windows teardown:',
-        err instanceof Error ? err.message : String(err),
-      );
-    }
+    await manager.dispose();
   });
 
   it('completes a fast-success PowerShell command with exit code 0', async () => {
@@ -773,23 +729,14 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       expect(terminal?.state).toBe('cancelled');
     } finally {
       // dispose() rejects with ShellJobDisposalError by design when the
-      // injected always-fail taskkill leaves survivors. The shared helper
-      // then directly reaps BOTH the outer pid and the inner PowerShell pid
-      // (which owns the redirected log handles), confirms each gone via
-      // tasklist, drains the outer-survivor count (supplemental), and removes
-      // the temp dir — fail-fast if anything never settles.
-      try {
-        await failManager.dispose();
-      } catch (err) {
-        debugLogger.warn(
-          '[shellJobManager.test] failManager.dispose() rejected during teardown:',
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-      await reapAndRemoveWindowsTestDir(failDir, failManager, [
-        survivorPid,
-        innerPid,
-      ]);
+      // injected always-fail taskkill leaves survivors. Deterministic cleanup
+      // still reaps both process layers before accepting that expected error.
+      await disposeAndCleanupWindowsTest(
+        failDir,
+        failManager,
+        [survivorPid, innerPid],
+        true,
+      );
     }
   });
 
@@ -874,6 +821,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
   it('does not start overlapping cap polls when taskkill is slow (G2)', async () => {
     let killCallCount = 0;
     const slowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'g2-slow-'));
+    const innerMarker = path.join(slowDir, 'inner.pid');
     const slowManager = new ShellJobManager({
       baseDir: slowDir,
       logMaxBytes: 256,
@@ -884,13 +832,18 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       },
     });
     let pid = 0;
+    let innerPid = 0;
     try {
       const job = slowManager.launch({
-        command:
-          "1..10000 | ForEach-Object { Write-Output ('x' * 80) }; Start-Sleep -Seconds 15",
+        command: buildInnerPidMarkerCommand(
+          innerMarker,
+          15,
+          "1..10000 | ForEach-Object { Write-Output ('x' * 80) }",
+        ),
         cwd: os.tmpdir(),
       });
       pid = job.pid;
+      innerPid = await readInnerPidFromMarker(innerMarker, 10000);
 
       // Wait for the cap to be exceeded and at least one poll to fire.
       await waitForTerminal(slowManager, job.id, 20000);
@@ -900,8 +853,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       // taskkill must be called exactly once — serialized polls prevent overlap.
       expect(killCallCount).toBe(1);
     } finally {
-      await slowManager.dispose();
-      await reapAndRemoveWindowsTestDir(slowDir, slowManager, [pid]);
+      await disposeAndCleanupWindowsTest(slowDir, slowManager, [pid, innerPid]);
     }
   }, 45000);
 
@@ -939,8 +891,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       expect(terminal?.state).toBe('completed');
       expect(terminal?.exitCode).toBe(0);
     } finally {
-      await reclaimManager.dispose();
-      await reapAndRemoveWindowsTestDir(reclaimDir, reclaimManager, []);
+      await disposeAndCleanupWindowsTest(reclaimDir, reclaimManager, []);
     }
   });
 });

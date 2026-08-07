@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { it } from 'vitest';
+import { it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 

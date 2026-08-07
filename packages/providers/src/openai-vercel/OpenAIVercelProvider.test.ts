@@ -11,7 +11,7 @@
  * @requirement REQ-OAV-003 - Authentication Support
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { IProvider } from '../IProvider.js';
@@ -185,6 +185,7 @@ describe('OpenAIVercelProvider', () => {
             headers: {
               Authorization: 'Bearer live-key',
             },
+            signal: expect.any(AbortSignal),
           },
         );
         expect(models).toStrictEqual(

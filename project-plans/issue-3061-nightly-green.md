@@ -6,8 +6,11 @@ failures are independent problems, not one.
 
 ## Scope
 
-Make the nightly workflow pass. Everything below is a defect in test or CI
-code; no product behaviour changes are required, and none are in scope.
+Make the nightly workflow pass by correcting defective CI/test assumptions and
+the narrowly evidenced cross-platform lifecycle behavior they exposed. Product
+changes remain limited to those concrete root causes: process-tree ownership and
+shutdown, Windows path/capability handling, fail-fast dependency wiring, and
+portable runtime backend selection. Unrelated feature behavior is out of scope.
 
 Hard constraint carried into every fix: **no test may be neutered to pass.**
 Deleting assertions, broadening a matcher until it cannot fail, or skipping a

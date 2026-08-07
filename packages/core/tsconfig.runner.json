@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-core": ["./index.ts"],
+      "@vybestack/llxprt-code-core/*": ["./src/*"]
+    }
+  },
+  "include": ["run-bun-tests.ts", "test/run-bun-tests.test.ts"]
+}

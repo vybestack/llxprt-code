@@ -50,6 +50,22 @@ const DEFAULT_PTY_BACKEND_LOADERS: PtyBackendLoaders = {
   loadFallback: () => import('node-pty'),
 };
 
+export async function loadNodePty(
+  loaders: PtyBackendLoaders = DEFAULT_PTY_BACKEND_LOADERS,
+): Promise<PtyImplementation> {
+  try {
+    const module = await loaders.loadPrimary();
+    return { module, name: 'lydell-node-pty' };
+  } catch {
+    try {
+      const module = await loaders.loadFallback();
+      return { module, name: 'node-pty' };
+    } catch {
+      return null;
+    }
+  }
+}
+
 /**
  * Resolve the PTY implementation for the current runtime.
  *
@@ -70,17 +86,5 @@ export const getPty = async (
     };
   }
 
-  try {
-    const module = await loaders.loadPrimary();
-    return { module, name: 'lydell-node-pty' };
-  } catch {
-    // Probe for alternative node-pty implementation
-    try {
-      const module = await loaders.loadFallback();
-      return { module, name: 'node-pty' };
-    } catch {
-      // No node-pty implementation available
-      return null;
-    }
-  }
+  return loadNodePty(loaders);
 };

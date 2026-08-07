@@ -539,7 +539,7 @@
     "test": "bun run-bun-tests.ts",
     "test:ci": "bun run-bun-tests.ts",
     "test:mutation": "stryker run stryker.conf.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.runner.json"
   },
   "files": [
     "index.ts",

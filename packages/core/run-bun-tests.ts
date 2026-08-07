@@ -20,7 +20,7 @@
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
@@ -35,8 +35,9 @@ const WORKSPACE_ROOT = import.meta.dir;
 const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');
 const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 // PowerShell/taskkill-heavy suites leave Windows log handles pending when Bun
-// children overlap, so Windows runs files serially; POSIX has no such constraint.
-const MAX_CONCURRENCY = process.platform === 'win32' ? 1 : 8;
+// children overlap. POSIX retains bounded parallelism without saturating shared
+// CI runners, where event-loop starvation can trip otherwise healthy test files.
+const MAX_CONCURRENCY = process.platform === 'win32' ? 1 : 2;
 const CONCURRENCY = Math.min(MAX_CONCURRENCY, availableParallelism());
 const PER_TEST_TIMEOUT_MS = 30_000;
 const PER_FILE_TIMEOUT_MS = process.platform === 'win32' ? 180_000 : 60_000;
@@ -88,16 +89,153 @@ export function discoverTestFiles(root: string): string[] {
   return results;
 }
 
-interface TestResult {
+export interface TestResult {
   file: string;
   passed: boolean;
   exitCode: number | null;
   timedOut: boolean;
+  timeoutMs: number;
+  reapFailed: boolean;
+  reapError: string | null;
 }
 
-function runTestFile(file: string): Promise<TestResult> {
+export interface RunTestFileOptions {
+  readonly timeoutMs?: number;
+  readonly reapTimeoutMs?: number;
+  readonly taskkillTimeoutMs?: number;
+}
+
+const REAP_TIMEOUT_MS = 10_000;
+const TASKKILL_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operation: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${operation} did not complete within ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+export function observeChildClose(child: ChildProcess): Promise<void> {
+  return new Promise<void>((resolve) => {
+    child.once('close', () => resolve());
+  });
+}
+
+export async function killChildTreeAndWait(
+  child: ChildProcess,
+  childClosed: Promise<void>,
+  options: Pick<RunTestFileOptions, 'reapTimeoutMs' | 'taskkillTimeoutMs'> = {},
+): Promise<void> {
+  const pid = child.pid;
+  if (pid === undefined) {
+    throw new Error('Cannot reap test process without a PID');
+  }
+
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    let taskkillError: Error | null = null;
+    killer.once('error', (error: Error) => {
+      taskkillError = error;
+    });
+    const killerClosed = new Promise<number | null>((resolve) => {
+      killer.once('close', resolve);
+    });
+    let taskkillCode: number | null;
+    try {
+      taskkillCode = await withTimeout(
+        killerClosed,
+        options.taskkillTimeoutMs ?? TASKKILL_TIMEOUT_MS,
+        `taskkill for test process ${pid}`,
+      );
+    } catch (error) {
+      let forcedKillError: Error | null = null;
+      const recordForcedKillError = (killError: Error): void => {
+        forcedKillError = killError;
+      };
+      killer.once('error', recordForcedKillError);
+      try {
+        if (killer.exitCode === null && killer.signalCode === null) {
+          killer.kill('SIGKILL');
+        }
+        await withTimeout(
+          killerClosed,
+          options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+          `Timed-out taskkill (pid ${killer.pid ?? 'unknown'}) close lifecycle`,
+        );
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          `taskkill for test process ${pid} failed and did not close`,
+        );
+      } finally {
+        killer.off('error', recordForcedKillError);
+      }
+      if (forcedKillError !== null) {
+        throw new AggregateError(
+          [error, forcedKillError],
+          `taskkill for test process ${pid} timed out and could not be terminated`,
+        );
+      }
+      throw error;
+    }
+    if (taskkillError !== null) {
+      throw taskkillError;
+    }
+    if (taskkillCode !== 0) {
+      throw new Error(
+        `taskkill /T /F /PID ${pid} exited with code ${taskkillCode}`,
+      );
+    }
+  } else {
+    // POSIX: kill the entire per-test process group by negative PID. The
+    // child was spawned with detached: true (see runTestFile) so it leads
+    // its own group; this sends SIGKILL to every descendant that inherited
+    // it (e.g. grandchildren spawned via Bun.spawn), which child.kill()
+    // alone would orphan.
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch (error) {
+      const code =
+        error instanceof Error && 'code' in error ? error.code : undefined;
+      if (code !== 'ESRCH') {
+        throw error;
+      }
+    }
+  }
+
+  await withTimeout(
+    childClosed,
+    options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+    `Timed-out child (pid ${pid}) close lifecycle`,
+  );
+}
+
+export function runTestFile(
+  file: string,
+  options: RunTestFileOptions = {},
+): Promise<TestResult> {
+  const timeoutMs = options.timeoutMs ?? PER_FILE_TIMEOUT_MS;
   return new Promise((resolve) => {
     let resolved = false;
+    let spawnError: Error | null = null;
     const child = spawn(
       process.execPath,
       [
@@ -112,29 +250,70 @@ function runTestFile(file: string): Promise<TestResult> {
         cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
         env: process.env,
+        // POSIX: put the test child in its own process group so a timeout
+        // can kill the entire per-test process tree by negative PID.
+        // Windows ignores detached for process-group purposes; the Windows
+        // path uses taskkill /T instead.
+        detached: process.platform !== 'win32',
       },
     );
+    const childClosed = observeChildClose(child);
 
     const timer = setTimeout(() => {
       if (resolved) return;
       resolved = true;
-      child.kill('SIGKILL');
-      resolve({ file, passed: false, exitCode: null, timedOut: true });
-    }, PER_FILE_TIMEOUT_MS);
+      const reaping = killChildTreeAndWait(child, childClosed, options);
+      void reaping.then(
+        () => {
+          resolve({
+            file,
+            passed: false,
+            exitCode: null,
+            timedOut: true,
+            timeoutMs,
+            reapFailed: false,
+            reapError: null,
+          });
+        },
+        (error: unknown) => {
+          const reapError =
+            error instanceof Error ? error.message : String(error);
+          console.error(
+            `Failed to reap timed-out test process for ${file}: ${reapError}`,
+          );
+          resolve({
+            file,
+            passed: false,
+            exitCode: null,
+            timedOut: true,
+            timeoutMs,
+            reapFailed: true,
+            reapError,
+          });
+        },
+      );
+    }, timeoutMs);
 
-    child.on('exit', (code) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timer);
-      resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
+    child.on('error', (error: Error) => {
+      spawnError = error;
     });
 
-    child.on('error', (err: Error) => {
+    child.on('close', (code) => {
+      clearTimeout(timer);
       if (resolved) return;
       resolved = true;
-      clearTimeout(timer);
-      console.error(`Error spawning test for ${file}: ${err.message}`);
-      resolve({ file, passed: false, exitCode: -1, timedOut: false });
+      if (spawnError !== null) {
+        console.error(`Error spawning test for ${file}: ${spawnError.message}`);
+      }
+      resolve({
+        file,
+        passed: spawnError === null && code === 0,
+        exitCode: spawnError === null ? code : -1,
+        timedOut: false,
+        timeoutMs,
+        reapFailed: false,
+        reapError: null,
+      });
     });
   });
 }
@@ -147,23 +326,32 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function generateJUnit(
-  results: TestResult[],
-  totalFiles: number,
-  failedCount: number,
-): string {
+function buildFailureXml(result: TestResult): string {
+  if (result.passed) {
+    return '';
+  }
+  if (result.timedOut && result.reapFailed) {
+    const message = escapeXml(
+      result.reapError ?? 'Process tree reaping failed',
+    );
+    return `<failure message="${message}">TIMEOUT+REAP_FAILED</failure>`;
+  }
+  if (result.timedOut) {
+    return `<failure message="Timed out after ${result.timeoutMs / 1000}s">TIMEOUT</failure>`;
+  }
+  return `<failure message="Exit code ${result.exitCode ?? -1}">FAILED</failure>`;
+}
+
+export function generateJUnit(results: TestResult[]): string {
   const newlines = '\n';
+  const totalFiles = results.length;
+  const failedCount = results.filter((result) => !result.passed).length;
   const testCases = results
     .map((r) => {
       const className = escapeXml(
         r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
       );
-      const exitCode = r.exitCode ?? -1;
-      const failureXml = r.passed
-        ? ''
-        : r.timedOut
-          ? `<failure message="Timed out after ${PER_FILE_TIMEOUT_MS / 1000}s">TIMEOUT</failure>`
-          : `<failure message="Exit code ${exitCode}">FAILED</failure>`;
+      const failureXml = buildFailureXml(r);
       const timeAttr = r.passed ? '' : ' time="0"';
       return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
     })
@@ -196,8 +384,22 @@ async function main(): Promise<void> {
 
   for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
     const batch = testFiles.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(batch.map(runTestFile));
+    const batchResults = await Promise.all(
+      batch.map((file) => runTestFile(file)),
+    );
     results.push(...batchResults);
+
+    // Fail fast: if reaping a timed-out child failed, do NOT proceed with
+    // another file — the old process tree may still be alive and holding
+    // resources (log handles, ports) that would corrupt subsequent results.
+    if (batchResults.some((r) => r.reapFailed)) {
+      console.error(
+        'FATAL: failed to reap a timed-out test process tree; aborting to ' +
+          'avoid running subsequent files against leaked resources.',
+      );
+      writeFileSync(JUNIT_PATH, generateJUnit(results));
+      process.exit(1);
+    }
   }
 
   const passed = results.filter((r) => r.passed).length;
@@ -206,7 +408,8 @@ async function main(): Promise<void> {
   for (const result of failed) {
     if (result.timedOut) {
       console.error(
-        `TIMEOUT: ${result.file} (exceeded ${PER_FILE_TIMEOUT_MS / 1000}s)`,
+        `TIMEOUT: ${result.file} (exceeded ${result.timeoutMs / 1000}s)` +
+          (result.reapFailed ? ' [REAP FAILED]' : ''),
       );
     } else {
       console.error(
@@ -220,10 +423,7 @@ async function main(): Promise<void> {
       (failed.length > 0 ? ` (${failed.length} failed)` : ''),
   );
 
-  writeFileSync(
-    JUNIT_PATH,
-    generateJUnit(results, testFiles.length, failed.length),
-  );
+  writeFileSync(JUNIT_PATH, generateJUnit(results));
 
   process.exit(failed.length > 0 ? 1 : 0);
 }

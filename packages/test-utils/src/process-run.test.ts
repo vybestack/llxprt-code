@@ -7,7 +7,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
   spawnRun,
   spawnRunWithTimeout,
@@ -163,7 +163,7 @@ describe('process run capture', () => {
       },
     );
 
-    await expect(run).rejects.toThrow(/code 3/);
+    expect((await captureRejection(run)).message).toMatch(/code 3/);
     expect(capture).toStrictEqual({
       stdout: 'partial out',
       stderr: 'partial err',
@@ -198,7 +198,7 @@ describe('process run capture', () => {
         },
       );
 
-      await expect(run).rejects.toThrow(/timed out/);
+      expect((await captureRejection(run)).message).toMatch(/timed out/);
       expect(capture).toStrictEqual({
         stdout: 'started graceful-out',
         stderr: 'graceful-err',
@@ -206,6 +206,7 @@ describe('process run capture', () => {
         timedOut: true,
       });
     },
+    15_000,
   );
 
   it.skipIf(process.platform === 'win32')(
@@ -233,7 +234,7 @@ describe('process run capture', () => {
         },
       );
 
-      await expect(run).rejects.toThrow(/timed out/);
+      expect((await captureRejection(run)).message).toMatch(/timed out/);
       expect(capture).toStrictEqual({
         stdout: 'started shutdown-out',
         stderr: 'shutdown-err',
@@ -241,6 +242,7 @@ describe('process run capture', () => {
         timedOut: true,
       });
     },
+    15_000,
   );
 
   it('preserves process and capture failures together', async () => {
@@ -286,7 +288,9 @@ describe('process run capture', () => {
     // Matching both keeps the assertion strict — it still rejects only for a
     // missing-executable spawn failure and still fails if the rejection stops
     // happening or changes to a different error class (timeout/exit code).
-    await expect(run).rejects.toThrow(/ENOENT|Executable not found/i);
+    expect((await captureRejection(run)).message).toMatch(
+      /ENOENT|Executable not found/i,
+    );
     expect(capture).toStrictEqual({
       stdout: '',
       stderr: '',
@@ -306,7 +310,9 @@ describe('process run capture', () => {
       },
     );
 
-    await expect(run).rejects.toThrow(/capture handler failed/);
+    expect((await captureRejection(run)).message).toMatch(
+      /capture handler failed/,
+    );
   });
 
   it('isolates capture handler failures in timeout-managed runs', async () => {
@@ -321,7 +327,9 @@ describe('process run capture', () => {
       },
     );
 
-    await expect(run).rejects.toThrow(/timeout capture handler failed/);
+    expect((await captureRejection(run)).message).toMatch(
+      /timeout capture handler failed/,
+    );
   });
 
   it('keeps concurrent run captures isolated by callback', async () => {

@@ -7,7 +7,10 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { boundedTaskkill } from '../../src/services/shellProcessKill.js';
-import type { ShellJobManager } from '../../src/services/shellJobManager.js';
+import {
+  ShellJobDisposalError,
+  type ShellJobManager,
+} from '../../src/services/shellJobManager.js';
 import { debugLogger } from '../../src/utils/debugLogger.js';
 
 /**
@@ -32,6 +35,40 @@ import { debugLogger } from '../../src/utils/debugLogger.js';
  * to reapAndRemoveWindowsTestDir so the inner is directly reaped and
  * confirmed gone.
  */
+
+export async function disposeAndCleanupWindowsTest(
+  dir: string,
+  manager: ShellJobManager,
+  pids: readonly number[],
+  allowSurvivorError = false,
+): Promise<void> {
+  let disposalError: unknown;
+  try {
+    await manager.dispose();
+  } catch (error) {
+    disposalError = error;
+  }
+
+  try {
+    await reapAndRemoveWindowsTestDir(dir, manager, pids);
+  } catch (cleanupError) {
+    if (disposalError !== undefined) {
+      throw new AggregateError(
+        [disposalError, cleanupError],
+        'Shell-job disposal and deterministic cleanup both failed',
+      );
+    }
+    throw cleanupError;
+  }
+
+  if (disposalError === undefined) return;
+  if (
+    !allowSurvivorError ||
+    !(disposalError instanceof ShellJobDisposalError)
+  ) {
+    throw disposalError;
+  }
+}
 
 /** Transient Windows removal codes that warrant a bounded retry. */
 const TRANSIENT_REMOVAL_CODES: ReadonlySet<string> = new Set([
@@ -88,6 +125,69 @@ async function waitForPidGoneWindows(
   }
   throw new Error(
     `PID ${pid} still alive after ${timeoutMs}ms — possible process leak`,
+  );
+}
+
+/**
+ * Poll until a PID is confirmed alive or gone on Windows.
+ */
+export async function waitForPidStateWindows(
+  pid: number,
+  alive: boolean,
+  timeoutMs = 10000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isPidAliveWindows(pid) === alive) return;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(
+    `PID ${pid} did not become ${alive ? 'alive' : 'gone'} within ${timeoutMs}ms`,
+  );
+}
+
+const TRANSIENT_PID_FILE_CODES = new Set(['ENOENT', 'EACCES', 'EPERM']);
+
+function readPositivePid(filePath: string): number | null {
+  try {
+    const pid = Number(fs.readFileSync(filePath, 'utf8').trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch (error) {
+    const code = errorCodeOf(error);
+    if (code !== undefined && TRANSIENT_PID_FILE_CODES.has(code)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function pollPositivePidFile(
+  filePath: string,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const pid = readPositivePid(filePath);
+    if (pid !== null) {
+      return pid;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(timeoutMessage);
+}
+
+/**
+ * Poll until a PID file appears and contains a positive integer.
+ */
+export function waitForPidFile(
+  filePath: string,
+  timeoutMs: number,
+): Promise<number> {
+  return pollPositivePidFile(
+    filePath,
+    timeoutMs,
+    `PID file ${filePath} did not appear within ${timeoutMs}ms`,
   );
 }
 
@@ -231,10 +331,14 @@ export async function reapAndRemoveWindowsTestDir(
 export function buildInnerPidMarkerCommand(
   markerPath: string,
   sleepSeconds = 300,
+  beforeSleepCommand?: string,
 ): string {
   const escaped = markerPath.replace(/'/g, "''");
+  const beforeSleep =
+    beforeSleepCommand === undefined ? '' : `${beforeSleepCommand}; `;
   return (
     `$PID | Out-File -FilePath '${escaped}' -Encoding ASCII; ` +
+    beforeSleep +
     `Start-Sleep -Seconds ${sleepSeconds}`
   );
 }
@@ -243,19 +347,13 @@ export function buildInnerPidMarkerCommand(
  * Poll a marker file until it parses as a positive pid. Fail-fast: throws if
  * the marker is never written within the deadline.
  */
-export async function readInnerPidFromMarker(
+export function readInnerPidFromMarker(
   markerPath: string,
   timeoutMs = 10000,
 ): Promise<number> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (fs.existsSync(markerPath)) {
-      const pid = parseInt(fs.readFileSync(markerPath, 'utf8').trim(), 10);
-      if (!Number.isNaN(pid) && pid > 0) return pid;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(
+  return pollPositivePidFile(
+    markerPath,
+    timeoutMs,
     `Inner PID marker ${markerPath} not written within ${timeoutMs}ms`,
   );
 }

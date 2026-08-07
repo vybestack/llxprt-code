@@ -28,7 +28,7 @@ import {
   beforeEach,
   afterEach,
   vi,
-} from 'vitest';
+} from 'bun:test';
 import * as fc from 'fast-check';
 import * as path from 'path';
 import * as os from 'os';
