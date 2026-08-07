@@ -47,10 +47,13 @@ const TEST_FILE_RE = /\.(test|spec)\.[cm]?tsx?$|\.bun\.ts$/;
 const TEST_FILE_NAMES = new Set(['test-setup.ts', 'bun-test-setup.ts']);
 
 function isTestPath(p: string): boolean {
-  const parts = p.split('/');
+  // `path.relative` yields platform separators; normalise before splitting so
+  // directory-segment matching works on Windows as well as POSIX.
+  const normalised = p.split('\\').join('/');
+  const parts = normalised.split('/');
   if (parts.some((s) => TEST_DIR_SEGMENTS.includes(s))) return true;
   if (TEST_FILE_NAMES.has(parts[parts.length - 1])) return true;
-  return TEST_FILE_RE.test(p);
+  return TEST_FILE_RE.test(normalised);
 }
 
 function walk(dir: string, out: string[] = []): string[] {

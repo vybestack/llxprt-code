@@ -66,10 +66,13 @@ const TEST_FILE_NAMES = new Set([
 ]);
 
 export function isTestPath(relPath: string): boolean {
-  const parts = relPath.split('/');
+  // `path.relative` yields platform separators; normalise before splitting so
+  // directory-segment matching works on Windows as well as POSIX.
+  const normalised = relPath.split('\\').join('/');
+  const parts = normalised.split('/');
   if (parts.some((p) => TEST_DIR_SEGMENTS.includes(p))) return true;
   if (TEST_FILE_NAMES.has(parts[parts.length - 1])) return true;
-  return TEST_FILE_RE.test(relPath);
+  return TEST_FILE_RE.test(normalised);
 }
 
 /**
@@ -232,17 +235,44 @@ export function scanFile(
   return records;
 }
 
+/**
+ * Scan every package source file, skipping any that cannot be read.
+ *
+ * A file can vanish or become unreadable between the directory walk and the
+ * read; that must not discard the whole run's analysis.
+ */
+function collectRecords(pkgDirs: string[]): {
+  records: ImportRecord[];
+  unreadable: string[];
+} {
+  const records: ImportRecord[] = [];
+  const unreadable: string[] = [];
+  for (const pkg of pkgDirs) {
+    for (const abs of walk(join(PACKAGES, pkg))) {
+      const rel = relative(ROOT, abs);
+      let source: string;
+      try {
+        source = readFileSync(abs, 'utf8');
+      } catch {
+        unreadable.push(rel);
+        continue;
+      }
+      records.push(...scanFile(abs, rel, pkg, source));
+    }
+  }
+  return { records, unreadable };
+}
+
 function main(): void {
   const pkgDirs = readdirSync(PACKAGES, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name);
 
-  const records: ImportRecord[] = [];
-  for (const pkg of pkgDirs) {
-    for (const abs of walk(join(PACKAGES, pkg))) {
-      const rel = relative(ROOT, abs);
-      records.push(...scanFile(abs, rel, pkg, readFileSync(abs, 'utf8')));
-    }
+  const { records, unreadable } = collectRecords(pkgDirs);
+  if (unreadable.length > 0) {
+    console.log(
+      `WARNING: skipped ${unreadable.length} unreadable file(s): ${unreadable.slice(0, 5).join(', ')}`,
+    );
   }
 
   mkdirSync(join(ROOT, 'tmp'), { recursive: true });
@@ -280,6 +310,8 @@ function main(): void {
     }
   }
   const totalSpec = typeSpec + valueSpec;
+  const typeOnlyPct =
+    totalSpec === 0 ? 'n/a' : `${((typeSpec / totalSpec) * 100).toFixed(1)}%`;
   // Denominator is NAMED BINDINGS only. Namespace imports, default imports,
   // dynamic imports, side-effect imports and export-star carry no named
   // bindings and are excluded — this is not a percentage of statements.
@@ -287,7 +319,7 @@ function main(): void {
     (r) => r.specifiers.length === 0 && !r.statementTypeOnly,
   ).length;
   console.log(
-    `\nnamed symbol bindings (deep): ${totalSpec}  type-only=${typeSpec} (${((typeSpec / totalSpec) * 100).toFixed(1)}% of named bindings)  value=${valueSpec}`,
+    `\nnamed symbol bindings (deep): ${totalSpec}  type-only=${typeSpec} (${typeOnlyPct} of named bindings)  value=${valueSpec}`,
   );
   console.log(
     `  statements carrying no named binding (namespace/default/dynamic/star): ${unnamed} — excluded from the ratio above`,

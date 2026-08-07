@@ -160,5 +160,10 @@ describe('LspControl capability dependency', () => {
     expect(snapshot.disabled).toBe(true);
     expect(snapshot.unavailableReason).toContain('transport closed');
     expect(snapshot.servers[0].healthy).toBe(false);
+    // readStatus maps the formatted error onto every configured server, so the
+    // per-server detail must carry the reason too — not just the top-level
+    // field. Without this the reason could stop propagating to servers and the
+    // suite would still pass.
+    expect(snapshot.servers[0].detail).toContain('transport closed');
   });
 });
