@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { automock } from '../../../test-utils/src/automock.js';
+import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -15,12 +16,34 @@ import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceCon
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClient } from './mcp-client.js';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+const realStdioModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
+};
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realOauthProviderModule = {
+  ...(await import('../auth/oauth-provider.js')),
+};
+const realOauthTokenStorageModule = {
+  ...(await import('../auth/oauth-token-storage.js')),
+};
+const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
+
+void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+  automock(realStdioModule),
+);
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+void vi.mock('../auth/oauth-provider.js', () =>
+  automock(realOauthProviderModule),
+);
+void vi.mock('../auth/oauth-token-storage.js', () =>
+  automock(realOauthTokenStorageModule),
+);
+void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
+void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
 function createSdkClient() {
   return {
@@ -50,10 +73,14 @@ describe('McpClient stale error handling', () => {
     Object.assign(sdkClient, {
       getInstructions: vi.fn().mockReturnValue('stale instructions'),
     });
-    vi.mocked(ClientLib.Client).mockReturnValue(sdkClient as unknown as Client);
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as Client);
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
     const client = new McpClient(
       'test-server',
       { command: 'test-command' },
@@ -78,12 +105,14 @@ describe('McpClient stale error handling', () => {
   it('ignores errors emitted by a stale SDK client after reconnect', async () => {
     const staleSdkClient = createSdkClient();
     const activeSdkClient = createSdkClient();
-    vi.mocked(ClientLib.Client)
+    (ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>)
       .mockReturnValueOnce(staleSdkClient as unknown as Client)
       .mockReturnValueOnce(activeSdkClient as unknown as Client);
-    vi.mocked(SdkClientStdioLib.StdioClientTransport).mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
-    );
+    (
+      SdkClientStdioLib.StdioClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
     const client = new McpClient(
       'test-server',
       { command: 'test-command' },

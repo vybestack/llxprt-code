@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'bun:test';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { disableMouseEvents, isMouseEventsActive } from '../utils/mouse.js';
 import { mouseCommand } from './mouseCommand.js';

@@ -99,15 +99,31 @@ const CONCURRENCY = resolveConcurrency();
  * It must be passed on the command line: Bun 1.3.14 ignores a `[test] timeout`
  * key in `bunfig.toml` and silently falls back to its 5s default, which makes
  * the slower suites fail once the machine is under parallel load.
+ *
+ * Raised from 30s against measurement. subagentOrchestrator-loadBalancer runs
+ * a real load-balancer activation: ~430ms per launch in isolation, but with
+ * the pool saturated a single launch was timed at 78.6s while consuming 0.8s
+ * of user CPU, so it is waiting on something rather than computing. Failure
+ * rate for that file across repeated runs at this pool's concurrency: 4/24 at
+ * 30s, 0/24 at 60s, 0/16 at 200s. The work completes; the old bound simply
+ * cut it off.
+ *
+ * This covers slow suites only. A suite that never completes is still caught
+ * by PER_FILE_TIMEOUT_MS below, which is what should happen - a raised
+ * per-test bound must not turn a hang into a longer hang.
  */
-const PER_TEST_TIMEOUT_MS = 30_000;
+const PER_TEST_TIMEOUT_MS = 180_000;
 
 /**
  * Per-file wall-clock budget. The slowest agents files (streaming chat-session
  * suites) take tens of seconds, so this is generous enough to avoid flaking
  * while still converting a genuine hang into a reported failure.
  */
-const PER_FILE_TIMEOUT_MS = 120_000;
+// Raised alongside the per-test bound: the whole-file wall clock for
+// subagentOrchestrator-loadBalancer was measured at 99.4s under load, leaving
+// almost no headroom under the previous 120s cap. This remains the backstop
+// for a suite that genuinely hangs.
+const PER_FILE_TIMEOUT_MS = 300_000;
 
 /**
  * Directories that are pruned during discovery.

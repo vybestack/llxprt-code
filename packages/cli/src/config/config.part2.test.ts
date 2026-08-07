@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -23,23 +32,26 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('./trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('./trustedFolders.js')>(
-    './trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('./trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
   };
 });
 
-vi.mock('./sandboxConfig.js', () => ({
+void vi.mock('./sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => {
   const mockHome = pathMod.resolve(pathMod.sep, 'mock', 'home', 'user');
   const MOCK_CWD1 = process.cwd();
   const MOCK_CWD2 = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
@@ -69,25 +81,23 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
+}));
 
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('read-package-up', () => ({
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -96,9 +106,9 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ServerConfig.RuntimeProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -242,10 +252,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actualServer = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actualServer = realLlxprtCodeCoreModule;
   return {
     ...actualServer,
     IdeClient: {
@@ -293,14 +301,14 @@ describe('loadCliConfig chatCompression', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -352,16 +360,18 @@ describe('loadCliConfig useRipgrep', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     // Default: ripgrep is available
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      true,
+    );
   });
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -370,7 +380,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      true,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -388,7 +400,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(false);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      false,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -406,7 +420,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { useRipgrep: false };
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      true,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -424,7 +440,9 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { useRipgrep: true };
-    vi.mocked(isRipgrepAvailable).mockResolvedValue(false);
+    (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
+      false,
+    );
     const config = await loadCliConfig(
       settings,
       [],
@@ -445,14 +463,14 @@ describe('screenReader configuration', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -539,17 +557,19 @@ describe('loadCliConfig tool exclusions', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     process.stdin.isTTY = originalIsTTY;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });

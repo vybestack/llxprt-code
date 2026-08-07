@@ -5,13 +5,13 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { MemoryUsageDisplay } from './MemoryUsageDisplay.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';
 
 // Mock formatMemoryUsage utility
-vi.mock('../utils/formatters.js', () => ({
+void vi.mock('../utils/formatters.js', () => ({
   formatMemoryUsage: vi.fn((bytes: number) => {
     if (bytes >= 1024 * 1024 * 1024) {
       return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -16,37 +24,30 @@ import {
 import { createExtension } from '../test-utils/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+const mockedOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn().mockReturnValue(true),
-  };
-});
+const actual = { ...(await import('./trustedFolders.js')) };
+void vi.mock('./trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn().mockReturnValue(true),
+}));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...actual,
-    logExtensionEnable: vi.fn(),
-    logExtensionInstallEvent: vi.fn(),
-    logExtensionUninstall: vi.fn(),
-    logExtensionDisable: vi.fn(),
-    ExtensionEnableEvent: vi.fn(),
-    ExtensionInstallEvent: vi.fn(),
-    ExtensionUninstallEvent: vi.fn(),
-    ExtensionDisableEvent: vi.fn(),
-  };
-});
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  logExtensionEnable: vi.fn(),
+  logExtensionInstallEvent: vi.fn(),
+  logExtensionUninstall: vi.fn(),
+  logExtensionDisable: vi.fn(),
+  ExtensionEnableEvent: vi.fn(),
+  ExtensionInstallEvent: vi.fn(),
+  ExtensionUninstallEvent: vi.fn(),
+  ExtensionDisableEvent: vi.fn(),
+}));
 
 describe('extension skills loading', () => {
   let tempHomeDir: string;
@@ -75,7 +76,7 @@ describe('extension skills loading', () => {
     userExtensionsDir = path.join(tempHomeDir, 'extensions');
     fs.mkdirSync(userExtensionsDir, { recursive: true });
 
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
   });
 
   afterEach(() => {

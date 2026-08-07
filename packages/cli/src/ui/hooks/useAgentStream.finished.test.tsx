@@ -4,16 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import type { Mock } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
@@ -35,32 +34,40 @@ import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actualSchedulerModule,
-    useReactToolScheduler: vi.fn(),
-  };
-});
-const mockUseReactToolScheduler = useReactToolScheduler as Mock;
+const realAtCommandProcessorModule = {
+  ...(await import('./atCommandProcessor.js')),
+};
 
-vi.mock('./useKeypress.js', () => ({
+const actualSchedulerModule = {
+  ...(await import('./useReactToolScheduler.js')),
+};
+void vi.mock('./useReactToolScheduler.js', () => ({
+  ...actualSchedulerModule,
+  useReactToolScheduler: vi.fn(),
+}));
+const mockUseReactToolScheduler = useReactToolScheduler as Mock<
+  (...args: never[]) => unknown
+>;
+
+void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
 }));
 
-vi.mock('./shellCommandProcessor.js', () => ({
+void vi.mock('./shellCommandProcessor.js', () => ({
   useShellCommandProcessor: vi.fn().mockReturnValue({
     handleShellCommand: vi.fn(),
   }),
 }));
 
-vi.mock('./atCommandProcessor.js');
+void vi.mock('./atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
 
-vi.mock('../utils/markdownUtilities.js', () => ({
+void vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),
 }));
 
-vi.mock('./useStateAndRef.js', () => ({
+void vi.mock('./useStateAndRef.js', () => ({
   useStateAndRef: <T,>(
     initial: T,
   ): [
@@ -85,7 +92,7 @@ vi.mock('./useStateAndRef.js', () => ({
   },
 }));
 
-vi.mock('./useLogger.js', () => ({
+void vi.mock('./useLogger.js', () => ({
   useLogger: vi.fn().mockReturnValue({
     logMessage: vi.fn().mockResolvedValue(undefined),
   }),
@@ -93,7 +100,7 @@ vi.mock('./useLogger.js', () => ({
 
 const mockStartNewPrompt = vi.fn();
 const mockAddUsage = vi.fn();
-vi.mock('../contexts/SessionContext.js', () => ({
+void vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({
     startNewPrompt: mockStartNewPrompt,
     addUsage: mockAddUsage,
@@ -101,7 +108,7 @@ vi.mock('../contexts/SessionContext.js', () => ({
   })),
 }));
 
-vi.mock('./slashCommandProcessor.js', () => ({
+void vi.mock('./slashCommandProcessor.js', () => ({
   handleSlashCommand: vi.fn().mockReturnValue(false),
 }));
 
@@ -109,13 +116,13 @@ vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock;
+  let mockAddItem: Mock<(...args: never[]) => unknown>;
   let mockConfig: Config;
-  let mockOnDebugMessage: Mock;
-  let mockHandleSlashCommand: Mock;
-  let mockScheduleToolCalls: Mock;
-  let mockCancelAllToolCalls: Mock;
-  let mockMarkToolsAsDisplayCleared: Mock;
+  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
+  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
+  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockCancelAllToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
@@ -225,7 +232,7 @@ describe('useAgentStream', () => {
       setShellInputFocused?: (focused: boolean) => void;
       performMemoryRefresh?: () => Promise<void>;
       onAuthError?: () => void;
-      setModelSwitched?: Mock;
+      setModelSwitched?: Mock<(...args: never[]) => unknown>;
       modelSwitched?: boolean;
     } = {},
   ) => {
@@ -387,7 +394,7 @@ describe('useAgentStream', () => {
 
     describe('ContextWindowWillOverflow event', () => {
       beforeEach(() => {
-        vi.mocked(tokenLimit).mockReturnValue(100);
+        (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(100);
       });
 
       it.each([
@@ -630,7 +637,9 @@ describe('useAgentStream', () => {
     });
 
     // We need to capture the onComplete callback from useReactToolScheduler
-    const mockUseReactToolScheduler = useReactToolScheduler as Mock;
+    const mockUseReactToolScheduler = useReactToolScheduler as Mock<
+      (...args: never[]) => unknown
+    >;
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete;
       return [

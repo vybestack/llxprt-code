@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { RuntimeModel } from '../../src/runtime/contracts/RuntimeModel.js';
 import { hydrateModelsWithRegistry } from '../../src/models/hydration.js';
 import { getModelRegistry } from '../../src/models/registry.js';

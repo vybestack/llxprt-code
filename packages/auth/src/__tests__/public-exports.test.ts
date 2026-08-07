@@ -14,7 +14,7 @@
  * stay in @vybestack/llxprt-code-core and must not be exported from auth.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 // Import from auth package main entry using canonical specifier
 import {

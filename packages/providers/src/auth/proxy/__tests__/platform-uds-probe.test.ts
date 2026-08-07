@@ -16,7 +16,7 @@
  * @requirement R27.2
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';

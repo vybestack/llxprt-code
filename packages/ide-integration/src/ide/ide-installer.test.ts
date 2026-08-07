@@ -4,20 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import { automock } from '../../../test-utils/src/automock.js';
+import { vi } from 'bun:test';
 
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    execSync: vi.fn(),
-    spawnSync: vi.fn(() => ({ status: 0 })),
-  };
-});
-vi.mock('fs');
-vi.mock('os');
+const realFsModule = { ...(await import('fs')) };
+const realOsModule = { ...(await import('os')) };
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+const actual = { ...(await import('node:child_process')) };
+void vi.mock('node:child_process', () => ({
+  ...actual,
+  execSync: vi.fn(),
+  spawnSync: vi.fn(() => ({ status: 0 })),
+}));
+void vi.mock('fs', () => automock(realFsModule));
+void vi.mock('os', () => automock(realOsModule));
+
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { getIdeInstaller } from './ide-installer.js';
 import * as child_process from 'node:child_process';
 import * as fs from 'node:fs';
@@ -33,6 +35,9 @@ describe('ide-installer', () => {
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 

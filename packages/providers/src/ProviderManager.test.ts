@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ProviderManager } from './ProviderManager.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import type { IProvider } from './IProvider.js';

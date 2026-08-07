@@ -9,7 +9,7 @@
  * @plan PLAN-20260731-GHBROKER.P05
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   encodeFrame,
   FrameDecoder,

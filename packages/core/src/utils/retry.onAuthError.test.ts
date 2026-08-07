@@ -12,6 +12,7 @@
  * 3. Passes errorStatus to the callback
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { retryWithBackoff, type HttpError } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
@@ -48,7 +49,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Unauthorized');
 
     // onAuthError should have been called for the 401
@@ -79,7 +80,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Forbidden');
 
     // onAuthError should have been called for the 403
@@ -110,7 +111,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Rate limit');
 
     expect(mockOnAuthError).not.toHaveBeenCalled();
@@ -136,7 +137,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Server error');
 
     expect(mockOnAuthError).not.toHaveBeenCalled();
@@ -164,7 +165,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Unauthorized');
 
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
@@ -195,7 +196,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Forbidden');
 
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
@@ -221,7 +222,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Forbidden');
 
     expect(mockFn).toHaveBeenCalledTimes(1);
@@ -256,7 +257,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Forbidden');
 
     expect(mockFn).toHaveBeenCalledTimes(1);

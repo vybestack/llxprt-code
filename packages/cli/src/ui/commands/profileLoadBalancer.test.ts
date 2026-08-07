@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   extractExplicitLoadBalancerContextLimit,
   getAmbientLoadBalancerContextLimit,
@@ -114,7 +114,11 @@ describe('createLoadBalancerProfileDefinition', () => {
     expect(profile.policy).toBe('roundrobin');
     expect(profile.profiles).toStrictEqual(['a', 'b']);
     expect(profile.contextLimit).toBe(2048);
-    expect(profile.ephemeralSettings).toStrictEqual({ temperature: 0.5 });
+    expect(profile.ephemeralSettings).toStrictEqual({
+      temperature: 0.5,
+      // EphemeralSettings is a fixed-key interface but arbitrary keys are
+      // accepted and persisted at runtime.
+    } as unknown as typeof profile.ephemeralSettings);
   });
 
   it('omits contextLimit when undefined', () => {

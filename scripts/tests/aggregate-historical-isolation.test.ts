@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

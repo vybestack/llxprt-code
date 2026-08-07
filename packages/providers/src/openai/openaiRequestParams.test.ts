@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
 import { MAX_PROMPT_CACHE_KEY_LENGTH } from '../openai-responses/sanitizePromptCacheKey.js';
 

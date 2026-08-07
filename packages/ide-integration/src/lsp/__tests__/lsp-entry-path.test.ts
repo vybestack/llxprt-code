@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 /**
  * The case below asserts what `import.meta.resolve` reports *when the package
@@ -45,7 +45,7 @@ describe('LSP entry path resolution', () => {
     expect(existsSync(brokenPath)).toBe(false);
   });
 
-  it.runIf(hasImportMetaResolve)(
+  it.skipIf(!hasImportMetaResolve)(
     'resolves via import.meta.resolve when package is installed',
     () => {
       // Call through `import.meta` rather than detaching `resolve` into a

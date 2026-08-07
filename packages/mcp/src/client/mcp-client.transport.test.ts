@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 
@@ -21,24 +22,46 @@ import {
   getTransportHeaders,
 } from './mcpClientTestHelpers.js';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
+const realStdioModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
+};
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realOauthProviderModule = {
+  ...(await import('../auth/oauth-provider.js')),
+};
+const realOauthTokenStorageModule = {
+  ...(await import('../auth/oauth-token-storage.js')),
+};
+const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
 
-const { MockGoogleAuth } = vi.hoisted(() => {
+void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+  automock(realStdioModule),
+);
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+void vi.mock('../auth/oauth-provider.js', () =>
+  automock(realOauthProviderModule),
+);
+void vi.mock('../auth/oauth-token-storage.js', () =>
+  automock(realOauthTokenStorageModule),
+);
+void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
+
+const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {
     constructor(..._args: unknown[]) {}
   }
   MockGoogleAuth.prototype.getClient = vi.fn();
   return { MockGoogleAuth };
-});
-vi.mock('google-auth-library', () => ({
+})();
+void vi.mock('google-auth-library', () => ({
   GoogleAuth: MockGoogleAuth,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },
@@ -168,9 +191,11 @@ describe('mcp-client', () => {
           quotaProjectId: 'myproject',
         };
 
-        vi.mocked(MockGoogleAuth.prototype.getClient).mockResolvedValue(
-          mockClient,
-        );
+        (
+          MockGoogleAuth.prototype.getClient as Mock<
+            typeof MockGoogleAuth.prototype.getClient
+          >
+        ).mockResolvedValue(mockClient);
       });
 
       it('should use GoogleCredentialProvider when specified', async () => {

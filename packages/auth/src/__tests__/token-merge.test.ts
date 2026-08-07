@@ -8,7 +8,7 @@
  * @plan PLAN-20250214-CREDPROXY.P07
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   mergeRefreshedToken,
   type OAuthTokenWithExtras,

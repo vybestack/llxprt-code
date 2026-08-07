@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 
 import * as actualNodeFs from 'node:fs';
 import path from 'node:path';
@@ -22,12 +22,12 @@ import mime from 'mime-types';
 import sharp from 'sharp';
 import { detectFileType, processSingleFileContent } from './fileUtils.js';
 
-vi.mock('mime-types', () => ({
+void vi.mock('mime-types', () => ({
   default: { lookup: vi.fn() },
   lookup: vi.fn(),
 }));
 
-const mockMimeLookup = mime.lookup as Mock;
+const mockMimeLookup = mime.lookup as Mock<(...args: never[]) => unknown>;
 
 describe('fileUtils.detectFileType', () => {
   let tempRootDir: string;

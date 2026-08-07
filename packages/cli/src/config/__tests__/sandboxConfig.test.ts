@@ -4,20 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { loadSandboxConfig } from '../sandboxConfig.js';
 import type { Settings } from '../settings.js';
+
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
 const baseSettings: Settings = {
   sandbox: true,
 };
 
-vi.mock('../../utils/resolvePath.js', () => ({
+void vi.mock('../../utils/resolvePath.js', () => ({
   resolvePath: (value: string) => value.replace('~', '/mock/home/user'),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getPackageJson: vi.fn(async () => ({
@@ -28,7 +32,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('command-exists', () => ({
+void vi.mock('command-exists', () => ({
   default: {
     sync: vi.fn(
       (command: string) => command === 'docker' || command === 'podman',
@@ -36,7 +40,7 @@ vi.mock('command-exists', () => ({
   },
 }));
 
-vi.mock('../sandboxProfiles.js', () => ({
+void vi.mock('../sandboxProfiles.js', () => ({
   ensureDefaultSandboxProfiles: vi.fn(async () => undefined),
   loadSandboxProfile: vi.fn(async () => ({
     engine: 'docker',

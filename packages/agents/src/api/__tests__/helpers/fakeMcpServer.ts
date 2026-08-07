@@ -19,7 +19,7 @@
  * spinning up an actual stdio/http MCP server.
  */
 
-import { afterEach } from '../../../testApi.js';
+import { afterEach } from 'bun:test';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

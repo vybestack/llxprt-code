@@ -5,7 +5,7 @@
  * Migration compatibility tests: verify existing strategies and settings
  * continue to work identically after high-density additions.
  */
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   COMPRESSION_STRATEGIES,
   type CompressionStrategyName,

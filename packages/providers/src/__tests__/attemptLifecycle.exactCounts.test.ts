@@ -10,7 +10,8 @@
  * line budget.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
@@ -96,7 +97,7 @@ describe('#10 exact counts for all scenarios', () => {
     );
     await stream.next();
     await stream.return?.(undefined);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const snap = uiTelemetryService.getSessionSnapshot();
       expect(snap.totalApiRequests).toBe(1);
       expect(snap.totalApiErrors).toBe(1);

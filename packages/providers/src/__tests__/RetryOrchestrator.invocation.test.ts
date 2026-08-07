@@ -11,7 +11,7 @@
  * options.invocation.getModelBehavior.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import {
   BaseProvider,

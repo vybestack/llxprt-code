@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
 

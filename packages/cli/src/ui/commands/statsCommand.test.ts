@@ -4,19 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  setSystemTime,
+  type Mock,
+  afterEach,
+} from 'bun:test';
 import { statsCommand } from './statsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
 
+afterEach(() => {
+  restoreGlobals();
+});
+
 const getCliOAuthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
 const getActiveProviderNameMock = vi.fn();
 const getCliProviderManagerMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     maybeGetCliOAuthManager: getCliOAuthManagerMock,
     getEphemeralSetting: getEphemeralSettingMock,
@@ -32,7 +46,7 @@ describe('statsCommand', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(endTime);
+    setSystemTime(endTime);
 
     // 1. Create the mock context with all default values
     mockContext = createMockCommandContext();
@@ -137,7 +151,9 @@ describe('statsCommand', () => {
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const infoItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -197,7 +213,9 @@ describe('statsCommand', () => {
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const infoItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -243,7 +261,7 @@ describe('statsCommand', () => {
         success: true,
       }),
     } as Response);
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -251,7 +269,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -275,7 +295,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -335,7 +357,7 @@ describe('statsCommand', () => {
         success: true,
       }),
     } as Response);
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -343,7 +365,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -373,7 +397,7 @@ describe('statsCommand', () => {
         toolCallDiscounts: null,
       }),
     } as Response);
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -381,7 +405,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -425,7 +451,7 @@ describe('statsCommand', () => {
         }),
       } as Response);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -433,7 +459,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -460,7 +488,7 @@ describe('statsCommand', () => {
       status: 401,
       statusText: 'Unauthorized',
     } as Response);
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -468,7 +496,9 @@ describe('statsCommand', () => {
 
     await quotaSubCommand.action!(mockContext, '');
 
-    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const addItemCalls = (
+      mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+    ).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
       type: MessageType;
       text?: string;
@@ -527,7 +557,7 @@ describe('statsCommand', () => {
           success: true,
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -535,7 +565,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -572,7 +604,7 @@ describe('statsCommand', () => {
           subscription: { limit: 1000, requests: 100, renewsAt: null },
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -580,7 +612,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -617,7 +651,7 @@ describe('statsCommand', () => {
           available_balance: 100.0,
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -625,7 +659,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -662,7 +698,7 @@ describe('statsCommand', () => {
           available_balance: 50.0,
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -670,7 +706,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -706,7 +744,7 @@ describe('statsCommand', () => {
           subscription: { limit: 2000, requests: 500, renewsAt: null },
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -714,7 +752,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -751,7 +791,7 @@ describe('statsCommand', () => {
           available_balance: 75.5,
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -759,7 +799,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -809,7 +851,7 @@ describe('statsCommand', () => {
           success: true,
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -817,7 +859,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;
@@ -853,7 +897,7 @@ describe('statsCommand', () => {
           subscription: { limit: 1000, requests: 300, renewsAt: null },
         }),
       } as Response);
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
@@ -861,7 +905,9 @@ describe('statsCommand', () => {
 
       await quotaSubCommand.action!(mockContext, '');
 
-      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const addItemCalls = (
+        mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
+      ).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
         type: MessageType;
         text?: string;

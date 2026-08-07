@@ -4,33 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 // Mock DebugLogger
-const { mockLog, mockDebugLoggerError } = vi.hoisted(() => ({
+const { mockLog, mockDebugLoggerError } = {
   mockLog: vi.fn(),
   mockDebugLoggerError: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  return {
-    ...actual,
-    DebugLogger: vi.fn().mockImplementation(() => ({
-      log: mockLog,
-    })),
-    debugLogger: {
-      error: mockDebugLoggerError,
-      warn: vi.fn(),
-      debug: vi.fn(),
-      log: vi.fn(),
-      info: vi.fn(),
-    },
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  DebugLogger: vi.fn().mockImplementation(() => ({
+    log: mockLog,
+  })),
+  debugLogger: {
+    error: mockDebugLoggerError,
+    warn: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    info: vi.fn(),
+  },
+}));
 
 // Loaded with top-level await instead of a static import so the module under
 // test constructs its DebugLogger from the mock registered above.

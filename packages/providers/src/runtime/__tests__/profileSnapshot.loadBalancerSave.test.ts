@@ -13,20 +13,23 @@
  * previously produced dead sessions via the silent gemini fallback.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
-const saveProfileMock = vi.hoisted(() => vi.fn());
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
-const runtimeServicesState = vi.hoisted(() => ({
+const saveProfileMock = vi.fn();
+
+const runtimeServicesState = {
   activeProviderName: 'load-balancer' as string,
   lbConfig: null as unknown,
   ephemerals: {} as Record<string, unknown>,
-}));
+};
 
-vi.mock('../runtimeAccessors.js', () => ({
+void vi.mock('../runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({
     config: {
       getEphemeralSettings: () => runtimeServicesState.ephemerals,
@@ -67,14 +70,12 @@ vi.mock('../runtimeAccessors.js', () => ({
   },
 }));
 
-vi.mock('../profileApplication.js', () => ({
+void vi.mock('../profileApplication.js', () => ({
   applyProfileWithGuards: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+void vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     ProfileManager: vi.fn(() => ({

@@ -99,7 +99,6 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
       'vscode-ide-companion',
       'policy',
       'lsp',
-      'test-setup',
       'scripts-tests',
       'evals',
       'integration-tests',

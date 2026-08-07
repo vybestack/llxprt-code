@@ -4,12 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { terminalSetupCommand } from './terminalSetupCommand.js';
 import * as terminalSetupModule from '../utils/terminalSetup.js';
 import type { CommandContext } from './types.js';
 
-vi.mock('../utils/terminalSetup.js');
+const realTerminalSetupModule2 = {
+  ...(await import('../utils/terminalSetup.js')),
+};
+
+const realTerminalSetupModule = {
+  ...(await import('../utils/terminalSetup.js')),
+};
+
+void vi.mock('../utils/terminalSetup.js', () =>
+  automock(realTerminalSetupModule2),
+);
 
 describe('terminalSetupCommand', () => {
   beforeEach(() => {
@@ -88,33 +99,25 @@ describe('terminalSetupCommand', () => {
 // hoist-and-bounded. The module is mocked above, so import the real impl.
 describe('issue #2114 stripJsonComments characterization', () => {
   it('strips a leading single-line comment', async () => {
-    const { stripJsonComments } = await vi.importActual<
-      typeof import('../utils/terminalSetup.js')
-    >('../utils/terminalSetup.js');
+    const { stripJsonComments } = realTerminalSetupModule;
     expect(stripJsonComments('// hello\n')).toBe('\n');
   });
 
   it('strips an indented comment and preserves non-comment lines', async () => {
-    const { stripJsonComments } = await vi.importActual<
-      typeof import('../utils/terminalSetup.js')
-    >('../utils/terminalSetup.js');
+    const { stripJsonComments } = realTerminalSetupModule;
     const input = '{\n  // a comment\n  "k": 1\n}\n';
     expect(stripJsonComments(input)).toBe('{\n\n  "k": 1\n}\n');
   });
 
   it('leaves trailing inline text after // untouched (only leading comments strip)', async () => {
-    const { stripJsonComments } = await vi.importActual<
-      typeof import('../utils/terminalSetup.js')
-    >('../utils/terminalSetup.js');
+    const { stripJsonComments } = realTerminalSetupModule;
     expect(stripJsonComments('  url: "http://x" // note')).toBe(
       '  url: "http://x" // note',
     );
   });
 
   it('strips very long leading comments without a regex length cap', async () => {
-    const { stripJsonComments } = await vi.importActual<
-      typeof import('../utils/terminalSetup.js')
-    >('../utils/terminalSetup.js');
+    const { stripJsonComments } = realTerminalSetupModule;
     const input = `// ${'x'.repeat(9000)}\n{"k":1}\n`;
     expect(stripJsonComments(input)).toBe('\n{"k":1}\n');
   });

@@ -7,6 +7,7 @@
  * Split from retry.test.ts for max-lines compliance.
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   retryWithBackoff,
@@ -233,7 +234,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     });
 
     // Wait for all timers to complete
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(4);
@@ -293,7 +294,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
       maxDelayMs: 30000,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(3);
@@ -333,7 +334,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
       maxDelayMs: 30000,
     }).catch((error) => error); // Expected to throw - catch it to prevent unhandled rejection
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     const error = await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -396,7 +397,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
       maxDelayMs: 30000,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -471,7 +472,7 @@ describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
       (error: unknown) => ({ ok: false as const, error }),
     );
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(await outcome).toStrictEqual({ ok: true, value: 'success' });
     expect(mockFn).toHaveBeenCalledTimes(3);
@@ -487,7 +488,7 @@ describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
       initialDelayMs: 10,
     }).catch((error) => error);
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     const error = await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(2);

@@ -23,7 +23,7 @@
  *    turns via the generic path.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ServerAgentStreamEvent, ToolCallRequestInfo } from './turn.js';
 import { AgentEventType } from './turn.js';
@@ -37,8 +37,11 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 
 const mockTurnRun = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', (importOriginal) => {
-  const result = importOriginal() as
+const __actual = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const result = __actual as
     | typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')
     | Promise<typeof import('@vybestack/llxprt-code-core/core/tokenLimits.js')>;
   const buildExports = (
@@ -68,8 +71,9 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', (importOriginal) => {
   return buildExports(result);
 });
 
-vi.mock('./turn.js', (importOriginal) => {
-  const result = importOriginal() as
+const __actual2 = { ...(await import('./turn.js')) };
+void vi.mock('./turn.js', () => {
+  const result = __actual2 as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {
@@ -314,7 +318,7 @@ function toolCallRequestOnlyStream(
 describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(tokenLimit).mockImplementation(
+    (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );

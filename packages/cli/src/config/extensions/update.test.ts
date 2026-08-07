@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { vi } from 'vitest';
+import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -35,7 +33,7 @@ const mockGit = {
   path: vi.fn(),
 };
 
-vi.mock('simple-git', () => ({
+void vi.mock('simple-git', () => ({
   simpleGit: vi.fn((path?: string) => {
     // Return the provided path or an empty string if not provided
     mockGit.path.mockReturnValue(path ?? '');
@@ -43,36 +41,29 @@ vi.mock('simple-git', () => ({
   }),
 }));
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+const mockedOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
-vi.mock('../trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../trustedFolders.js')>();
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn(),
-  };
-});
+const actual = { ...(await import('../trustedFolders.js')) };
+void vi.mock('../trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn(),
+}));
 
-const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
-const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
+const mockLogExtensionInstallEvent = vi.fn();
+const mockLogExtensionUninstall = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...actual,
-    logExtensionInstallEvent: mockLogExtensionInstallEvent,
-    logExtensionUninstall: mockLogExtensionUninstall,
-    ExtensionInstallEvent: vi.fn(),
-    ExtensionUninstallEvent: vi.fn(),
-  };
-});
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  logExtensionInstallEvent: mockLogExtensionInstallEvent,
+  logExtensionUninstall: mockLogExtensionUninstall,
+  ExtensionInstallEvent: vi.fn(),
+  ExtensionUninstallEvent: vi.fn(),
+}));
 
 describe('update tests', () => {
   let tempHomeDir: string;
@@ -93,7 +84,7 @@ describe('update tests', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
     for (const key of ENV_KEYS) {
       SAVED_ENV[key] = process.env[key];
       process.env[key] = tempHomeDir;
@@ -103,7 +94,9 @@ describe('update tests', () => {
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
     Object.values(mockGit).forEach((fn) => fn.mockReset());
   });

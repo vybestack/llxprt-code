@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -64,7 +72,11 @@ describe('restoreCommand', () => {
   });
 
   it('should return null if checkpointing is not enabled', () => {
-    vi.mocked(mockConfig.getCheckpointingEnabled).mockReturnValue(false);
+    (
+      mockConfig.getCheckpointingEnabled as Mock<
+        typeof mockConfig.getCheckpointingEnabled
+      >
+    ).mockReturnValue(false);
 
     expect(restoreCommand(mockConfig)).toBeNull();
   });
@@ -82,8 +94,10 @@ describe('restoreCommand', () => {
 
   describe('action', () => {
     it('should return an error if temp dir is not found', async () => {
-      vi.mocked(
-        mockConfig.storage.getProjectTempCheckpointsDir,
+      (
+        mockConfig.storage.getProjectTempCheckpointsDir as Mock<
+          typeof mockConfig.storage.getProjectTempCheckpointsDir
+        >
       ).mockReturnValue('');
 
       expect(
@@ -253,7 +267,11 @@ describe('restoreCommand', () => {
     };
 
     it('returns an empty array if temp dir is not found', async () => {
-      vi.mocked(mockConfig.storage.getProjectTempDir).mockReturnValueOnce('');
+      (
+        mockConfig.storage.getProjectTempDir as Mock<
+          typeof mockConfig.storage.getProjectTempDir
+        >
+      ).mockReturnValueOnce('');
       expect(await runCompletion('')).toStrictEqual([]);
     });
 

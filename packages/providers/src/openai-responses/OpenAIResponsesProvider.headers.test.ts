@@ -1,10 +1,14 @@
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const mockSettingsService = vi.hoisted(() => ({
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   setProviderSetting: vi.fn(),
@@ -12,29 +16,25 @@ const mockSettingsService = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
+};
 
-const parseResponsesStreamMock = vi.hoisted(() =>
-  vi.fn(async function* () {
-    // No streamed messages for these assertions
-  }),
-);
+const parseResponsesStreamMock = vi.fn(async function* () {
+  // No streamed messages for these assertions
+});
 
-const fetchMock = vi.hoisted(() => vi.fn());
+const fetchMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-vi.mock('../openai/parseResponsesStream.js', () => ({
+void vi.mock('../openai/parseResponsesStream.js', () => ({
   parseResponsesStream: parseResponsesStreamMock,
 }));
 
@@ -42,7 +42,7 @@ describe('OpenAIResponsesProvider custom headers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue({});
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
     fetchMock.mockResolvedValue({
       ok: true,
       body: undefined,
@@ -50,7 +50,7 @@ describe('OpenAIResponsesProvider custom headers', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 

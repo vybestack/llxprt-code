@@ -4,12 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // Hoist mock factories so they're available before vi.mock() runs
 // ---------------------------------------------------------------------------
-const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
+const realLlxprtCodeAuthModule = {
+  ...(await import('@vybestack/llxprt-code-auth')),
+};
+
+const { flushMockRef, providerManagerRef, providerRef } = {
   flushMockRef: {
     current: undefined as ReturnType<typeof vi.fn> | undefined,
   },
@@ -21,12 +25,10 @@ const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   providerRef: {
     current: undefined as unknown,
   },
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
-    '@vybestack/llxprt-code-auth',
-  );
+void vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = realLlxprtCodeAuthModule;
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],
@@ -47,7 +49,6 @@ import type { ProviderRegistry } from '../provider-registry.js';
 import type { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
 import type { OAuthBucketManager } from '../OAuthBucketManager.js';
 import type { TokenAccessCoordinator } from '../token-access-coordinator.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -865,11 +866,15 @@ describe('AuthStatusService.logout proactive renewal cleanup', () => {
     await service.logout('device-code-test', 'bucket-x');
 
     // Must be called with the exact provider+bucket
-    expect(
+    const clearRenewalsForProvider =
       proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
         typeof vi.fn
-      >,
-    ).toHaveBeenCalledExactlyOnceWith('device-code-test', 'bucket-x');
+      >;
+    expect(clearRenewalsForProvider).toHaveBeenCalledTimes(1);
+    expect(clearRenewalsForProvider).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-x',
+    );
 
     // Over-broad cleanup methods must NOT be called
     expect(

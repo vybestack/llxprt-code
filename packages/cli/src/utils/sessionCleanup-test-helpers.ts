@@ -4,19 +4,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { type Config } from '@vybestack/llxprt-code-core';
 import { SESSION_FILE_PREFIX } from '@vybestack/llxprt-code-storage';
 import { type SessionInfo, getAllSessionFiles } from './sessionUtils.js';
 
-vi.mock('fs/promises');
-vi.mock('./sessionUtils.js', () => ({
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+void vi.mock('fs/promises', () => automock(realPromisesModule));
+void vi.mock('./sessionUtils.js', () => ({
   getAllSessionFiles: vi.fn(),
 }));
 
-export const mockFs = vi.mocked(fs);
-export const mockGetAllSessionFiles = vi.mocked(getAllSessionFiles);
+/**
+ * Bun ships no deep-mock type, so the members each suite actually drives are
+ * named explicitly and given Bun's Mock signature.
+ */
+type MockedMembers<T, K extends keyof T> = {
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+};
+
+export const mockFs = fs as unknown as MockedMembers<
+  typeof fs,
+  'access' | 'readFile' | 'unlink'
+>;
+export const mockGetAllSessionFiles = getAllSessionFiles as Mock<
+  typeof getAllSessionFiles
+>;
 
 export type { Config, SessionInfo };
 

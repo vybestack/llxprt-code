@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
 import {
   BaseSelectionList,
@@ -17,16 +16,22 @@ import { useSelectionList } from '../../hooks/useSelectionList.js';
 import { Text } from 'ink';
 import { testRegex } from '../../../test-utils/regex.js';
 
+const realUseSelectionListModule = {
+  ...(await import('../../hooks/useSelectionList.js')),
+};
+
 type Theme = typeof import('../../semantic-colors.js').theme;
 
-vi.mock('../../hooks/useSelectionList.js');
+void vi.mock('../../hooks/useSelectionList.js', () =>
+  automock(realUseSelectionListModule),
+);
 
 const mockTheme = {
   text: { primary: 'COLOR_PRIMARY', secondary: 'COLOR_SECONDARY' },
   status: { success: 'COLOR_SUCCESS' },
 } as Theme;
 
-vi.mock('../../semantic-colors.js', () => ({
+void vi.mock('../../semantic-colors.js', () => ({
   theme: {
     text: { primary: 'COLOR_PRIMARY', secondary: 'COLOR_SECONDARY' },
     status: { success: 'COLOR_SUCCESS' },
@@ -54,7 +59,7 @@ describe('BaseSelectionList', () => {
     > = {},
     activeIndex: number = 0,
   ) => {
-    vi.mocked(useSelectionList).mockReturnValue({
+    (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
       activeIndex,
       setActiveIndex: vi.fn(),
     });
@@ -278,7 +283,7 @@ describe('BaseSelectionList', () => {
         renderItem: mockRenderItem,
       };
 
-      vi.mocked(useSelectionList).mockReturnValue({
+      (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
         activeIndex: initialActiveIndex,
         setActiveIndex: vi.fn(),
       });
@@ -295,7 +300,7 @@ describe('BaseSelectionList', () => {
 
       // Function to simulate the activeIndex changing over time
       const updateActiveIndex = async (newIndex: number) => {
-        vi.mocked(useSelectionList).mockReturnValue({
+        (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
           activeIndex: newIndex,
           setActiveIndex: vi.fn(),
         });

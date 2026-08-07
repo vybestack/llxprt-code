@@ -4,15 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 // Controllable platform mock
-const mockPlatform = vi.hoisted(() => vi.fn(() => process.platform));
+const mockPlatform = vi.fn(() => process.platform);
 
-vi.mock('os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:os');
+const __actual = { ...(await import('os')) };
+void vi.mock('os', () => {
+  const actual = __actual as typeof import('node:os');
   return {
     ...actual,
     platform: mockPlatform,

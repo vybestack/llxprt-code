@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IMessage } from '../IMessage.js';
 import type { ITool } from '../ITool.js';
@@ -131,7 +131,7 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
       }),
     ];
 
-    vi.mocked(global.fetch).mockResolvedValueOnce(
+    (global.fetch as Mock<typeof global.fetch>).mockResolvedValueOnce(
       createStreamingResponse(responseChunks),
     );
 
@@ -183,7 +183,7 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
     ).toBe(true);
 
     // Verify fetch was called only once (no retry)
-    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+    expect(global.fetch as Mock<typeof global.fetch>).toHaveBeenCalledTimes(1);
   });
 
   it('should not retry on finish_reason=length', async () => {
@@ -234,7 +234,7 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
       }),
     ];
 
-    vi.mocked(global.fetch).mockResolvedValueOnce(
+    (global.fetch as Mock<typeof global.fetch>).mockResolvedValueOnce(
       createStreamingResponse(responseChunks),
     );
 
@@ -283,6 +283,6 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
     ).toBe(true);
 
     // Verify fetch was called only once (no retry for length)
-    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+    expect(global.fetch as Mock<typeof global.fetch>).toHaveBeenCalledTimes(1);
   });
 });

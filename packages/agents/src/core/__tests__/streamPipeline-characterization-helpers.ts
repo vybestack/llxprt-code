@@ -18,7 +18,7 @@
  */
 
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { vi, type Mock } from '../../testApi.js';
+import { vi, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from '../turn.js';
 import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';

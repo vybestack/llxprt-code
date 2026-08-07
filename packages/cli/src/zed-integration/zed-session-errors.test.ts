@@ -19,7 +19,7 @@
  * instances.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { RequestError } from '@agentclientprotocol/sdk';
 import {
   classifyResumeFailure,

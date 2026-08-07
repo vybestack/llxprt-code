@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import { type HistoryItem, MessageType, ToolCallStatus } from '../types.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
@@ -18,20 +18,17 @@ import { renderWithProviders } from '../../test-utils/render.js';
 // The real RuntimeContextProvider resolves the CLI runtime scope, which this
 // component test does not establish. Preserve the complete module shape and
 // replace only the hook so unrelated exports keep their production contract.
-vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../contexts/RuntimeContext.js')>();
-  return {
-    ...actual,
-    useRuntimeApi: () => ({
-      getActiveProviderStatus: () => ({ providerName: 'gemini' }),
-      getEphemeralSetting: () => undefined,
-    }),
-  };
-});
+const actual = { ...(await import('../contexts/RuntimeContext.js')) };
+void vi.mock('../contexts/RuntimeContext.js', () => ({
+  ...actual,
+  useRuntimeApi: () => ({
+    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+    getEphemeralSetting: () => undefined,
+  }),
+}));
 
 // Mock child components
-vi.mock('./messages/ToolGroupMessage.js', () => ({
+void vi.mock('./messages/ToolGroupMessage.js', () => ({
   ToolGroupMessage: vi.fn(() => <div />),
 }));
 
@@ -201,9 +198,12 @@ describe('<HistoryItemDisplay />', () => {
       />,
     );
 
-    const passedProps = vi.mocked(ToolGroupMessage).mock.calls[0][0];
-    const confirmationDetails = passedProps.toolCalls[0]
-      .confirmationDetails as ToolExecuteConfirmationDetails;
+    const passedProps = (
+      ToolGroupMessage as unknown as Mock<(...args: never[]) => unknown>
+    ).mock.calls[0][0];
+    const confirmationDetails = (
+      passedProps as { toolCalls: Array<{ confirmationDetails: unknown }> }
+    ).toolCalls[0].confirmationDetails as ToolExecuteConfirmationDetails;
 
     expect(confirmationDetails.command).toBe(
       'echo "\\u001b[31mhello\\u001b[0m"',

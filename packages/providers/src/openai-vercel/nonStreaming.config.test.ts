@@ -25,7 +25,7 @@
  * @requirement REQ-OAV-007 - Chat Completion Generation
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -33,7 +33,7 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Mock the 'ai' module
-vi.mock('ai', () => ({
+void vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
   extractReasoningMiddleware: vi.fn(() => ({})),
@@ -41,7 +41,7 @@ vi.mock('ai', () => ({
 }));
 
 // Mock @ai-sdk/openai
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 

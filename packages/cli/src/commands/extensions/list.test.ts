@@ -12,28 +12,23 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-  type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import { handleList } from './list.js';
 import type * as extensionModule from '../../config/extension.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
-  vi.hoisted(() => vi.fn());
-const mockToOutputString: Mock<typeof extensionModule.toOutputString> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
+const mockToOutputString: Mock<typeof extensionModule.toOutputString> = vi.fn();
 
-vi.mock('../../config/extension.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/extension.js')>();
-  return {
-    ...actual,
-    loadUserExtensions: mockLoadUserExtensions,
-    toOutputString: mockToOutputString,
-  };
-});
+const actual = { ...(await import('../../config/extension.js')) };
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  loadUserExtensions: mockLoadUserExtensions,
+  toOutputString: mockToOutputString,
+}));
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: unknown) => {
     if (error instanceof Error) {
       return error.message;
@@ -46,9 +41,9 @@ vi.mock('../../utils/errors.js', () => ({
 }));
 
 describe('handleList', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

@@ -11,10 +11,10 @@ import { LoadingIndicator } from './LoadingIndicator.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { StreamingState } from '../types.js';
 import { Colors } from '../colors.js';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 // Mock RespondingSpinner
-vi.mock('./RespondingSpinner.js', () => ({
+void vi.mock('./RespondingSpinner.js', () => ({
   RespondingSpinner: ({
     nonRespondingDisplay,
   }: {

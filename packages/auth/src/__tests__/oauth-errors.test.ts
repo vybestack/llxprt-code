@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   OAuthError,
   OAuthErrorFactory,
@@ -360,19 +361,19 @@ describe('RetryHandler', () => {
       const result = retryHandler.executeWithRetry(operation, 'test-provider');
       result.catch(() => {});
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(999);
+      await advanceTimersByTimeAsync(999);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(2);
 
-      await vi.advanceTimersByTimeAsync(1999);
+      await advanceTimersByTimeAsync(1999);
       expect(operation).toHaveBeenCalledTimes(2);
 
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(3);
 
       await expect(result).resolves.toBe('success');
@@ -389,27 +390,27 @@ describe('RetryHandler', () => {
       const result = retryHandler.executeWithRetry(operation, 'test-provider');
       result.catch(() => {});
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(999);
+      await advanceTimersByTimeAsync(999);
       expect(operation).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(2);
 
-      await vi.advanceTimersByTimeAsync(1999);
+      await advanceTimersByTimeAsync(1999);
       expect(operation).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(3);
 
-      await vi.advanceTimersByTimeAsync(3999);
+      await advanceTimersByTimeAsync(3999);
       expect(operation).toHaveBeenCalledTimes(3);
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(4);
 
-      await vi.advanceTimersByTimeAsync(4999);
+      await advanceTimersByTimeAsync(4999);
       expect(operation).toHaveBeenCalledTimes(4);
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(5);
 
       await expect(result).rejects.toBeInstanceOf(OAuthError);
@@ -429,13 +430,13 @@ describe('RetryHandler', () => {
       const result = retryHandler.executeWithRetry(operation, 'test-provider');
       result.catch(() => {});
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(1999);
+      await advanceTimersByTimeAsync(1999);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(2);
 
       await expect(result).resolves.toBe('success');
@@ -472,19 +473,19 @@ describe('RetryHandler', () => {
       );
       result.catch(() => {});
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(499);
+      await advanceTimersByTimeAsync(499);
       expect(operation).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(2);
 
-      await vi.advanceTimersByTimeAsync(994);
+      await advanceTimersByTimeAsync(994);
       expect(operation).toHaveBeenCalledTimes(2);
 
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(operation).toHaveBeenCalledTimes(3);
 
       await expect(result).resolves.toBe('success');
@@ -515,8 +516,8 @@ describe('RetryHandler', () => {
       const result = retryHandler.executeWithRetry(operation, 'test-provider');
       result.catch(() => {});
 
-      await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(100000);
+      await advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(100000);
 
       expect(operation).toHaveBeenCalledTimes(5);
       await expect(result).rejects.toBeInstanceOf(OAuthError);

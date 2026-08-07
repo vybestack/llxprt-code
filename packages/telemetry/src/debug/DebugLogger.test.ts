@@ -2,7 +2,7 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P04
  * @requirement REQ-001,REQ-002,REQ-006
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
 import { ConfigurationManager } from './ConfigurationManager.js';

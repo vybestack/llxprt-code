@@ -13,8 +13,9 @@
  * checkpointing, missing file_path arg, and multiple tools.
  */
 
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
@@ -182,7 +183,8 @@ describe('createToolCheckpoint', () => {
     const writtenContent = JSON.parse(fsOps.writeFile.mock.calls[0][1]);
     expect(writtenContent.commitHash).toBe('fallback-hash');
     // Debug message about failed snapshot should have been logged
-    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+    expect(onDebugMessage).toHaveBeenCalledTimes(1);
+    expect(onDebugMessage).toHaveBeenCalledWith(
       expect.stringContaining('Attempting to use current commit'),
     );
   });
@@ -231,7 +233,8 @@ describe('createToolCheckpoint', () => {
 
     expect(fsOps.writeFile).not.toHaveBeenCalled();
     expect(gitService.createFileSnapshot).not.toHaveBeenCalled();
-    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+    expect(onDebugMessage).toHaveBeenCalledTimes(1);
+    expect(onDebugMessage).toHaveBeenCalledWith(
       expect.stringContaining('missing file_path'),
     );
   });
@@ -272,7 +275,7 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.writeFile).toHaveBeenCalledTimes(2);
@@ -297,7 +300,7 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.mkdir).not.toHaveBeenCalled();
@@ -322,7 +325,7 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.mkdir).not.toHaveBeenCalled();
@@ -347,11 +350,12 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.writeFile).not.toHaveBeenCalled();
-    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+    expect(onDebugMessage).toHaveBeenCalledTimes(1);
+    expect(onDebugMessage).toHaveBeenCalledWith(
       expect.stringContaining('Git service is not available'),
     );
   });
@@ -379,7 +383,7 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     // EEXIST should be swallowed — write should still happen
@@ -409,11 +413,12 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.writeFile).not.toHaveBeenCalled();
-    expect(onDebugMessage).toHaveBeenCalledExactlyOnceWith(
+    expect(onDebugMessage).toHaveBeenCalledTimes(1);
+    expect(onDebugMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to create checkpoint directory'),
     );
   });
@@ -445,7 +450,7 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     // Both tools attempted — both caught, both debug messages
@@ -477,7 +482,7 @@ describe('useCheckpointPersistence', () => {
           fsOps,
         ),
       );
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.mkdir).not.toHaveBeenCalled();
@@ -507,7 +512,7 @@ describe('useCheckpointPersistence', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.writeFile).toHaveBeenCalledTimes(1);
@@ -516,7 +521,7 @@ describe('useCheckpointPersistence', () => {
     currentTools = [...tools];
     rerender();
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.writeFile).toHaveBeenCalledTimes(1);
@@ -545,7 +550,7 @@ describe('useCheckpointPersistence', () => {
     );
 
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
     expect(fsOps.writeFile).toHaveBeenCalledTimes(1);
 
@@ -553,14 +558,14 @@ describe('useCheckpointPersistence', () => {
     currentTools = [];
     rerender();
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     // Tool re-enters — should checkpoint again
     currentTools = [tool];
     rerender();
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(fsOps.writeFile).toHaveBeenCalledTimes(2);

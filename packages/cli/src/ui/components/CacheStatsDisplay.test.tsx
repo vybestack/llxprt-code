@@ -12,22 +12,22 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type { UiEvent } from '@vybestack/llxprt-code-telemetry';
 import { EVENT_API_RESPONSE } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 
 // Deterministic counter for unique prompt IDs so test events are
 // distinguishable without relying on Math.random().

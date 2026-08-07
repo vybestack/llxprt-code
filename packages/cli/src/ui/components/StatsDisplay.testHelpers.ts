@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
 import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 

@@ -17,7 +17,7 @@
  * configuration.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -28,11 +28,11 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: class FakeAnthropic {
     readonly messages = {
       create: vi.fn(async () => ({})),

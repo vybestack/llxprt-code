@@ -11,7 +11,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 const TOKEN_USAGE = {
   promptTokens: 100,

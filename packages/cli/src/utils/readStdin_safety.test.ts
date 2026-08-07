@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { vi, describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { readStdin } from './readStdin.js';
 import { EventEmitter } from 'node:events';
 
 // Mock debugLogger to avoid clutter
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   debugLogger: {
     warn: vi.fn(),
   },

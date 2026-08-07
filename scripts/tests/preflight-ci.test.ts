@@ -4,13 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { automock } from '../../packages/test-utils/src/automock.js';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as child_process from 'child_process';
 import { preflightSteps, runPreflight } from '../preflight-ci.ts';
 
-vi.mock('child_process');
+/**
+ * Adapts a `(command) => Buffer` stub to execSync's 4-overload signature so it
+ * can be passed to `mockImplementation`. That overload set includes branches
+ * that return `string`, which a real `Buffer` return cannot structurally
+ * satisfy, so the stub is routed through execSync's declared type. Runtime
+ * behaviour (return value / thrown error per command) is unchanged.
+ */
+function asExecSyncStub(
+  impl: (command: string) => Buffer,
+): typeof child_process.execSync {
+  return impl as unknown as typeof child_process.execSync;
+}
+
+const realChildProcessModule = { ...(await import('child_process')) };
+
+void vi.mock('child_process', () => automock(realChildProcessModule));
 
 /**
  * Issue #2323: Behavioral regression test for release preflight step ordering.
@@ -93,7 +117,9 @@ describe('Issue #2323: root package.json preflight script', () => {
  */
 describe('Issue #2323: runPreflight executes steps in order', () => {
   beforeEach(() => {
-    vi.mocked(child_process.execSync).mockImplementation(() => Buffer.from(''));
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(asExecSyncStub(() => Buffer.from('')));
   });
 
   afterEach(() => {
@@ -103,7 +129,9 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
   it('dispatches the preflightSteps() commands through child_process in order', () => {
     runPreflight();
 
-    const calls = vi.mocked(child_process.execSync).mock.calls;
+    const calls = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls;
     const executedCommands = calls.map((call) => call[0]);
     const expectedCommands = preflightSteps().map((step) => step.command);
 
@@ -123,18 +151,22 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
 
   it('continues through ordered preflight steps when rollup install fails', () => {
     const rollupCommand = 'npm install @rollup/rollup-linux-x64-gnu --no-save';
-    vi.mocked(child_process.execSync).mockImplementation((command) => {
-      if (command === rollupCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === rollupCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).not.toThrow();
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
     expect(executedCommands).toContain(rollupCommand);
     for (const step of preflightSteps()) {
       expect(
@@ -155,7 +187,9 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
  */
 describe('Issue #2323: runPreflight aborts on failure', () => {
   beforeEach(() => {
-    vi.mocked(child_process.execSync).mockImplementation(() => Buffer.from(''));
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(asExecSyncStub(() => Buffer.from('')));
   });
 
   afterEach(() => {
@@ -164,18 +198,22 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
 
   it('throws Failed to run: npm run build and skips later steps', () => {
     const failingCommand = 'npm run build';
-    vi.mocked(child_process.execSync).mockImplementation((command) => {
-      if (command === failingCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === failingCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
 
     const buildIndex = executedCommands.indexOf(failingCommand);
     expect(
@@ -204,18 +242,22 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
   });
   it('throws Failed to run: npm run clean and skips all subsequent steps', () => {
     const failingCommand = 'npm run clean';
-    vi.mocked(child_process.execSync).mockImplementation((command) => {
-      if (command === failingCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === failingCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
 
     expect(executedCommands).not.toContain('npm ci');
     for (const step of preflightSteps()) {
@@ -227,18 +269,22 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
   });
   it('throws Failed to run: npm ci and skips all ordered preflight steps', () => {
     const failingCommand = 'npm ci';
-    vi.mocked(child_process.execSync).mockImplementation((command) => {
-      if (command === failingCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === failingCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
-    const executedCommands = vi
-      .mocked(child_process.execSync)
-      .mock.calls.map((call) => call[0]);
+    const executedCommands = (
+      child_process.execSync as Mock<typeof child_process.execSync>
+    ).mock.calls.map((call) => call[0]);
 
     for (const step of preflightSteps()) {
       expect(

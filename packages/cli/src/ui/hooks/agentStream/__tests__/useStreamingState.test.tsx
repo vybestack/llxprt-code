@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { StreamingState } from '../../../types.js';
 import { useStreamingState } from '../useAgentStreamLifecycle.js';

@@ -12,23 +12,19 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-  type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import { handleUninstall, uninstallCommand } from './uninstall.js';
 import yargs from 'yargs';
 import type * as extensionModule from '../../config/extension.js';
 
 const mockUninstallExtension: Mock<typeof extensionModule.uninstallExtension> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 
-vi.mock('../../config/extension.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/extension.js')>();
-  return {
-    ...actual,
-    uninstallExtension: mockUninstallExtension,
-  };
-});
+const actual = { ...(await import('../../config/extension.js')) };
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  uninstallExtension: mockUninstallExtension,
+}));
 
 describe('extensions uninstall command', () => {
   it('should fail if no name is provided', () => {
@@ -43,9 +39,9 @@ describe('extensions uninstall command', () => {
 });
 
 describe('handleUninstall', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processExitSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processExitSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

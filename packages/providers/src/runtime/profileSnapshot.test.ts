@@ -4,14 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
 // Mock external dependencies of applyProfileSnapshot so we can verify
 // emission without bootstrapping the entire CLI runtime.
-vi.mock('./runtimeAccessors.js', () => ({
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
+void vi.mock('./runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({
     config: {},
     settingsService: { setCurrentProfileName: vi.fn() },
@@ -28,7 +39,7 @@ vi.mock('./runtimeAccessors.js', () => ({
   },
 }));
 
-vi.mock('./profileApplication.js', () => ({
+void vi.mock('./profileApplication.js', () => ({
   applyProfileWithGuards: vi.fn(
     async (profile: { provider: string; model: string }) => ({
       providerName: profile.provider,
@@ -43,12 +54,10 @@ vi.mock('./profileApplication.js', () => ({
   ),
 }));
 
-const profileManagerLoadProfileMock = vi.hoisted(() => vi.fn());
+const profileManagerLoadProfileMock = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-settings', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+void vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     ProfileManager: vi.fn(() => ({
@@ -299,7 +308,9 @@ describe('buildRuntimeProfileSnapshot', () => {
   });
 
   it('excludes internal settings from persisted ephemeralSettings', () => {
-    vi.mocked(getCliRuntimeServices).mockReturnValue({
+    (
+      getCliRuntimeServices as Mock<typeof getCliRuntimeServices>
+    ).mockReturnValue({
       config: {
         getEphemeralSettings: () => ({
           activeProvider: 'gemini',
@@ -311,11 +322,15 @@ describe('buildRuntimeProfileSnapshot', () => {
       settingsService: { setCurrentProfileName: vi.fn() },
       providerManager: {},
     } as ReturnType<typeof getCliRuntimeServices>);
-    vi.mocked(
-      runtimeAccessorsInternal.resolveActiveProviderName,
+    (
+      runtimeAccessorsInternal.resolveActiveProviderName as Mock<
+        typeof runtimeAccessorsInternal.resolveActiveProviderName
+      >
     ).mockReturnValue('openai');
-    vi.mocked(
-      runtimeAccessorsInternal.getProviderSettingsSnapshot,
+    (
+      runtimeAccessorsInternal.getProviderSettingsSnapshot as Mock<
+        typeof runtimeAccessorsInternal.getProviderSettingsSnapshot
+      >
     ).mockReturnValue({
       model: 'gpt-4o',
     });

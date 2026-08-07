@@ -6,7 +6,7 @@
 
 import { Buffer } from 'node:buffer';
 import vm from 'node:vm';
-import { expect } from 'vitest';
+import { expect } from 'bun:test';
 import {
   WORKFLOW_PATH,
   extractFunctionSource,

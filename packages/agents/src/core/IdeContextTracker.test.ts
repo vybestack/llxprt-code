@@ -4,23 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { IdeContextTracker } from './IdeContextTracker.js';
 import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
 
 // Mock the ideContext singleton from the ide-integration package
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    ideContext: {
-      getIdeContext: vi.fn(),
-    },
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual,
+  ideContext: {
+    getIdeContext: vi.fn(),
+  },
+}));
 
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 

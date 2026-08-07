@@ -3,7 +3,7 @@
  * @requirement REQ-003.1, REQ-003.2, REQ-003.3
  * @pseudocode lines 40-53
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   toolDeclarationsFromLegacyToolset,

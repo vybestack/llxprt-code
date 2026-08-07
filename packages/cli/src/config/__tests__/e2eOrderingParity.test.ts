@@ -27,7 +27,16 @@
  *   - Full provider and model precedence chain is honored end-to-end
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -46,20 +55,29 @@ import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock('../trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('../trustedFolders.js')>(
-    '../trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
+const realProfileBootstrapModule = {
+  ...(await import('../profileBootstrap.js')),
+};
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('../trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return { ...actual, isWorkspaceTrusted: vi.fn().mockReturnValue(true) };
 });
 
-vi.mock('../sandboxConfig.js', () => ({
+void vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([MOCK_CWD, process.cwd()]);
   return {
@@ -76,28 +94,22 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
+}));
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-vi.mock('../profileBootstrap.js', async () => {
-  const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
-    '../profileBootstrap.js',
-  );
-  const { SettingsService: RealSettingsService } = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+void vi.mock('../profileBootstrap.js', () => {
+  const actual = realProfileBootstrapModule;
+  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => ({
@@ -124,9 +136,9 @@ vi.mock('../profileBootstrap.js', async () => {
  * Shared call log — populated by mock implementations below.
  * Used to assert temporal ordering between critical lifecycle steps.
  */
-const callLog = vi.hoisted(() => ({ entries: [] as string[] }));
+const callLog = { entries: [] as string[] };
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -135,106 +147,118 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
 // Mock applyProfileSnapshot (static import in config.ts from profileSnapshot.js)
-vi.mock('@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', () => ({
-  applyProfileSnapshot: vi.fn(
-    async (profile: { provider?: string; model?: string }) => {
-      callLog.entries.push('applyProfileSnapshot');
-      return {
-        providerName: profile.provider ?? '',
-        modelName: profile.model ?? '',
-        warnings: [],
-      };
-    },
-  ),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js',
+  () => ({
+    applyProfileSnapshot: vi.fn(
+      async (profile: { provider?: string; model?: string }) => {
+        callLog.entries.push('applyProfileSnapshot');
+        return {
+          providerName: profile.provider ?? '',
+          modelName: profile.model ?? '',
+          warnings: [],
+        };
+      },
+    ),
+  }),
+);
 
 // Mock switchActiveProvider (static import in config.ts from providerSwitch.js)
-vi.mock('@vybestack/llxprt-code-providers/runtime/providerSwitch.js', () => ({
-  switchActiveProvider: vi.fn(async (providerName: string) => {
-    callLog.entries.push(`switchActiveProvider:${providerName}`);
-    return {
-      changed: true,
-      previousProvider: null,
-      nextProvider: providerName,
-      infoMessages: [],
-    };
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/providerSwitch.js',
+  () => ({
+    switchActiveProvider: vi.fn(async (providerName: string) => {
+      callLog.entries.push(`switchActiveProvider:${providerName}`);
+      return {
+        changed: true,
+        previousProvider: null,
+        nextProvider: providerName,
+        infoMessages: [],
+      };
+    }),
   }),
-}));
+);
 
 // Mock setCliRuntimeContext (static import in config.ts from runtimeLifecycle.js)
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js', () => ({
-  resetCliProviderInfrastructure: vi.fn(),
-  setCliRuntimeContext: vi.fn(
-    (
-      svc: SettingsService,
-      cfg?: ServerConfig.Config,
-      opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-    ) => {
-      callLog.entries.push('setCliRuntimeContext');
-      runtimeSettingsState.context = {
-        settingsService: svc,
-        config: cfg ?? null,
-        runtimeId: opts.runtimeId ?? 'mock-runtime',
-        metadata: opts.metadata ?? {},
-      };
-    },
-  ),
-  registerCliProviderInfrastructure: vi.fn(
-    (
-      mgr: ProviderManager,
-      oauth: unknown,
-      _options?: {
-        messageBus?: unknown;
-        runtimeId?: string;
-        metadata?: Record<string, unknown>;
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js',
+  () => ({
+    resetCliProviderInfrastructure: vi.fn(),
+    setCliRuntimeContext: vi.fn(
+      (
+        svc: SettingsService,
+        cfg?: ServerConfig.Config,
+        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
+      ) => {
+        callLog.entries.push('setCliRuntimeContext');
+        runtimeSettingsState.context = {
+          settingsService: svc,
+          config: cfg ?? null,
+          runtimeId: opts.runtimeId ?? 'mock-runtime',
+          metadata: opts.metadata ?? {},
+        };
       },
-    ) => {
-      callLog.entries.push('registerCliProviderInfrastructure');
-      runtimeSettingsState.providerManager = mgr;
-      runtimeSettingsState.oauthManager = oauth ?? null;
-    },
-  ),
-}));
+    ),
+    registerCliProviderInfrastructure: vi.fn(
+      (
+        mgr: ProviderManager,
+        oauth: unknown,
+        _options?: {
+          messageBus?: unknown;
+          runtimeId?: string;
+          metadata?: Record<string, unknown>;
+        },
+      ) => {
+        callLog.entries.push('registerCliProviderInfrastructure');
+        runtimeSettingsState.providerManager = mgr;
+        runtimeSettingsState.oauthManager = oauth ?? null;
+      },
+    ),
+  }),
+);
 
 // Mock runtimeAccessors (static import in config.ts)
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js', () => ({
-  getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-  getCliRuntimeConfig: vi.fn(
-    () => runtimeSettingsState.context?.config ?? null,
-  ),
-  getCliRuntimeServices: vi.fn(() => ({
-    config: runtimeSettingsState.context?.config ?? null,
-    settingsService:
-      runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-    providerManager:
-      runtimeSettingsState.providerManager ??
-      ({
-        listProviders: vi.fn(() => []),
-        getActiveProviderName: vi.fn(() => null),
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => undefined),
-        getAvailableModels: vi.fn(async () => []),
-      } as unknown as ProviderManager),
-  })),
-  getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-  getCliOAuthManager: vi.fn(() => {
-    if (runtimeSettingsState.oauthManager === null) {
-      throw new Error('OAuthManager missing from runtime registration');
-    }
-    return runtimeSettingsState.oauthManager;
+void vi.mock(
+  '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js',
+  () => ({
+    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
+    getCliRuntimeConfig: vi.fn(
+      () => runtimeSettingsState.context?.config ?? null,
+    ),
+    getCliRuntimeServices: vi.fn(() => ({
+      config: runtimeSettingsState.context?.config ?? null,
+      settingsService:
+        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
+      providerManager:
+        runtimeSettingsState.providerManager ??
+        ({
+          listProviders: vi.fn(() => []),
+          getActiveProviderName: vi.fn(() => null),
+          setActiveProvider: vi.fn(),
+          getActiveProvider: vi.fn(() => undefined),
+          getAvailableModels: vi.fn(async () => []),
+        } as unknown as ProviderManager),
+    })),
+    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
+    getCliOAuthManager: vi.fn(() => {
+      if (runtimeSettingsState.oauthManager === null) {
+        throw new Error('OAuthManager missing from runtime registration');
+      }
+      return runtimeSettingsState.oauthManager;
+    }),
+    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    listProviders: vi.fn(() => []),
+    getActiveProviderName: vi.fn(() => null),
+    getActiveModelName: vi.fn(() => null),
+    getEphemeralSettings: vi.fn(() => ({})),
+    getEphemeralSetting: vi.fn(() => undefined),
   }),
-  getActiveProviderStatus: vi.fn(() => ({ name: null })),
-  listProviders: vi.fn(() => []),
-  getActiveProviderName: vi.fn(() => null),
-  getActiveModelName: vi.fn(() => null),
-  getEphemeralSettings: vi.fn(() => ({})),
-  getEphemeralSetting: vi.fn(() => undefined),
-}));
+);
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -396,10 +420,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     IdeClient: {
@@ -458,12 +480,12 @@ describe('e2eOrderingParity: step ordering constraints', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     callLog.entries.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -473,7 +495,7 @@ describe('e2eOrderingParity: step ordering constraints', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -531,12 +553,12 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     callLog.entries.length = 0;
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -546,13 +568,13 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
 
   it('CLI --provider wins over LLXPRT_DEFAULT_PROVIDER env', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({}, ['--provider', 'openai']);
     expect(config.getProvider()).toBe('openai');
     expect(
@@ -561,7 +583,7 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
   });
 
   it('LLXPRT_DEFAULT_PROVIDER env wins over gemini default', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({});
     expect(config.getProvider()).toBe('anthropic');
     expect(

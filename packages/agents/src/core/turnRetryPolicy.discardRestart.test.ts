@@ -15,7 +15,7 @@
  * complete enumeration from `analysis/pseudocode/001-turn-retry-policy.md`.
  */
 
-import { describe, expect, it } from '../testApi.js';
+import { describe, expect, it } from 'bun:test';
 import {
   shouldRetryStreamAttempt,
   applyRetryTemperature,

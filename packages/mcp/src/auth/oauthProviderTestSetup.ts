@@ -8,14 +8,21 @@
  * the mock setup without exceeding max-lines.
  */
 
-import { vi } from 'vitest';
-import type { MockInstance } from 'vitest';
+import {
+  setGlobal,
+  restoreGlobals,
+} from '../../../test-utils/src/global-test-helpers.js';
+import { vi, type Mock, afterEach } from 'bun:test';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import type { MCPOAuthToken } from './oauth-token-storage.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import * as crypto from 'node:crypto';
+
+afterEach(() => {
+  restoreGlobals();
+});
 
 export const mockFetch = vi.fn();
 
@@ -101,11 +108,13 @@ export const mockTokenResponse: OAuthTokenResponse = {
   scope: 'read write',
 };
 
+// Derived from the spied methods, so a mockResolvedValue or a calls[] read is
+// checked against the real signature instead of collapsing to never[]/unknown.
 export type OAuthSpies = {
-  saveTokenSpy: MockInstance;
-  getCredentialsSpy: MockInstance;
-  deleteCredentialsSpy: MockInstance;
-  isTokenExpiredSpy: MockInstance;
+  saveTokenSpy: Mock<MCPOAuthTokenStorage['saveToken']>;
+  getCredentialsSpy: Mock<MCPOAuthTokenStorage['getCredentials']>;
+  deleteCredentialsSpy: Mock<MCPOAuthTokenStorage['deleteCredentials']>;
+  isTokenExpiredSpy: Mock<typeof MCPOAuthTokenStorage.isTokenExpired>;
 };
 
 export function setupOAuthTestSpies(
@@ -113,13 +122,15 @@ export function setupOAuthTestSpies(
 ): OAuthSpies {
   vi.clearAllMocks();
   openBrowserFn.mockClear();
-  vi.stubGlobal('fetch', mockFetch);
+  setGlobal('fetch', mockFetch);
   vi.spyOn(DebugLogger.prototype, 'log').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'warn').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
   vi.spyOn(DebugLogger.prototype, 'debug').mockImplementation(() => {});
 
-  vi.mocked(crypto.randomBytes).mockImplementation((size: number) => {
+  (
+    crypto.randomBytes as unknown as Mock<typeof crypto.randomBytes>
+  ).mockImplementation((size: number) => {
     if (size === 32) {
       return Buffer.from('mock_code_verifier_32_bytes_long_string');
     }
@@ -129,7 +140,7 @@ export function setupOAuthTestSpies(
     return Buffer.alloc(size);
   });
 
-  vi.mocked(crypto.createHash).mockReturnValue({
+  (crypto.createHash as Mock<typeof crypto.createHash>).mockReturnValue({
     update: vi.fn().mockReturnThis(),
     digest: vi.fn().mockReturnValue('code_challenge_mock'),
   } as unknown as crypto.Hash);

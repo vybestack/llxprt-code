@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -471,7 +472,7 @@ describe('LoadBalancingProvider', () => {
               void _chunk;
             }
           })();
-          await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+          await waitFor(() => expect(capturedSignal).toBeDefined());
           expect(capturedSignal?.aborted).toBe(false);
           controller.abort();
           await completion;

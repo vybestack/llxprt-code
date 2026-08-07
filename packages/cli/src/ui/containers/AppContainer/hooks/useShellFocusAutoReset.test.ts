@@ -4,20 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import { ToolCallStatus } from '../../../types.js';
 import { SHELL_COMMAND_NAME } from '../../../constants.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 
-const isActivePtyMock = vi.hoisted(() => vi.fn());
-const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+const isActivePtyMock = vi.fn();
+const getLastActivePtyIdMock = vi.fn();
+
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   return {
     ...actual,

@@ -12,33 +12,32 @@
  * assertions.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
+const actual = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
+  )),
+};
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
-      >();
-    return {
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 type Part = { text: string };

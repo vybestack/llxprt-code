@@ -17,7 +17,7 @@
  *   provider (Ollama emits reasoning under delta.reasoning).
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type OpenAI from 'openai';

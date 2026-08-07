@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  mock,
+} from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import {
@@ -15,7 +23,7 @@ import {
 } from '../../src/utils/ripgrepPathResolver.js';
 
 function mockRipgrepPackageUnavailable(): void {
-  vi.doMock(
+  void mock.module(
     '@lvce-editor/ripgrep',
     () =>
       new Proxy(
@@ -48,7 +56,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
 
     // Mock package to be available
-    vi.doMock('@lvce-editor/ripgrep', () => ({
+    void mock.module('@lvce-editor/ripgrep', () => ({
       rgPath: '/mock/package/path/rg',
     }));
 
@@ -72,12 +80,12 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     });
     vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
 
-    vi.doMock('@lvce-editor/ripgrep', () => ({
+    void mock.module('@lvce-editor/ripgrep', () => ({
       rgPath: '/mock/package/path/rg',
     }));
 
     const mockExecSync = vi.fn().mockReturnValue('/usr/local/bin/rg\n');
-    vi.doMock('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -97,7 +105,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
 
     // Mock system ripgrep available
     const mockExecSync = vi.fn().mockReturnValue('/usr/local/bin/rg\n');
-    vi.doMock('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -124,7 +132,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    vi.doMock('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -153,7 +161,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    vi.doMock('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -180,7 +188,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    vi.doMock('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 
@@ -211,7 +219,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
     });
-    vi.doMock('child_process', () => ({
+    void mock.module('child_process', () => ({
       execSync: mockExecSync,
     }));
 

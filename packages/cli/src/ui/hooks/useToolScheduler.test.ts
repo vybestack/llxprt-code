@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -20,7 +19,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
@@ -43,6 +42,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import type { HistoryItemWithoutId } from '../types.js';
+
+type OnCompleteFn = (
+  schedulerId: symbol,
+  tools: CompletedToolCall[],
+  options: { isPrimary: boolean },
+) => void | Promise<void>;
+type SetPendingHistoryItemFn = React.Dispatch<
+  React.SetStateAction<HistoryItemWithoutId | null>
+>;
 
 const buildRequest = (
   overrides: Partial<ToolCallRequestInfo> = {},
@@ -443,9 +452,9 @@ const mockToolRequiresConfirmation = new MockTool({
  * Used across multiple test suites to avoid sonarjs/no-identical-functions.
  */
 const renderScheduler = (
-  onComplete: Mock,
+  onComplete: Mock<OnCompleteFn>,
   mockConfig: Partial<Config>,
-  setPendingHistoryItem: Mock,
+  setPendingHistoryItem: Mock<SetPendingHistoryItemFn>,
 ) =>
   renderHook(() =>
     useReactToolScheduler(
@@ -458,8 +467,8 @@ const renderScheduler = (
   );
 
 describe('useReactToolScheduler in YOLO Mode', () => {
-  let onComplete: Mock;
-  let setPendingHistoryItem: Mock;
+  let onComplete: Mock<OnCompleteFn>;
+  let setPendingHistoryItem: Mock<SetPendingHistoryItemFn>;
 
   beforeEach(() => {
     onComplete = vi.fn();
@@ -468,14 +477,15 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     mockToolRequiresConfirmation.executeFn.mockClear();
 
     // IMPORTANT: Enable YOLO mode for this test suite
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+    (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
+      ApprovalMode.YOLO,
+    );
 
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     cleanup();
-    vi.clearAllTimers();
     vi.useRealTimers();
     for (const [sessionId, scheduler] of createdSchedulers.entries()) {
       scheduler.dispose();
@@ -509,7 +519,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       await schedule(requestWithoutAgent, new AbortController().signal);
     });
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),
@@ -519,7 +529,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1];
     expect(completedCalls[0].request.agentId).toBe('primary');
   });
 });

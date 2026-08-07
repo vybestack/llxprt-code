@@ -21,7 +21,7 @@
  * @pseudocode 001-concurrent-dispatch.md lines T1-T8
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as net from 'node:net';
 
 import {

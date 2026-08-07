@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'bun:test';
 import {
   getDefaultCliRuntimeId,
   resetCliRuntimeRegistryForTesting,

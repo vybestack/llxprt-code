@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,
@@ -19,14 +20,25 @@ import {
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Mock, MockInstance } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { LoadedSettings } from './config/settings.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 // Captures the resolved query handed to the fake Agent's stream(), and the
 // AgentEvents it should emit. Reset per-test in beforeEach.
-const agentState = vi.hoisted(() => ({
+const realAtCommandProcessorModule = {
+  ...(await import('./ui/hooks/atCommandProcessor.js')),
+};
+
+const agentState = {
   // runNonInteractive passes the resolved query to agent.stream(); typed as
   // AgentInput | null (matching the stream() parameter type) so assertions get
   // compile-time checking instead of the looser `unknown`.
@@ -35,7 +47,7 @@ const agentState = vi.hoisted(() => ({
   // tests can assert runNonInteractive still forwards prompt_id and maxTurns.
   streamOpts: null as TurnOptions | null,
   events: [] as AgentEvent[],
-}));
+};
 
 // Activation params (_profileModelParams, _cliModelParams, _bootstrapArgs) have
 // no public setter API on Config — production code reads/writes them via the
@@ -65,30 +77,26 @@ function makeBootstrapProfileArgs(
   };
 }
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
-  return {
-    ...original,
-    fromConfig: vi.fn(),
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...original,
+  fromConfig: vi.fn(),
+}));
 
 // Mock core modules
-vi.mock('./ui/hooks/atCommandProcessor.js');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...original,
-    shutdownTelemetry: vi.fn(),
-    isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
-  };
-});
+void vi.mock('./ui/hooks/atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
+const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualOriginal,
+  shutdownTelemetry: vi.fn(),
+  isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
+}));
 
-const mockGetCommands = vi.hoisted(() => vi.fn());
-const mockCommandServiceCreate = vi.hoisted(() => vi.fn());
-vi.mock('./services/CommandService.js', () => ({
+const mockGetCommands = vi.fn();
+const mockCommandServiceCreate = vi.fn();
+void vi.mock('./services/CommandService.js', () => ({
   CommandService: {
     create: mockCommandServiceCreate,
   },
@@ -121,14 +129,19 @@ function buildFakeAgent(): Agent {
 describe('runNonInteractive - slash commands and thinking output', () => {
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockShutdownTelemetry: Mock;
-  let mockIsTelemetrySdkInitialized: Mock;
-  let processStdoutSpy: MockInstance;
+  let mockShutdownTelemetry: Mock<(...args: never[]) => Promise<void>>;
+  let mockIsTelemetrySdkInitialized: Mock<(...args: never[]) => boolean>;
+  let processStdoutSpy: Mock<(...args: never[]) => boolean>;
 
   beforeEach(async () => {
-    mockShutdownTelemetry = vi.mocked(shutdownTelemetry);
+    mockShutdownTelemetry = shutdownTelemetry as unknown as Mock<
+      (...args: never[]) => Promise<void>
+    >;
     mockShutdownTelemetry.mockResolvedValue(undefined);
-    mockIsTelemetrySdkInitialized = vi.mocked(isTelemetrySdkInitialized);
+    mockIsTelemetrySdkInitialized =
+      isTelemetrySdkInitialized as unknown as Mock<
+        (...args: never[]) => boolean
+      >;
     mockIsTelemetrySdkInitialized.mockReturnValue(true);
 
     mockCommandServiceCreate.mockResolvedValue({
@@ -139,11 +152,13 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
-      .mockImplementation(() => true);
+      .mockImplementation(() => true) as unknown as Mock<
+      (...args: never[]) => boolean
+    >;
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    vi.mocked(fromConfig).mockResolvedValue(buildFakeAgent());
+    (fromConfig as Mock<typeof fromConfig>).mockResolvedValue(buildFakeAgent());
 
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
@@ -202,12 +217,17 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
     );
-    vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
-      processedQuery: [{ type: 'text', text: query }],
-    }));
+    (handleAtCommand as Mock<typeof handleAtCommand>).mockImplementation(
+      async ({ query }) => ({
+        processedQuery: [{ type: 'text', text: query }],
+      }),
+    );
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -215,7 +235,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
     );
-    const mockHandleAtCommand = vi.mocked(handleAtCommand);
+    const mockHandleAtCommand = handleAtCommand as Mock<typeof handleAtCommand>;
 
     const rawInput = 'Summarize @file.txt';
     const processedParts = [
@@ -279,8 +299,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // The prompt sent to the Agent is from the command, not the raw input.
     expect(agentState.streamInput).toStrictEqual([
+      // Command content blocks are forwarded as-is without a TextBlock `type`
+      // discriminator at runtime.
       { text: 'Prompt from command' },
-    ]);
+    ] as unknown as AgentInput);
     expect(processStdoutSpy).toHaveBeenCalledWith('Response from command');
   });
 
@@ -330,7 +352,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       'Exiting due to a confirmation prompt requested by the command.',
     );
 
-    expect(vi.mocked(fromConfig)).not.toHaveBeenCalled();
+    expect(fromConfig as Mock<typeof fromConfig>).not.toHaveBeenCalled();
   });
 
   it('creates and disposes the Agent for a slash command that submits a prompt', async () => {
@@ -345,7 +367,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
     const fakeAgent = buildFakeAgent();
-    vi.mocked(fromConfig).mockResolvedValue(fakeAgent);
+    (fromConfig as Mock<typeof fromConfig>).mockResolvedValue(fakeAgent);
     agentState.events = [
       { type: 'text', text: 'ok' },
       { type: 'done', reason: 'stop' },
@@ -358,15 +380,19 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-agent-lifecycle',
     });
 
-    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
+    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('passes the resolved config model and merged model params to fromConfig activation when no CLI model override is present', async () => {
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
     const configWithParams = mockConfig as ConfigWithActivationParams;
-    vi.mocked(mockConfig.getProvider).mockReturnValue('openai');
-    vi.mocked(mockConfig.getModel).mockReturnValue('kimi-k2.5');
+    (
+      mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
+    ).mockReturnValue('openai');
+    (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
+      'kimi-k2.5',
+    );
     configWithParams._profileModelParams = { temperature: 0.4 };
     configWithParams._cliModelParams = { top_p: 0.9 };
     agentState.events = [{ type: 'done', reason: 'stop' }];
@@ -378,8 +404,9 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-activation-model',
     });
 
-    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
-    const activation = vi.mocked(fromConfig).mock.calls[0][0].activation;
+    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
+    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0]
+      .activation;
     expect(activation).toMatchObject({
       provider: 'openai',
       model: 'kimi-k2.5',
@@ -391,8 +418,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   it('preserves profile model params when the CLI provider override supplies the activation provider', async () => {
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
     const configWithParams = mockConfig as ConfigWithActivationParams;
-    vi.mocked(mockConfig.getProvider).mockReturnValue(undefined);
-    vi.mocked(mockConfig.getModel).mockReturnValue('kimi-k2.5');
+    (
+      mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
+    ).mockReturnValue(undefined);
+    (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
+      'kimi-k2.5',
+    );
     configWithParams._profileModelParams = { temperature: 0.4 };
     configWithParams._cliModelParams = { top_p: 0.9 };
     configWithParams._bootstrapArgs = makeBootstrapProfileArgs({
@@ -407,8 +438,9 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-provider-override',
     });
 
-    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
-    const activation = vi.mocked(fromConfig).mock.calls[0][0].activation;
+    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
+    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0]
+      .activation;
     expect(activation).toBeDefined();
     expect(activation).toMatchObject({
       provider: 'anthropic',
@@ -420,8 +452,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
   it('omits the activation model when the resolved config model is the placeholder sentinel', async () => {
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    vi.mocked(mockConfig.getProvider).mockReturnValue('openai');
-    vi.mocked(mockConfig.getModel).mockReturnValue(PLACEHOLDER_MODEL);
+    (
+      mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
+    ).mockReturnValue('openai');
+    (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
+      PLACEHOLDER_MODEL,
+    );
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
     await runNonInteractive({
@@ -431,8 +467,9 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-placeholder-model',
     });
 
-    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
-    const activation = vi.mocked(fromConfig).mock.calls[0][0].activation;
+    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
+    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0]
+      .activation;
     expect(activation).toBeDefined();
     expect(activation?.provider).toBe('openai');
     expect(activation?.model).toBeUndefined();
@@ -581,7 +618,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // Both thought events should be buffered and flushed as a single <think> block
     expect(thinkingOutputs).toHaveLength(1);
-    const thinkingText = thinkingOutputs[0][0];
+    const thinkingText = thinkingOutputs[0][0] as string;
     // Code formats thoughts as "subject: description" when both present
     expect(thinkingText).toContain('First: thought');
     expect(thinkingText).toContain('Second: thought');
@@ -608,7 +645,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // All thoughts should be buffered into one <think> block (no pyramid repetition)
     expect(thinkingOutputs).toHaveLength(1);
-    const thinkingText = thinkingOutputs[0][0];
+    const thinkingText = thinkingOutputs[0][0] as string;
     // "Analyzing" should appear exactly once — not repeated for each subsequent thought
     const thoughtCount = (thinkingText.match(/Analyzing/g) ?? []).length;
     expect(thoughtCount).toBe(1);
@@ -620,9 +657,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       if (key === 'reasoning.includeInResponse') return true;
       return undefined;
     });
-    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
-      mockGetEphemeralSetting,
-    );
+    (
+      mockConfig.getEphemeralSetting as Mock<
+        typeof mockConfig.getEphemeralSetting
+      >
+    ).mockImplementation(mockGetEphemeralSetting);
 
     agentState.events = [
       {
@@ -647,7 +686,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       (value[0] as string).includes('<think>'),
     );
     expect(thinkOutput).toBeDefined();
-    const thinkText = thinkOutput?.[0] as string;
+    const thinkText = thinkOutput?.[0] as unknown as string;
     expect(thinkText).not.toContain('\u{1F914}');
     expect(thinkText).not.toContain('\u{1F4AD}');
     expect(thinkText).toContain('Planning');
@@ -662,9 +701,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       if (key === 'reasoning.includeInResponse') return true;
       return undefined;
     });
-    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
-      mockGetEphemeralSetting,
-    );
+    (
+      mockConfig.getEphemeralSetting as Mock<
+        typeof mockConfig.getEphemeralSetting
+      >
+    ).mockImplementation(mockGetEphemeralSetting);
 
     agentState.events = [
       {
@@ -697,9 +738,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       if (key === 'reasoning.includeInResponse') return true;
       return undefined;
     });
-    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
-      mockGetEphemeralSetting,
-    );
+    (
+      mockConfig.getEphemeralSetting as Mock<
+        typeof mockConfig.getEphemeralSetting
+      >
+    ).mockImplementation(mockGetEphemeralSetting);
 
     agentState.events = [
       {
@@ -724,7 +767,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       (value[0] as string).includes('<think>'),
     );
     expect(thinkOutput).toBeDefined();
-    const thinkText = thinkOutput?.[0] as string;
+    const thinkText = thinkOutput?.[0] as unknown as string;
     expect(thinkText).toContain('\u{1F914}');
     expect(thinkText).toContain('\u{1F4AD}');
   });

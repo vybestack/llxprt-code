@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { aboutCommand } from './aboutCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -20,15 +29,15 @@ import { USER_SETTINGS_PATH } from '../../config/settings.js';
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { assertDefined } from '../../test-utils/assertions.js';
 
-const runtimeMocks = vi.hoisted(() => ({
+const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),
-}));
+};
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: runtimeMocks.getRuntimeApiMock,
 }));
 
-vi.mock('../../utils/version.js', () => ({
+void vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
@@ -76,7 +85,9 @@ describe('aboutCommand', () => {
       },
     } as unknown as CommandContext);
 
-    vi.mocked(versionUtils.getCliVersion).mockResolvedValue('test-version');
+    (
+      versionUtils.getCliVersion as Mock<typeof versionUtils.getCliVersion>
+    ).mockResolvedValue('test-version');
     vi.spyOn(mockContext.services.config!, 'getModel').mockReturnValue(
       'test-model',
     );
@@ -90,7 +101,7 @@ describe('aboutCommand', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
     });

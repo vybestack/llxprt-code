@@ -18,7 +18,8 @@
  * rather than racing with setTimeout.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   createStreamWatchdog,
   type StreamWatchdogOptions,
@@ -87,7 +88,7 @@ describe('createStreamWatchdog', () => {
       expect(wd.isActive).toBe(true);
 
       const promise = wd.timeoutPromise;
-      await vi.advanceTimersByTimeAsync(50);
+      await advanceTimersByTimeAsync(50);
 
       await expect(promise).rejects.toThrow('Stream watchdog timeout');
       expect(onFire).toHaveBeenCalledTimes(1);
@@ -104,7 +105,7 @@ describe('createStreamWatchdog', () => {
         defaultOpts({ firstResponseMs: 100, onFire }),
       );
 
-      await vi.advanceTimersByTimeAsync(50);
+      await advanceTimersByTimeAsync(50);
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
     });
@@ -118,7 +119,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(10_000);
+      await advanceTimersByTimeAsync(10_000);
 
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
@@ -131,7 +132,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
 
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
@@ -151,7 +152,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(10_000);
+      await advanceTimersByTimeAsync(10_000);
 
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
@@ -164,14 +165,14 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
       wd.onLiveness(livenessPing('response.in_progress'));
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -187,7 +188,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.cancel();
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
@@ -201,7 +202,7 @@ describe('createStreamWatchdog', () => {
 
       wd.onLiveness(livenessPing());
       wd.cancel();
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       expect(onFire).not.toHaveBeenCalled();
     });
@@ -223,7 +224,7 @@ describe('createStreamWatchdog', () => {
         defaultOpts({ firstResponseMs: 30, onFire }),
       );
 
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -237,7 +238,7 @@ describe('createStreamWatchdog', () => {
         defaultOpts({ firstResponseMs: 30, onFire }),
       );
       wd.cancel();
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(onFire).not.toHaveBeenCalled();
     });
   });
@@ -246,7 +247,7 @@ describe('createStreamWatchdog', () => {
     it('does not produce an unhandled rejection when cancelled without awaiting', async () => {
       const wd = createStreamWatchdog(defaultOpts({ firstResponseMs: 30 }));
       wd.cancel();
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       // If timeoutPromise had an unhandled rejection, Node/vitest would surface
       // it. Reaching here cleanly is the assertion.
       expect(wd.getFire()).toBeUndefined();
@@ -262,7 +263,7 @@ describe('createStreamWatchdog', () => {
         defaultOpts({ firstResponseMs: 30, onFire }),
       );
 
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
 
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
@@ -281,7 +282,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
 
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
@@ -299,7 +300,7 @@ describe('createStreamWatchdog', () => {
         }),
       );
 
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
       await Promise.resolve();
       // Reaching here without vitest surfacing an unhandled rejection is the
       // assertion. Additionally verify state is consistent.
@@ -315,7 +316,7 @@ describe('createStreamWatchdog', () => {
 
     it('isActive becomes false after fire', async () => {
       const wd = createStreamWatchdog(defaultOpts({ firstResponseMs: 30 }));
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -356,7 +357,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onSemanticEvent();
-      await vi.advanceTimersByTimeAsync(10_000);
+      await advanceTimersByTimeAsync(10_000);
 
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
@@ -372,23 +373,23 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onSemanticEvent();
-      await vi.advanceTimersByTimeAsync(10);
+      await advanceTimersByTimeAsync(10);
       expect(onFire).not.toHaveBeenCalled();
 
       wd.onLiveness(livenessPing('response.in_progress'));
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
       wd.onLiveness(livenessPing('response.in_progress'));
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
       wd.onLiveness(livenessPing('response.in_progress'));
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
       wd.onSemanticEvent();
-      await vi.advanceTimersByTimeAsync(50);
+      await advanceTimersByTimeAsync(50);
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
     });
@@ -401,11 +402,11 @@ describe('createStreamWatchdog', () => {
 
       wd.onSemanticEvent();
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
       // Pings stop. Exactly at 100ms after the last ping, it should fire.
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -421,7 +422,7 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onSemanticEvent();
-      await vi.advanceTimersByTimeAsync(10_000);
+      await advanceTimersByTimeAsync(10_000);
 
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.getFire()).toBeUndefined();
@@ -460,7 +461,7 @@ describe('createStreamWatchdog', () => {
       wd.onLiveness(livenessPing());
       expect(wd.isActive).toBe(true);
 
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -494,7 +495,7 @@ describe('createStreamWatchdog', () => {
 
     it('after fire, isActive is false', async () => {
       const wd = createStreamWatchdog(defaultOpts({ firstResponseMs: 30 }));
-      await vi.advanceTimersByTimeAsync(30);
+      await advanceTimersByTimeAsync(30);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -526,16 +527,16 @@ describe('createStreamWatchdog', () => {
 
       wd.onLiveness(livenessPing());
       expect(wd.isActive).toBe(true);
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
       expect(wd.isActive).toBe(true);
 
       wd.onLiveness(livenessPing('response.in_progress'));
       expect(wd.isActive).toBe(true);
-      await vi.advanceTimersByTimeAsync(40);
+      await advanceTimersByTimeAsync(40);
       expect(onFire).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );
@@ -549,14 +550,14 @@ describe('createStreamWatchdog', () => {
       );
 
       wd.onLiveness(livenessPing());
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
       // Rearm before the 30ms deadline — the first timer must be aborted.
       wd.onLiveness(livenessPing('response.in_progress'));
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
       // 40ms total since first arm, but only 20ms since rearm; must not fire.
       expect(onFire).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(10);
+      await advanceTimersByTimeAsync(10);
       await expect(wd.timeoutPromise).rejects.toThrow(
         'Stream watchdog timeout',
       );

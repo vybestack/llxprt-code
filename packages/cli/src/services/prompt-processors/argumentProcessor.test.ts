@@ -6,7 +6,7 @@
 
 import { DefaultArgumentProcessor } from './argumentProcessor.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 describe('Argument Processors', () => {
   describe('DefaultArgumentProcessor', () => {

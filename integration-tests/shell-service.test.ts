@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import { ShellExecutionService } from '../packages/core/src/services/shellExecutionService.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 describe('ShellExecutionService programmatic integration tests', () => {
   let testDir: string;
@@ -43,7 +43,7 @@ describe('ShellExecutionService programmatic integration tests', () => {
     expect(result.output).toContain('hello from the service');
   });
 
-  it.runIf(process.platform === 'win32')(
+  it.skipIf(process.platform !== 'win32')(
     'should execute "dir" on Windows',
     async () => {
       const testFile = 'test-file-windows.txt';

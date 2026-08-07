@@ -14,7 +14,7 @@
  * These tests verify CLI argument parsing for session management flags.
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';

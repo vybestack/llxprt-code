@@ -15,24 +15,21 @@
  * directly (#2378).
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { ProviderActivationIntent } from '@vybestack/llxprt-code-agents';
 import type { CliProviderManager } from './cliProviderInit.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 
-const { preflightAgentActivationMock } = vi.hoisted(() => ({
+const { preflightAgentActivationMock } = {
   preflightAgentActivationMock: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
-  return {
-    ...actual,
-    preflightAgentActivation: preflightAgentActivationMock,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  preflightAgentActivation: preflightAgentActivationMock,
+}));
 
 import { activateConfiguredProvider } from './cliProviderInit.js';
 

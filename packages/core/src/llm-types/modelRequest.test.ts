@@ -3,7 +3,7 @@
  * @requirement REQ-006.1, REQ-006.2, REQ-006.3
  * @pseudocode lines 60-64
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
   ReasoningConfig,

@@ -21,7 +21,7 @@
  * @requirement R21, R22, R23, R24, R25, R26, R27.3
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -90,28 +90,22 @@ function createStubProvider(): IProvider {
 
 let mockStorageRef: ProviderKeyStorage | null = null;
 
-vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-storage')>();
-  return {
-    ...actual,
-    getProviderKeyStorage: () => mockStorageRef,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
+void vi.mock('@vybestack/llxprt-code-storage', () => ({
+  ...actual,
+  getProviderKeyStorage: () => mockStorageRef,
+}));
 
 // @plan:PLAN-20250214-CREDPROXY.P35
 // Also mock the factory to use the same mockStorageRef since runtimeSettings
 // now uses createProviderKeyStorage from the factory instead of direct getProviderKeyStorage
-vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-providers/auth.js')
-    >();
-  return {
-    ...actual,
-    createProviderKeyStorage: () => mockStorageRef,
-  };
-});
+const actualActual = {
+  ...(await import('@vybestack/llxprt-code-providers/auth.js')),
+};
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+  ...actualActual,
+  createProviderKeyStorage: () => mockStorageRef,
+}));
 
 const { parseBootstrapArgs } = await import('../../config/profileBootstrap.js');
 

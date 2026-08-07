@@ -11,7 +11,16 @@
  * file-level max-lines).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -33,7 +42,11 @@ import {
 } from './client-test-helpers.js';
 
 // Mock prompts module before imports
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+const realConfigModule = {
+  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
+
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
     Promise.resolve('Test system instruction'),
   ),
@@ -43,7 +56,7 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
     Array.isArray(v)
@@ -63,19 +76,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -90,22 +103,25 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
-  ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
-    analyzeComplexity: vi.fn().mockReturnValue({
-      complexityScore: 0.2,
-      isComplex: false,
-      detectedTasks: [],
-      sequentialIndicators: [],
-      questionCount: 0,
-      shouldSuggestTodos: false,
-    }),
-  })),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/services/complexity-analyzer.js',
+  () => ({
+    ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
+      analyzeComplexity: vi.fn().mockReturnValue({
+        complexityScore: 0.2,
+        isComplex: false,
+        detectedTasks: [],
+        sequentialIndicators: [],
+        questionCount: 0,
+        shouldSuggestTodos: false,
+      }),
+    })),
+  }),
+);
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
     TodoReminderService: vi.fn().mockImplementation(() => ({
@@ -116,16 +132,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', (importOriginal) => {
-  const result = importOriginal() as
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: mockTodoStoreConstructor,
+}));
+const __actual = { ...(await import('./turn')) };
+void vi.mock('./turn', () => {
+  const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {
@@ -145,14 +159,16 @@ vi.mock('./turn', (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
-vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+  automock(realConfigModule),
+);
+void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
     getResponseText: (result: MockResponseShape) =>
@@ -161,57 +177,51 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual3,
+  ideContext: {
+    ...actual3.ideContext,
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
+}));
+const actual4 = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
   return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
+    ...actual4,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (
+        model: string,
+        userCtx?: number,
+        provCtx?: number,
+        resolveTok?: (model: string) => number,
+      ) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        if (resolveTok) return resolveTok(model);
+        return tokenLimit(model);
+      },
+    ),
   };
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
-    const tokenLimit = vi.fn();
-    return {
-      ...actual,
-      tokenLimit,
-      resolveEffectiveContextLimit: vi.fn(
-        (
-          model: string,
-          userCtx?: number,
-          provCtx?: number,
-          resolveTok?: (model: string) => number,
-        ) => {
-          const ok = (v: unknown): v is number =>
-            typeof v === 'number' && Number.isFinite(v) && v > 0;
-          if (ok(userCtx)) return userCtx;
-          if (ok(provCtx)) return provCtx;
-          if (resolveTok) return resolveTok(model);
-          return tokenLimit(model);
-        },
-      ),
-    };
-  },
-);
-vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
     getLastPromptTokenCount: vi.fn(),
@@ -245,14 +255,16 @@ function buildOverflowScenario(
   client: AgentClient,
   scenario: OverflowScenario,
 ): OverflowScenarioHandle {
-  vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+  (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(MOCKED_TOKEN_LIMIT);
 
   const initialBaseline =
     scenario.initialProjectedBaseline ?? PREFLIGHT_BASELINE;
   const observedCount = scenario.lastPromptTokenCount ?? initialBaseline;
-  vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-    observedCount,
-  );
+  (
+    uiTelemetryService.getLastPromptTokenCount as Mock<
+      typeof uiTelemetryService.getLastPromptTokenCount
+    >
+  ).mockReturnValue(observedCount);
 
   let currentBaseline = initialBaseline;
 
@@ -411,7 +423,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
 
     it('should recover via context-window enforcement when ordinary compression is a no-op (issue 2755 A1)', async () => {
       const ENFORCEMENT_TOKEN_LIMIT = 10_000;
-      vi.mocked(tokenLimit).mockReturnValue(ENFORCEMENT_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        ENFORCEMENT_TOKEN_LIMIT,
+      );
 
       const historyService = new HistoryService();
       const fillText = 'x'.repeat(12_000);
@@ -582,8 +596,14 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
     });
 
     it('should defer overflow detection to finalized provider enforcement for consecutive turns with cleared counts (issue 2755 A4)', async () => {
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(0);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(0);
 
       const currentBaseline = PREFLIGHT_BASELINE;
 
@@ -643,7 +663,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
           mockEmbedContentFn,
         })
       ).client;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
       (
         client as unknown as {
           todoContinuationService: { todoToolsAvailable: boolean };
@@ -698,7 +720,9 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
     });
 
     it('should proceed exactly at the threshold boundary where estimated equals remaining * 0.95 (issue 2755 A7 exact threshold)', async () => {
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       const fitBaseline = 500;
       const requestChars = Math.floor(

@@ -8,8 +8,18 @@
  * SubAgentScope termination, recovery, runInteractive, scheduling timeout, dispose.
  */
 
-import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { SubAgentScope } from './subagent.js';
 import {
@@ -25,77 +35,69 @@ import {
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
+const realNonInteractiveToolExecutorModule = {
+  ...(await import('./nonInteractiveToolExecutor.js')),
+};
+
+const { mockReadTodos, TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
   return { mockReadTodos, TodoStoreMock };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: TodoStoreMock,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: TodoStoreMock,
+}));
 
-vi.mock('./chatSession.js', (importOriginal) => {
+const __actual = { ...(await import('./chatSession.js')) };
+void vi.mock('./chatSession.js', () => {
   const apply = (actual: typeof import('./chatSession.js')) => ({
     ...actual,
     ChatSession: vi.fn(),
   });
-  const result = importOriginal() as
+  const result = __actual as
     | typeof import('./chatSession.js')
     | Promise<typeof import('./chatSession.js')>;
   return result instanceof Promise ? result.then(apply) : apply(result);
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/contentGenerator.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
-      >();
-    return {
-      ...actual,
-      createContentGenerator: vi.fn(),
-    };
-  },
+const actual3 = {
+  ...(await import('@vybestack/llxprt-code-core/core/contentGenerator.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => ({
+  ...actual3,
+  createContentGenerator: vi.fn(),
+}));
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
 );
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
-vi.mock('./nonInteractiveToolExecutor.js');
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    IdeClient: {
-      getInstance: vi.fn().mockResolvedValue({
-        getConnectionStatus: vi.fn(),
-        initialize: vi.fn(),
-        shutdown: vi.fn(),
-      }),
-    },
-  };
-});
-vi.mock(
-  '@vybestack/llxprt-code-core/core/prompts.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
-      >();
-    return {
-      ...actual,
-      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-    };
-  },
+void vi.mock('./nonInteractiveToolExecutor.js', () =>
+  automock(realNonInteractiveToolExecutorModule),
 );
+const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual4,
+  IdeClient: {
+    getInstance: vi.fn().mockResolvedValue({
+      getConnectionStatus: vi.fn(),
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+    }),
+  },
+}));
+const actual5 = {
+  ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  ...actual5,
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+}));
 
 import {
   createMockConfig,
@@ -116,15 +118,19 @@ describe('subagent.ts', () => {
     mockReadTodos.mockResolvedValue([]);
     TodoStoreMock.mockClear();
 
-    vi.mocked(getEnvironmentContext).mockResolvedValue([
-      { text: 'Env Context' },
-    ]);
-    vi.mocked(createContentGenerator).mockResolvedValue({
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([{ text: 'Env Context' }]);
+    (
+      createContentGenerator as Mock<typeof createContentGenerator>
+    ).mockResolvedValue({
       getGenerativeModel: vi.fn(),
     } as unknown as ContentGenerator);
 
     mockSendMessageStream = vi.fn();
-    vi.mocked(ChatSession).mockImplementation(
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           sendMessageStream: mockSendMessageStream,
@@ -321,7 +327,7 @@ describe('subagent.ts', () => {
       expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
         true,
       );
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+      await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
       await runRejection;
 
@@ -417,7 +423,7 @@ describe('subagent.ts', () => {
       expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
         true,
       );
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       await runRejection;
 
@@ -497,7 +503,7 @@ describe('subagent.ts', () => {
           () => mockSendMessageStream.mock.calls.length > 0,
         ),
       ).toBe(true);
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       await runRejection;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
@@ -513,7 +519,9 @@ describe('subagent.ts', () => {
     const recordCompletedToolCalls = vi.fn(() => {
       throw new Error('history write failed');
     });
-    vi.mocked(ChatSession).mockImplementationOnce(
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementationOnce(
       () =>
         ({
           sendMessageStream: mockSendMessageStream,
@@ -713,7 +721,7 @@ describe('subagent.ts', () => {
           () => mockSendMessageStream.mock.calls.length > 0,
         ),
       ).toBe(true);
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       await runRejection;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);

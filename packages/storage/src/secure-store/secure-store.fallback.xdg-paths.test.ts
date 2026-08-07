@@ -30,7 +30,7 @@
  * path-resolver.ts depends ONLY on `env-paths` and `node:path`.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';

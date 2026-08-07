@@ -9,20 +9,20 @@
  */
 
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import type { MemoryLoadResult } from '../utils/memoryDiscovery.js';
 
-const mockLoadGlobalMemory = vi.hoisted(() => vi.fn());
-const mockLoadEnvironmentMemory = vi.hoisted(() => vi.fn());
-const mockLoadJitSubdirectoryMemory = vi.hoisted(() => vi.fn());
-const mockLoadCoreMemory = vi.hoisted(() => vi.fn());
+const mockLoadGlobalMemory = vi.fn();
+const mockLoadEnvironmentMemory = vi.fn();
+const mockLoadJitSubdirectoryMemory = vi.fn();
+const mockLoadCoreMemory = vi.fn();
 
 // Mock memoryDiscovery module
-vi.mock('../utils/memoryDiscovery.js', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('../utils/memoryDiscovery.js');
+const __actual = { ...(await import('../utils/memoryDiscovery.js')) };
+void vi.mock('../utils/memoryDiscovery.js', () => {
+  const actual = __actual as typeof import('../utils/memoryDiscovery.js');
   return {
     ...actual,
     loadGlobalMemory: mockLoadGlobalMemory,

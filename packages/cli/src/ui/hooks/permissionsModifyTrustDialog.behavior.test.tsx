@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import path from 'node:path';
 import { renderHook } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
@@ -14,29 +15,29 @@ import {
   type ResolvedTrustRule,
 } from '../../config/trustedFolders.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteValue = vi.hoisted(() => vi.fn());
-const mockedUserConfig = vi.hoisted<{
-  value: Record<string, TrustLevel>;
-}>(() => ({ value: {} }));
-const mockedResolvePathTrust = vi.hoisted<
-  ReturnType<
-    typeof vi.fn<(folderPath: string) => ResolvedTrustRule | undefined>
-  >
->(() => vi.fn(() => undefined));
-const mockedGetValue = vi.hoisted(() =>
-  vi.fn((folderPath: string) => mockedUserConfig.value[folderPath]),
-);
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
-const mockedIdeTrust = vi.hoisted<{ value: boolean | undefined }>(() => ({
-  value: undefined,
-}));
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../config/trustedFolders.js')
-  >('../../config/trustedFolders.js');
+const mockedSetValue = vi.fn();
+const mockedDeleteValue = vi.fn();
+const mockedUserConfig: { value: Record<string, TrustLevel> } = {
+  value: {},
+};
+const mockedResolvePathTrust = vi.fn<
+  (folderPath: string) => ResolvedTrustRule | undefined
+>(() => undefined);
+const mockedGetValue = vi.fn(
+  (folderPath: string) => mockedUserConfig.value[folderPath],
+);
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
+const mockedIdeTrust: { value: boolean | undefined } = {
+  value: undefined,
+};
+
+void vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -63,7 +64,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
   };
 });
 
-vi.mock('./useIdeTrustListener.js', () => ({
+void vi.mock('./useIdeTrustListener.js', () => ({
   useIdeTrustListener: () => ({ isIdeTrusted: mockedIdeTrust.value }),
 }));
 
@@ -328,7 +329,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     act(() => {
       commit = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
-    await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
+    await waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
 
     workingDirectory = WORKSPACE_SECOND;
     rerender();
@@ -373,7 +374,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       firstCommit = result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
       secondCommit = result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST);
     });
-    await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
+    await waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
 
     expect(mockedUserConfig.value[CONFIGURED_WORKSPACE]).toBe(
       TrustLevel.TRUST_FOLDER,
@@ -410,7 +411,8 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
 
-    expect(mockedSetValue).toHaveBeenCalledExactlyOnceWith(
+    expect(mockedSetValue).toHaveBeenCalledTimes(1);
+    expect(mockedSetValue).toHaveBeenCalledWith(
       CONFIGURED_WORKSPACE,
       TrustLevel.TRUST_FOLDER,
     );

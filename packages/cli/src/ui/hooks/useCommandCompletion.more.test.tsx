@@ -4,9 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
@@ -18,13 +25,19 @@ import type { UseAtCompletionProps } from './useAtCompletion.js';
 import { useAtCompletion } from './useAtCompletion.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 
-vi.mock('./useAtCompletion', () => ({
+const realUseSlashCompletionModule = {
+  ...(await import('./useSlashCompletion')),
+};
+
+void vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),
 }));
 
-vi.mock('./useSlashCompletion');
+void vi.mock('./useSlashCompletion', () =>
+  automock(realUseSlashCompletionModule),
+);
 
-vi.mock('./useCompletion', () => ({
+void vi.mock('./useCompletion', () => ({
   useCompletion: vi.fn(() => {
     const [suggestions, setSuggestions] = useState([]);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
@@ -82,7 +95,7 @@ vi.mock('./useCompletion', () => ({
   }),
 }));
 
-vi.mock('./usePromptCompletion', () => ({
+void vi.mock('./usePromptCompletion', () => ({
   usePromptCompletion: vi.fn(() => ({
     suggestions: [],
     activeSuggestionIndex: -1,
@@ -114,7 +127,7 @@ const setupMocks = ({
   isPerfectMatch?: boolean;
 }) => {
   // Mock for @-completions
-  (useAtCompletion as vi.Mock).mockImplementation(
+  (useAtCompletion as Mock<(...args: never[]) => unknown>).mockImplementation(
     ({
       enabled,
       setSuggestions,
@@ -130,7 +143,9 @@ const setupMocks = ({
   );
 
   // Mock for /-completions with proper state management
-  (useSlashCompletion as vi.Mock).mockImplementation((buffer) => {
+  (
+    useSlashCompletion as Mock<(...args: never[]) => unknown>
+  ).mockImplementation((buffer) => {
     const [suggestions, setSuggestions] =
       useState<Suggestion[]>(slashSuggestions);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(

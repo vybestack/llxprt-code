@@ -5,6 +5,6 @@
     "outDir": "dist",
     "composite": false
   },
-  "include": ["src/**/*.ts"],
+  "include": ["../../bun-test-corrections.d.ts", "src/**/*.ts"],
   "exclude": ["dist", "test"]
 }

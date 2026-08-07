@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { logApiResponse, logApiError, logToolCall } from './loggers.js';
 import { UiTelemetryService } from './uiTelemetry.js';
 import { uiTelemetryService } from './uiTelemetry.js';

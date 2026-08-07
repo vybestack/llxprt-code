@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
@@ -17,28 +21,27 @@ import {
   delayRealTime,
 } from '../test-utils/eventLoop.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
+const actual = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
+  )),
+};
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
-      >();
-    return {
-      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
-      // real implementation so thinking/tool_call/text detection is correct.
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+    // real implementation so thinking/tool_call/text detection is correct.
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 describe('Turn - stream idle timeout behavioral tests', () => {
@@ -146,9 +149,9 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe(AgentEventType.Content);
 
-    await vi.advanceTimersByTimeAsync(2);
+    await advanceTimersByTimeAsync(2);
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(

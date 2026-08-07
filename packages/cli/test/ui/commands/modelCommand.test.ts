@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { modelCommand } from '../../../src/ui/commands/modelCommand.js';
 import {
   CommandContext,
@@ -18,7 +18,7 @@ import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
 
 // Mock the RuntimeContext
 const mockSetActiveModel = vi.fn();
-vi.mock('../../../src/ui/contexts/RuntimeContext.js', () => ({
+void vi.mock('../../../src/ui/contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     setActiveModel: mockSetActiveModel,
   }),

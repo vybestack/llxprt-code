@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';
@@ -25,16 +26,17 @@ const activeRenders: Array<ReturnType<typeof render>> = [];
 //
 // The factory imports the real Ink module via a direct file path (re-exported
 // from test-utils/real-ink.ts) to bypass the `ink → ink-stub` resolve alias.
-vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+const { Text } = await import('ink');
 
-vi.mock('../components/ContextSummaryDisplay.js', async () => {
-  const { Text } = await import('ink');
-  return {
-    ContextSummaryDisplay: () => (
-      <Text color="white">context-summary-mock</Text>
-    ),
-  };
-});
+const realRealInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
+
+void vi.mock('ink', () => realRealInkModule);
+
+void vi.mock('../components/ContextSummaryDisplay.js', () => ({
+  ContextSummaryDisplay: () => <Text color="white">context-summary-mock</Text>,
+}));
 
 function renderInlineContent(props: InlineContentProps) {
   const rendered = render(
@@ -93,14 +95,14 @@ function createProps(): InlineContentProps {
 
 describe('InlineContent', () => {
   beforeEach(() => {
-    vi.stubEnv('GEMINI_SYSTEM_MD', '');
+    setEnv('GEMINI_SYSTEM_MD', '');
   });
 
   afterEach(() => {
     for (const rendered of activeRenders.splice(0)) {
       rendered.unmount();
     }
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it('does not render transient status text when no left status is visible', () => {
@@ -148,7 +150,7 @@ describe('InlineContent', () => {
   });
 
   it('renders the system-md indicator when GEMINI_SYSTEM_MD is set', () => {
-    vi.stubEnv('GEMINI_SYSTEM_MD', 'true');
+    setEnv('GEMINI_SYSTEM_MD', 'true');
     const { lastFrame } = renderInlineContent(createProps());
 
     expect(lastFrame()).toContain('⌐■_■');

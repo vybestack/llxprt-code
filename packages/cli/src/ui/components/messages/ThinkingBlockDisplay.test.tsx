@@ -12,7 +12,7 @@
  * @requirement:REQ-THINK-UI-003 - Toggle via setting
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { render } from 'ink-testing-library';
 import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
 import { Colors } from '../../colors.js';

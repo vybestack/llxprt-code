@@ -19,7 +19,7 @@ import {
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision } from '../policy/types.js';
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 
 interface MockToolOptions {
   name: string;

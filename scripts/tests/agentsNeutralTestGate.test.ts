@@ -21,7 +21,7 @@
  * @requirement:REQ-012.3
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -226,7 +226,6 @@ describe('agents-neutral-test-gate — unrelated fixture in exempt boundary file
     // extractSystemInstructionText), but the `unrelated` fixture is NOT
     // passed to any converter — it must still FAIL.
     const source = `
-import { extractSystemInstructionText } from './helper.js';
 it('test', () => {
   const content = { role: 'system', parts: [{ text: 'hello' }] };
   expect(extractSystemInstructionText(content as unknown)).toBe('hello');

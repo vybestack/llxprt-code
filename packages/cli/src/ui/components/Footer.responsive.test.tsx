@@ -4,29 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import type React from 'react';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type MockedFunction,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('../hooks/useTerminalSize.js');
+const realUseTerminalSizeModule = {
+  ...(await import('../hooks/useTerminalSize.js')),
+};
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../hooks/useTerminalSize.js', () =>
+  automock(realUseTerminalSizeModule),
+);
+
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getActiveProviderStatus: () => ({ providerName: 'gemini' }),
   }),
 }));
 
-vi.mock('node:v8', () => ({
+void vi.mock('node:v8', () => ({
   default: {
     getHeapStatistics: vi.fn(() => ({
       heap_size_limit: 8 * 1024 * 1024 * 1024,
@@ -34,9 +34,7 @@ vi.mock('node:v8', () => ({
   },
 }));
 
-const mockUseTerminalSize = useTerminalSize as MockedFunction<
-  typeof useTerminalSize
->;
+const mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
 
 function renderFooter(
   props: React.ComponentProps<typeof Footer>,

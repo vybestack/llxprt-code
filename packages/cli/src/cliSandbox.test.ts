@@ -11,7 +11,7 @@
  * the full sandbox hop.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   resolveContainerMemoryMB,
   findFirstPositionalArgIndex,

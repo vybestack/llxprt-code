@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,8 +45,9 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 // real, because sandbox-containers.ts evaluates promisify(exec) at module
 // scope; a stub there would produce an execAsync that never settles and
 // would hang the first test to reach that path.
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual: typeof import('node:child_process') = await importOriginal();
+const __actual = { ...(await import('node:child_process')) };
+void vi.mock('node:child_process', () => {
+  const actual: typeof import('node:child_process') = __actual;
   return {
     ...actual,
     execSync: vi.fn(),
@@ -103,7 +112,7 @@ function buildThenSetup(fixturePath: string): {
   };
 }
 
-describe.sequential('#1456 container network policy', () => {
+describe('#1456 container network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -111,7 +120,9 @@ describe.sequential('#1456 container network policy', () => {
     environmentSnapshot = { ...process.env };
     fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-1456-'));
     vi.resetAllMocks();
-    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    (
+      childProcess.execSync as Mock<typeof childProcess.execSync>
+    ).mockReturnValue(Buffer.from(''));
   });
 
   afterEach(() => {
@@ -134,7 +145,9 @@ describe.sequential('#1456 container network policy', () => {
       const orchestrate = () => buildThenSetup(fixturePath);
       expect(orchestrate).toThrowError(FatalSandboxError);
       expect(orchestrate).toThrowError(PROXIED_NETWORK_ERROR);
-      expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+      expect(
+        childProcess.execSync as Mock<typeof childProcess.execSync>,
+      ).not.toHaveBeenCalled();
     },
   );
 
@@ -144,7 +157,9 @@ describe.sequential('#1456 container network policy', () => {
     expect(() => buildThenSetup(fixturePath)).toThrowError(
       PROXIED_NETWORK_ERROR,
     );
-    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('keeps a defined-empty primary authoritative over legacy proxied', () => {
@@ -154,7 +169,9 @@ describe.sequential('#1456 container network policy', () => {
 
     expect(proxyCommand).toBeUndefined();
     expect(args).not.toContain('--network');
-    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('keeps primary "on" authoritative over legacy proxied', () => {
@@ -164,7 +181,9 @@ describe.sequential('#1456 container network policy', () => {
 
     expect(proxyCommand).toBeUndefined();
     expect(args).not.toContain('--network');
-    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('keeps primary proxied authoritative over legacy off', () => {
@@ -173,7 +192,9 @@ describe.sequential('#1456 container network policy', () => {
     expect(() => buildThenSetup(fixturePath)).toThrowError(
       PROXIED_NETWORK_ERROR,
     );
-    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('retains the exact network-off argument pair', () => {
@@ -214,10 +235,14 @@ describe.sequential('#1456 container network policy', () => {
       '--network',
       'llxprt-code-sandbox',
     ]);
-    expect(vi.mocked(childProcess.execSync)).toHaveBeenCalledWith(
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox || docker network create --internal llxprt-code-sandbox',
     );
-    expect(vi.mocked(childProcess.execSync)).toHaveBeenCalledWith(
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox-proxy || docker network create llxprt-code-sandbox-proxy',
     );
     expect(warnSpy).not.toHaveBeenCalled();
@@ -244,7 +269,7 @@ const CONTAINER_ENV_VARS = [
 
 const ENV_CONFIG = { command: 'docker', image: 'test' } as const;
 
-describe.sequential('#2946 container credential isolation', () => {
+describe('#2946 container credential isolation', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let tempDirs: string[] = [];
 
@@ -407,7 +432,7 @@ const HARDENING_ENV_KEYS = [
   'LLXPRT_CODE_INTEGRATION_TEST',
 ] as const;
 
-describe.sequential('#2902 sandbox privilege hardening', () => {
+describe('#2902 sandbox privilege hardening', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -418,7 +443,9 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
     // current-user path calls `id -u` / `id -g` via execSync; stub to empty
     // so the path completes without a real shell. The cap-add values under
     // test do not depend on uid/gid.
-    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    (
+      childProcess.execSync as Mock<typeof childProcess.execSync>
+    ).mockReturnValue(Buffer.from(''));
     for (const key of HARDENING_ENV_KEYS) delete process.env[key];
   });
 
@@ -498,7 +525,9 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
     // startProxyContainer builds a second `run` argv that previously bypassed
     // the hardening. spawn is stubbed to throw immediately so the function
     // rejects before performing I/O, while the call args are recorded.
-    vi.mocked(childProcess.spawn).mockImplementation(() => {
+    (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mockImplementation(() => {
       throw new Error('proxy-argv-captured');
     });
 
@@ -506,7 +535,9 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
       startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
     ).rejects.toThrow('proxy-argv-captured');
 
-    const spawnCalls = vi.mocked(childProcess.spawn).mock.calls;
+    const spawnCalls = (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mock.calls;
     expect(spawnCalls.length).toBeGreaterThan(0);
     const proxyArgs = spawnCalls[0][1];
     expect(proxyArgs).toContain('--cap-drop=ALL');
@@ -519,7 +550,9 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
     // The proxy sidecar has always forwarded setupContainerUser's userFlag
     // (unchanged by this PR). Assert that the hardening flags coexist with it
     // and that the user selection is still passed through intact.
-    vi.mocked(childProcess.spawn).mockImplementation(() => {
+    (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mockImplementation(() => {
       throw new Error('proxy-argv-captured');
     });
 
@@ -533,7 +566,9 @@ describe.sequential('#2902 sandbox privilege hardening', () => {
       ),
     ).rejects.toThrow('proxy-argv-captured');
 
-    const proxyArgs = vi.mocked(childProcess.spawn).mock.calls[0][1];
+    const proxyArgs = (
+      childProcess.spawn as unknown as Mock<typeof childProcess.spawn>
+    ).mock.calls[0][1];
     expect(proxyArgs).toContain('--cap-drop=ALL');
     const secIdx = proxyArgs.indexOf('--security-opt');
     expect(proxyArgs[secIdx + 1]).toBe('no-new-privileges');
@@ -620,7 +655,7 @@ const CANONICAL_CONFIG_MOUNT_ENV_KEYS = [
   'LLXPRT_LOG_HOME',
 ] as const;
 
-describe.sequential('#3081 canonical config mount + env pinning', () => {
+describe('#3081 canonical config mount + env pinning', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -628,7 +663,9 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
     environmentSnapshot = { ...process.env };
     fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-3081-'));
     vi.resetAllMocks();
-    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    (
+      childProcess.execSync as Mock<typeof childProcess.execSync>
+    ).mockReturnValue(Buffer.from(''));
     // Force the non-current-user path deterministically: the Debian/Ubuntu
     // auto-detect makes shouldUseCurrentUserInSandbox return true on some
     // CI hosts. containerHome is then /home/node regardless of host.
@@ -768,7 +805,9 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
     await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
       /may not override reserved key 'LLXPRT_CONFIG_HOME'/,
     );
-    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+    expect(
+      childProcess.execSync as Mock<typeof childProcess.execSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('translates Windows host paths: no backslash in emitted config home or entrypoint roots', () => {
@@ -792,7 +831,7 @@ describe.sequential('#3081 canonical config mount + env pinning', () => {
   });
 });
 
-describe.sequential('#3081 current-user container-home agreement', () => {
+describe('#3081 current-user container-home agreement', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
 
@@ -800,7 +839,9 @@ describe.sequential('#3081 current-user container-home agreement', () => {
     environmentSnapshot = { ...process.env };
     fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'container-3081-cu-'));
     vi.resetAllMocks();
-    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(''));
+    (
+      childProcess.execSync as Mock<typeof childProcess.execSync>
+    ).mockReturnValue(Buffer.from(''));
     process.env.SANDBOX_SET_UID_GID = '1';
     for (const key of CANONICAL_CONFIG_MOUNT_ENV_KEYS) {
       if (key !== 'SANDBOX_SET_UID_GID') delete process.env[key];
@@ -838,7 +879,7 @@ describe.sequential('#3081 current-user container-home agreement', () => {
     // LLXPRT_CONFIG_HOME still points at the config bind mount, not the home.
     const configHome = envValue(args, 'LLXPRT_CONFIG_HOME');
     expect(configHome).toBe(getContainerPath(Storage.getGlobalConfigDir()));
-    expect(volumeDestinations(args)).toContain(configHome);
+    expect(volumeDestinations(args)).toContain(configHome as string);
 
     // The current-user branch was actually taken (the other branch is covered
     // by the #3081 canonical config mount describe above).

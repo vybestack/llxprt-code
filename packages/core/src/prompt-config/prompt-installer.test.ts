@@ -5,7 +5,7 @@
  * using temporary directories to ensure the installer works correctly.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   PromptInstaller,
   REQUIRED_DIRECTORIES,

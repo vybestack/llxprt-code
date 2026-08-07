@@ -9,7 +9,7 @@
  * Assertions target observable store/output behavior only.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { TodoPauseTool, TodoWriteTool, TodoReadTool } from '../index.js';
 import type { ITodoService, TodoStore } from '../interfaces/index.js';
 import type { Todo } from '../types/todo-schemas.js';

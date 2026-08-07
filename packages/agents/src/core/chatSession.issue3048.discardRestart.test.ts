@@ -24,7 +24,7 @@
  * generateChatCompletion async generator.
  */
 
-import { describe, it, expect, beforeEach, vi } from '../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -427,7 +427,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-budget',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
     expect(attempt).toBe(2);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
   });
@@ -457,7 +457,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-nontransient',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('Bad request');
+    await expect(collectEvents(stream)).rejects.toThrow('Bad request');
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -496,7 +496,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-invalid-stream',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
+    await expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -531,7 +531,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-abort',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('Request aborted');
+    await expect(collectEvents(stream)).rejects.toThrow('Request aborted');
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -558,7 +558,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-abort-code',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('terminated');
+    await expect(collectEvents(stream)).rejects.toThrow('terminated');
     expect(attempt).toBe(1);
   });
 
@@ -587,7 +587,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-abort-signal',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('terminated');
+    await expect(collectEvents(stream)).rejects.toThrow('terminated');
     expect(attempt).toBe(1);
   });
 

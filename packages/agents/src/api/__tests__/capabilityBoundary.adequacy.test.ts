@@ -22,7 +22,7 @@
  * shares its exact, RegExp-free parity semantics.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
@@ -277,16 +277,6 @@ function isDriverAllowed(specifier: string): boolean {
     return true;
   }
   if (specifier === 'bun:test' || specifier.startsWith('bun:test/')) {
-    return true;
-  }
-  // The workspace test-API facade (src/testApi.ts) is the framework entry
-  // point for these suites — it re-exports Bun's test API with the corrections
-  // the compat shim actually installs at runtime. It stands in for what used to
-  // be a bare 'vitest' import, so it is allowed on the same grounds.
-  //
-  // Matched narrowly rather than allowing '../' generally, which would let the
-  // driver reach arbitrary in-tree modules and defeat this boundary.
-  if (/^(?:\.\.\/)+testApi\.js$/.test(specifier)) {
     return true;
   }
   if (specifier === 'fast-check' || specifier.startsWith('fast-check/')) {

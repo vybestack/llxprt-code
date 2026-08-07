@@ -15,7 +15,7 @@
  * imports the real implementation without any `vi.mock` setup.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { mergePartListUnions } from '../streamUtils.js';
 
 // ─── mergePartListUnions ──────────────────────────────────────────────────────

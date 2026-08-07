@@ -6,7 +6,7 @@
  * Behavioral tests for ast_edit empty and edge-case inputs (issue #1758).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {

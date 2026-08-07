@@ -4,19 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { getStartupWarnings } from './startupWarnings';
 import fs from 'fs/promises';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
-vi.mock('fs/promises');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    getErrorMessage: vi.fn(),
-  };
-});
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+void vi.mock('fs/promises', () => automock(realPromisesModule));
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  getErrorMessage: vi.fn(),
+}));
 
 /**
  * Tests for startup warnings functionality.
@@ -30,9 +31,9 @@ describe('startupWarnings', () => {
 
   it('should return warnings from the file and delete it', async () => {
     const mockWarnings = 'Warning 1\nWarning 2';
-    vi.mocked(fs.access).mockResolvedValue();
-    vi.mocked(fs.readFile).mockResolvedValue(mockWarnings);
-    vi.mocked(fs.unlink).mockResolvedValue();
+    (fs.access as Mock<typeof fs.access>).mockResolvedValue();
+    (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue(mockWarnings);
+    (fs.unlink as Mock<typeof fs.unlink>).mockResolvedValue();
 
     const warnings = await getStartupWarnings();
 
@@ -45,7 +46,7 @@ describe('startupWarnings', () => {
   it('should return an empty array if the file does not exist', async () => {
     const error = new Error('File not found');
     (error as Error & { code: string }).code = 'ENOENT';
-    vi.mocked(fs.access).mockRejectedValue(error);
+    (fs.access as Mock<typeof fs.access>).mockRejectedValue(error);
 
     const warnings = await getStartupWarnings();
 
@@ -54,8 +55,10 @@ describe('startupWarnings', () => {
 
   it('should return an error message if reading the file fails', async () => {
     const error = new Error('Permission denied');
-    vi.mocked(fs.access).mockRejectedValue(error);
-    vi.mocked(getErrorMessage).mockReturnValue('Permission denied');
+    (fs.access as Mock<typeof fs.access>).mockRejectedValue(error);
+    (getErrorMessage as Mock<typeof getErrorMessage>).mockReturnValue(
+      'Permission denied',
+    );
 
     const warnings = await getStartupWarnings();
 
@@ -66,9 +69,11 @@ describe('startupWarnings', () => {
 
   it('should return a warning if deleting the file fails', async () => {
     const mockWarnings = 'Warning 1';
-    vi.mocked(fs.access).mockResolvedValue();
-    vi.mocked(fs.readFile).mockResolvedValue(mockWarnings);
-    vi.mocked(fs.unlink).mockRejectedValue(new Error('Permission denied'));
+    (fs.access as Mock<typeof fs.access>).mockResolvedValue();
+    (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue(mockWarnings);
+    (fs.unlink as Mock<typeof fs.unlink>).mockRejectedValue(
+      new Error('Permission denied'),
+    );
 
     const warnings = await getStartupWarnings();
 

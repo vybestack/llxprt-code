@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { act } from 'react';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 
-vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+const realRealInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
+
+void vi.mock('ink', () => realRealInkModule);
 
 import {
   PoliciesDialog,
@@ -18,34 +20,31 @@ import {
 } from './PoliciesDialog.js';
 import { MessageType } from '../types.js';
 
-const PolicyDecision = vi.hoisted(() => ({
+const PolicyDecision = {
   ALLOW: 'allow',
   DENY: 'deny',
   ASK_USER: 'ask_user',
-})) as unknown as typeof import('@vybestack/llxprt-code-core').PolicyDecision;
+} as unknown as typeof import('@vybestack/llxprt-code-core').PolicyDecision;
 
-const mockListEditableRules = vi.hoisted(() => vi.fn());
-const mockAddEditableRule = vi.hoisted(() => vi.fn());
-const mockUpdateEditableRule = vi.hoisted(() => vi.fn());
-const mockDeleteEditableRule = vi.hoisted(() => vi.fn());
-const mockDuplicateEditableRule = vi.hoisted(() => vi.fn());
-const mockReloadUserPolicyRules = vi.hoisted(() => vi.fn());
+const mockListEditableRules = vi.fn();
+const mockAddEditableRule = vi.fn();
+const mockUpdateEditableRule = vi.fn();
+const mockDeleteEditableRule = vi.fn();
+const mockDuplicateEditableRule = vi.fn();
+const mockReloadUserPolicyRules = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    PolicyDecision,
-    MAX_USER_PRIORITY: 999,
-    listEditableRules: mockListEditableRules,
-    addEditableRule: mockAddEditableRule,
-    updateEditableRule: mockUpdateEditableRule,
-    deleteEditableRule: mockDeleteEditableRule,
-    duplicateEditableRule: mockDuplicateEditableRule,
-    reloadUserPolicyRules: mockReloadUserPolicyRules,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  PolicyDecision,
+  MAX_USER_PRIORITY: 999,
+  listEditableRules: mockListEditableRules,
+  addEditableRule: mockAddEditableRule,
+  updateEditableRule: mockUpdateEditableRule,
+  deleteEditableRule: mockDeleteEditableRule,
+  duplicateEditableRule: mockDuplicateEditableRule,
+  reloadUserPolicyRules: mockReloadUserPolicyRules,
+}));
 
 const mockAddItem = vi.fn();
 

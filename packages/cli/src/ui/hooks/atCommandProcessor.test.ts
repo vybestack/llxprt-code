@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { handleAtCommand } from './atCommandProcessor.js';
 import { type DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';

@@ -20,7 +20,7 @@
  *       (enforced by the type system at compile time — no runtime test needed).
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   buildAgent,
   drain,

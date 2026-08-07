@@ -22,7 +22,7 @@
  * @pseudocode 003-github-broker.md lines 124b-124k
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { OP_REGISTRY } from '../github-broker-ops.js';
 import { assertNotPartialSuccess } from '../github-broker-shaping.js';
 

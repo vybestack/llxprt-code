@@ -4,21 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
-const mockInstallSkill = vi.hoisted(() => vi.fn());
+const mockInstallSkill = vi.fn();
 
-vi.mock('../../utils/skillUtils.js', () => ({
+void vi.mock('../../utils/skillUtils.js', () => ({
   installSkill: mockInstallSkill,
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...(actual as object),
-    debugLogger: { log: vi.fn(), error: vi.fn() },
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...(actual as object),
+  debugLogger: { log: vi.fn(), error: vi.fn() },
+}));
 
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { handleInstall, installCommand } from './install.js';

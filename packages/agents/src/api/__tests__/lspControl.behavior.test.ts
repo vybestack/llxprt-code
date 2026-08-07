@@ -16,7 +16,7 @@
  * delegation to Config.getLspConfig()/getLspServiceClient().
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type {
   AgentLspConfig,
   AgentLspServerConfig,

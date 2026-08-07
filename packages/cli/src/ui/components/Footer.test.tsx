@@ -5,9 +5,10 @@
  */
 
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { vi } from '../../test-utils/bunTest.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { act } from 'react';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { Footer } from './Footer.js';
 
 let mockProcessVersions: NodeJS.ProcessVersions;
@@ -23,18 +24,18 @@ const mockMemoryUsage: NodeJS.MemoryUsage = {
 };
 
 // Mock the responsive hooks and utilities
-vi.mock('../hooks/useResponsive.js', () => ({
+void vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: vi.fn(),
 }));
 
-vi.mock('../utils/responsive.js', () => ({
+void vi.mock('../utils/responsive.js', () => ({
   truncateMiddle: vi.fn((text: string, maxLength: number) =>
     text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text,
   ),
 }));
 
-vi.mock('node:process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:process')>();
+const actual = { ...(await import('node:process')) };
+void vi.mock('node:process', () => {
   // Under Bun, require('node:process') returns the process namespace
   // directly (no .default wrapper), so normalize the shape.
   const actualDefault =
@@ -54,13 +55,13 @@ vi.mock('node:process', async (importOriginal) => {
   };
 });
 
-vi.mock('node:v8', () => ({
+void vi.mock('node:v8', () => ({
   default: {
     getHeapStatistics: vi.fn(() => mockHeapStatistics),
   },
 }));
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getActiveProviderStatus: () => ({ providerName: 'gemini' }),
   }),
@@ -69,7 +70,7 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 import { useResponsive } from '../hooks/useResponsive.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-const mockUseResponsive = vi.mocked(useResponsive);
+const mockUseResponsive = useResponsive as Mock<typeof useResponsive>;
 
 describe('Footer', () => {
   const defaultProps = {
@@ -565,7 +566,7 @@ describe('Footer', () => {
       mockHeapStatistics.heap_size_limit = 8 * 1024 ** 3;
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(2000);
+        await advanceTimersByTimeAsync(2000);
       });
 
       textContent = lastFrame() ?? '';
@@ -605,7 +606,7 @@ describe('Footer', () => {
       mockMemoryUsage.arrayBuffers = 8 * 1024 * 1024;
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(2000);
+        await advanceTimersByTimeAsync(2000);
       });
 
       textContent = lastFrame() ?? '';

@@ -22,7 +22,7 @@
  * the OBSERVED argument is neutral ContentBlock[].
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildLlmPartsFromToolCalls } from './task-runtime-helpers.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';

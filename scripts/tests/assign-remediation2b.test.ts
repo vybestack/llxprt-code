@@ -12,7 +12,7 @@
  * These execute the REAL bash scripts against the fake gh infrastructure.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'fs';
 import * as nodePath from 'path';
 import {

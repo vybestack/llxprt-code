@@ -6,7 +6,7 @@
 
 /// <reference types="vitest/globals" />
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   validateSettings,
   formatValidationError,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 import { configCommand } from './config.js';
 import yargs from 'yargs';
@@ -15,29 +15,35 @@ import type * as settingsModule from './settings.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import type { ExtensionSetting } from '../../config/extensions/extensionSettings.js';
 
+const realSettingsIntegrationModule = {
+  ...(await import('../../config/extensions/settingsIntegration.js')),
+};
+const realExtensionModule = { ...(await import('../../config/extension.js')) };
+const realConfigModule = { ...(await import('./config.js')) };
+
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 const mockGetScopedEnvContents: Mock<
   typeof settingsIntegrationModule.getScopedEnvContents
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadExtensionSettingsFromManifest: Mock<
   typeof settingsIntegrationModule.loadExtensionSettingsFromManifest
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockGetExtensionAndConfig: Mock<
   typeof utilsModule.getExtensionAndConfig
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 const mockLoadExtensionConfig: Mock<
   typeof extensionModule.loadExtensionConfig
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockPromptForSetting: Mock<typeof settingsModule.promptForSetting> =
-  vi.hoisted(() => vi.fn());
-const mockConfirmOverwrite: Mock = vi.hoisted(() => vi.fn());
-const mockLoadSettings: Mock = vi.hoisted(() => vi.fn());
+  vi.fn();
+const mockConfirmOverwrite: Mock<(promptType: unknown) => boolean> = vi.fn();
+const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
 // Mock readline module to control confirmOverwrite
-vi.mock('node:readline', () => ({
+void vi.mock('node:readline', () => ({
   createInterface: vi.fn(() => ({
     question: vi.fn((prompt: string, callback: (answer: string) => void) => {
       // Call the mocked confirmOverwrite function and resolve based on its return value
@@ -62,10 +68,8 @@ function resolvePromptType(prompt: string): string {
   return 'unknown';
 }
 
-vi.mock('../../config/extensions/settingsIntegration.js', async () => {
-  const actual = await vi.importActual<typeof settingsIntegrationModule>(
-    '../../config/extensions/settingsIntegration.js',
-  );
+void vi.mock('../../config/extensions/settingsIntegration.js', () => {
+  const actual = realSettingsIntegrationModule;
   return {
     updateSetting: mockUpdateSetting,
     getScopedEnvContents: mockGetScopedEnvContents,
@@ -74,14 +78,12 @@ vi.mock('../../config/extensions/settingsIntegration.js', async () => {
   };
 });
 
-vi.mock('./utils.js', () => ({
+void vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../../config/extension.js', async () => {
-  const actual = await vi.importActual<typeof extensionModule>(
-    '../../config/extension.js',
-  );
+void vi.mock('../../config/extension.js', () => {
+  const actual = realExtensionModule;
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -89,22 +91,20 @@ vi.mock('../../config/extension.js', async () => {
   };
 });
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   promptForSetting: mockPromptForSetting,
 }));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-vi.mock('./utils.js', () => ({
+void vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../../config/extension.js', async () => {
-  const actual = await vi.importActual<typeof extensionModule>(
-    '../../config/extension.js',
-  );
+void vi.mock('../../config/extension.js', () => {
+  const actual = realExtensionModule;
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
@@ -112,21 +112,21 @@ vi.mock('../../config/extension.js', async () => {
   };
 });
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   promptForSetting: mockPromptForSetting,
 }));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings: mockLoadSettings,
 }));
 
 // Mock confirmOverwrite in the config module
-vi.mock('./config.js', async () => {
-  const actual = await vi.importActual('./config.js');
+void vi.mock('./config.js', () => {
+  const actual = realConfigModule;
   return {
     ...actual,
     confirmOverwrite: mockConfirmOverwrite,
@@ -153,7 +153,7 @@ describe('extensions config command', () => {
     mockGetScopedEnvContents.mockResolvedValue({});
     mockLoadExtensionSettingsFromManifest.mockReturnValue([]);
     mockPromptForSetting.mockResolvedValue('test-value');
-    mockConfirmOverwrite.mockResolvedValue(true);
+    mockConfirmOverwrite.mockReturnValue(true);
     mockLoadUserExtensions.mockReturnValue([]);
     mockLoadExtensionConfig.mockResolvedValue({
       name: 'test-ext',
@@ -293,7 +293,7 @@ describe('extensions config command', () => {
       mockGetScopedEnvContents.mockResolvedValue({
         API_KEY: 'existing-value',
       });
-      mockConfirmOverwrite.mockResolvedValue(true);
+      mockConfirmOverwrite.mockReturnValue(true);
 
       const parser = yargs([]).command(configCommand).fail(false);
       await parser.parseAsync('config test-ext');

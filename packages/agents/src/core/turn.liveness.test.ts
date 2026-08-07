@@ -16,7 +16,11 @@
  * patterns). No mock theater: real Turn + real timers where feasible.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type {
   ServerAgentStreamEvent,
   ServerStreamIdleTimeoutEvent,
@@ -26,26 +30,25 @@ import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
+const actual = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
+  )),
+};
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
-      >();
-    return {
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 type Part = { text: string };
@@ -206,8 +209,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(
@@ -619,8 +622,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -656,8 +659,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }
     })();
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(

@@ -4,9 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 
-vi.mock('../local-oauth-callback.js', () => ({
+void vi.mock('../local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
 }));
 
@@ -21,7 +29,9 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 
-const startLocalOAuthCallbackMock = vi.mocked(startLocalOAuthCallback);
+const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
+  typeof startLocalOAuthCallback
+>;
 const openBrowserArgs: string[] = [];
 
 /**

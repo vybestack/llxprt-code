@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, expect, it, vi } from 'bun:test';
 import type {
   JspBoundDocument,
   JspSnapshotDocument,
@@ -127,7 +128,7 @@ describe('heartbeat cadence', () => {
       producer.start();
       await producer.flush();
       // Advance a full lease window so the interval has fired repeatedly.
-      await vi.advanceTimersByTimeAsync(OBSERVER_LEASE_MS);
+      await advanceTimersByTimeAsync(OBSERVER_LEASE_MS);
       // An observer must be able to lose two consecutive heartbeats inside
       // one lease, so at least three must actually be delivered.
       expect(heartbeats).toBeGreaterThanOrEqual(3);
@@ -758,7 +759,7 @@ describe('heartbeat resilience', () => {
       });
       producer.start();
       await producer.flush();
-      await vi.advanceTimersByTimeAsync(35);
+      await advanceTimersByTimeAsync(35);
 
       // Heartbeats keep being attempted and nothing escapes as an unhandled
       // rejection; the producer is still usable.
@@ -795,7 +796,7 @@ describe('heartbeat resilience', () => {
       // First lifecycle: issue a heartbeat and leave it in flight.
       producer.start();
       await producer.flush();
-      await vi.advanceTimersByTimeAsync(15);
+      await advanceTimersByTimeAsync(15);
       expect(pending.length).toBeGreaterThan(0);
 
       // Restart, then let the stale heartbeat resolve with a credential
@@ -807,7 +808,7 @@ describe('heartbeat resilience', () => {
       for (const resolve of pending) {
         resolve(REJECTED_401);
       }
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
 
       // The restarted producer is still live and still publishing.
       const before = producer.snapshot().source_sequence;

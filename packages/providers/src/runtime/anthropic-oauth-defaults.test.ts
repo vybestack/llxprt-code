@@ -11,14 +11,22 @@
  * - oauthManager.isOAuthEnabled('claudecode') returns true (OAuth is actively being used)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+const realProviderAliasesModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-providers/composition/providerAliases.js'
+  )),
+};
 
 const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
-} = vi.hoisted(() => {
+} = (() => {
   class StubSettingsService {
     providers: Record<string, Record<string, unknown>> = {};
     global: Record<string, unknown> = {};
@@ -141,7 +149,7 @@ const {
   }
 
   return { StubSettingsService, StubConfig, StubProvider };
-});
+})();
 
 type StubSettingsServiceInstance = InstanceType<
   typeof StubSettingsServiceClass
@@ -177,10 +185,8 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-core')>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   let activeContext: {
     settingsService: StubSettingsServiceInstance;
@@ -223,12 +229,10 @@ vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerAliases.js',
   () => {
-    const actual = importActualSync<
-      typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js')
-    >('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+    const actual = realProviderAliasesModule;
     return {
       ...actual,
       loadProviderAliasEntries: () => [],

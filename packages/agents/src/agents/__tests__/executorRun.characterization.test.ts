@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { applyTemplateToInitialMessages } from '../executor-prompt-builder.js';
 import { templateString } from '../utils.js';

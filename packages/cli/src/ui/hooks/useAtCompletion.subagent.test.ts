@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import {
+  advanceTimersByTimeAsync,
+  runOnlyPendingTimersAsync,
+  createTmpDir,
+  cleanupTmpDir,
+} from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
@@ -15,7 +21,6 @@ import {
   DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
 } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
-import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import { useTestHarnessForAtCompletion } from './useAtCompletion-test-helpers.js';
 import { CommandKind } from '../commands/types.js';
 
@@ -366,7 +371,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       });
 
       await act(async () => {
-        await vi.runOnlyPendingTimersAsync();
+        await runOnlyPendingTimersAsync();
       });
       vi.useRealTimers();
 
@@ -497,7 +502,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       );
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(2);
+        await advanceTimersByTimeAsync(2);
         await Promise.resolve();
       });
 

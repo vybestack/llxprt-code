@@ -5,11 +5,12 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 // Unmock ink to use real Ink with ink-testing-library
 // The global mock in test-setup.ts conflicts with renderer behavior here.
-vi.unmock('ink');
+// Under Bun, ink is redirected to a stub by a resolution plugin rather than a
+// module mock, so there is nothing to unmock.
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
 import { useUIState } from '../contexts/UIStateContext.js';
@@ -21,67 +22,67 @@ import {
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
 
-const { dialogManagerRenderSpy, composerRenderSpy } = vi.hoisted(() => ({
+const { dialogManagerRenderSpy, composerRenderSpy } = {
   dialogManagerRenderSpy: vi.fn(() => null),
   composerRenderSpy: vi.fn(() => null),
-}));
+};
 
-vi.mock('../contexts/UIStateContext.js', () => ({
+void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(),
 }));
 
-vi.mock('../contexts/UIActionsContext.js', () => ({
+void vi.mock('../contexts/UIActionsContext.js', () => ({
   useUIActions: vi.fn(),
 }));
 
-vi.mock('../components/DialogManager.js', () => ({
+void vi.mock('../components/DialogManager.js', () => ({
   DialogManager: dialogManagerRenderSpy,
 }));
 
-vi.mock('../components/Composer.js', () => ({
+void vi.mock('../components/Composer.js', () => ({
   Composer: composerRenderSpy,
 }));
 
 // Mock all other child components as null so this test only verifies
 // dialog gating behavior in DefaultAppLayout.
-vi.mock('../components/AppHeader.js', () => ({ AppHeader: () => null }));
-vi.mock('../components/HistoryItemDisplay.js', () => ({
+void vi.mock('../components/AppHeader.js', () => ({ AppHeader: () => null }));
+void vi.mock('../components/HistoryItemDisplay.js', () => ({
   HistoryItemDisplay: () => null,
 }));
-vi.mock('../components/ShowMoreLines.js', () => ({
+void vi.mock('../components/ShowMoreLines.js', () => ({
   ShowMoreLines: () => null,
 }));
-vi.mock('../components/Notifications.js', () => ({
+void vi.mock('../components/Notifications.js', () => ({
   Notifications: () => null,
 }));
-vi.mock('../components/TodoPanel.js', () => ({ TodoPanel: () => null }));
-vi.mock('../components/Footer.js', () => ({ Footer: () => null }));
-vi.mock('../components/BucketAuthConfirmation.js', () => ({
+void vi.mock('../components/TodoPanel.js', () => ({ TodoPanel: () => null }));
+void vi.mock('../components/Footer.js', () => ({ Footer: () => null }));
+void vi.mock('../components/BucketAuthConfirmation.js', () => ({
   BucketAuthConfirmation: () => null,
 }));
-vi.mock('../components/LoadingIndicator.js', () => ({
+void vi.mock('../components/LoadingIndicator.js', () => ({
   LoadingIndicator: () => null,
 }));
-vi.mock('../components/AutoAcceptIndicator.js', () => ({
+void vi.mock('../components/AutoAcceptIndicator.js', () => ({
   AutoAcceptIndicator: () => null,
 }));
-vi.mock('../components/ShellModeIndicator.js', () => ({
+void vi.mock('../components/ShellModeIndicator.js', () => ({
   ShellModeIndicator: () => null,
 }));
-vi.mock('../components/ContextSummaryDisplay.js', () => ({
+void vi.mock('../components/ContextSummaryDisplay.js', () => ({
   ContextSummaryDisplay: () => null,
 }));
-vi.mock('../components/DetailedMessagesDisplay.js', () => ({
+void vi.mock('../components/DetailedMessagesDisplay.js', () => ({
   DetailedMessagesDisplay: () => null,
 }));
-vi.mock('../components/shared/ScrollableList.js', () => ({
+void vi.mock('../components/shared/ScrollableList.js', () => ({
   ScrollableList: () => null,
 }));
-vi.mock('../components/shared/VirtualizedList.js', () => ({
+void vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
 }));
 
-vi.mock('../themes/theme-manager.js', () => ({
+void vi.mock('../themes/theme-manager.js', () => ({
   themeManager: {
     getActiveTheme: () => ({
       name: 'default',
@@ -92,7 +93,7 @@ vi.mock('../themes/theme-manager.js', () => ({
   },
 }));
 
-vi.mock('../colors.js', () => ({
+void vi.mock('../colors.js', () => ({
   Colors: {
     AccentRed: '#ff0000',
     AccentYellow: '#ffff00',
@@ -102,7 +103,7 @@ vi.mock('../colors.js', () => ({
   SemanticColors: new Proxy({}, { get: () => '#808080' }),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   ephemeralSettingHelp: {},
@@ -121,8 +122,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   }),
 }));
 
-const mockUseUIState = vi.mocked(useUIState);
-const mockUseUIActions = vi.mocked(useUIActions);
+const mockUseUIState = useUIState as Mock<typeof useUIState>;
+const mockUseUIActions = useUIActions as Mock<typeof useUIActions>;
 
 function createConfigStub() {
   return {

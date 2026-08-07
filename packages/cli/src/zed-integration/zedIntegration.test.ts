@@ -4,25 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   createSessionScopedConfig,
   parseZedAuthMethodId,
 } from './zedIntegration.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),
@@ -69,9 +70,16 @@ describe('createSessionScopedConfig', () => {
       readTextFile: vi.fn(async (_path: string) => 'replacement'),
       writeTextFile: vi.fn(async () => undefined),
     };
-    const baseProviderManager = { id: 'base' };
-    const firstProviderManager = { id: 'first' };
-    const secondProviderManager = { id: 'second' };
+    // Minimal stand-ins; Config's getters type them as RuntimeProviderManager.
+    const baseProviderManager = {
+      id: 'base',
+    } as unknown as RuntimeProviderManager;
+    const firstProviderManager = {
+      id: 'first',
+    } as unknown as RuntimeProviderManager;
+    const secondProviderManager = {
+      id: 'second',
+    } as unknown as RuntimeProviderManager;
     const baseConfig = {
       getFileSystemService: () => baseFileSystemService,
       setFileSystemService: vi.fn(),
@@ -127,8 +135,13 @@ describe('createSessionScopedConfig', () => {
       readTextFile: vi.fn(async () => 'replacement'),
       writeTextFile: vi.fn(async () => undefined),
     };
-    const baseProviderManager = { id: 'base' };
-    const replacementProviderManager = { id: 'replacement' };
+    // Minimal stand-ins; Config's getters type them as RuntimeProviderManager.
+    const baseProviderManager = {
+      id: 'base',
+    } as unknown as RuntimeProviderManager;
+    const replacementProviderManager = {
+      id: 'replacement',
+    } as unknown as RuntimeProviderManager;
     const baseConfig = {
       getFileSystemService: () => baseFileSystemService,
       setFileSystemService: vi.fn(),
@@ -172,9 +185,16 @@ describe('ZedAgent.newSession', () => {
         };
       },
     );
-    const baseProviderManager = { id: 'base' };
-    const firstProviderManager = { id: 'first' };
-    const secondProviderManager = { id: 'second' };
+    // Minimal stand-ins; Config's getters type them as RuntimeProviderManager.
+    const baseProviderManager = {
+      id: 'base',
+    } as unknown as RuntimeProviderManager;
+    const firstProviderManager = {
+      id: 'first',
+    } as unknown as RuntimeProviderManager;
+    const secondProviderManager = {
+      id: 'second',
+    } as unknown as RuntimeProviderManager;
     const baseConfig = {
       getFileSystemService: () => ({
         readTextFile: vi.fn(async () => 'base'),

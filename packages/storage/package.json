@@ -80,7 +80,9 @@
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace storage",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace storage --junit junit.xml",
     "test:vitest": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:secure-store:keyring": "bun test --timeout 30000 --reporter=junit --reporter-outfile=junit.secure-store.xml src/secure-store/secure-store.native-keyring.test.ts",
+    "test:secure-store:fallback": "bun test --timeout 30000 --reporter=junit --reporter-outfile=junit.secure-store.xml src/secure-store/secure-store.fallback-behavior.test.ts src/secure-store/provider-key-storage.fallback.test.ts"
   },
   "files": [
     "index.ts",

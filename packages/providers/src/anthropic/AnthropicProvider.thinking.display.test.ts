@@ -9,7 +9,7 @@
  * compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
 import {

@@ -17,7 +17,7 @@
  * They will pass after Phase P10 ChatSession refactor.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -83,34 +83,32 @@ function buildRuntimeContext(
 }
 
 // Mock content generator to avoid real API calls
-vi.mock('../core/contentGenerator.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    createContentGenerator: vi.fn().mockResolvedValue({
-      generateContent: vi.fn().mockResolvedValue({
-        response: {
-          text: () => 'mock response',
-          candidates: [],
-          usageMetadata: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      }),
-      generateContentStream: vi.fn().mockResolvedValue({
-        async *stream() {
-          yield {
-            text: () => 'mock stream',
-            candidates: [],
-            usageMetadata: {
-              inputTokens: 10,
-              outputTokens: 20,
-              totalTokens: 30,
-            },
-          };
-        },
-      }),
+const actual = { ...(await import('../core/contentGenerator.js')) };
+void vi.mock('../core/contentGenerator.js', () => ({
+  ...actual,
+  createContentGenerator: vi.fn().mockResolvedValue({
+    generateContent: vi.fn().mockResolvedValue({
+      response: {
+        text: () => 'mock response',
+        candidates: [],
+        usageMetadata: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      },
     }),
-  };
-});
+    generateContentStream: vi.fn().mockResolvedValue({
+      async *stream() {
+        yield {
+          text: () => 'mock stream',
+          candidates: [],
+          usageMetadata: {
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+        };
+      },
+    }),
+  }),
+}));
 
 describe('ChatSession Isolation Integration Tests', () => {
   beforeEach(() => {

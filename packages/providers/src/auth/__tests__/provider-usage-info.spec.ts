@@ -4,18 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // Hoisted mock factories
 // ---------------------------------------------------------------------------
+const realLlxprtCodeProvidersModule = {
+  ...(await import('@vybestack/llxprt-code-providers')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const {
   mockFetchAnthropicUsage,
   mockFetchCodexUsage,
   mockFetchCodexRateLimitResetCredits,
   mockGetSettingsService,
   mockSettingsServiceRef,
-} = vi.hoisted(() => {
+} = (() => {
   const settingsServiceRef = { current: { get: vi.fn(() => false) } };
   return {
     mockFetchAnthropicUsage: vi.fn(),
@@ -24,12 +31,10 @@ const {
     mockGetSettingsService: vi.fn(() => settingsServiceRef.current),
     mockSettingsServiceRef: settingsServiceRef,
   };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-providers', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-providers')
-  >('@vybestack/llxprt-code-providers');
+void vi.mock('@vybestack/llxprt-code-providers', () => {
+  const actual = realLlxprtCodeProvidersModule;
   return {
     ...actual,
     fetchAnthropicUsage: mockFetchAnthropicUsage,
@@ -38,10 +43,8 @@ vi.mock('@vybestack/llxprt-code-providers', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-core')>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getSettingsService: mockGetSettingsService,
@@ -58,7 +61,6 @@ import {
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from '../test-oauth-settings.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0 */
 
-import { describe, it, expect, vi } from 'vitest';
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi } from 'bun:test';
 import { retryWithBackoff } from './retry.js';
 
 interface HttpError extends Error {
@@ -33,7 +34,7 @@ describe('retryWithBackoff - server error failover (issue #1726)', () => {
       onPersistent429: failoverCallback,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).resolves.toBe('success after bucket switch');
     expect(failoverCallback).toHaveBeenCalledTimes(1);
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -70,7 +71,7 @@ describe('retryWithBackoff - server error failover (issue #1726)', () => {
       onPersistent429: failoverCallback,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).resolves.toBe('success after bucket switch');
     // api_error is caught by isOverloadError, treated as overload, and
     // triggers failover through the 429/overload threshold path.

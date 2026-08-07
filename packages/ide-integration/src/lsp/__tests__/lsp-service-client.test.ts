@@ -5,7 +5,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Diagnostic, LspConfig } from '../types.js';
 
 const {
@@ -14,13 +14,13 @@ const {
   streamMessageReaderMock,
   streamMessageWriterMock,
   sendRequestMock,
-} = vi.hoisted(() => ({
+} = {
   spawnMock: vi.fn(),
   createMessageConnectionMock: vi.fn(),
   streamMessageReaderMock: vi.fn(),
   streamMessageWriterMock: vi.fn(),
   sendRequestMock: vi.fn(),
-}));
+};
 
 const createLocatorProcess = () => {
   const proc = new EventEmitter() as EventEmitter & { stdout: PassThrough };
@@ -72,11 +72,11 @@ const createConnection = () => ({
   dispose: vi.fn(),
 });
 
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   spawn: spawnMock,
 }));
 
-vi.mock('vscode-jsonrpc/node.js', () => ({
+void vi.mock('vscode-jsonrpc/node.js', () => ({
   createMessageConnection: createMessageConnectionMock,
   StreamMessageReader: streamMessageReaderMock,
   StreamMessageWriter: streamMessageWriterMock,

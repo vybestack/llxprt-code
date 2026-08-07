@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import {
   llxprtModelToIModel,
@@ -23,8 +31,9 @@ import {
 import { transformModel } from '../../src/models/transformer.js';
 
 // Mock fs module
-vi.mock('node:fs', (importOriginal) => {
-  const actual = importOriginal() as typeof fs;
+const __actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => {
+  const actual = __actual as typeof fs;
   return {
     ...actual,
     existsSync: vi.fn(),
@@ -39,14 +48,14 @@ vi.mock('node:fs', (importOriginal) => {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-const registryState = vi.hoisted(() => ({
+const registryState = {
   instance: null as ModelRegistry | null,
-}));
+};
 
 // Reset singleton between tests
-vi.mock('../../src/models/registry.js', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('../../src/models/registry.js');
+const __actual2 = { ...(await import('../../src/models/registry.js')) };
+void vi.mock('../../src/models/registry.js', () => {
+  const actual = __actual2 as typeof import('../../src/models/registry.js');
 
   return {
     ...actual,
@@ -130,11 +139,11 @@ describe('hasModelInRegistry', () => {
   describe('with initialized registry', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -179,11 +188,11 @@ describe('getExtendedModelInfo', () => {
   describe('with initialized registry', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
@@ -231,11 +240,11 @@ describe('getRecommendedModel', () => {
   describe('with initialized registry', () => {
     beforeEach(async () => {
       const now = Date.now();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
         mtimeMs: now - 1000,
       } as fs.Stats);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));

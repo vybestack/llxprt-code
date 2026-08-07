@@ -6,7 +6,11 @@
  * without changing behavior, so these tests guard against regressions.
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+  restoreEnv,
+  setEnv,
+} from '../../packages/test-utils/src/env-test-helpers.js';
+import { afterEach, describe, it, expect } from 'bun:test';
 import { accessSync, constants as fsConstants } from 'node:fs';
 import { quote } from 'shell-quote';
 
@@ -18,7 +22,7 @@ const TEST_BUN_EXECUTABLE = process.execPath;
 const SHELL_QUOTED_NODE_EXECUTABLE = quote([process.execPath]);
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  restoreEnv();
 });
 
 async function importHarness() {
@@ -216,8 +220,8 @@ describe('buildStartArgs', () => {
 // ---------------------------------------------------------------------------
 describe('resolveStartArgsForTmux', () => {
   it('replaces exact node argv and embedded node placeholders with the configured executable', async () => {
-    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
-    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
+    setEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    setEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { resolveStartArgsForTmux } = await importHarness();
 
     expect(
@@ -234,8 +238,8 @@ describe('resolveStartArgsForTmux', () => {
   });
 
   it('replaces exact bun argv and embedded bun placeholders with the resolved bun executable', async () => {
-    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
-    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
+    setEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    setEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { resolveStartArgsForTmux } = await importHarness();
 
     expect(
@@ -252,8 +256,8 @@ describe('resolveStartArgsForTmux', () => {
   });
 
   it('falls back to a bun executable when BUN_EXECUTABLE_PATH is not set', async () => {
-    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
-    vi.stubEnv('BUN_EXECUTABLE_PATH', '');
+    setEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    setEnv('BUN_EXECUTABLE_PATH', '');
     const { resolveStartArgsForTmux } = await importHarness();
 
     const [resolvedBun] = resolveStartArgsForTmux(['bun']);
@@ -270,8 +274,8 @@ describe('resolveStartArgsForTmux', () => {
 // ---------------------------------------------------------------------------
 describe('buildTmuxStartCommand', () => {
   it('returns one-string commands unchanged after placeholder expansion', async () => {
-    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
-    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
+    setEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    setEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { buildTmuxStartCommand } = await importHarness();
 
     expect(
@@ -283,8 +287,8 @@ describe('buildTmuxStartCommand', () => {
   });
 
   it('shell-quotes multi-argument commands after resolving node', async () => {
-    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
-    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
+    setEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    setEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { buildTmuxStartCommand } = await importHarness();
 
     expect(buildTmuxStartCommand(['node', 'scripts/start.ts'], '')).toBe(
@@ -293,8 +297,8 @@ describe('buildTmuxStartCommand', () => {
   });
 
   it('prefixes artifact directory env when provided', async () => {
-    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
-    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
+    setEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    setEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { buildTmuxStartCommand } = await importHarness();
 
     expect(

@@ -17,7 +17,8 @@
  * of the logger default stub.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { waitFor } from '../../../test-utils/src/wait-for.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import { CodexDeviceFlow } from '../flows/codex-device-flow.js';
@@ -307,7 +308,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         'Codex OAuth network request timed out',
       );
       const elapsed = Date.now() - start;
-      await vi.waitFor(() => expect(body.locked).toBe(false));
+      await waitFor(() => expect(body.locked).toBe(false));
 
       expect({ cancelCount, prompt: elapsed < 500 }).toStrictEqual({
         cancelCount: 1,

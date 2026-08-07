@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useHistory } from './useHistoryManager.js';
@@ -92,7 +90,9 @@ describe('useHistoryManager', () => {
       ...initialItem,
       id: itemId,
       text: updatedText,
-    });
+      // HistoryItem is a discriminated union; the spread `type` widens to the
+      // full union so the literal must be asserted back to HistoryItem.
+    } as unknown as HistoryItem);
   });
 
   it('should not change history if updateHistoryItem is called with a nonexistent ID', () => {

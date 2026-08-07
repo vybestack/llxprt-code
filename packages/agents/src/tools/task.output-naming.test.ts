@@ -11,7 +11,7 @@
  * rejects JSON-Schema-shaped object values.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import {
   validateOutputSpec,

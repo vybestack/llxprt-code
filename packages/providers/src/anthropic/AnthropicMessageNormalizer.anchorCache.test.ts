@@ -37,7 +37,7 @@ import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 // Light boundary mock: prepareAnthropicRequest builds the real system prompt
 // asynchronously; stub it so the gating/count tests stay deterministic and
 // network-free. This is the only mock — no SDK, no ToolFormatter, no iterators.
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 

@@ -13,7 +13,7 @@
  * Tests verify all bucket features work together end-to-end.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import {

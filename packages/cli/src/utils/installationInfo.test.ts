@@ -4,14 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getInstallationInfo, PackageManager } from './installationInfo.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as childProcess from 'child_process';
 import { isGitRepository } from '@vybestack/llxprt-code-core';
 
-const { mockDebugLogger } = vi.hoisted(() => ({
+const { mockDebugLogger } = {
   mockDebugLogger: {
     debug: vi.fn(),
     warn: vi.fn(),
@@ -19,42 +27,39 @@ const { mockDebugLogger } = vi.hoisted(() => ({
     log: vi.fn(),
     info: vi.fn(),
   },
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   isGitRepository: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  return {
-    ...actual,
-    debugLogger: mockDebugLogger,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  debugLogger: mockDebugLogger,
+}));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof fs>();
-  return {
-    ...actualFs,
-    realpathSync: vi.fn(),
-    existsSync: vi.fn(),
-  };
-});
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => ({
+  ...actualFs,
+  realpathSync: vi.fn(),
+  existsSync: vi.fn(),
+}));
 
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('child_process')>();
-  return {
-    ...actual,
-    execSync: vi.fn(),
-  };
-});
+const actualActual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => ({
+  ...actualActual,
+  execSync: vi.fn(),
+}));
 
-const mockedIsGitRepository = vi.mocked(isGitRepository);
-const mockedRealPathSync = vi.mocked(fs.realpathSync);
-const mockedExistsSync = vi.mocked(fs.existsSync);
-const mockedExecSync = vi.mocked(childProcess.execSync);
+const mockedIsGitRepository = isGitRepository as Mock<typeof isGitRepository>;
+const mockedRealPathSync = fs.realpathSync as unknown as Mock<
+  (path: fs.PathLike) => string
+>;
+const mockedExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+const mockedExecSync = childProcess.execSync as unknown as Mock<
+  (command: string) => string
+>;
 
 describe('getInstallationInfo', () => {
   const projectRoot = '/path/to/project';

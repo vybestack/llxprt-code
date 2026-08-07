@@ -8,7 +8,7 @@
  * Integration test to verify circular reference handling with proxy agents
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 describe('Circular Reference Integration Test', () => {
   it('placeholder test for removed ClearcutLogger functionality', () => {

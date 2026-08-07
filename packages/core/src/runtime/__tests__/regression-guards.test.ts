@@ -12,7 +12,7 @@
  * These tests enforce that runtime state remains the authoritative source.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   createAgentRuntimeState,
   updateAgentRuntimeState,

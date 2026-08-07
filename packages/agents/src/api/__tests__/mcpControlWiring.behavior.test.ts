@@ -26,7 +26,7 @@
  * store in teardown.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '../../testApi.js';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fc from 'fast-check';
 import { buildMcpControlDeps } from '../control/mcpControlWiring.js';
 import type {

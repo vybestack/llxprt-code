@@ -9,7 +9,7 @@
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { MessageType } from '../types.js';
@@ -17,14 +17,14 @@ import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-provide
 import type { AppAction } from '../reducers/appReducer.js';
 import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
 
-const useRuntimeApiMock = vi.hoisted(() => vi.fn());
-const useAppDispatchMock = vi.hoisted(() => vi.fn());
+const useRuntimeApiMock = vi.fn();
+const useAppDispatchMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
 }));
 
-vi.mock('../contexts/AppDispatchContext.js', () => ({
+void vi.mock('../contexts/AppDispatchContext.js', () => ({
   useAppDispatch: useAppDispatchMock,
 }));
 

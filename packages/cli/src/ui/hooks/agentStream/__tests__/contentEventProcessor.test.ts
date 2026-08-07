@@ -14,7 +14,7 @@
  * prefix rendering).
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type React from 'react';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId } from '../../../types.js';

@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { useRef, forwardRef, useImperativeHandle, act } from 'react';
 import { render } from 'ink-testing-library';
 import { Box, type DOMElement } from 'ink';
@@ -16,27 +17,24 @@ import {
 import type { MouseEvent } from '../utils/mouse.js';
 
 const mockUseMouseCallbacks = new Set<(event: MouseEvent) => void | boolean>();
-vi.mock('../hooks/useMouse.js', async () => {
-  const React = await import('react');
-  return {
-    useMouse: (callback: (event: MouseEvent) => void | boolean) => {
-      React.useLayoutEffect(() => {
-        mockUseMouseCallbacks.add(callback);
-        return () => {
-          mockUseMouseCallbacks.delete(callback);
-        };
-      }, [callback]);
-    },
-  };
-});
+const React = await import('react');
 
-vi.mock('ink', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('ink')>();
-  return {
-    ...actual,
-    getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),
-  };
-});
+void vi.mock('../hooks/useMouse.js', () => ({
+  useMouse: (callback: (event: MouseEvent) => void | boolean) => {
+    React.useLayoutEffect(() => {
+      mockUseMouseCallbacks.add(callback);
+      return () => {
+        mockUseMouseCallbacks.delete(callback);
+      };
+    }, [callback]);
+  },
+}));
+
+const actual = { ...(await import('ink')) };
+void vi.mock('ink', () => ({
+  ...actual,
+  getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),
+}));
 
 const TestScrollable = forwardRef(
   (
@@ -257,7 +255,7 @@ describe('ScrollProvider', () => {
 
     expect(scrollBy).not.toHaveBeenCalled();
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(scrollBy).toHaveBeenCalledTimes(1);
     expect(scrollBy).toHaveBeenCalledWith(3);
@@ -311,7 +309,7 @@ describe('ScrollProvider', () => {
 
     expect(scrollBy).not.toHaveBeenCalled();
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(scrollBy).toHaveBeenCalledTimes(1);
     expect(scrollBy).toHaveBeenCalledWith(1);
@@ -363,7 +361,7 @@ describe('ScrollProvider', () => {
       });
     }
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(scrollBy).toHaveBeenCalledTimes(1);
     expect(scrollBy).toHaveBeenCalledWith(1);

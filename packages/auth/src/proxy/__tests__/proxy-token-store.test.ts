@@ -8,7 +8,7 @@
  * @plan PLAN-20250214-CREDPROXY.P10
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as fs from 'node:fs';

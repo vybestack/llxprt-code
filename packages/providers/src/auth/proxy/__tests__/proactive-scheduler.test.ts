@@ -14,7 +14,8 @@
  * @plan PLAN-20250214-CREDPROXY.P22
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { ProactiveScheduler } from '../proactive-scheduler.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ describe('ProactiveScheduler', () => {
       expect(scheduler.activeCount).toBe(1);
 
       // Advance past the maximum possible fire time (expiry - 0 jitter)
-      await vi.advanceTimersByTimeAsync(3600 * 1000);
+      await advanceTimersByTimeAsync(3600 * 1000);
 
       expect(refreshFn.calls.length).toBe(1);
       expect(refreshFn.calls[0].provider).toBe('anthropic');
@@ -94,11 +95,11 @@ describe('ProactiveScheduler', () => {
       // Fire time should be in range [expiry - 300 - 60, expiry - 300 - 0]
       // = [3240s, 3300s] from now
       // Advance to just before the earliest fire time
-      await vi.advanceTimersByTimeAsync(3239 * 1000);
+      await advanceTimersByTimeAsync(3239 * 1000);
       expect(refreshFn.calls.length).toBe(0);
 
       // Advance through the full window (3300s from start)
-      await vi.advanceTimersByTimeAsync(61 * 1000);
+      await advanceTimersByTimeAsync(61 * 1000);
       expect(refreshFn.calls.length).toBe(1);
       expect(refreshFn.calls[0].provider).toBe('anthropic');
       expect(refreshFn.calls[0].bucket).toBe('default');
@@ -155,11 +156,11 @@ describe('ProactiveScheduler', () => {
       expect(scheduler.activeCount).toBe(1);
 
       // Advance past original fire time — should NOT fire (cancelled)
-      await vi.advanceTimersByTimeAsync(3600 * 1000);
+      await advanceTimersByTimeAsync(3600 * 1000);
       expect(refreshFn.calls.length).toBe(0);
 
       // Advance to new fire window
-      await vi.advanceTimersByTimeAsync(3600 * 1000);
+      await advanceTimersByTimeAsync(3600 * 1000);
       expect(refreshFn.calls.length).toBe(1);
     });
   });
@@ -185,7 +186,7 @@ describe('ProactiveScheduler', () => {
       expect(scheduler.activeCount).toBe(0);
 
       // Advance past expiry — refreshFn should not be called
-      await vi.advanceTimersByTimeAsync(3600 * 1000);
+      await advanceTimersByTimeAsync(3600 * 1000);
       expect(refreshFn.calls.length).toBe(0);
     });
 
@@ -229,7 +230,7 @@ describe('ProactiveScheduler', () => {
       expect(scheduler.activeCount).toBe(0);
 
       // Advance past all possible fire times — nothing should fire
-      await vi.advanceTimersByTimeAsync(7200 * 1000);
+      await advanceTimersByTimeAsync(7200 * 1000);
       expect(refreshFn.calls.length).toBe(0);
     });
 
@@ -289,7 +290,7 @@ describe('ProactiveScheduler', () => {
       expect(scheduler.activeCount).toBe(1);
 
       // Advance past fire time
-      await vi.advanceTimersByTimeAsync(3600 * 1000);
+      await advanceTimersByTimeAsync(3600 * 1000);
 
       expect(scheduler.activeCount).toBe(0);
     });
@@ -342,7 +343,7 @@ describe('ProactiveScheduler', () => {
       // Advance to exactly (expiry - leadTime) = 3300s. If jitter is applied (> 0),
       // the timer fires before this point. If jitter happens to be 0, it fires at 3300s.
       // Either way, by 3300s the timer should have fired.
-      await vi.advanceTimersByTimeAsync(3300 * 1000);
+      await advanceTimersByTimeAsync(3300 * 1000);
 
       expect(trackFn.calls.length).toBe(1);
       jitterScheduler.cancelAll();
@@ -382,7 +383,7 @@ describe('ProactiveScheduler', () => {
       expect(scheduler.activeCount).toBe(3);
 
       // Advance past all fire times
-      await vi.advanceTimersByTimeAsync(3600 * 1000);
+      await advanceTimersByTimeAsync(3600 * 1000);
 
       expect(refreshFn.calls.length).toBe(3);
 

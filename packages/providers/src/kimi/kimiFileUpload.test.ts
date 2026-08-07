@@ -13,7 +13,7 @@
  * See the License for the specific language.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import {
   uploadKimiFiles,
   buildKimiFileReferenceText,

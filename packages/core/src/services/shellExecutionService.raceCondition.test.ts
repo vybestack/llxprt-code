@@ -4,33 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import EventEmitter from 'events';
 import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
 // Hoisted Mocks
-const mockPtySpawn = vi.hoisted(() => vi.fn());
-const mockCpSpawn = vi.hoisted(() => vi.fn());
-const mockIsBinary = vi.hoisted(() => vi.fn());
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockGetPty = vi.hoisted(() => vi.fn());
+const mockPtySpawn = vi.fn();
+const mockCpSpawn = vi.fn();
+const mockIsBinary = vi.fn();
+const mockPlatform = vi.fn();
+const mockGetPty = vi.fn();
 
 // Top-level Mocks
-vi.mock('@lydell/node-pty', () => ({
+void vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('child_process');
+const __actual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => {
+  const actual = __actual as typeof import('child_process');
   return {
     ...actual,
     spawn: mockCpSpawn,
   };
 });
-vi.mock('../utils/textUtils.js', () => ({
+void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
-vi.mock('os', () => ({
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: () => '/tmp/test-home',
@@ -50,7 +55,7 @@ vi.mock('os', () => ({
     },
   },
 }));
-vi.mock('../utils/getPty.js', () => ({
+void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
@@ -59,9 +64,9 @@ vi.spyOn(process, 'kill').mockImplementation(() => true);
 describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
 
@@ -79,9 +84,9 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
 
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
@@ -196,7 +201,7 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
         true,
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       const handle = await handlePromise;
 
       // Send data
@@ -206,9 +211,9 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
       mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
 
       // Advance time past the finalization timeout
-      await vi.advanceTimersByTimeAsync(1000);
+      await advanceTimersByTimeAsync(1000);
       // Drain any remaining pending microtasks/timers
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       // The result should be available (not hanging)
       const result = await handle.result;

@@ -16,7 +16,7 @@
  * envelope that gets sent — exactly the drift issue #2817 exists to remove.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type {

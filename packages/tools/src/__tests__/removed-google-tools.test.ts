@@ -22,7 +22,7 @@
  *    GoogleWebFetchToolParams type and GoogleWebSearchToolInvocation class.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as ToolsNamespace from '../index.js';
 import * as TypesNamespace from '../types/tool-names.js';
 

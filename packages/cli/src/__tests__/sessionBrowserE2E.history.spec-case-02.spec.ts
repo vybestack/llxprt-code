@@ -15,7 +15,7 @@
  * History conversion
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../test-utils/assertions.js';
 import { performResume } from '../services/performResume.js';
 import {

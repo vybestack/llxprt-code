@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 import http from 'node:http';
 import net from 'node:net';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';

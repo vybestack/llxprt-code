@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 
 import * as actualNodeFs from 'node:fs'; // For setup/teardown
 import fs from 'node:fs';
@@ -32,12 +32,12 @@ import {
 } from './fileUtils.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 
-vi.mock('mime-types', () => ({
+void vi.mock('mime-types', () => ({
   default: { lookup: vi.fn() },
   lookup: vi.fn(),
 }));
 
-const mockMimeLookup = mime.lookup as Mock;
+const mockMimeLookup = mime.lookup as Mock<(...args: never[]) => unknown>;
 
 describe('fileUtils', () => {
   let tempRootDir: string;

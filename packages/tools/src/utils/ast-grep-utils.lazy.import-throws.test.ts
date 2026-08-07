@@ -14,9 +14,9 @@
 // file specifically tests import survival when the registration spy is rigged
 // to throw, which requires a different mock configuration.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 
-const { registerSpy, mockLang } = vi.hoisted(() => {
+const { registerSpy, mockLang } = (() => {
   const mockLang = {
     TypeScript: 'TypeScript',
     JavaScript: 'JavaScript',
@@ -30,9 +30,9 @@ const { registerSpy, mockLang } = vi.hoisted(() => {
     }),
     mockLang,
   };
-});
+})();
 
-vi.mock('@ast-grep/napi', () => ({
+void vi.mock('@ast-grep/napi', () => ({
   __esModule: true,
   Lang: mockLang,
   parse: vi.fn((lang: unknown, content: string) => ({
@@ -49,14 +49,14 @@ vi.mock('@ast-grep/napi', () => ({
 }));
 
 const emptyGrammar = { __esModule: true, default: {} };
-vi.mock('@ast-grep/lang-python', () => emptyGrammar);
-vi.mock('@ast-grep/lang-go', () => emptyGrammar);
-vi.mock('@ast-grep/lang-rust', () => emptyGrammar);
-vi.mock('@ast-grep/lang-java', () => emptyGrammar);
-vi.mock('@ast-grep/lang-cpp', () => emptyGrammar);
-vi.mock('@ast-grep/lang-c', () => emptyGrammar);
-vi.mock('@ast-grep/lang-json', () => emptyGrammar);
-vi.mock('@ast-grep/lang-ruby', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-python', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-go', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-rust', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-java', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-cpp', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-c', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-json', () => emptyGrammar);
+void vi.mock('@ast-grep/lang-ruby', () => emptyGrammar);
 
 describe('ast-grep-utils lazy initialization — import survival', () => {
   it('importing succeeds even when registerDynamicLanguage throws (SAC blocked)', async () => {

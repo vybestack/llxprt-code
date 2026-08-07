@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'bun:test';
 import { CodeAssistServer } from './server.js';
 import { OAuth2Client } from 'google-auth-library';
 import { UserTierId } from './types.js';
 
-vi.mock('google-auth-library', (importOriginal) => {
-  const actual = importOriginal() as typeof import('google-auth-library');
+const __actual = { ...(await import('google-auth-library')) };
+void vi.mock('google-auth-library', () => {
+  const actual = __actual as typeof import('google-auth-library');
   return {
     ...actual,
     OAuth2Client: vi.fn().mockImplementation(() => ({})),

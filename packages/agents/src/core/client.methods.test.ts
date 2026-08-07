@@ -10,7 +10,16 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
@@ -29,7 +38,11 @@ import {
 } from './client-test-helpers.js';
 
 // Mock prompts module before imports
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+const realConfigModule = {
+  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
+
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
     Promise.resolve('Test system instruction'),
   ),
@@ -39,7 +52,7 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
     Array.isArray(v)
@@ -59,19 +72,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -86,22 +99,25 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
-  ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
-    analyzeComplexity: vi.fn().mockReturnValue({
-      complexityScore: 0.2,
-      isComplex: false,
-      detectedTasks: [],
-      sequentialIndicators: [],
-      questionCount: 0,
-      shouldSuggestTodos: false,
-    }),
-  })),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/services/complexity-analyzer.js',
+  () => ({
+    ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
+      analyzeComplexity: vi.fn().mockReturnValue({
+        complexityScore: 0.2,
+        isComplex: false,
+        detectedTasks: [],
+        sequentialIndicators: [],
+        questionCount: 0,
+        shouldSuggestTodos: false,
+      }),
+    })),
+  }),
+);
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
     TodoReminderService: vi.fn().mockImplementation(() => ({
@@ -112,16 +128,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', (importOriginal) => {
-  const result = importOriginal() as
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: mockTodoStoreConstructor,
+}));
+const __actual = { ...(await import('./turn')) };
+void vi.mock('./turn', () => {
+  const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {
@@ -141,14 +155,16 @@ vi.mock('./turn', (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
-vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+  automock(realConfigModule),
+);
+void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
     getResponseText: (result: MockResponseShape) =>
@@ -157,51 +173,45 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual3,
+  ideContext: {
+    ...actual3.ideContext,
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
+}));
+const actual4 = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
   return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
+    ...actual4,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
   };
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
-    const tokenLimit = vi.fn();
-    return {
-      ...actual,
-      tokenLimit,
-      resolveEffectiveContextLimit: vi.fn(
-        (model: string, userCtx?: number, provCtx?: number) => {
-          const ok = (v: unknown): v is number =>
-            typeof v === 'number' && Number.isFinite(v) && v > 0;
-          if (ok(userCtx)) return userCtx;
-          if (ok(provCtx)) return provCtx;
-          return tokenLimit(model);
-        },
-      ),
-    };
-  },
-);
-vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
     getLastPromptTokenCount: vi.fn(),
@@ -347,14 +357,20 @@ describe('AgentClient (client.ts)', () => {
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue(['tool_a']);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        true,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue(['tool_a']);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(true);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
-        'prompt body with new memory',
-      );
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt body with new memory');
 
       await client.updateSystemInstruction();
 
@@ -409,14 +425,20 @@ describe('AgentClient (client.ts)', () => {
         'Always respond in JSON',
       );
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
-        'prompt with core directives',
-      );
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt with core directives');
 
       await client.updateSystemInstruction();
 
@@ -461,12 +483,20 @@ sub memory
       );
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt with jit');
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt with jit');
 
       await client.updateSystemInstruction();
 
@@ -513,12 +543,20 @@ sub memory
       vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue('');
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
-      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
-      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
-        false,
-      );
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
 
-      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt no jit');
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt no jit');
 
       await client.updateSystemInstruction();
 
@@ -635,7 +673,7 @@ sub memory
 
       mockGenerateContentFn.mockRejectedValue(error429);
 
-      const retrySpy = vi.mocked(retryWithBackoff);
+      const retrySpy = retryWithBackoff as Mock<typeof retryWithBackoff>;
       const originalImpl = retrySpy.getMockImplementation();
 
       retrySpy.mockImplementation(async (apiCall) => {
@@ -690,8 +728,8 @@ sub memory
     it('should create a new chat session, clearing the old history', async () => {
       // Setup: Mock getHistory to track history state
       let historyState: IContent[] = [];
-      vi.mocked(client.getHistory).mockImplementation(() =>
-        Promise.resolve([...historyState]),
+      (client.getHistory as Mock<typeof client.getHistory>).mockImplementation(
+        () => Promise.resolve([...historyState]),
       );
 
       // Mock addHistory to update the state

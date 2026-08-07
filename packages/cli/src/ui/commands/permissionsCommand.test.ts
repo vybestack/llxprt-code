@@ -7,15 +7,27 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { permissionsCommand } from './permissionsCommand.js';
 import { CommandKind } from './types.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 import { createMockCommandContext as createBaseMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
-const mockedCwd = vi.hoisted(() => vi.fn());
-const mockedHomedir = vi.hoisted(() => vi.fn(() => '/mock/home/user'));
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+
+const mockedCwd = vi.fn();
+const mockedHomedir = vi.fn(() => '/mock/home/user');
 const mockSetValue = vi.fn();
 const mockSnapshotValue = vi.fn();
 const mockRestoreSnapshot = vi.fn();
@@ -25,24 +37,20 @@ const mockRules: Array<{
   trustLevel: trustedFolders.TrustLevel;
 }> = [];
 
-vi.mock('node:process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:process')>();
-  return {
-    ...actual,
-    cwd: mockedCwd,
-  };
-});
+const actual = { ...(await import('node:process')) };
+void vi.mock('node:process', () => ({
+  ...actual,
+  cwd: mockedCwd,
+}));
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
-    ...actual,
-    homedir: mockedHomedir,
-  };
-});
+const actualActual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actualActual,
+  homedir: mockedHomedir,
+}));
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+void vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -409,7 +417,7 @@ describe('permissionsCommand', () => {
         setTrustedFolderLive,
         getWorkingDir: () => path.join(testRoot, 'config', 'workspace'),
       });
-      vi.mocked(mockedProcess.cwd).mockReturnValue(
+      (mockedProcess.cwd as Mock<typeof mockedProcess.cwd>).mockReturnValue(
         path.join(testRoot, 'process', 'workspace'),
       );
 
@@ -474,11 +482,13 @@ describe('permissionsCommand', () => {
     });
 
     it('returns a user-facing error when trusted-folder loading fails', async () => {
-      vi.mocked(trustedFolders.loadTrustedFolders).mockImplementationOnce(
-        () => {
-          throw new Error('load failed');
-        },
-      );
+      (
+        trustedFolders.loadTrustedFolders as Mock<
+          typeof trustedFolders.loadTrustedFolders
+        >
+      ).mockImplementationOnce(() => {
+        throw new Error('load failed');
+      });
       const mockContext = createMockContext();
 
       const result = await permissionsCommand.action?.(

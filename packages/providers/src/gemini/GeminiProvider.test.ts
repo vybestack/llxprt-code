@@ -4,48 +4,55 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '@google/genai';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import {
   getSettingsService,
   type SettingsService,
 } from '@vybestack/llxprt-code-settings';
 
-const generateContentStreamMock = vi.hoisted(() => vi.fn());
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
 
-const googleGenAIConstructor = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
-    models: {
-      generateContentStream: generateContentStreamMock,
-    },
-  })),
-);
+const generateContentStreamMock = vi.fn();
 
-vi.mock('@google/genai', () => ({
+const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
+  models: {
+    generateContentStream: generateContentStreamMock,
+  },
+}));
+
+void vi.mock('@google/genai', () => ({
   GoogleGenAI: googleGenAIConstructor,
   Type: { OBJECT: 'object' },
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-const mockSettingsService = vi.hoisted(() => ({
+const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
   SETTINGS_REGISTRY: [],
 }));
@@ -59,7 +66,9 @@ describe('GeminiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.get.mockReset();
-    vi.mocked(getSettingsService).mockImplementation(() => mockSettingsService);
+    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
+      () => mockSettingsService,
+    );
     generateContentStreamMock.mockReset();
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -70,9 +79,11 @@ describe('GeminiProvider', () => {
   });
 
   it('uses the constructor fallback when the global settings service is unavailable', () => {
-    vi.mocked(getSettingsService).mockImplementation(() => {
-      throw new Error('SettingsService not registered');
-    });
+    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
+      () => {
+        throw new Error('SettingsService not registered');
+      },
+    );
     const provider = new GeminiProvider();
 
     expect(() => provider.isPaidMode()).not.toThrow();

@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+  mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -29,8 +38,10 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 // is an unmocked OS keychain call. SecureStore already accepts an injectable
 // keyring, so the real storage class is kept and only the keychain is swapped
 // for the in-memory adapter that test-bun/settingsStorage.bun.ts uses.
-vi.mock('./settingsStorage.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./settingsStorage.js')>();
+const realGitUtilsModule = { ...(await import('../../utils/gitUtils.js')) };
+
+const actual = { ...(await import('./settingsStorage.js')) };
+void vi.mock('./settingsStorage.js', () => {
   const entries = new Map<string, string>();
   const keyring = {
     async getPassword(service: string, account: string) {
@@ -64,18 +75,13 @@ vi.mock('./settingsStorage.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../utils/gitUtils.js')>();
-  return {
-    ...actual,
-    getWorkspaceIdentity: vi.fn(actual.getWorkspaceIdentity),
-  };
-});
+const actualActual = { ...(await import('../../utils/gitUtils.js')) };
+void vi.mock('../../utils/gitUtils.js', () => ({
+  ...actualActual,
+  getWorkspaceIdentity: vi.fn(actualActual.getWorkspaceIdentity),
+}));
 
-const actualGitUtils = await vi.importActual<
-  typeof import('../../utils/gitUtils.js')
->('../../utils/gitUtils.js');
+const actualGitUtils = realGitUtilsModule;
 
 describe('settingsIntegration', () => {
   let tempDir: string;
@@ -84,9 +90,9 @@ describe('settingsIntegration', () => {
     // Re-established explicitly rather than relying on mockRestore(): the two
     // runners disagree on whether that returns a mock to the implementation it
     // was constructed with.
-    vi.mocked(getWorkspaceIdentity).mockImplementation(
-      actualGitUtils.getWorkspaceIdentity,
-    );
+    (
+      getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+    ).mockImplementation(actualGitUtils.getWorkspaceIdentity);
     tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-settings-test-'),
     );
@@ -457,7 +463,9 @@ describe('settingsIntegration', () => {
       const workspaceRoot = await fs.promises.mkdtemp(
         path.join(os.tmpdir(), 'llxprt-ws-test-'),
       );
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(workspaceRoot);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(workspaceRoot);
 
       const manifestPath = path.join(tempDir, 'llxprt-extension.json');
       const manifest = {
@@ -507,7 +515,9 @@ describe('settingsIntegration', () => {
       const workspaceRoot = await fs.promises.mkdtemp(
         path.join(os.tmpdir(), 'llxprt-ws-merge-test-'),
       );
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(workspaceRoot);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(workspaceRoot);
 
       const manifestPath = path.join(tempDir, 'llxprt-extension.json');
       const manifest = {
@@ -627,7 +637,9 @@ describe('settingsIntegration', () => {
       );
 
       // Mock getWorkspaceIdentity to return the mock repo root
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(mockRepoRoot);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(mockRepoRoot);
 
       const mockPrompt = vi.fn().mockResolvedValue('workspace-value');
       await updateSetting(
@@ -675,7 +687,7 @@ describe('settingsIntegration', () => {
       );
 
       const mockRepoRoot = '/Users/test/repo';
-      vi.doMock('./../../utils/gitUtils.js', () => ({
+      void mock.module('./../../utils/gitUtils.js', () => ({
         getWorkspaceIdentity: vi.fn(() => mockRepoRoot),
       }));
 
@@ -755,7 +767,9 @@ describe('settingsIntegration', () => {
     });
 
     it('should return workspace source when workspace overrides user', async () => {
-      vi.mocked(getWorkspaceIdentity).mockReturnValue(tempDir);
+      (
+        getWorkspaceIdentity as Mock<typeof getWorkspaceIdentity>
+      ).mockReturnValue(tempDir);
 
       // Create manifest
       const manifestPath = path.join(tempDir, 'llxprt-extension.json');

@@ -15,7 +15,7 @@
  * Error handling
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertFalse } from '../test-utils/assertions.js';
 import * as path from 'node:path';
 import { performResume } from '../services/performResume.js';

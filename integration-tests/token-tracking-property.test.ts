@@ -4,7 +4,7 @@
  * Integration TDD Phase - Property-based tests for token tracking
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';

@@ -9,7 +9,7 @@
  * @requirement REQ-ASYNC-006, REQ-ASYNC-007
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { taskCommand, tasksCommands } from './tasksCommand.js';
 import type { CommandContext } from './types.js';
 import {

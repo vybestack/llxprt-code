@@ -17,7 +17,8 @@
  * reported-zero, provider switch, clear, and canonical reconciliation.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -395,7 +396,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       // Abort by calling return on the iterator
       await stream.return?.(undefined);
       // Deterministically wait for the telemetry pipeline to flush
-      await vi.waitFor(() => {
+      await waitFor(() => {
         const snap = uiTelemetryService.getSessionSnapshot();
         // At least 1 request recorded (either success from normal completion
         // or the recorder processed the terminal event)

@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import type Anthropic from '@anthropic-ai/sdk';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
@@ -107,7 +108,7 @@ describe('Anthropic stream retry ownership', () => {
         metadata: { abortSignal: controller.signal },
       }),
     );
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
     controller.abort();
 

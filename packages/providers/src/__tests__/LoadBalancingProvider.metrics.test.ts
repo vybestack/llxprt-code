@@ -7,7 +7,7 @@
  * Issue #489 - Advanced Failover with Metrics
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -55,7 +55,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   });
 
   afterEach(() => {
-    vi.clearAllTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

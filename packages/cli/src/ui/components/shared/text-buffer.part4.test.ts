@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import stripAnsi from 'strip-ansi';
 import { act } from 'react';
 import { renderHook } from '../../../test-utils/render.js';
@@ -432,7 +430,10 @@ describe('multi-line text', () => {
   ])(
     'should return $expected for $desc (offset $offset)',
     ({ offset, expected }) => {
-      expect(offsetToLogicalPos(text, offset)).toStrictEqual(expected);
+      // it.each types the table tuples as readonly; the actual is mutable.
+      expect(offsetToLogicalPos(text, offset)).toStrictEqual(
+        expected as [number, number],
+      );
     },
   );
 });

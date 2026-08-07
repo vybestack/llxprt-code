@@ -17,7 +17,7 @@
  * ChatSession still uses Config directly.
  */
 
-import { describe, it, expect, vi } from '../../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import {
   Config,

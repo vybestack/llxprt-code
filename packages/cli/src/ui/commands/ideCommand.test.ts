@@ -4,27 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MockInstance } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
 import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
-vi.mock('child_process');
-vi.mock('glob');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    getIdeInstaller: vi.fn(),
-  };
-});
+const realChildProcessModule = { ...(await import('child_process')) };
+const realGlobModule = { ...(await import('glob')) };
+
+void vi.mock('child_process', () => automock(realChildProcessModule));
+void vi.mock('glob', () => automock(realGlobModule));
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  getIdeInstaller: vi.fn(),
+}));
 
 describe('ideCommand', () => {
   let mockContext: CommandContext;
   let mockConfig: Config;
-  let platformSpy: MockInstance;
+  let platformSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     mockContext = {
@@ -58,8 +60,12 @@ describe('ideCommand', () => {
   });
 
   it('should return the ide command', () => {
-    vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
-    vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+    (
+      mockConfig.getIdeMode as Mock<typeof mockConfig.getIdeMode>
+    ).mockReturnValue(true);
+    (
+      mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+    ).mockReturnValue({
       getCurrentIde: () => IDE_DEFINITIONS.vscode,
       getDetectedIdeDisplayName: () => 'VS Code',
       getConnectionStatus: () => ({
@@ -76,8 +82,12 @@ describe('ideCommand', () => {
   });
 
   it('should set autoExecute: true on all subcommands when disconnected', () => {
-    vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
-    vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+    (
+      mockConfig.getIdeMode as Mock<typeof mockConfig.getIdeMode>
+    ).mockReturnValue(true);
+    (
+      mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+    ).mockReturnValue({
       getCurrentIde: () => IDE_DEFINITIONS.vscode,
       getDetectedIdeDisplayName: () => 'VS Code',
       getConnectionStatus: () => ({
@@ -91,8 +101,12 @@ describe('ideCommand', () => {
   });
 
   it('should set autoExecute: true on all subcommands when connected', () => {
-    vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
-    vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+    (
+      mockConfig.getIdeMode as Mock<typeof mockConfig.getIdeMode>
+    ).mockReturnValue(true);
+    (
+      mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+    ).mockReturnValue({
       getCurrentIde: () => IDE_DEFINITIONS.vscode,
       getDetectedIdeDisplayName: () => 'VS Code',
       getConnectionStatus: () => ({
@@ -106,8 +120,12 @@ describe('ideCommand', () => {
   });
 
   it('should show disable command when connected', () => {
-    vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
-    vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+    (
+      mockConfig.getIdeMode as Mock<typeof mockConfig.getIdeMode>
+    ).mockReturnValue(true);
+    (
+      mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+    ).mockReturnValue({
       getCurrentIde: () => IDE_DEFINITIONS.vscode,
       getDetectedIdeDisplayName: () => 'VS Code',
       getConnectionStatus: () => ({
@@ -124,7 +142,9 @@ describe('ideCommand', () => {
   describe('status subcommand', () => {
     const mockGetConnectionStatus = vi.fn();
     beforeEach(() => {
-      vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+      (
+        mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+      ).mockReturnValue({
         getConnectionStatus: mockGetConnectionStatus,
         getCurrentIde: () => IDE_DEFINITIONS.vscode,
         getDetectedIdeDisplayName: () => 'VS Code',
@@ -200,8 +220,12 @@ describe('ideCommand', () => {
   describe('install subcommand', () => {
     const mockInstall = vi.fn();
     beforeEach(() => {
-      vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
-      vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+      (
+        mockConfig.getIdeMode as Mock<typeof mockConfig.getIdeMode>
+      ).mockReturnValue(true);
+      (
+        mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+      ).mockReturnValue({
         getCurrentIde: () => IDE_DEFINITIONS.vscode,
         getConnectionStatus: () => ({
           status: core.IDEConnectionStatus.Disconnected,
@@ -209,7 +233,9 @@ describe('ideCommand', () => {
         getDetectedIdeDisplayName: () => 'VS Code',
         connect: vi.fn(),
       } as unknown as ReturnType<Config['getIdeClient']>);
-      vi.mocked(core.getIdeInstaller).mockReturnValue({
+      (
+        core.getIdeInstaller as Mock<typeof core.getIdeInstaller>
+      ).mockReturnValue({
         install: mockInstall,
         isInstalled: vi.fn(),
       });

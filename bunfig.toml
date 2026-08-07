@@ -3,5 +3,3 @@
 # node_modules behaves identically under bun and npm during the migration.
 linker = "hoisted"
 
-[test]
-preload = ["./test-setup/augment-bun-vi.ts"]

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';

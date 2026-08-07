@@ -9,7 +9,7 @@
  * @plan:PLAN-20250214-CREDPROXY.P25
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 
 import { PKCESessionStore } from '../oauth-session-manager.js';
 

@@ -12,7 +12,7 @@
  * No mocks of the aggregator or service internals.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { UiTelemetryService } from './uiTelemetry.js';
 
 let attemptCounter = 0;

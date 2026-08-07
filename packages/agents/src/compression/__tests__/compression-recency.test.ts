@@ -11,14 +11,7 @@
  * ALREADY_COMPRESSED from NOOP (issue #1792).
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-} from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { PerformCompressionResult } from '../../core/turn.js';
@@ -34,7 +27,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
   delay: vi.fn().mockResolvedValue(undefined),
   createAbortError: () => {
     const err = new Error('Aborted');

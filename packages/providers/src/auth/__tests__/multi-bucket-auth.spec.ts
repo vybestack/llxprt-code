@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { MultiBucketAuthenticator } from '../MultiBucketAuthenticator.js';
 
 /**
@@ -804,10 +805,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       // Advance past the 3-second timeout that currently exists
-      await vi.advanceTimersByTimeAsync(4000);
+      await advanceTimersByTimeAsync(4000);
 
       // MessageBus responds after 5 seconds with approval
-      await vi.advanceTimersByTimeAsync(1000);
+      await advanceTimersByTimeAsync(1000);
       messageBusResponseResolver!(true);
 
       const result = await authPromise;
@@ -892,7 +893,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       // In non-prompt mode with delay, delay is called instead of prompt
       // So this test validates delay-mode behavior is preserved
-      await vi.advanceTimersByTimeAsync(6000);
+      await advanceTimersByTimeAsync(6000);
 
       const result = await authPromise;
 

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { main } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { loadSettings } from './config/settings.js';
@@ -19,7 +27,7 @@ import {
 } from './utils/bootstrap.js';
 import { start_sandbox } from './utils/sandbox.js';
 
-vi.mock('./config/settings.js', () => ({
+void vi.mock('./config/settings.js', () => ({
   loadSettings: vi.fn().mockReturnValue({
     merged: {
       advanced: {},
@@ -39,99 +47,95 @@ vi.mock('./config/settings.js', () => ({
   },
 }));
 
-vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(),
     getTerminalBackgroundColor: vi.fn(),
   },
 }));
 
-vi.mock('./config/config.js', () => ({
+void vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('./config/cliArgParser.js', () => ({
+void vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('read-package-up', () => ({
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn().mockResolvedValue({
     packageJson: { name: 'test-pkg', version: 'test-version' },
     path: '/fake/path/package.json',
   }),
 }));
 
-vi.mock('update-notifier', () => ({
+void vi.mock('update-notifier', () => ({
   default: vi.fn(() => ({ notify: vi.fn() })),
 }));
 
-vi.mock('./utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/events.js')>();
-  return { ...actual, appEvents: { emit: vi.fn() } };
-});
+const actual = { ...(await import('./utils/events.js')) };
+void vi.mock('./utils/events.js', () => ({
+  ...actual,
+  appEvents: { emit: vi.fn() },
+}));
 
-vi.mock('./utils/sandbox.js', () => ({
+void vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''),
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
-vi.mock('./utils/bootstrap.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/bootstrap.js')>();
-  return {
-    ...actual,
-    shouldRelaunchForMemory: vi.fn(() => []),
-    isDebugMode: vi.fn(() => false),
-    computeSandboxMemoryArgs: vi.fn(
-      (..._args: Parameters<typeof actual.computeSandboxMemoryArgs>) =>
-        ['-m', '4096'] as unknown as ReturnType<
-          typeof actual.computeSandboxMemoryArgs
-        >,
-    ),
-  };
-});
+const actualActual = { ...(await import('./utils/bootstrap.js')) };
+void vi.mock('./utils/bootstrap.js', () => ({
+  ...actualActual,
+  shouldRelaunchForMemory: vi.fn(() => []),
+  isDebugMode: vi.fn(() => false),
+  computeSandboxMemoryArgs: vi.fn(
+    (..._args: Parameters<typeof actualActual.computeSandboxMemoryArgs>) =>
+      ['-m', '4096'] as unknown as ReturnType<
+        typeof actualActual.computeSandboxMemoryArgs
+      >,
+  ),
+}));
 
-vi.mock('./utils/relaunch.js', () => ({
+void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn().mockResolvedValue(0),
 }));
 
-vi.mock('./utils/version.js', () => ({
+void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./utils/terminalTheme.js', () => ({
+void vi.mock('./utils/terminalTheme.js', () => ({
   setupTerminalAndTheme: vi.fn(() => Promise.resolve(undefined)),
 }));
 
-vi.mock('./ui/utils/updateCheck.js', () => ({
+void vi.mock('./ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
   runExitCleanup: vi.fn(),
 }));
 
-vi.mock('ink', () => ({
+void vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
 // Mock the provider-activation executor so main() does not invoke real
 // providers-runtime mutators that require a wired CLI runtime context.
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
-  return {
-    ...actual,
-    executeProviderActivation: vi.fn().mockResolvedValue({
-      authFailed: false,
-      infoMessages: [],
-    }),
-  };
-});
+const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actualActual2,
+  executeProviderActivation: vi.fn().mockResolvedValue({
+    authFailed: false,
+    infoMessages: [],
+  }),
+}));
 
-vi.mock('./ui/utils/mouse.js', () => ({
+void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
   disableMouseEvents: vi.fn(),
   parseMouseEvent: vi.fn(),
@@ -142,19 +146,16 @@ vi.mock('./ui/utils/mouse.js', () => ({
   DISABLE_MOUSE_EVENTS: '',
 }));
 
-const { mockWriteToStdout } = vi.hoisted(() => ({
+const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
+};
+const actualActual3 = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual3,
+  writeToStdout: mockWriteToStdout,
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
 }));
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    writeToStdout: mockWriteToStdout,
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
 
 describe('cli sandbox maxHeapSizeMB integration', () => {
   const originalEnv = { ...process.env };
@@ -173,11 +174,15 @@ describe('cli sandbox maxHeapSizeMB integration', () => {
   });
 
   it('passes settings maxHeapSizeMB to computeSandboxMemoryArgs and start_sandbox', async () => {
-    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
-    const loadSettingsMock = vi.mocked(loadSettings);
-    const loadCliConfigMock = vi.mocked(loadCliConfig);
-    const startSandboxMock = vi.mocked(start_sandbox);
-    const computeMock = vi.mocked(computeSandboxMemoryArgs);
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
+    const loadCliConfigMock = loadCliConfig as Mock<typeof loadCliConfig>;
+    const startSandboxMock = start_sandbox as Mock<typeof start_sandbox>;
+    const computeMock = computeSandboxMemoryArgs as Mock<
+      typeof computeSandboxMemoryArgs
+    >;
 
     shouldRelaunchMock.mockReturnValue([]);
     const customMaxHeap = 4096;
@@ -195,7 +200,9 @@ describe('cli sandbox maxHeapSizeMB integration', () => {
 
     const mockConfig = buildSandboxConfig();
     loadCliConfigMock.mockResolvedValue(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce(buildArgv('test prompt'));
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
+      buildArgv('test prompt'),
+    );
 
     const originalIsTTY = process.stdin.isTTY;
     const originalSetRawMode = process.stdin.setRawMode;

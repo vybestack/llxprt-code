@@ -4,21 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { act, StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
-const mockedExit = vi.hoisted(() => vi.fn());
+const realNodeProcessModule = { ...(await import('node:process')) };
+
+const mockedExit = vi.fn();
 const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
-vi.mock('node:process', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:process')>('node:process');
+void vi.mock('node:process', () => {
+  const actual = realNodeProcessModule;
   return {
     ...actual,
     exit: mockedExit,
@@ -120,7 +119,9 @@ describe('FolderTrustDialog', () => {
       stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
 
-    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledOnce();
+    });
     expect(mockedExit).not.toHaveBeenCalled();
     selection.resolve();
     await selection.promise;
@@ -128,7 +129,9 @@ describe('FolderTrustDialog', () => {
     act(() => {
       stdin.write(KITTY_ESCAPE_SEQUENCE);
     });
-    await waitFor(() => expect(mockedExit).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(mockedExit).toHaveBeenCalledOnce();
+    });
   });
 
   it('allows another selection after StrictMode replays the mount effect', async () => {
@@ -149,7 +152,9 @@ describe('FolderTrustDialog', () => {
     act(() => {
       stdin.write('\r');
     });
-    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledOnce();
+    });
 
     selection.resolve();
     await act(async () => selection.promise);

@@ -3,7 +3,7 @@
  * @requirement REQ-008.3, REQ-008.4
  * @pseudocode lines 95-98
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
   GroundingSource,

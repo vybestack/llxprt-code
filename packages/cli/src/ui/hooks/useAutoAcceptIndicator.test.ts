@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useAutoAcceptIndicator } from './useAutoAcceptIndicator.js';
@@ -17,7 +16,9 @@ import type { Key } from './useKeypress.js';
 import { useKeypress } from './useKeypress.js';
 import { MessageType } from '../types.js';
 
-vi.mock('./useKeypress.js');
+const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
+
+void vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
 
 interface AgentStub {
   getApprovalMode: Mock<() => ApprovalMode>;
@@ -45,7 +46,7 @@ describe('useAutoAcceptIndicator', () => {
       setApprovalMode: setApprovalModeMock,
     };
 
-    vi.mocked(useKeypress).mockImplementation(
+    (useKeypress as Mock<typeof useKeypress>).mockImplementation(
       (handler: UseKeypressHandler, _options) => {
         capturedUseKeypressHandler = handler;
         return { refresh: () => {} };

@@ -11,7 +11,7 @@
  *
  * @issue #1142
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
@@ -169,7 +169,9 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
       }),
     ];
 
-    vi.mocked(global.fetch).mockResolvedValue(createStreamingResponse(chunks));
+    (global.fetch as Mock<typeof global.fetch>).mockResolvedValue(
+      createStreamingResponse(chunks),
+    );
 
     const generator = provider.generateChatCompletion(
       [
@@ -297,7 +299,9 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
       }),
     ];
 
-    vi.mocked(global.fetch).mockResolvedValue(createStreamingResponse(chunks));
+    (global.fetch as Mock<typeof global.fetch>).mockResolvedValue(
+      createStreamingResponse(chunks),
+    );
 
     const generator = provider.generateChatCompletion(
       [{ role: 'user' as const, content: 'What is the answer?' }],

@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, beforeEach, it, expect } from 'vitest';
+import type { Mock } from 'bun:test';
+import { vi, describe, beforeEach, it, expect } from 'bun:test';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
-const { MockGoogleAuth } = vi.hoisted(() => {
+const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {
     static mockConstructor = vi.fn();
     constructor(...args: unknown[]) {
@@ -17,9 +17,9 @@ const { MockGoogleAuth } = vi.hoisted(() => {
   }
   MockGoogleAuth.prototype.getClient = vi.fn();
   return { MockGoogleAuth };
-});
+})();
 
-vi.mock('google-auth-library', () => ({
+void vi.mock('google-auth-library', () => ({
   GoogleAuth: MockGoogleAuth,
 }));
 
@@ -46,9 +46,9 @@ describe('GoogleCredentialProvider', () => {
 
   describe('with provider instance', () => {
     let provider: GoogleCredentialProvider;
-    let mockGetAccessToken: Mock;
+    let mockGetAccessToken: Mock<(...args: never[]) => unknown>;
     let mockClient: {
-      getAccessToken: Mock;
+      getAccessToken: Mock<(...args: never[]) => unknown>;
       credentials?: { expiry_date: number | null };
       quotaProjectId?: string;
     };
@@ -71,9 +71,11 @@ describe('GoogleCredentialProvider', () => {
         getAccessToken: mockGetAccessToken,
         credentials: {},
       };
-      (MockGoogleAuth.prototype.getClient as Mock).mockResolvedValue(
-        mockClient,
-      );
+      (
+        MockGoogleAuth.prototype.getClient as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockResolvedValue(mockClient);
       provider = new GoogleCredentialProvider(config);
       vi.clearAllMocks();
     });

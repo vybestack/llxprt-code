@@ -9,8 +9,8 @@
  *
  * Bun's mock.module does not apply mocks to source module imports when the
  * value is captured at module scope (e.g. `const x = promisify(execFile)`).
- * Vi.mock factories run at module evaluation time, AFTER all imports (including
- * the source module) are resolved. To work around this, this module is imported
+ * Bun registers a mock.module at the moment the call runs, so this module is
+ * imported
  * FIRST in the test file, before the source module. This ensures the mock is
  * registered during the import phase, before the source module loads.
  *
@@ -18,7 +18,7 @@
  * configure them (mockResolvedValue, etc.) and assert on them.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import { createRequire } from 'node:module';
 import type * as ChildProcessModule from 'node:child_process';
 import type { ExecFileOptions } from 'node:child_process';
@@ -60,7 +60,7 @@ export const secureBrowserMocks: SecureBrowserMockHolder = {
 
 // Register mocks using Bun's native mock.module BEFORE any source imports.
 // This runs during the import phase, before the source module is loaded.
-mock.module('node:child_process', () => {
+void mock.module('node:child_process', () => {
   const actual = localRequire(
     'node:child_process',
   ) as typeof ChildProcessModule;
@@ -87,7 +87,7 @@ mock.module('node:child_process', () => {
   };
 });
 
-mock.module('node:fs/promises', () => {
+void mock.module('node:fs/promises', () => {
   const actual = localRequire('node:fs/promises') as typeof FsPromisesModule;
   return {
     ...actual,
@@ -95,7 +95,7 @@ mock.module('node:fs/promises', () => {
   };
 });
 
-mock.module('node:os', () => {
+void mock.module('node:os', () => {
   const actual = localRequire('node:os') as typeof OsModule;
   return {
     ...actual,

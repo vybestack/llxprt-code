@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/HookSystem.js';
 import {

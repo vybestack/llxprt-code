@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  advanceTimersByTimeAsync,
+  waitFor,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 interface InstanceMock {
@@ -31,7 +35,7 @@ function createInstanceMock(): InstanceMock {
   };
 }
 
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => {
     const mock = createInstanceMock();
     instances.push(mock);
@@ -39,7 +43,7 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
   }),
 }));
 
-vi.mock('../hooks/hookSystem.js', () => ({
+void vi.mock('../hooks/hookSystem.js', () => ({
   HookSystem: vi.fn().mockImplementation(() => {
     const initialize = vi.fn().mockResolvedValue(undefined);
     hookInitializers.push(initialize);
@@ -380,14 +384,14 @@ describe('Config MCP wiring on folder trust change', () => {
         );
         outcome.catch(() => {});
 
-        await vi.advanceTimersByTimeAsync(0);
+        await advanceTimersByTimeAsync(0);
         const initializationSignal = hookInitializers[0].mock.calls[0][0];
 
-        await vi.advanceTimersByTimeAsync(29_999);
+        await advanceTimersByTimeAsync(29_999);
         expect(initializationSignal).toBeInstanceOf(AbortSignal);
         expect(initializationSignal.aborted).toBe(false);
 
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
         const result = await outcome;
         expect(result).toBeInstanceOf(Error);
         expect(result).toMatchObject({
@@ -410,9 +414,7 @@ describe('Config MCP wiring on folder trust change', () => {
       hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
 
       void config.setTrustedFolderLive(true);
-      await vi.waitFor(() =>
-        expect(hookInitializers[0]).toHaveBeenCalledOnce(),
-      );
+      await waitFor(() => expect(hookInitializers[0]).toHaveBeenCalledOnce());
       const initializationSignal = hookInitializers[0].mock.calls[0][0];
 
       const disposed = config.dispose().then(() => 'disposed');
@@ -441,7 +443,7 @@ describe('Config MCP wiring on folder trust change', () => {
         );
 
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
         const disposePromise = config.dispose();
@@ -468,7 +470,7 @@ describe('Config MCP wiring on folder trust change', () => {
 
         const getHookSystemSpy = vi.spyOn(config, 'getHookSystem');
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
         const disposePromise = config.dispose();
@@ -552,7 +554,7 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].stop.mockRejectedValue(stopError);
 
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
 
@@ -569,7 +571,7 @@ describe('Config MCP wiring on folder trust change', () => {
         instances[0].stop.mockRejectedValue(stopError);
 
         void config.setTrustedFolderLive(false);
-        await vi.waitFor(() =>
+        await waitFor(() =>
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
 

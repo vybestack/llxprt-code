@@ -17,14 +17,7 @@
  * provider AsyncIterable via the existing turn-test-helpers.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-} from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from '../turn.js';
 import type { ServerAgentStreamEvent } from '../turn.js';
 import type { ChatSession } from '../chatSession.js';
@@ -35,12 +28,12 @@ import {
   findFinishedEvent,
 } from '../turn-test-helpers.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 

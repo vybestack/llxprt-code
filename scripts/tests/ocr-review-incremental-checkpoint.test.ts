@@ -6,7 +6,7 @@
 
 import { Buffer } from 'node:buffer';
 import vm from 'node:vm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import {
   asRecord,
   asString,

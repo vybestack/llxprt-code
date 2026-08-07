@@ -4,21 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { processImports } from './memoryImportProcessor.js';
 import { debugLogger } from './debugLogger.js';
 
 // Mock fs/promises
-vi.mock('fs/promises', (importOriginal) => {
-  const actual = importOriginal() as typeof import('fs/promises');
+const __actual = { ...(await import('fs/promises')) };
+void vi.mock('fs/promises', () => {
+  const actual = __actual as typeof import('fs/promises');
   return {
     ...actual,
     access: vi.fn(),
   };
 });
-const mockedFs = vi.mocked(fs);
+const mockedFs = fs as Mock<typeof fs>;
 
 // Mock console methods to capture error messages
 const originalConsoleError = debugLogger.error;

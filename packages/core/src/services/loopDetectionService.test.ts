@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '../config/config.js';
 import type {
   ServerContentEvent,
@@ -16,7 +16,7 @@ import * as loggers from '../telemetry/loggers.js';
 import { LoopType } from '../telemetry/types.js';
 import { LoopDetectionService } from './loopDetectionService.js';
 
-vi.mock('../telemetry/loggers.js', () => ({
+void vi.mock('../telemetry/loggers.js', () => ({
   logLoopDetected: vi.fn(),
 }));
 

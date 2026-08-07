@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { discoverBrowserProfiles } from './browser-profile-discovery.js';
 
 describe('discoverBrowserProfiles', () => {

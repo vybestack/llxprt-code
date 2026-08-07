@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, vi } from '../testApi.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -181,7 +181,8 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
         new Set(),
       );
 
-      expect(warn).toHaveBeenCalledExactlyOnceWith(
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
         expect.stringContaining(missingKeyfile),
       );
     } finally {
@@ -212,9 +213,8 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
         new Set(),
       );
 
-      expect(warn).toHaveBeenCalledExactlyOnceWith(
-        expect.stringContaining(emptyKeyfile),
-      );
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(emptyKeyfile));
     } finally {
       warn.mockRestore();
       fs.rmSync(tempDir, { recursive: true, force: true });

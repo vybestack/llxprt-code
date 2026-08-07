@@ -17,7 +17,7 @@
  * No reverse tests (no `.not.toThrow()`) except for idempotency cases.
  */
 
-import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { SessionStartSource, SessionEndReason } from '../types.js';
 import type { DebugLogger } from '../../debug/index.js';
@@ -28,7 +28,8 @@ import type { MessageBus } from '../../confirmation-bus/message-bus.js';
 // Mocks
 // ---------------------------------------------------------------------------
 
-vi.mock('../../debug/index.js', () => {
+const realDebugModule = { ...(await import('../../debug/index.js')) };
+void vi.mock('../../debug/index.js', () => {
   const mockLogger = {
     log: vi.fn(),
     warn: vi.fn(),
@@ -40,10 +41,13 @@ vi.mock('../../debug/index.js', () => {
     return mockLogger;
   }
   DebugLogger.getLogger = vi.fn(() => mockLogger);
-  return { DebugLogger };
+  return {
+    ...realDebugModule,
+    DebugLogger,
+  };
 });
 
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
   promises: {},

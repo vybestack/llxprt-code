@@ -15,7 +15,7 @@
  * assignment fails typecheck.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { TurnProcessor } from '../TurnProcessor.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 

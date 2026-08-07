@@ -4,22 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
 }));
 
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getEnabledToolNamesForPrompt: vi.fn().mockReturnValue(['tool1', 'tool2']),
   shouldIncludeSubagentDelegationForConfig: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
@@ -90,7 +90,9 @@ describe('generateJson', () => {
     contentGenerator = makeContentGenerator();
     baseLlmClient = makeBaseLlmClient();
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(SYSTEM_PROMPT);
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue(SYSTEM_PROMPT);
   });
 
   it('returns parsed JSON for valid model response', async () => {
@@ -146,9 +148,9 @@ describe('generateJson', () => {
   });
 
   it('converts plain text "user"/"model" responses for next_speaker checks', async () => {
-    vi.mocked(baseLlmClient.generateJson).mockResolvedValue(
-      'user' as unknown as Record<string, unknown>,
-    );
+    (
+      baseLlmClient.generateJson as Mock<typeof baseLlmClient.generateJson>
+    ).mockResolvedValue('user' as unknown as Record<string, unknown>);
 
     const contents = [
       {
@@ -177,7 +179,9 @@ describe('generateJson', () => {
 
   it('rethrows errors when not aborted', async () => {
     const apiError = new Error('API failure');
-    vi.mocked(baseLlmClient.generateJson).mockRejectedValue(apiError);
+    (
+      baseLlmClient.generateJson as Mock<typeof baseLlmClient.generateJson>
+    ).mockRejectedValue(apiError);
 
     const contents = [
       {
@@ -219,7 +223,9 @@ describe('generateContent', () => {
       generateContent: vi.fn().mockResolvedValue(mockResponse),
     });
     vi.clearAllMocks();
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(SYSTEM_PROMPT);
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue(SYSTEM_PROMPT);
   });
 
   it('returns generated content with merged config', async () => {
@@ -287,9 +293,11 @@ describe('generateContent', () => {
   });
 
   it('wraps and rethrows non-abort errors with model name', async () => {
-    vi.mocked(contentGenerator.generateContent).mockRejectedValue(
-      new Error('network error'),
-    );
+    (
+      contentGenerator.generateContent as Mock<
+        typeof contentGenerator.generateContent
+      >
+    ).mockRejectedValue(new Error('network error'));
 
     const contents = [
       {
@@ -332,7 +340,11 @@ describe('generateEmbedding', () => {
       [0.1, 0.2],
       [0.3, 0.4],
     ];
-    vi.mocked(baseLlmClient.generateEmbedding).mockResolvedValue(embeddings);
+    (
+      baseLlmClient.generateEmbedding as Mock<
+        typeof baseLlmClient.generateEmbedding
+      >
+    ).mockResolvedValue(embeddings);
 
     const result = await generateEmbedding(
       baseLlmClient,

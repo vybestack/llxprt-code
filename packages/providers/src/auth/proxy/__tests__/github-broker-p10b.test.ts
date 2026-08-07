@@ -16,7 +16,7 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 import {
   CredentialProxyServer,

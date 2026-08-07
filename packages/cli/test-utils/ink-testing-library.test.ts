@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { useStdin } from './ink-stub.js';
 import { cleanup, render } from './ink-testing-library.js';
 

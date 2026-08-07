@@ -20,7 +20,7 @@
  * @requirement REQ-001, REQ-015
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as net from 'node:net';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import type { CredentialProxyServerOptions } from '../credential-proxy-server.js';

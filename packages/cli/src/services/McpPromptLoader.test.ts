@@ -8,7 +8,7 @@ import { McpPromptLoader } from './McpPromptLoader.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import * as cliCore from '@vybestack/llxprt-code-core';
 import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { CommandKind, type CommandContext } from '../ui/commands/types.js';
 
 const mockPrompt = {

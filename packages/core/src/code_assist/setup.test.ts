@@ -4,15 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { setupUser, ProjectIdRequiredError } from './setup.js';
 import { CodeAssistServer } from '../code_assist/server.js';
 import type { OAuth2Client } from 'google-auth-library';
 import type { GeminiUserTier } from './types.js';
 import { UserTierId } from './types.js';
 
-vi.mock('../code_assist/server.js', (importOriginal) => {
-  const actual = importOriginal() as typeof import('../code_assist/server.js');
+const __actual = { ...(await import('../code_assist/server.js')) };
+void vi.mock('../code_assist/server.js', () => {
+  const actual = __actual as typeof import('../code_assist/server.js');
   return {
     ...actual,
     CodeAssistServer: vi.fn(),
@@ -48,7 +49,9 @@ describe('setupUser for existing user', () => {
         },
       },
     });
-    vi.mocked(CodeAssistServer).mockImplementation(
+    (
+      CodeAssistServer as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           loadCodeAssist: mockLoad,
@@ -93,7 +96,9 @@ describe('setupUser for existing user', () => {
   it('should throw ProjectIdRequiredError when no project ID is available', async () => {
     delete process.env.GOOGLE_CLOUD_PROJECT;
     // And the server itself requires a project ID internally
-    vi.mocked(CodeAssistServer).mockImplementation(() => {
+    (
+      CodeAssistServer as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => {
       throw new ProjectIdRequiredError();
     });
 
@@ -118,7 +123,9 @@ describe('setupUser for new user', () => {
         },
       },
     });
-    vi.mocked(CodeAssistServer).mockImplementation(
+    (
+      CodeAssistServer as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () =>
         ({
           loadCodeAssist: mockLoad,

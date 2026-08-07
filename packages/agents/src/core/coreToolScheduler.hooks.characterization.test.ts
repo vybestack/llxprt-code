@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
@@ -529,7 +530,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
       },
     ]);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(resolvers.size).toBe(3);
     });
 

@@ -4,20 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
 let mockPlatform: NodeJS.Platform = 'win32';
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
+const actual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actual,
+  default: {
     ...actual,
-    default: {
-      ...actual,
-      platform: () => mockPlatform,
-    },
-  };
-});
+    platform: () => mockPlatform,
+  },
+}));
 
 import {
   formatShellDetails,

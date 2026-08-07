@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,
@@ -12,31 +21,39 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
-  vi.hoisted(() => ({
-    MockedChatSession: vi.fn(),
-    mockSendMessageStream: vi.fn(),
-    mockExecuteToolCall: vi.fn(),
-  }));
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
 
-vi.mock('../core/chatSession.js', (importOriginal) => {
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } = {
+  MockedChatSession: vi.fn(),
+  mockSendMessageStream: vi.fn(),
+  mockExecuteToolCall: vi.fn(),
+};
+
+const __actual = { ...(await import('../core/chatSession.js')) };
+void vi.mock('../core/chatSession.js', () => {
   const apply = (actual: typeof import('../core/chatSession.js')) => ({
     ...actual,
     ChatSession: MockedChatSession,
   });
-  const result = importOriginal() as
+  const result = __actual as
     | typeof import('../core/chatSession.js')
     | Promise<typeof import('../core/chatSession.js')>;
   return result instanceof Promise ? result.then(apply) : apply(result);
 });
 
-vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
+void vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
+);
 
-const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+const mockedGetDirectoryContextString = getDirectoryContextString as Mock<
+  typeof getDirectoryContextString
+>;
 
 describe('stream idle timeout behavioral tests', () => {
   let fixture: ExecutorTestFixture;

@@ -9,7 +9,7 @@
  * Split from release-process.test.ts to satisfy the 800line limit.
  */
 
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

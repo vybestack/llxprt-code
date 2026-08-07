@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { format } from 'node:util';
 import { handleDisable, disableCommand } from './disable.js';
 import {
@@ -14,38 +22,32 @@ import {
   type LoadableSettingScope,
 } from '../../config/settings.js';
 
-const emitConsoleLog = vi.hoisted(() => vi.fn());
-const debugLogger = vi.hoisted(() => ({
+const emitConsoleLog = vi.fn();
+const debugLogger = {
   log: vi.fn((message, ...args) => {
     emitConsoleLog('log', format(message, ...args));
   }),
+};
+
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  debugLogger,
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  return {
-    ...actual,
-    debugLogger,
-  };
-});
+const actualActual = { ...(await import('../../config/settings.js')) };
+void vi.mock('../../config/settings.js', () => ({
+  ...actualActual,
+  loadSettings: vi.fn(),
+  isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
+}));
 
-vi.mock('../../config/settings.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/settings.js')>();
-  return {
-    ...actual,
-    loadSettings: vi.fn(),
-    isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
-  };
-});
-
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
 describe('skills disable command', () => {
-  const mockLoadSettings = vi.mocked(loadSettings);
+  const mockLoadSettings = loadSettings as Mock<typeof loadSettings>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,7 +122,7 @@ describe('skills disable command', () => {
         }),
         setValue: vi.fn(),
       };
-      vi.mocked(loadSettings).mockReturnValue(
+      (loadSettings as Mock<typeof loadSettings>).mockReturnValue(
         mockSettings as unknown as LoadedSettings,
       );
 

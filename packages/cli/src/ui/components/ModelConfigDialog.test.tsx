@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
@@ -12,15 +12,14 @@ import { waitFor } from '../../test-utils/async.js';
 // Mock the providers runtime barrel to avoid the broken dist dependency
 // chain, but delegate parseEphemeralSettingValue to the REAL source
 // implementation so tests exercise actual parsing/validation behavior.
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', async () => {
-  const real = await import(
-    '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
-  );
-  return {
-    parseEphemeralSettingValue: real.parseEphemeralSettingValue,
-    ephemeralSettingHelp: real.ephemeralSettingHelp,
-  };
-});
+const real = await import(
+  '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
+);
+
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+  parseEphemeralSettingValue: real.parseEphemeralSettingValue,
+  ephemeralSettingHelp: real.ephemeralSettingHelp,
+}));
 
 // Use the real parseValue from setCommand (source-resolved, no broken deps)
 import { ModelConfigDialog } from './ModelConfigDialog.js';
@@ -78,7 +77,7 @@ function createStatefulRuntime(
 
 let activeRuntime: ReturnType<typeof createStatefulRuntime>;
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => activeRuntime,
 }));
 

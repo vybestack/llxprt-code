@@ -9,7 +9,8 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -258,7 +259,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
         true,
       );
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+      await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
@@ -358,7 +359,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
         true,
       );
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+      await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);

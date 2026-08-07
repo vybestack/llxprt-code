@@ -5,28 +5,40 @@
  */
 
 // Patch: Unset NO_COLOR at the very top before any imports
+const realNodeFsModule = { ...(await import('node:fs')) };
+
 if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  automock,
+  restoreEnv,
+  setEnv,
+} from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { themeManager, DEFAULT_THEME } from './theme-manager.js';
 import type { CustomTheme } from './theme.js';
 import type { SemanticColors } from './semantic-tokens.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import type * as osActual from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-vi.mock('node:fs');
-vi.mock('node:os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+void vi.mock('node:fs', () => automock(realNodeFsModule));
+const actualOs = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+  platform: vi.fn(() => 'linux'),
+}));
 
 const validCustomTheme: CustomTheme = {
   type: 'custom',
@@ -117,9 +129,9 @@ describe('ThemeManager', () => {
   });
 
   it('should return NoColorTheme if NO_COLOR is set', () => {
-    vi.stubEnv('NO_COLOR', '1');
+    setEnv('NO_COLOR', '1');
     expect(themeManager.getActiveTheme().name).toBe('NoColor');
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   describe('getSemanticColors', () => {
@@ -218,8 +230,12 @@ describe('ThemeManager', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(os.homedir).mockReturnValue('/home/user');
-      vi.spyOn(fs, 'realpathSync').mockImplementation((p) => p as string);
+      (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/home/user');
+      (
+        vi.spyOn(fs, 'realpathSync') as unknown as Mock<
+          (path: fs.PathLike) => string
+        >
+      ).mockImplementation((p) => p as string);
     });
 
     it('should load a theme from a valid file path', () => {

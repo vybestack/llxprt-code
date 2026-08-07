@@ -10,20 +10,20 @@
  * IMPORTANT: Tests public API behavior ONLY (generateChatCompletion).
  * Does NOT test private methods or implementation details (RULES.md lines 102-107).
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type {
   ThinkingBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type * as Ai from 'ai';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 /**
  * Mock the Vercel AI SDK to control streaming responses
  */
-vi.mock('ai', () => {
-  const actual = importActualSync<typeof Ai>('ai');
+const realAiModule = { ...(await import('ai')) };
+
+void vi.mock('ai', () => {
+  const actual = realAiModule;
   return {
     ...actual,
     streamText: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock('ai', () => {
   };
 });
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => ({
     chat: vi.fn(() => 'mock-model'),
   })),

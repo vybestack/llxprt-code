@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -27,11 +27,11 @@ const createFakeAgent = (config: Config): Agent =>
     getConfig: () => config,
   }) as unknown as Agent;
 
-vi.mock('./utils/version.js', () => ({
+void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(() => Promise.resolve()),
     isKittyProtocolEnabled: vi.fn(() => false),
@@ -42,27 +42,24 @@ vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   },
 }));
 
-vi.mock('./ui/utils/updateCheck.js', () => ({
+void vi.mock('./ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    writeToStdout: vi.fn().mockReturnValue(true),
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  writeToStdout: vi.fn().mockReturnValue(true),
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
+}));
 
-vi.mock('./utils/sandbox.js', () => ({
+void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
@@ -121,78 +118,70 @@ describe('startInteractiveUI ink render options', () => {
     }
   });
 
-  it(
-    'passes computed Ink render options to ink.render()',
-    { timeout: 120_000 },
-    async () => {
-      const { startInteractiveUI } = await import('./cli.js');
-      const config = new Config({
-        sessionId: 'test-session',
-        targetDir: tempDir,
-        cwd: tempDir,
-        debugMode: false,
-        model: 'gemini-2.5-flash-lite',
-        accessibility: { screenReader: false },
-      });
+  it('passes computed Ink render options to ink.render()', async () => {
+    const { startInteractiveUI } = await import('./cli.js');
+    const config = new Config({
+      sessionId: 'test-session',
+      targetDir: tempDir,
+      cwd: tempDir,
+      debugMode: false,
+      model: 'gemini-2.5-flash-lite',
+      accessibility: { screenReader: false },
+    });
 
-      const settings = createLoadedSettings();
+    const settings = createLoadedSettings();
 
-      await startInteractiveUI(
-        config,
-        createFakeAgent(config),
-        settings,
-        [],
-        tempDir,
-      );
+    await startInteractiveUI(
+      config,
+      createFakeAgent(config),
+      settings,
+      [],
+      tempDir,
+    );
 
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-      const [_reactElement, options] = renderSpy.mock.calls[0];
-      const expectedRenderOptions = inkRenderOptions(config, settings);
-      expect(options).toStrictEqual(
-        expect.objectContaining({
-          exitOnCtrlC: false,
-          patchConsole: false,
-          isScreenReaderEnabled: false,
-          alternateBuffer: expectedRenderOptions.alternateBuffer,
-          incrementalRendering: expectedRenderOptions.incrementalRendering,
-        }),
-      );
-    },
-  );
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    const [_reactElement, options] = renderSpy.mock.calls[0];
+    const expectedRenderOptions = inkRenderOptions(config, settings);
+    expect(options).toStrictEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: false,
+        alternateBuffer: expectedRenderOptions.alternateBuffer,
+        incrementalRendering: expectedRenderOptions.incrementalRendering,
+      }),
+    );
+  }, 120_000);
 
-  it(
-    'forces alternate buffer off when screen reader mode is enabled',
-    { timeout: 120_000 },
-    async () => {
-      const { startInteractiveUI } = await import('./cli.js');
-      const config = new Config({
-        sessionId: 'test-session',
-        targetDir: tempDir,
-        cwd: tempDir,
-        debugMode: false,
-        model: 'gemini-2.5-flash-lite',
-        accessibility: { screenReader: true },
-      });
+  it('forces alternate buffer off when screen reader mode is enabled', async () => {
+    const { startInteractiveUI } = await import('./cli.js');
+    const config = new Config({
+      sessionId: 'test-session',
+      targetDir: tempDir,
+      cwd: tempDir,
+      debugMode: false,
+      model: 'gemini-2.5-flash-lite',
+      accessibility: { screenReader: true },
+    });
 
-      await startInteractiveUI(
-        config,
-        createFakeAgent(config),
-        createLoadedSettings(),
-        [],
-        tempDir,
-      );
+    await startInteractiveUI(
+      config,
+      createFakeAgent(config),
+      createLoadedSettings(),
+      [],
+      tempDir,
+    );
 
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-      const [_reactElement, options] = renderSpy.mock.calls[0];
-      expect(options).toStrictEqual(
-        expect.objectContaining({
-          exitOnCtrlC: false,
-          patchConsole: false,
-          isScreenReaderEnabled: true,
-          alternateBuffer: false,
-          incrementalRendering: false,
-        }),
-      );
-    },
-  );
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    const [_reactElement, options] = renderSpy.mock.calls[0];
+    expect(options).toStrictEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: true,
+        alternateBuffer: false,
+        incrementalRendering: false,
+      }),
+    );
+  }, 120_000);
 });

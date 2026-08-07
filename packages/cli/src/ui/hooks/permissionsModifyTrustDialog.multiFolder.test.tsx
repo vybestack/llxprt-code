@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,19 +16,21 @@ import { TrustFormAction } from '../trustDialogHelpers.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 import { usePermissionsTrustDialogFlow } from './usePermissionsTrustDialogFlow.js';
 
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteRuleByKey = vi.hoisted(() => vi.fn());
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
-const mockedResolvePathTrust = vi.hoisted(() => vi.fn());
-const mockedTrustedConfig = vi.hoisted<{
-  value: Record<string, TrustLevel>;
-}>(() => ({ value: {} }));
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../config/trustedFolders.js')
-  >('../../config/trustedFolders.js');
+const mockedSetValue = vi.fn();
+const mockedDeleteRuleByKey = vi.fn();
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
+const mockedResolvePathTrust = vi.fn();
+const mockedTrustedConfig: { value: Record<string, TrustLevel> } = {
+  value: {},
+};
+
+void vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -52,7 +54,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
   };
 });
 
-vi.mock('./useIdeTrustListener.js', () => ({
+void vi.mock('./useIdeTrustListener.js', () => ({
   useIdeTrustListener: () => ({ isIdeTrusted: undefined }),
 }));
 

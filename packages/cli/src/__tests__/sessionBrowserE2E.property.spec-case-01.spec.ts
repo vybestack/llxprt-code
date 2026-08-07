@@ -15,7 +15,7 @@
  * Property-based tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../test-utils/assertions.js';
 import fc from 'fast-check';
 import * as fs from 'node:fs/promises';

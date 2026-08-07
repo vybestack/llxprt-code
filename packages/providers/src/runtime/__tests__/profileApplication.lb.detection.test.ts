@@ -14,7 +14,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   Profile,
   LoadBalancerProfile,
@@ -41,7 +41,7 @@ import {
 } from './lbProfileApplicationTestSetup.js';
 import type { ProfileApplicationResult } from './lbProfileApplicationTestSetup.js';
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,

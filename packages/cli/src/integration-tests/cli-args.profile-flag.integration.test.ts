@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {

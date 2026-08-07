@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   ToolStatusIndicator,
   ToolInfo,
@@ -16,7 +16,7 @@ import { ToolCallStatus, StreamingState } from '../../types.js';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 
-vi.mock('../RespondingSpinner.js', () => ({
+void vi.mock('../RespondingSpinner.js', () => ({
   RespondingSpinner: ({
     nonRespondingDisplay,
   }: {

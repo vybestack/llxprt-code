@@ -16,7 +16,7 @@
  * positive case exercises the real SkillManager through Config.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
 
 describe('agent.skills control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03', () => {

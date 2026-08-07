@@ -5,7 +5,15 @@
  */
 
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  type Mock,
+} from 'bun:test';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import {
@@ -14,15 +22,15 @@ import {
 } from './StatsDisplay.testHelpers.js';
 
 // Mock the context to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 
 const renderWithMockedStats = (metrics: TestMetricsInput) => {
   const fullMetrics = withTokenTracking(metrics);

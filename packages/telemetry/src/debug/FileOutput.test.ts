@@ -2,7 +2,15 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P10
  * @requirement REQ-005
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';
@@ -10,7 +18,7 @@ import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
 
 // Mock fs module
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   promises: {
     access: vi.fn(),
     mkdir: vi.fn(),
@@ -22,7 +30,7 @@ vi.mock('fs', () => ({
 }));
 
 // Mock path module
-vi.mock('path', () => ({
+void vi.mock('path', () => ({
   join: vi.fn((...args) => args.join('/')),
 }));
 
@@ -38,18 +46,19 @@ describe('FileOutput', () => {
       undefined;
 
     // Setup mocks
-    vi.mocked(join).mockImplementation((...args) => args.join('/'));
-    vi.mocked(fs.access).mockResolvedValue(undefined);
-    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-    vi.mocked(fs.appendFile).mockResolvedValue(undefined);
-    vi.mocked(fs.stat).mockRejectedValue(new Error('File not found'));
+    (join as Mock<typeof join>).mockImplementation((...args) => args.join('/'));
+    (fs.access as Mock<typeof fs.access>).mockResolvedValue(undefined);
+    (fs.mkdir as Mock<typeof fs.mkdir>).mockResolvedValue(undefined);
+    (fs.appendFile as Mock<typeof fs.appendFile>).mockResolvedValue(undefined);
+    (fs.stat as Mock<typeof fs.stat>).mockRejectedValue(
+      new Error('File not found'),
+    );
   });
 
   afterEach(async () => {
     if (fileOutput) {
       await fileOutput.dispose();
     }
-    vi.clearAllTimers();
   });
 
   /**
@@ -74,7 +83,7 @@ describe('FileOutput', () => {
    * @then Directory created with proper permissions
    */
   it('should create debug directory if it does not exist @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
-    vi.mocked(fs.access).mockRejectedValueOnce(
+    (fs.access as Mock<typeof fs.access>).mockRejectedValueOnce(
       new Error('Directory not found'),
     );
 
@@ -216,7 +225,7 @@ describe('FileOutput', () => {
     }
 
     // Verify batched JSONL format
-    const calls = vi.mocked(fs.appendFile).mock.calls;
+    const calls = (fs.appendFile as Mock<typeof fs.appendFile>).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
 
     const jsonlContent = calls[0][1] as string;
@@ -240,7 +249,7 @@ describe('FileOutput', () => {
     fileOutput = FileOutput.getInstance();
 
     // Mock file stats to show large file
-    vi.mocked(fs.stat).mockResolvedValueOnce({
+    (fs.stat as Mock<typeof fs.stat>).mockResolvedValueOnce({
       size: 11 * 1024 * 1024, // 11MB, exceeds 10MB limit
       birthtime: new Date(),
     } as unknown as fs.Stats);
@@ -275,7 +284,7 @@ describe('FileOutput', () => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
-    vi.mocked(fs.stat).mockResolvedValueOnce({
+    (fs.stat as Mock<typeof fs.stat>).mockResolvedValueOnce({
       size: 1024, // Small file
       birthtime: yesterday,
     } as unknown as fs.Stats);
@@ -337,7 +346,7 @@ describe('FileOutput', () => {
       resolveFirstAppend = resolve;
     });
 
-    vi.mocked(fs.appendFile)
+    (fs.appendFile as Mock<typeof fs.appendFile>)
       .mockImplementationOnce(() => {
         resolveAppendStarted();
         return firstAppend;
@@ -372,7 +381,7 @@ describe('FileOutput', () => {
     await Promise.all([firstWrite, secondWrite, disposePromise]);
 
     expect(fs.appendFile).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(fs.appendFile).mock.calls[1][1]).toBe(
+    expect((fs.appendFile as Mock<typeof fs.appendFile>).mock.calls[1][1]).toBe(
       JSON.stringify(secondEntry) + '\n',
     );
   });
@@ -388,7 +397,9 @@ describe('FileOutput', () => {
     fileOutput = FileOutput.getInstance();
 
     // Mock appendFile to fail
-    vi.mocked(fs.appendFile).mockRejectedValueOnce(new Error('Disk full'));
+    (fs.appendFile as Mock<typeof fs.appendFile>).mockRejectedValueOnce(
+      new Error('Disk full'),
+    );
 
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -427,7 +438,9 @@ describe('FileOutput', () => {
     const blockedAppend = new Promise<void>((resolve) => {
       resolveAppend = resolve;
     });
-    vi.mocked(fs.appendFile).mockImplementation(() => blockedAppend);
+    (fs.appendFile as Mock<typeof fs.appendFile>).mockImplementation(
+      () => blockedAppend,
+    );
 
     // Add more entries than max queue size (1000)
     const entries: LogEntry[] = [];
@@ -474,7 +487,8 @@ describe('FileOutput', () => {
 
     await fileOutput.write(logEntry);
 
-    const appendCall = vi.mocked(fs.appendFile).mock.calls[0];
+    const appendCall = (fs.appendFile as Mock<typeof fs.appendFile>).mock
+      .calls[0];
     const writtenPath = appendCall[0] as string;
     // Validate the filename structure without a complex regex literal:
     // llxprt-debug-<runId>-YYYY-MM-DD-HH-MM-SS.jsonl

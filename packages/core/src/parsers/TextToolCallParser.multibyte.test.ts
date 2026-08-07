@@ -20,7 +20,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { GemmaToolCallParser } from './TextToolCallParser.js';
 
 // Simulate a Hermes/text style tool call directive embedded in text

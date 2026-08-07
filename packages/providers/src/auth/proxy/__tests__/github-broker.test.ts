@@ -20,7 +20,7 @@
  * @pseudocode 003-github-broker.md lines T1-T14
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

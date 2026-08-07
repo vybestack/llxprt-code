@@ -14,7 +14,7 @@
  * No reverse testing — we assert on resolved auth results, not on internal structure.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { OAuthManager, OAuthTokenRequestMetadata } from '../precedence.js';
 import type { OAuthToken } from '../types.js';

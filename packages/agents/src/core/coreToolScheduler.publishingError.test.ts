@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -111,7 +112,7 @@ describe('CoreToolScheduler publishing error handling', () => {
       signal,
     );
 
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       },
@@ -209,7 +210,7 @@ describe('CoreToolScheduler publishing error handling', () => {
       signal,
     );
 
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       },

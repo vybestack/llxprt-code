@@ -17,7 +17,7 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   buildIssueListArgv,
   shapeIssueList,

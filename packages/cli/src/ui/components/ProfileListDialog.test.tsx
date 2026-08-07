@@ -6,9 +6,10 @@
 
 import { render } from 'ink-testing-library';
 import { act } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'bun:test';
 
-vi.unmock('ink');
+// Under Bun, ink is redirected to a stub by a resolution plugin rather than a
+// module mock, so there is nothing to unmock.
 
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import {
@@ -21,8 +22,8 @@ enum TerminalKeys {
   ESCAPE = '\u001B',
 }
 
-const mockIsNarrow = vi.hoisted(() => ({ value: false }));
-vi.mock('../hooks/useResponsive.js', () => ({
+const mockIsNarrow = { value: false };
+void vi.mock('../hooks/useResponsive.js', () => ({
   useResponsive: () => ({
     width: mockIsNarrow.value ? 60 : 120,
     breakpoint: mockIsNarrow.value ? 'NARROW' : 'WIDE',

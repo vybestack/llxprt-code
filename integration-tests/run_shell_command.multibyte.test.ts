@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { it } from 'vitest';
+import { it } from 'bun:test';
 import { strict as assert } from 'assert';
 import { TestRig } from './test-helper.js';
 
@@ -12,11 +12,11 @@ const MULTIBYTE = 'ありがとう 世界';
 
 // Deterministic command avoiding echo quirks; ensures exact byte output.
 
-it.skip('run_shell_command handles UTF-8 multibyte output correctly (integration)', async ({
-  task,
-}) => {
+it.skip('run_shell_command handles UTF-8 multibyte output correctly (integration)', async () => {
   const rig = new TestRig();
-  rig.setup(task.name);
+  rig.setup(
+    'run_shell_command handles UTF-8 multibyte output correctly (integration)',
+  );
 
   // Use single quotes to preserve the space in the multibyte string
   // Use different command for Windows vs Unix

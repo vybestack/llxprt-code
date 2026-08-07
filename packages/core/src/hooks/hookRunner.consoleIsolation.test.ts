@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { spawn } from 'node:child_process';
 import { HookRunner } from './hookRunner.js';
 import {
@@ -15,11 +23,10 @@ import {
 } from './types.js';
 import type { Config } from '../config/config.js';
 
-vi.mock('node:child_process', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:child_process')>(
-      'node:child_process',
-    );
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
+
+void vi.mock('node:child_process', () => {
+  const actual = realNodeChildProcessModule;
   return { ...actual, spawn: vi.fn() };
 });
 
@@ -65,8 +72,8 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
     // The spawn mock is created once by the module factory, so its recorded
     // calls survive across tests. Clear them so each test only observes the
     // spawn invocation it triggered itself.
-    vi.mocked(spawn).mockClear();
-    vi.mocked(spawn).mockReturnValue(
+    (spawn as Mock<typeof spawn>).mockClear();
+    (spawn as Mock<typeof spawn>).mockReturnValue(
       mockSpawnObj as unknown as ReturnType<typeof spawn>,
     );
 
@@ -135,7 +142,7 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
         mockInput,
       );
 
-      const spawnOptions = vi.mocked(spawn).mock.calls[0][2];
+      const spawnOptions = (spawn as Mock<typeof spawn>).mock.calls[0][2];
       expect(spawnOptions).toBeDefined();
       expect(spawnOptions.shell).toBe(false);
       expect(spawnOptions.windowsHide).toBeUndefined();

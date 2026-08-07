@@ -11,8 +11,8 @@ import {
   expect,
   it,
   vi,
-  type MockedFunction,
-} from 'vitest';
+  type Mock,
+} from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -30,8 +30,12 @@ import { type AppState, type AppAction } from '../reducers/appReducer.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     checkHasEditorType: vi.fn(() => true),
@@ -39,16 +43,20 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-const mockCheckHasEditorType = vi.mocked(checkHasEditorType);
-const mockAllowEditorTypeInSandbox = vi.mocked(allowEditorTypeInSandbox);
+const mockCheckHasEditorType = checkHasEditorType as Mock<
+  typeof checkHasEditorType
+>;
+const mockAllowEditorTypeInSandbox = allowEditorTypeInSandbox as Mock<
+  typeof allowEditorTypeInSandbox
+>;
 
 describe('useEditorSettings', () => {
   let mockLoadedSettings: LoadedSettings;
   let mockAppState: AppState;
-  let mockAddItem: MockedFunction<
+  let mockAddItem: Mock<
     (item: Omit<HistoryItem, 'id'>, timestamp: number) => void
   >;
-  let mockDispatch: MockedFunction<React.Dispatch<AppAction>>;
+  let mockDispatch: Mock<React.Dispatch<AppAction>>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -376,9 +384,7 @@ describe('useEditorSettings', () => {
 
     const errorMessage = 'Failed to save settings';
     (
-      mockLoadedSettings.setValue as MockedFunction<
-        typeof mockLoadedSettings.setValue
-      >
+      mockLoadedSettings.setValue as Mock<typeof mockLoadedSettings.setValue>
     ).mockImplementation(() => {
       throw new Error(errorMessage);
     });

@@ -13,7 +13,7 @@
  * observable state, not on mock call counts (no toHaveBeenCalled theater).
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import * as path from 'node:path';
 import { mkdtempSync } from 'node:fs';
 import * as fs from 'node:fs/promises';

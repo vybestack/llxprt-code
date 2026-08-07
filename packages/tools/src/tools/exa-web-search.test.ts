@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 import { ExaWebSearchTool } from './exa-web-search.js';
 
-const { mockedFetch } = vi.hoisted(() => ({ mockedFetch: vi.fn() }));
-vi.mock('node-fetch', () => ({
+const { mockedFetch } = { mockedFetch: vi.fn() };
+void vi.mock('node-fetch', () => ({
   default: mockedFetch,
 }));
 

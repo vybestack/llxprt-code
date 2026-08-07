@@ -20,12 +20,13 @@
  * settings file.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 // Mock os so Storage.getGlobalSettingsPath() resolves under a fake homedir.
-vi.mock('os', () => {
-  const actual = importActualSync<typeof import('os')>('os');
+const realOsModule = { ...(await import('os')) };
+
+void vi.mock('os', () => {
+  const actual = realOsModule;
   return {
     ...actual,
     homedir: vi.fn(() => '/home/headless-user'),
@@ -34,13 +35,13 @@ vi.mock('os', () => {
 });
 
 // Mock strip-json-comments so the raw settings read is a passthrough.
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
 // Keep the concrete-provider completion proof hermetic: stub the system-prompt
 // resolution so no prompt files are read from disk.
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 

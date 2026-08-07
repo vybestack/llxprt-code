@@ -7,7 +7,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { AgentEventType } from '@vybestack/llxprt-code-core';
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import type {
   Agent,
   AgentEvent,
@@ -15,7 +15,7 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { mapStreamEvent } from '@vybestack/llxprt-code-agents';
 
-const coreMocks = vi.hoisted(() => {
+const coreMocks = (() => {
   const mockSendMessageStream = vi
     .fn()
     .mockReturnValue((async function* () {})());
@@ -45,24 +45,22 @@ const coreMocks = vi.hoisted(() => {
     mockSendMessageStream,
     mockStartChat,
   };
-});
+})();
 
 export const MockedAgentClientClass = coreMocks.MockedAgentClientClass;
 export const mockParseAndFormatApiError = coreMocks.mockParseAndFormatApiError;
 export const mockSendMessageStream = coreMocks.mockSendMessageStream;
 export const mockStartChat = coreMocks.mockStartChat;
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actualCoreModule,
-    GitService: vi.fn(),
-    AgentClient: coreMocks.MockedAgentClientClass,
-    UserPromptEvent: coreMocks.MockedUserPromptEvent,
-    parseAndFormatApiError: coreMocks.mockParseAndFormatApiError,
-    tokenLimit: vi.fn().mockReturnValue(100),
-  };
-});
+const actualCoreModule = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualCoreModule,
+  GitService: vi.fn(),
+  AgentClient: coreMocks.MockedAgentClientClass,
+  UserPromptEvent: coreMocks.MockedUserPromptEvent,
+  parseAndFormatApiError: coreMocks.mockParseAndFormatApiError,
+  tokenLimit: vi.fn().mockReturnValue(100),
+}));
 
 /**
  * Creates a minimal fake Agent that delegates history/model calls to a mock

@@ -9,7 +9,7 @@
  * - Idempotent activation and double-deactivation behavior
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   activateSettingsRuntimeContext,
   deactivateSettingsRuntimeContext,

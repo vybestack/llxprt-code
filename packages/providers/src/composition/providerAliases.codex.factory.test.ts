@@ -13,7 +13,7 @@
  * source of truth for Codex models.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // This test needs real config files, not the global mock
 

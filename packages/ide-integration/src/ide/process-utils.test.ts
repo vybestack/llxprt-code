@@ -12,21 +12,21 @@ import {
   afterEach,
   beforeAll,
   beforeEach,
-} from 'vitest';
+} from 'bun:test';
 
-const mockedExec = vi.hoisted(() => vi.fn());
-vi.mock('node:util', () => ({
+const mockedExec = vi.fn();
+void vi.mock('node:util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
-vi.mock('util', () => ({
+void vi.mock('util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
-const mockedOs = vi.hoisted(() => ({
+const mockedOs = {
   platform: vi.fn(),
   homedir: vi.fn(),
-}));
-vi.mock('node:os', () => ({ default: mockedOs, ...mockedOs }));
-vi.mock('os', () => ({ default: mockedOs, ...mockedOs }));
+};
+void vi.mock('node:os', () => ({ default: mockedOs, ...mockedOs }));
+void vi.mock('os', () => ({ default: mockedOs, ...mockedOs }));
 
 // `process-utils.js` calls `promisify(exec)` at module scope, so it must be
 // loaded only after the module mocks above are registered. A static import

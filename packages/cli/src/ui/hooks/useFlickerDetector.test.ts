@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useFlickerDetector } from './useFlickerDetector.js';
 import { measureElement, type DOMElement } from 'ink';
 import { appEvents, AppEvent } from '../../utils/events.js';
 
 // Mock ink's measureElement
-vi.mock('ink', async () => {
-  const actualInk = await vi.importActual('ink');
+const realInkModule = { ...(await import('ink')) };
+
+void vi.mock('ink', () => {
+  const actualInk = realInkModule;
   return {
     ...actualInk,
     measureElement: vi.fn(),

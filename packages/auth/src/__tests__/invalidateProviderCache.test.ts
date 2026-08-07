@@ -11,7 +11,7 @@
  *                providerRuntimeContext → runtime state injection via precedence.ts helpers
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,

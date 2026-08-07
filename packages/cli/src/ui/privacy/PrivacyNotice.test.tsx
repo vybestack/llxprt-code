@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { PrivacyNotice } from './PrivacyNotice.js';
 import type { ModelState } from '../cliUiRuntime.js';

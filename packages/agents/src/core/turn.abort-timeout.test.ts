@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
@@ -14,10 +15,10 @@ import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { flushEventLoop } from '../test-utils/eventLoop.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
 function waitForAbort(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -39,23 +40,22 @@ function rejectWhenAborted(signal: AbortSignal): Promise<never> {
   });
 }
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
+const actual = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
+  )),
+};
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
-      >();
-    return {
-      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
-      // real implementation so thinking/tool_call/text detection is correct.
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+    // real implementation so thinking/tool_call/text detection is correct.
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 describe('Turn run - abort and idle timeout', () => {
@@ -189,7 +189,7 @@ describe('Turn run - abort and idle timeout', () => {
       // for-await body — the for-await loop must make at least one iteration,
       // which requires a macrotask yield, not a microtask drain.
       await flushEventLoop();
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       await runPromise;
 
       expect(returnSpy).toHaveBeenCalled();
@@ -360,7 +360,7 @@ describe('Turn run - abort and idle timeout', () => {
       // here because the provider signal is pushed inside the mock's async
       // generator body, which requires a macrotask yield to enter.
       await flushEventLoop();
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
+      await advanceTimersByTimeAsync(testTimeoutMs + 1);
       const events = await eventsPromise;
 
       expect(events).toStrictEqual([

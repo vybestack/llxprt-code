@@ -196,12 +196,10 @@ bun run test:bun
 ```
 
 This script (`scripts/test.ts`) orchestrates testing across all workspace
-packages using Bun as the runtime, then runs the script harness. Migrated
-workspaces execute under **Bun's native test runner** via
-`scripts/run_bun_tests.ts` (one isolated process per test file); the
-workspaces still finishing their migration run under Vitest, with the
-Vitest-compatibility shim (`test-setup/augment-bun-vi.ts`) supplying the
-`vi.*` and `it.*` helpers Bun lacks.
+packages using Bun as the runtime, then runs the script harness. Every
+workspace executes under **Bun's native test runner** via
+`scripts/run_bun_tests.ts` (one isolated process per test file). Tests import
+`bun:test`; see `dev-docs/bun.md` for the mocking patterns Bun requires.
 
 Two roots are excluded from that run because they call a real provider and
 consume quota — run them explicitly when you have credentials:

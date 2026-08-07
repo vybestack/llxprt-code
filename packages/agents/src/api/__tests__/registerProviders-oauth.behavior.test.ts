@@ -21,7 +21,7 @@
  * its static OAuth model list, while the Anthropic API-key alias does not.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from '../../testApi.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

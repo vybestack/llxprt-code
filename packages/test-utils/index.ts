@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export * from './src/bounded-guard.js';
-export * from './src/file-system-test-helpers.js';
-export * from './src/test-rig.js';
+/**
+ * Package entry point.
+ *
+ * This file and `src/index.ts` are both resolved as the package root — Bun and
+ * Node follow the `main` field to `src/index.ts`, while several workspaces map
+ * the package name here through tsconfig `paths`. Re-exporting the real barrel
+ * keeps the two entry points from drifting apart and exposing different names.
+ */
+
+export * from './src/index.js';

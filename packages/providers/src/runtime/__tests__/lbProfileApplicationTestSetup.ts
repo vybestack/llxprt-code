@@ -8,7 +8,7 @@
  * split test files can share the same stubs without exceeding max-lines.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';

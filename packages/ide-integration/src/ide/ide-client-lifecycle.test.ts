@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import {
   describe,
   it,
@@ -11,8 +12,8 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
-} from 'vitest';
+  type Mock,
+} from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
 import { ideContext, IdeContextNotificationSchema } from './ideContext.js';
 import * as fs from 'node:fs';
@@ -22,23 +23,35 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 import * as os from 'node:os';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...(actual as object),
-    promises: {
-      readFile: vi.fn(),
-      readdir: vi.fn(),
-    },
-    realpathSync: (p: string) => p,
-    existsSync: () => false,
-  };
-});
-vi.mock('./process-utils.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
-vi.mock('./detect-ide.js');
-vi.mock('node:os');
+const realProcessUtilsModule = { ...(await import('./process-utils.js')) };
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realStreamableHttpModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/streamableHttp.js')),
+};
+const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
+const realNodeOsModule = { ...(await import('node:os')) };
+
+const actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => ({
+  ...(actual as object),
+  promises: {
+    readFile: vi.fn(),
+    readdir: vi.fn(),
+  },
+  realpathSync: (p: string) => p,
+  existsSync: () => false,
+}));
+void vi.mock('./process-utils.js', () => automock(realProcessUtilsModule));
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+void vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () =>
+  automock(realStreamableHttpModule),
+);
+void vi.mock('./detect-ide.js', () => automock(realDetectIdeModule));
+void vi.mock('node:os', () => automock(realNodeOsModule));
 
 /**
  * A controllable fake MCP Client that lets tests drive connect/ping and fire
@@ -47,7 +60,7 @@ vi.mock('node:os');
  * verifying private method calls.
  */
 interface FakeClientController {
-  client: Mocked<Client>;
+  client: Client;
   contextHandler:
     | ((notification: { params: Record<string, unknown> }) => void)
     | undefined;
@@ -110,7 +123,7 @@ function createFakeClient(): FakeClientController {
       return (client as unknown as { _onclose: unknown })
         ._onclose as () => void;
     },
-  } as unknown as Mocked<Client>;
+  } as unknown as Client;
 
   return {
     client,
@@ -166,30 +179,40 @@ describe('IdeClient connection lifecycle isolation', () => {
     delete process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];
 
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
-    vi.mocked(detectIde).mockReturnValue(IDE_DEFINITIONS.vscode);
-    vi.mocked(getIdeProcessInfo).mockResolvedValue({
+    (detectIde as Mock<typeof detectIde>).mockReturnValue(
+      IDE_DEFINITIONS.vscode,
+    );
+    (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockResolvedValue({
       pid: 12345,
       command: 'test-ide',
     });
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    (os.tmpdir as Mock<typeof os.tmpdir>).mockReturnValue('/tmp');
 
     createdFakes = [];
-    vi.mocked(Client).mockImplementation(() => {
+    (
+      Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => {
       const controller = createFakeClient();
       createdFakes.push(controller);
       return controller.client;
     });
 
     transportMock = { close: vi.fn().mockResolvedValue(undefined) };
-    vi.mocked(StreamableHTTPClientTransport).mockReturnValue(
-      transportMock as unknown as Mocked<StreamableHTTPClientTransport>,
+    (
+      StreamableHTTPClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue(
+      transportMock as unknown as StreamableHTTPClientTransport,
     );
 
-    vi.mocked(fs.promises.readFile).mockResolvedValue(
-      JSON.stringify({ port: '8080' }),
-    );
     (
-      vi.mocked(fs.promises.readdir) as unknown as ReturnType<typeof vi.fn>
+      fs.promises.readFile as Mock<typeof fs.promises.readFile>
+    ).mockResolvedValue(JSON.stringify({ port: '8080' }));
+    (
+      fs.promises.readdir as Mock<
+        typeof fs.promises.readdir
+      > as unknown as ReturnType<typeof vi.fn>
     ).mockResolvedValue([]);
 
     ideClient = await IdeClient.getInstance();

@@ -20,7 +20,7 @@
  *   14: fake-gh label filter ALL-label subset semantics.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   createFakeRepo,
   defaultState,

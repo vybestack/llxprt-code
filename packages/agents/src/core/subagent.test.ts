@@ -8,7 +8,7 @@
  * SubAgentScope core tests: ContextState, SubAgentScope, stateless compliance.
  */
 
-import { vi, describe, it, expect } from '../testApi.js';
+import { vi, describe, it, expect } from 'bun:test';
 import { SubAgentScope } from './subagent.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { PromptConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -22,35 +22,24 @@ import {
   createRuntimeOverrides,
 } from './subagent-test-helpers.js';
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    IdeClient: {
-      getInstance: vi.fn().mockResolvedValue({
-        getConnectionStatus: vi.fn(),
-        initialize: vi.fn(),
-        shutdown: vi.fn(),
-      }),
-    },
-  };
-});
-vi.mock(
-  '@vybestack/llxprt-code-core/core/prompts.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
-      >();
-    return {
-      ...actual,
-      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-    };
+const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual,
+  IdeClient: {
+    getInstance: vi.fn().mockResolvedValue({
+      getConnectionStatus: vi.fn(),
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+    }),
   },
-);
+}));
+const actual2 = {
+  ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  ...actual2,
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+}));
 
 describe('subagent.ts', () => {
   describe('ContextState', () => {

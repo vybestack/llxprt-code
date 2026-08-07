@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as mcpClient from './mcp-client.js';
 import * as clientIndex from './index.js';
 import * as rootBarrel from '../index.js';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import type { Config, CodeAssistServer } from '@vybestack/llxprt-code-core';
 import { UserTierId } from '@vybestack/llxprt-code-core';

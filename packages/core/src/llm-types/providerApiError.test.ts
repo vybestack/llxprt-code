@@ -3,7 +3,7 @@
  * @requirement REQ-007.1, REQ-007.2
  * @pseudocode lines 80-84
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   isProviderApiError,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   existsSync,
@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
-import { afterEach } from 'vitest';
+import { afterEach } from 'bun:test';
 
 // Track smoke handles that need disposal after each test. Under Vitest,
 // ctx.onTestFinished provides per-test cleanup; Bun does not pass a test

@@ -5,13 +5,13 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ContextUsageDisplay } from './ContextUsageDisplay.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';
 
 // Mock the tokenLimit function
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   tokenLimit: vi.fn(
     (model: string, contextLimit?: number) =>
       contextLimit !== undefined && contextLimit !== 0 ? contextLimit : 100000, // Default 100k tokens

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 import { setCommand, listCommand } from './settings.js';
 import yargs from 'yargs';
@@ -13,16 +13,16 @@ import type * as utilsModule from './utils.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 const mockGetEnvContents: Mock<
   typeof settingsIntegrationModule.getEnvContents
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockGetExtensionAndConfig: Mock<
   typeof utilsModule.getExtensionAndConfig
-> = vi.hoisted(() => vi.fn());
-const mockLoadSettings: Mock = vi.hoisted(() => vi.fn());
+> = vi.fn();
+const mockLoadSettings: Mock<(...args: never[]) => unknown> = vi.fn();
 
-vi.mock('../../config/extensions/settingsIntegration.js', async () => ({
+void vi.mock('../../config/extensions/settingsIntegration.js', () => ({
   updateSetting: mockUpdateSetting,
   getEnvContents: mockGetEnvContents,
   ExtensionSettingScope: {
@@ -31,15 +31,15 @@ vi.mock('../../config/extensions/settingsIntegration.js', async () => ({
   },
 }));
 
-vi.mock('./utils.js', () => ({
+void vi.mock('./utils.js', () => ({
   getExtensionAndConfig: mockGetExtensionAndConfig,
 }));
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings: mockLoadSettings,
 }));
 

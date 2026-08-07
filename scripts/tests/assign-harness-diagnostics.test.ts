@@ -24,7 +24,11 @@
  * infrastructure adapter and assert observable output, not invocation counts.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import {
+  restoreEnv,
+  setEnv,
+} from '../../packages/test-utils/src/env-test-helpers.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -142,7 +146,7 @@ describe('assign harness diagnosability (#2688)', () => {
     });
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.stubEnv('CI', 'true');
+    setEnv('CI', 'true');
     let printed;
     try {
       repo.runCleanup();
@@ -151,7 +155,7 @@ describe('assign harness diagnosability (#2688)', () => {
       // assertion would pass or fail for the wrong reason.
       printed = errorSpy.mock.calls.map((args) => args.join(' ')).join('\n');
     } finally {
-      vi.unstubAllEnvs();
+      restoreEnv();
       errorSpy.mockRestore();
     }
 
@@ -169,18 +173,18 @@ describe('assign harness diagnosability (#2688)', () => {
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     // Stubbing to undefined removes the var (vitest deletes it), matching the
-    // "no CI" environment. Cleanup uses vi.unstubAllEnvs() for parity with the
+    // "no CI" environment. Cleanup uses restoreEnv() for parity with the
     // CI-presence test above — the only stubbed var here is CI, so the restore
     // is effectively targeted. (vi.unstubEnv, a per-key reset, does not exist
     // in vitest 3.2.x; unstubAllEnvs is the available restore.)
-    vi.stubEnv('CI', undefined);
+    setEnv('CI', undefined);
     let callCount;
     try {
       repo.runCleanup();
       // Captured before mockRestore() resets the recorded calls.
       callCount = errorSpy.mock.calls.length;
     } finally {
-      vi.unstubAllEnvs();
+      restoreEnv();
       errorSpy.mockRestore();
     }
 

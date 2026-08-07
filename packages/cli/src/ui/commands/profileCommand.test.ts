@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { profileCommand } from './profileCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-const runtimeMocks = vi.hoisted(() => ({
+const runtimeMocks = {
   saveProfileSnapshot: vi.fn(),
   loadProfileByName: vi.fn(),
   deleteProfileByName: vi.fn(),
@@ -20,35 +20,32 @@ const runtimeMocks = vi.hoisted(() => ({
   getActiveProviderStatus: vi.fn(),
   saveLoadBalancerProfile: vi.fn(),
   getEphemeralSettings: vi.fn(),
-}));
+};
 
-const agentMocks = vi.hoisted(() => ({
+const agentMocks = {
   setProvider: vi.fn().mockResolvedValue({
     changed: true,
     previousProvider: 'gemini',
     nextProvider: 'openai',
     infoMessages: [],
   }),
-}));
+};
 
-const tokenStoreMocks = vi.hoisted(() => ({
+const tokenStoreMocks = {
   listBuckets: vi.fn(),
-}));
+};
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => runtimeMocks,
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-providers/auth.js')
-    >();
-  return {
-    ...actual,
-    createTokenStore: () => ({ listBuckets: tokenStoreMocks.listBuckets }),
-  };
-});
+const actual = {
+  ...(await import('@vybestack/llxprt-code-providers/auth.js')),
+};
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+  ...actual,
+  createTokenStore: () => ({ listBuckets: tokenStoreMocks.listBuckets }),
+}));
 
 describe('profileCommand', () => {
   let context: CommandContext;

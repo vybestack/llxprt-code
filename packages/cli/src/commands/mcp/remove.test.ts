@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import yargs, { type Argv } from 'yargs';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
@@ -22,8 +22,10 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('fs/promises', async () => {
-  const actual = await vi.importActual('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+
+void vi.mock('fs/promises', () => {
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),
@@ -31,14 +33,14 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
 describe('mcp remove command', () => {
   describe('unit tests with mocks', () => {
     let parser: Argv;
-    let mockSetValue: Mock;
+    let mockSetValue: Mock<(...args: never[]) => unknown>;
     let mockSettings: Record<string, unknown>;
 
     beforeEach(async () => {

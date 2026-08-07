@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'bun:test';
 import { getCacheKey, read, write, clear } from './crawlCache.js';
 
 describe('CrawlCache', () => {
@@ -84,11 +85,11 @@ describe('CrawlCache', () => {
       expect(read(key)).toStrictEqual(data);
 
       // Advance time just before expiration
-      await vi.advanceTimersByTimeAsync(ttl - 1);
+      await advanceTimersByTimeAsync(ttl - 1);
       expect(read(key)).toStrictEqual(data);
 
       // Advance time past expiration
-      await vi.advanceTimersByTimeAsync(1);
+      await advanceTimersByTimeAsync(1);
       expect(read(key)).toBeUndefined();
     });
 
@@ -103,7 +104,7 @@ describe('CrawlCache', () => {
       write(key, initialData, ttl);
 
       // Advance time, but not enough to expire
-      await vi.advanceTimersByTimeAsync(3000);
+      await advanceTimersByTimeAsync(3000);
       expect(read(key)).toStrictEqual(initialData);
 
       // Update the data, which should reset the timer
@@ -112,11 +113,11 @@ describe('CrawlCache', () => {
 
       // Advance time again. If the timer wasn't reset, the total elapsed
       // time (3000 + 3000 = 6000) would cause an eviction.
-      await vi.advanceTimersByTimeAsync(3000);
+      await advanceTimersByTimeAsync(3000);
       expect(read(key)).toStrictEqual(updatedData);
 
       // Advance past the new expiration time
-      await vi.advanceTimersByTimeAsync(2001);
+      await advanceTimersByTimeAsync(2001);
       expect(read(key)).toBeUndefined();
     });
   });

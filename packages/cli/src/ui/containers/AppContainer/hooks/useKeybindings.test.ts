@@ -5,23 +5,28 @@
  */
 
 import { act } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import type { Key } from '../../../hooks/useKeypress.js';
 import { useKeybindings } from './useKeybindings.js';
 
-const useKeypressMock = vi.hoisted(() => vi.fn());
-const isMouseEventsActiveMock = vi.hoisted(() => vi.fn());
-const setMouseEventsActiveMock = vi.hoisted(() => vi.fn());
-const disableMouseEventsMock = vi.hoisted(() => vi.fn());
-const enableMouseEventsMock = vi.hoisted(() => vi.fn());
-const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
-const isActivePtyMock = vi.hoisted(() => vi.fn());
+const realUseKeypressModule = {
+  ...(await import('../../../hooks/useKeypress.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
-vi.mock('../../../hooks/useKeypress.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../../hooks/useKeypress.js')
-  >('../../../hooks/useKeypress.js');
+const useKeypressMock = vi.fn();
+const isMouseEventsActiveMock = vi.fn();
+const setMouseEventsActiveMock = vi.fn();
+const disableMouseEventsMock = vi.fn();
+const enableMouseEventsMock = vi.fn();
+const getLastActivePtyIdMock = vi.fn();
+const isActivePtyMock = vi.fn();
+
+void vi.mock('../../../hooks/useKeypress.js', () => {
+  const actual = realUseKeypressModule;
 
   return {
     ...actual,
@@ -29,17 +34,15 @@ vi.mock('../../../hooks/useKeypress.js', async () => {
   };
 });
 
-vi.mock('../../../utils/mouse.js', () => ({
+void vi.mock('../../../utils/mouse.js', () => ({
   isMouseEventsActive: isMouseEventsActiveMock,
   setMouseEventsActive: setMouseEventsActiveMock,
   disableMouseEvents: disableMouseEventsMock,
   enableMouseEvents: enableMouseEventsMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   return {
     ...actual,

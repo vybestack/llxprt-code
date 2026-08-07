@@ -1,4 +1,4 @@
-const reactStub = vi.hoisted(() => {
+const reactStub = (() => {
   let stateCursor = 0;
   const states: unknown[] = [];
   const setters: Array<(value: unknown) => void> = [];
@@ -62,24 +62,22 @@ const reactStub = vi.hoisted(() => {
     listeners,
     runEffects,
   };
-});
+})();
 
-vi.mock('react', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react')>();
-  return {
-    ...actual,
-    ...reactStub.module,
-  };
-});
+const actual = { ...(await import('react')) };
+void vi.mock('react', () => ({
+  ...actual,
+  ...reactStub.module,
+}));
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
 import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
-const coreMocks = vi.hoisted(() => {
+const coreMocks = (() => {
   const logSlashCommand = vi.fn();
   class StubLogger {
     debug = vi.fn();
@@ -136,25 +134,22 @@ const coreMocks = vi.hoisted(() => {
       FolderTrustChanged: 'folder-trust-changed',
     },
   };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-core', () => coreMocks);
+void vi.mock('@vybestack/llxprt-code-core', () => coreMocks);
 
-const sessionStatsMock = vi.hoisted(() => ({
+const sessionStatsMock = {
   stats: {},
   updateHistoryTokenCount: vi.fn(),
+};
+
+const actualActual = { ...(await import('../contexts/SessionContext.js')) };
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actualActual,
+  useSessionStats: vi.fn(() => sessionStatsMock),
 }));
 
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../contexts/SessionContext.js')>();
-  return {
-    ...actual,
-    useSessionStats: vi.fn(() => sessionStatsMock),
-  };
-});
-
-const loaderMocks = vi.hoisted(() => {
+const loaderMocks = (() => {
   const builtinLoaderInstance = { loadCommands: vi.fn() };
   const fileLoaderInstance = { loadCommands: vi.fn() };
   const mcpLoaderInstance = { loadCommands: vi.fn() };
@@ -168,17 +163,17 @@ const loaderMocks = vi.hoisted(() => {
     FileCommandLoader: vi.fn().mockImplementation(() => fileLoaderInstance),
     McpPromptLoader: vi.fn().mockImplementation(() => mcpLoaderInstance),
   };
-});
+})();
 
-vi.mock('../../services/BuiltinCommandLoader.js', () => ({
+void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: loaderMocks.BuiltinCommandLoader,
 }));
 
-vi.mock('../../services/FileCommandLoader.js', () => ({
+void vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: loaderMocks.FileCommandLoader,
 }));
 
-vi.mock('../../services/McpPromptLoader.js', () => ({
+void vi.mock('../../services/McpPromptLoader.js', () => ({
   McpPromptLoader: loaderMocks.McpPromptLoader,
 }));
 

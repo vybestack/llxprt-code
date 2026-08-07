@@ -8,7 +8,20 @@
  * SubAgentScope stream idle timeout behavioral tests.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -40,77 +53,69 @@ import {
   waitForConditionInRealTime,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
-const { TodoStoreMock } = vi.hoisted(() => {
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
+const realNonInteractiveToolExecutorModule = {
+  ...(await import('./nonInteractiveToolExecutor.js')),
+};
+
+const { TodoStoreMock } = (() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
   return { mockReadTodos, TodoStoreMock };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: TodoStoreMock,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: TodoStoreMock,
+}));
 
-vi.mock('./chatSession.js', (importOriginal) => {
+const __actual = { ...(await import('./chatSession.js')) };
+void vi.mock('./chatSession.js', () => {
   const apply = (actual: typeof import('./chatSession.js')) => ({
     ...actual,
     ChatSession: vi.fn(),
   });
-  const result = importOriginal() as
+  const result = __actual as
     | typeof import('./chatSession.js')
     | Promise<typeof import('./chatSession.js')>;
   return result instanceof Promise ? result.then(apply) : apply(result);
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/contentGenerator.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/contentGenerator.js')
-      >();
-    return {
-      ...actual,
-      createContentGenerator: vi.fn(),
-    };
-  },
+const actual3 = {
+  ...(await import('@vybestack/llxprt-code-core/core/contentGenerator.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => ({
+  ...actual3,
+  createContentGenerator: vi.fn(),
+}));
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
 );
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
-vi.mock('./nonInteractiveToolExecutor.js');
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    IdeClient: {
-      getInstance: vi.fn().mockResolvedValue({
-        getConnectionStatus: vi.fn(),
-        initialize: vi.fn(),
-        shutdown: vi.fn(),
-      }),
-    },
-  };
-});
-vi.mock(
-  '@vybestack/llxprt-code-core/core/prompts.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/core/prompts.js')
-      >();
-    return {
-      ...actual,
-      getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
-    };
-  },
+void vi.mock('./nonInteractiveToolExecutor.js', () =>
+  automock(realNonInteractiveToolExecutorModule),
 );
+const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual4,
+  IdeClient: {
+    getInstance: vi.fn().mockResolvedValue({
+      getConnectionStatus: vi.fn(),
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+    }),
+  },
+}));
+const actual5 = {
+  ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  ...actual5,
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+}));
 
 describe('subagent.ts', () => {
   describe('stream idle timeout behavioral tests', () => {
@@ -243,7 +248,9 @@ describe('subagent.ts', () => {
       );
 
       // Mock a slow stream that yields after the timeout
-      vi.mocked(ChatSession).mockImplementationOnce(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -253,7 +260,7 @@ describe('subagent.ts', () => {
                   value: mockChunk({ text: 'Starting...' }),
                 };
                 // Wait past the custom timeout
-                await vi.advanceTimersByTimeAsync(25_000);
+                await advanceTimersByTimeAsync(25_000);
                 yield {
                   type: StreamEventType.CHUNK,
                   value: mockChunk({ text: 'Late response' }),
@@ -272,8 +279,12 @@ describe('subagent.ts', () => {
           }) as unknown as ChatSession,
       );
 
-      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
-      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockReturnValue({} as ContentGenerator);
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue('');
 
       const runPromise = scope.runNonInteractive(new ContextState());
 
@@ -281,11 +292,11 @@ describe('subagent.ts', () => {
       const resultPromise = runPromise.catch((e) => e);
 
       // Advance past the custom timeout
-      await vi.advanceTimersByTimeAsync(20_000);
+      await advanceTimersByTimeAsync(20_000);
       await Promise.resolve();
 
       // Run to completion
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
 
       // Scope should have timed out
       const _result = await resultPromise;
@@ -328,7 +339,9 @@ describe('subagent.ts', () => {
         resolveIterator = resolve;
       });
 
-      vi.mocked(ChatSession).mockImplementationOnce(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -358,8 +371,12 @@ describe('subagent.ts', () => {
           }) as unknown as ChatSession,
       );
 
-      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
-      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockReturnValue({} as ContentGenerator);
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue('');
 
       let runSettled = false;
       const runPromise = scope
@@ -446,7 +463,9 @@ describe('subagent.ts', () => {
       const gapPromise = new Promise<void>((resolve) => {
         releaseGap = resolve;
       });
-      vi.mocked(ChatSession).mockImplementationOnce(
+      (
+        ChatSession as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementationOnce(
         () =>
           ({
             sendMessageStream: vi.fn().mockImplementation(async () => {
@@ -481,8 +500,12 @@ describe('subagent.ts', () => {
           }) as unknown as ChatSession,
       );
 
-      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
-      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+      (
+        createContentGenerator as Mock<typeof createContentGenerator>
+      ).mockReturnValue({} as ContentGenerator);
+      (
+        getEnvironmentContext as Mock<typeof getEnvironmentContext>
+      ).mockResolvedValue('');
 
       const runPromise = scope.runNonInteractive(new ContextState());
 

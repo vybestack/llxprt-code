@@ -9,7 +9,7 @@
  * Sibling files cover max_turns, timeout, async mode, and issue-specific tests.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';

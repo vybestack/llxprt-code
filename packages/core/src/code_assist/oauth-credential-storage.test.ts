@@ -13,7 +13,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { OAuthCredentialStorage } from './oauth-credential-storage.js';
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { OAuthCredentials } from '@vybestack/llxprt-code-mcp';
@@ -23,15 +23,15 @@ import { coreEvents } from '../utils/events.js';
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
 
-const mockHomedir = vi.hoisted(() => vi.fn(() => '/mock/home'));
-vi.mock('node:os', () => ({
+const mockHomedir = vi.fn(() => '/mock/home');
+void vi.mock('node:os', () => ({
   homedir: mockHomedir,
 }));
 
 // Mock external dependencies
-vi.mock('@vybestack/llxprt-code-mcp', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-mcp');
+const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+void vi.mock('@vybestack/llxprt-code-mcp', () => {
+  const actual = __actual as typeof import('@vybestack/llxprt-code-mcp');
   class MockKeychainTokenStorage {
     readToken = vi.fn();
     writeToken = vi.fn();
@@ -48,13 +48,13 @@ vi.mock('@vybestack/llxprt-code-mcp', (importOriginal) => {
       .mockImplementation(() => new MockKeychainTokenStorage()),
   };
 });
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),
     rm: vi.fn(),
   },
 }));
-vi.mock('../utils/events.js', () => ({
+void vi.mock('../utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },
@@ -139,17 +139,17 @@ describe('OAuthCredentialStorage', () => {
     it('should migrate from legacy .gemini path when llxprt file is missing', async () => {
       vi.spyOn(storage, 'getCredentials').mockResolvedValue(null);
 
-      (fs.readFile as unknown as Mock).mockImplementation(
-        async (filePath: string) => {
-          if (filePath === llxprtFilePath) {
-            throw createEnoentError();
-          }
-          if (filePath === geminiFilePath) {
-            return JSON.stringify(mockCredentials);
-          }
-          throw new Error(`Unexpected path ${filePath}`);
-        },
-      );
+      (
+        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(async (filePath: string) => {
+        if (filePath === llxprtFilePath) {
+          throw createEnoentError();
+        }
+        if (filePath === geminiFilePath) {
+          return JSON.stringify(mockCredentials);
+        }
+        throw new Error(`Unexpected path ${filePath}`);
+      });
 
       const result = await oauthStorage.loadCredentials();
 

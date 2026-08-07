@@ -23,7 +23,7 @@
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { CONFIRMATION_FORCING_SOURCE } from '../confirmationForcing.js';

@@ -5,7 +5,7 @@
  */
 
 import { render } from '../../../test-utils/render.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { SkillsList } from './SkillsList.js';
 import { type SkillDefinition } from '@vybestack/llxprt-code-core';
 

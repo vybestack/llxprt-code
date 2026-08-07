@@ -11,7 +11,7 @@
  * @issue #1750 — Stream retry boundary
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -19,13 +19,14 @@ import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/ind
 import type { SendMessageParams } from './chatSession.js';
 
 // Import retry utility types
-import type * as retryModule from '@vybestack/llxprt-code-core/utils/retry.js';
 
 // Mock the retry utility
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', async () => {
-  const actual = await vi.importActual<typeof retryModule>(
-    '@vybestack/llxprt-code-core/utils/retry.js',
-  );
+const realRetryModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
+};
+
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => {
+  const actual = realRetryModule;
   return {
     ...actual,
     retryWithBackoff: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock('@vybestack/llxprt-code-core/utils/retry.js', async () => {
 });
 
 // Mock turnLogging
-vi.mock('./turnLogging.js', () => ({
+void vi.mock('./turnLogging.js', () => ({
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
@@ -618,9 +619,7 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
 describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', () => {
   it('should have API call errors caught by retryWithBackoff', async () => {
     // Import the actual retryWithBackoff to test integration
-    const { retryWithBackoff: actualRetry } = await vi.importActual<
-      typeof import('@vybestack/llxprt-code-core/utils/retry.js')
-    >('@vybestack/llxprt-code-core/utils/retry.js');
+    const { retryWithBackoff: actualRetry } = realRetryModule;
 
     // Track retry attempts
     let _attemptCount = 0;
@@ -663,9 +662,7 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
   });
 
   it('should trigger bucket failover on persistent 429 errors', async () => {
-    const { retryWithBackoff: actualRetry } = await vi.importActual<
-      typeof import('@vybestack/llxprt-code-core/utils/retry.js')
-    >('@vybestack/llxprt-code-core/utils/retry.js');
+    const { retryWithBackoff: actualRetry } = realRetryModule;
 
     let _failoverCalled = false;
     const mockOnPersistent429 = vi.fn().mockResolvedValue(true); // Simulate successful failover

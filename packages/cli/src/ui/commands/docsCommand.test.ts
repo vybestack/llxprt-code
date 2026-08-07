@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import open from 'open';
 import { docsCommand } from './docsCommand.js';
 import { type CommandContext } from './types.js';
@@ -13,7 +22,7 @@ import { MessageType } from '../types.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
 // Mock the 'open' library
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
@@ -23,12 +32,12 @@ describe('docsCommand', () => {
     // Create a fresh mock context before each test
     mockContext = createMockCommandContext();
     // Reset the `open` mock
-    vi.mocked(open).mockClear();
+    (open as Mock<typeof open>).mockClear();
   });
 
   afterEach(() => {
     // Restore any stubbed environment variables
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it("should add an info message and call 'open' in a non-sandbox environment", async () => {

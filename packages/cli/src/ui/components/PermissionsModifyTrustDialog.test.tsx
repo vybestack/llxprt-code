@@ -4,12 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import * as path from 'node:path';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import React, { act } from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
@@ -19,18 +17,26 @@ import { ideContext } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
 
-const mockedExit = vi.hoisted(() => vi.fn());
-const mockedCwd = vi.hoisted(() => vi.fn());
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteValue = vi.hoisted(() => vi.fn());
-const mockedGetValue = vi.hoisted(() => vi.fn());
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
-const mockedResolvePathTrust = vi.hoisted(() => vi.fn());
-const mockedTrustedConfig = vi.hoisted<Record<string, TrustLevel>>(() => ({}));
+const realNodeProcessModule = { ...(await import('node:process')) };
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
-vi.mock('node:process', async () => {
-  const actual = await vi.importActual('node:process');
+const mockedExit = vi.fn();
+const mockedCwd = vi.fn();
+const mockedSetValue = vi.fn();
+const mockedDeleteValue = vi.fn();
+const mockedGetValue = vi.fn();
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
+const mockedResolvePathTrust = vi.fn();
+const mockedTrustedConfig = {} as Record<string, TrustLevel>;
+
+void vi.mock('node:process', () => {
+  const actual = realNodeProcessModule;
   return {
     ...actual,
     exit: mockedExit,
@@ -39,8 +45,8 @@ vi.mock('node:process', async () => {
 });
 
 // Mock the trustedFolders module
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+void vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -59,8 +65,8 @@ vi.mock('../../config/trustedFolders.js', async () => {
 });
 
 // Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getIdeTrust: vi.fn(() => undefined),
@@ -407,7 +413,9 @@ describe('PermissionsModifyTrustDialog', () => {
     stdin.write('\r');
     stdin.write('\r');
     stdin.write('\u001B');
-    await waitFor(() => expect(mockedSetValue).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(mockedSetValue).toHaveBeenCalledOnce();
+    });
     expect(onExit).not.toHaveBeenCalled();
 
     transition.resolve();
@@ -433,7 +441,9 @@ describe('PermissionsModifyTrustDialog', () => {
     );
 
     stdin.write('\r');
-    await waitFor(() => expect(mockedSetValue).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(mockedSetValue).toHaveBeenCalledOnce();
+    });
     unmount();
 
     await act(async () => {

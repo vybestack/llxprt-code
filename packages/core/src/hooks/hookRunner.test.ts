@@ -10,13 +10,21 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';
 import type { Config } from '../config/config.js';
 import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
+
+const realDebugModule = { ...(await import('../debug/index.js')) };
+afterEach(() => {
+  restoreGlobals();
+});
 
 function decodeSpawnCommand(args: readonly string[]): string {
   const shellCommand = String(args.at(-1) ?? '');
@@ -47,8 +55,9 @@ type MockChildProcessWithoutNullStreams = ChildProcessWithoutNullStreams & {
 };
 
 // Mock child_process with sync importOriginal for partial mocking
-vi.mock('node:child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:child_process');
+const __actual = { ...(await import('node:child_process')) };
+void vi.mock('node:child_process', () => {
+  const actual = __actual as typeof import('node:child_process');
   return {
     ...actual,
     spawn: vi.fn(),
@@ -56,20 +65,21 @@ vi.mock('node:child_process', (importOriginal) => {
 });
 
 // Mock debugLogger using vi.hoisted
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
-vi.mock('../debug/index.js', () => {
+void vi.mock('../debug/index.js', () => {
   // Create a constructor function that returns the mock
   const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
   // Add getLogger as a static method
   DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
 
   return {
+    ...realDebugModule,
     DebugLogger,
   };
 });
@@ -82,7 +92,7 @@ const mockConsole = {
   debug: vi.fn(),
 };
 
-vi.stubGlobal('console', mockConsole);
+setGlobal('console', mockConsole);
 
 // Dynamic import AFTER vi.mock calls so mocks are applied.
 const { HookRunner } = await import('./hookRunner.js');
@@ -139,12 +149,48 @@ describe('HookRunner', () => {
       mockProcessOn,
     } as unknown as MockChildProcessWithoutNullStreams;
 
-    vi.mocked(spawn).mockReturnValue(mockSpawn);
+    (spawn as Mock<typeof spawn>).mockReturnValue(mockSpawn);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  /** Configures mockProcessOn to fire the `close` event with the given exit code. */
+  const onClose = (
+    exitCode: number,
+    schedule: (cb: () => void) => void = (cb) => setTimeout(cb, 20),
+  ): void => {
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          schedule(() => callback(exitCode));
+        }
+      },
+    );
+  };
+
+  /** Configures mockStdoutOn to emit `data` with the given payload. */
+  const onStdoutData = (data: string, delay = 10): void => {
+    mockSpawn.mockStdoutOn.mockImplementation(
+      (event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data') {
+          setTimeout(() => callback(Buffer.from(data)), delay);
+        }
+      },
+    );
+  };
+
+  /** Configures mockStderrOn to emit `data` with the given payload. */
+  const onStderrData = (data: string, delay = 10): void => {
+    mockSpawn.mockStderrOn.mockImplementation(
+      (event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data') {
+          setTimeout(() => callback(Buffer.from(data)), delay);
+        }
+      },
+    );
+  };
 
   describe('executeHook', () => {
     describe('command hooks', () => {
@@ -210,13 +256,7 @@ describe('HookRunner', () => {
           },
         );
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setTimeout(() => callback(0), 20);
-            }
-          },
-        );
+        onClose(0);
 
         const result = await hookRunner.executeHook(
           commandConfig,
@@ -243,13 +283,7 @@ describe('HookRunner', () => {
           },
         );
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setTimeout(() => callback(1), 20);
-            }
-          },
-        );
+        onClose(1);
 
         const result = await hookRunner.executeHook(
           commandConfig,
@@ -270,7 +304,7 @@ describe('HookRunner', () => {
         };
 
         // Mock error during spawn
-        vi.mocked(spawn).mockImplementationOnce(() => {
+        (spawn as Mock<typeof spawn>).mockImplementationOnce(() => {
           throw new Error('Spawn error');
         });
 
@@ -377,7 +411,7 @@ describe('HookRunner', () => {
           // Let the async executeHook start and set up timers.
           // Under fake timers, we need to flush microtasks for the async
           // operation to proceed and register the setTimeout.
-          await vi.advanceTimersByTimeAsync(0);
+          await advanceTimersByTimeAsync(0);
 
           // Advance timers to trigger SIGTERM (timeout=50ms)
           vi.advanceTimersByTime(50);
@@ -402,13 +436,7 @@ describe('HookRunner', () => {
           command: '$LLXPRT_PROJECT_DIR/hooks/test.sh',
         };
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setImmediate(() => callback(0));
-            }
-          },
-        );
+        onClose(0, (cb) => setImmediate(cb));
 
         await hookRunner.executeHook(
           configWithEnvVar,
@@ -417,7 +445,7 @@ describe('HookRunner', () => {
         );
 
         // SECURITY: Verify spawn is called with shell executable and expanded path
-        const spawnCall = vi.mocked(spawn).mock.calls[0];
+        const spawnCall = (spawn as Mock<typeof spawn>).mock.calls[0];
         expect(spawnCall[0]).toMatch(/bash|powershell/i);
         expect(spawnCall[2]).toStrictEqual(
           expect.objectContaining({
@@ -454,13 +482,7 @@ describe('HookRunner', () => {
           command: 'ls $LLXPRT_PROJECT_DIR',
         };
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setImmediate(() => callback(0));
-            }
-          },
-        );
+        onClose(0, (cb) => setImmediate(cb));
 
         await hookRunner.executeHook(
           config,
@@ -479,7 +501,7 @@ describe('HookRunner', () => {
         );
 
         // Verify the decoded command contains the escaped malicious path.
-        const commandArgs = vi.mocked(spawn).mock.calls[0][1];
+        const commandArgs = (spawn as Mock<typeof spawn>).mock.calls[0][1];
         expect(isMaliciousPathEscaped(decodeSpawnCommand(commandArgs))).toBe(
           true,
         );
@@ -495,13 +517,7 @@ describe('HookRunner', () => {
       ];
 
       // Mock both commands to succeed
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 10);
-          }
-        },
-      );
+      onClose(0, (cb) => setTimeout(cb, 10));
 
       const results = await hookRunner.executeHooksParallel(
         configs,
@@ -556,7 +572,7 @@ describe('HookRunner', () => {
         (event: string, callback: (code: number) => void) => {
           if (event === 'close') {
             // Extract command from shell args instead of command directly
-            const args = vi.mocked(spawn).mock.calls[
+            const args = (spawn as Mock<typeof spawn>).mock.calls[
               executionOrder.length
             ][1] as string[];
             executionOrder.push(decodeSpawnCommand(args));
@@ -668,7 +684,8 @@ describe('HookRunner', () => {
 
       // Verify that the second hook received modified input
       const secondHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[1][0],
       );
       expect(secondHookInput.prompt).toContain('Original prompt');
       expect(secondHookInput.prompt).toContain('Context from hook 1');
@@ -729,7 +746,8 @@ describe('HookRunner', () => {
 
       // Verify that the second hook received modified input
       const secondHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[1][0],
       );
       expect(secondHookInput.llm_request.model).toBe('gemini-1.5-pro');
       expect(secondHookInput.llm_request.temperature).toBe(0.7);
@@ -741,13 +759,7 @@ describe('HookRunner', () => {
         { type: HookType.Command, command: './hook2.sh' },
       ];
 
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from('Hook failed')), 10);
-          }
-        },
-      );
+      onStderrData('Hook failed');
 
       mockSpawn.mockProcessOn.mockImplementation(
         (event: string, callback: (code: number) => void) => {
@@ -768,10 +780,12 @@ describe('HookRunner', () => {
 
       // Verify that both hooks received the same original input
       const firstHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[0][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[0][0],
       );
       const secondHookInput = JSON.parse(
-        vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
+        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
+          .calls[1][0],
       );
       expect(firstHookInput).toStrictEqual(secondHookInput);
     });
@@ -786,21 +800,9 @@ describe('HookRunner', () => {
     it('should handle invalid JSON output gracefully', async () => {
       const invalidJson = '{ "decision": "allow", incomplete';
 
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(invalidJson)), 10);
-          }
-        },
-      );
+      onStdoutData(invalidJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -820,21 +822,9 @@ describe('HookRunner', () => {
     it('should handle malformed JSON with exit code 0', async () => {
       const malformedJson = 'not json at all';
 
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(malformedJson)), 10);
-          }
-        },
-      );
+      onStdoutData(malformedJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -852,21 +842,9 @@ describe('HookRunner', () => {
     it('should handle invalid JSON with exit code 1 (non-blocking error)', async () => {
       const invalidJson = '{ broken json';
 
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(invalidJson)), 10);
-          }
-        },
-      );
+      onStderrData(invalidJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(1), 20);
-          }
-        },
-      );
+      onClose(1);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -885,21 +863,9 @@ describe('HookRunner', () => {
     it('should handle invalid JSON with exit code 2 (blocking error)', async () => {
       const invalidJson = '{ "error": incomplete';
 
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(invalidJson)), 10);
-          }
-        },
-      );
+      onStderrData(invalidJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(2), 20);
-          }
-        },
-      );
+      onClose(2);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -916,21 +882,9 @@ describe('HookRunner', () => {
     });
 
     it('should handle empty JSON output', async () => {
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from('')), 10);
-          }
-        },
-      );
+      onStdoutData('');
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -947,21 +901,9 @@ describe('HookRunner', () => {
       const mockOutput = { decision: 'allow', reason: 'All good' };
       const doubleEncodedJson = JSON.stringify(JSON.stringify(mockOutput));
 
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(doubleEncodedJson)), 10);
-          }
-        },
-      );
+      onStdoutData(doubleEncodedJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,

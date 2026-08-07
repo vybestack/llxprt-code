@@ -4,12 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { installNonInteractiveSigintHandler } from './cli.js';
 import { runExitCleanup } from './utils/cleanup.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(async () => {}),
 }));
 
@@ -19,7 +28,7 @@ describe('installNonInteractiveSigintHandler', () => {
 
   beforeEach(() => {
     capturedSigintListeners = [];
-    vi.mocked(runExitCleanup).mockClear();
+    (runExitCleanup as Mock<typeof runExitCleanup>).mockClear();
     stderrWriteSpy = vi
       .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
@@ -61,7 +70,7 @@ describe('installNonInteractiveSigintHandler', () => {
     const handler = capturedSigintListeners[capturedSigintListeners.length - 1];
 
     handler();
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(exitProcess).toHaveBeenCalledWith(130);
       expect(runExitCleanup).toHaveBeenCalledTimes(1);
     });
@@ -79,12 +88,12 @@ describe('installNonInteractiveSigintHandler', () => {
     const handler = capturedSigintListeners[capturedSigintListeners.length - 1];
 
     handler();
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(exitProcess).toHaveBeenCalledWith(130);
     });
 
-    vi.mocked(exitProcess).mockClear();
-    vi.mocked(runExitCleanup).mockClear();
+    (exitProcess as Mock<typeof exitProcess>).mockClear();
+    (runExitCleanup as Mock<typeof runExitCleanup>).mockClear();
     stderrWriteSpy.mockClear();
 
     handler();
@@ -131,7 +140,7 @@ describe('installNonInteractiveSigintHandler', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       handler();
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(exitProcess).toHaveBeenCalledWith(130);
       });
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ServiceAccountImpersonationProvider } from './sa-impersonation-provider.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
@@ -14,15 +14,13 @@ const mockGetClient = vi.fn(() => ({
 }));
 
 // Mock the google-auth-library to use a shared mock function
-vi.mock('google-auth-library', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('google-auth-library')>();
-  return {
-    ...actual,
-    GoogleAuth: vi.fn().mockImplementation(() => ({
-      getClient: mockGetClient,
-    })),
-  };
-});
+const actual = { ...(await import('google-auth-library')) };
+void vi.mock('google-auth-library', () => ({
+  ...actual,
+  GoogleAuth: vi.fn().mockImplementation(() => ({
+    getClient: mockGetClient,
+  })),
+}));
 
 const defaultSAConfig: MCPServerConfig = {
   url: 'https://my-iap-service.run.app',

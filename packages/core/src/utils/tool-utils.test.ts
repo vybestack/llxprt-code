@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it } from 'vitest';
+import { expect, describe, it } from 'bun:test';
 import { doesToolInvocationMatch } from './tool-utils.js';
 import type { AnyToolInvocation } from '../index.js';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools';

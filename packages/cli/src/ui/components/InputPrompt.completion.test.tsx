@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  automock,
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
@@ -16,7 +21,15 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import type { UseCommandCompletionReturn } from '../hooks/useCommandCompletion.js';
@@ -31,12 +44,43 @@ import chalk from 'chalk';
 import { StreamingState } from '../types.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 
-vi.mock('../hooks/useShellHistory.js');
-vi.mock('../hooks/useCommandCompletion.js');
-vi.mock('../hooks/useInputHistory.js');
-vi.mock('../hooks/useReverseSearchCompletion.js');
-vi.mock('../utils/clipboardUtils.js');
-vi.mock('../hooks/useKittyKeyboardProtocol.js');
+const realUseShellHistoryModule = {
+  ...(await import('../hooks/useShellHistory.js')),
+};
+const realUseCommandCompletionModule = {
+  ...(await import('../hooks/useCommandCompletion.js')),
+};
+const realUseInputHistoryModule = {
+  ...(await import('../hooks/useInputHistory.js')),
+};
+const realUseReverseSearchCompletionModule = {
+  ...(await import('../hooks/useReverseSearchCompletion.js')),
+};
+const realClipboardUtilsModule = {
+  ...(await import('../utils/clipboardUtils.js')),
+};
+const realUseKittyKeyboardProtocolModule = {
+  ...(await import('../hooks/useKittyKeyboardProtocol.js')),
+};
+
+void vi.mock('../hooks/useShellHistory.js', () =>
+  automock(realUseShellHistoryModule),
+);
+void vi.mock('../hooks/useCommandCompletion.js', () =>
+  automock(realUseCommandCompletionModule),
+);
+void vi.mock('../hooks/useInputHistory.js', () =>
+  automock(realUseInputHistoryModule),
+);
+void vi.mock('../hooks/useReverseSearchCompletion.js', () =>
+  automock(realUseReverseSearchCompletionModule),
+);
+void vi.mock('../utils/clipboardUtils.js', () =>
+  automock(realClipboardUtilsModule),
+);
+void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
+  automock(realUseKittyKeyboardProtocolModule),
+);
 
 const mockSlashCommands: SlashCommand[] = [
   {
@@ -95,13 +139,17 @@ describe('InputPrompt', () => {
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
 
-  const mockedUseShellHistory = vi.mocked(useShellHistory);
-  const mockedUseCommandCompletion = vi.mocked(useCommandCompletion);
-  const mockedUseInputHistory = vi.mocked(useInputHistory);
-  const mockedUseReverseSearchCompletion = vi.mocked(
-    useReverseSearchCompletion,
-  );
-  const mockedUseKittyKeyboardProtocol = vi.mocked(useKittyKeyboardProtocol);
+  const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
+  const mockedUseCommandCompletion = useCommandCompletion as Mock<
+    typeof useCommandCompletion
+  >;
+  const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
+  const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
+    typeof useReverseSearchCompletion
+  >;
+  const mockedUseKittyKeyboardProtocol = useKittyKeyboardProtocol as Mock<
+    typeof useKittyKeyboardProtocol
+  >;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -514,7 +562,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Simulate a paste operation (this should set the paste protection)
@@ -527,7 +575,7 @@ describe('InputPrompt', () => {
         stdin.write('\r');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Verify that onSubmit was NOT called due to recent paste protection
@@ -545,7 +593,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Simulate a paste operation (this sets the protection)
@@ -553,12 +601,12 @@ describe('InputPrompt', () => {
         stdin.write('\x1b[200~pasted text\x1b[201~');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Advance timers past the protection timeout
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(50);
+        await advanceTimersByTimeAsync(50);
       });
 
       // Now Enter should work normally
@@ -566,7 +614,7 @@ describe('InputPrompt', () => {
         stdin.write('\r');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       expect(props.onSubmit).toHaveBeenCalledWith('pasted text');
@@ -595,7 +643,7 @@ describe('InputPrompt', () => {
           { kittyProtocolEnabled: true },
         );
         await act(async () => {
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
         });
 
         // Simulate a paste operation
@@ -603,7 +651,7 @@ describe('InputPrompt', () => {
           stdin.write('\x1b[200~some pasted stuff\x1b[201~');
         });
         await act(async () => {
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
         });
 
         // Simulate an Enter key press immediately after paste
@@ -611,7 +659,7 @@ describe('InputPrompt', () => {
           stdin.write('\r');
         });
         await act(async () => {
-          await vi.runAllTimersAsync();
+          await runAllTimersAsync();
         });
 
         // Verify that onSubmit was called
@@ -628,7 +676,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Press Enter without any recent paste
@@ -636,7 +684,7 @@ describe('InputPrompt', () => {
         stdin.write('\r');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Verify that onSubmit was called normally
@@ -651,7 +699,7 @@ describe('InputPrompt', () => {
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
       props.buffer.setText('');
-      vi.mocked(props.buffer.setText).mockClear();
+      (props.buffer.setText as Mock<typeof props.buffer.setText>).mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -675,7 +723,9 @@ describe('InputPrompt', () => {
       // Seed the buffer, then clear the spy so the later assertion is about
       // the ESC-driven clear rather than this setup call.
       props.buffer.setText('text to clear');
-      (props.buffer.setText as unknown as Mock).mockClear();
+      (
+        props.buffer.setText as unknown as Mock<(...args: never[]) => unknown>
+      ).mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -778,14 +828,14 @@ describe('InputPrompt', () => {
         { kittyProtocolEnabled: false },
       );
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       await act(async () => {
         stdin.write('\x1B');
       });
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
       });
 
       // Passing undefined must be a safe no-op: clearing via replaceRange must

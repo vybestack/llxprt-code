@@ -7,7 +7,6 @@ linker = "hoisted"
 # It applies to every file here because discovery runs the whole workspace, so
 # a suite that drives the real store cannot opt in per file (issue #2979).
 preload = [
-  "../../test-setup/augment-bun-vi.ts",
   "./test-setup-storage-isolation.ts",
   "./bun-test-setup.ts",
 ]

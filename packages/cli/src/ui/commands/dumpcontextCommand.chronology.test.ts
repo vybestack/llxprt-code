@@ -9,27 +9,24 @@
  * unknown fields with HTTP 400.
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, type Mock } from 'bun:test';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
-vi.mock('@vybestack/llxprt-code-providers', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-providers')>();
-  return {
-    ...actual,
-    dumpRequestContext: vi.fn().mockResolvedValue({
-      baseId: '20260101-120000-anthropic-abc123',
-      requestFilename: '20260101-120000-anthropic-abc123-request.json',
-      dumpDir: '/tmp/.llxprt/dumps',
-    }),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
+void vi.mock('@vybestack/llxprt-code-providers', () => ({
+  ...actual,
+  dumpRequestContext: vi.fn().mockResolvedValue({
+    baseId: '20260101-120000-anthropic-abc123',
+    requestFilename: '20260101-120000-anthropic-abc123-request.json',
+    dumpDir: '/tmp/.llxprt/dumps',
+  }),
+}));
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: vi.fn(() => ({
     getEphemeralSetting: vi.fn(() => 'off'),
     setEphemeralSetting: vi.fn(),
@@ -82,9 +79,9 @@ function contextWithTrace(): CommandContext {
 // Declared as a const arrow (not a hoisted function declaration) so the
 // assertDefined narrowing of dumpcontextAction above applies inside the body.
 const dumpAndCaptureCall = async (): Promise<unknown[]> => {
-  vi.mocked(dumpRequestContext).mockClear();
+  (dumpRequestContext as Mock<typeof dumpRequestContext>).mockClear();
   await dumpcontextAction(contextWithTrace(), 'now');
-  return vi.mocked(dumpRequestContext).mock.calls[0];
+  return (dumpRequestContext as Mock<typeof dumpRequestContext>).mock.calls[0];
 };
 
 describe('dumpcontext now chronology sidecar (#1721)', () => {

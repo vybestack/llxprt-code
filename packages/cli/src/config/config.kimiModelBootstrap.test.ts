@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Settings } from './settings.js';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
@@ -16,13 +16,11 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    isRipgrepAvailable: vi.fn().mockResolvedValue(true),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  isRipgrepAvailable: vi.fn().mockResolvedValue(true),
+}));
 
 // Regression test for start.js model.missing when provider != gemini and no model provided.
 // Expected behavior: provider aliases with defaultModel should supply a non-empty model.

@@ -6,7 +6,7 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeAll, expect } from 'vitest';
+import { beforeAll, expect } from 'bun:test';
 import {
   asRecord,
   asRecordArray,

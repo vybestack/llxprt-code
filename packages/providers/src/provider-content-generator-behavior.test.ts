@@ -20,7 +20,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 // P11: provider content generation implementation is provider-owned;
 // core retains only structural runtime contracts.

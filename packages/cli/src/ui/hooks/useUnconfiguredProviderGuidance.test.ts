@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import {
   afterEach,
   beforeEach,
@@ -14,12 +12,13 @@ import {
   it,
   vi,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
+import type { HistoryItemWithoutId } from '../types.js';
 
 describe('useUnconfiguredProviderGuidance', () => {
-  let addItem: Mock;
+  let addItem: Mock<(item: HistoryItemWithoutId, timestamp?: number) => number>;
 
   beforeEach(() => {
     addItem = vi.fn();

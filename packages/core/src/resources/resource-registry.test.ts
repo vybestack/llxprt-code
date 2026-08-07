@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import type { Resource } from '@modelcontextprotocol/sdk/types.js';
 import { ResourceRegistry } from './resource-registry.js';
 

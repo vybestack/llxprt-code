@@ -21,7 +21,7 @@
  * @requirement:REQ-005.5c
  */
 
-import { describe, it, expect, beforeEach, vi } from '../../../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { recordCancelledToolHistory } from '../loopHelpers.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';

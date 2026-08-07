@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 import { GoogleGenAI } from '@google/genai';
 import type { ModelGenerationRequest } from '../llm-types/modelRequest.js';
 
-vi.mock('@google/genai', (importOriginal) => {
-  const actual = importOriginal() as typeof import('@google/genai');
+const __actual = { ...(await import('@google/genai')) };
+void vi.mock('@google/genai', () => {
+  const actual = __actual as typeof import('@google/genai');
   return {
     ...actual,
     GoogleGenAI: vi.fn(),
@@ -48,9 +49,9 @@ function makeModels() {
 describe('GoogleGenAIWrapper (neutral)', () => {
   it('generateContent converts neutral request and returns neutral ModelOutput', async () => {
     const models = makeModels();
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () => ({ models }) as unknown as GoogleGenAI,
-    );
+    (
+      GoogleGenAI as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => ({ models }) as unknown as GoogleGenAI);
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
@@ -82,9 +83,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('generateContentStream yields neutral ModelStreamChunk values', async () => {
     const models = makeModels();
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () => ({ models }) as unknown as GoogleGenAI,
-    );
+    (
+      GoogleGenAI as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => ({ models }) as unknown as GoogleGenAI);
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
@@ -114,9 +115,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('countTokens returns neutral CountTokensResult', async () => {
     const models = makeModels();
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () => ({ models }) as unknown as GoogleGenAI,
-    );
+    (
+      GoogleGenAI as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => ({ models }) as unknown as GoogleGenAI);
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
@@ -132,9 +133,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('embedContent returns neutral EmbedContentResult', async () => {
     const models = makeModels();
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () => ({ models }) as unknown as GoogleGenAI,
-    );
+    (
+      GoogleGenAI as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => ({ models }) as unknown as GoogleGenAI);
 
     const wrapper = new GoogleGenAIWrapper(
       { model: 'gemini-pro', apiKey: 'test-key' },
@@ -147,7 +148,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   });
 
   it('properly initializes GoogleGenAI with config', () => {
-    vi.mocked(GoogleGenAI).mockImplementation(
+    (
+      GoogleGenAI as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () => ({ models: makeModels() }) as unknown as GoogleGenAI,
     );
 
@@ -169,7 +172,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   });
 
   it('handles undefined apiKey', () => {
-    vi.mocked(GoogleGenAI).mockImplementation(
+    (
+      GoogleGenAI as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
       () => ({ models: makeModels() }) as unknown as GoogleGenAI,
     );
 

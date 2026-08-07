@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HybridTokenStorage } from './hybrid-token-storage.js';
 import { KeychainTokenStorage } from './keychain-token-storage.js';
 import { FileTokenStorage } from './file-token-storage.js';
 import { type OAuthCredentials, TokenStorageType } from './types.js';
 
-vi.mock('./keychain-token-storage.js', () => ({
+void vi.mock('./keychain-token-storage.js', () => ({
   KeychainTokenStorage: vi.fn().mockImplementation(() => ({
     isAvailable: vi.fn(),
     getCredentials: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock('./keychain-token-storage.js', () => ({
   })),
 }));
 
-vi.mock('./file-token-storage.js', () => ({
+void vi.mock('./file-token-storage.js', () => ({
   FileTokenStorage: vi.fn().mockImplementation(() => ({
     getCredentials: vi.fn(),
     setCredentials: vi.fn(),

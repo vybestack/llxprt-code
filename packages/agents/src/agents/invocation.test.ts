@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
-import type { Mock } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { SubagentInvocation } from './invocation.js';
 import { AgentExecutor } from './executor.js';
 import type {
@@ -20,9 +20,13 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type z } from 'zod';
 
-vi.mock('./executor.js');
+const realExecutorModule = { ...(await import('./executor.js')) };
 
-const MockAgentExecutor = vi.mocked(AgentExecutor);
+void vi.mock('./executor.js', () => automock(realExecutorModule));
+
+const MockAgentExecutor = AgentExecutor as unknown as Mock<
+  (...args: never[]) => unknown
+>;
 
 // Local mapped-type stand-in for a deep-mocked object: maps each method to a Mock<F>
 // while preserving non-method properties unchanged. Used for type annotations

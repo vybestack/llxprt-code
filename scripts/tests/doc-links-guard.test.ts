@@ -13,7 +13,7 @@
  * the exit code and stdout.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { symlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {

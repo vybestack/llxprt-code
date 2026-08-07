@@ -18,7 +18,7 @@
  * correct `this`.
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 // vi is used for mocking ctx components below
 import {
   initInteractiveScheduler,

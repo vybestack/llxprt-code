@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -660,7 +660,7 @@ function assertScrubbedEnvironment(harness: SeatbeltHarness): void {
   expect(childEnvironment).not.toContain('LLXPRT_CREDENTIAL_SOCKET=');
 }
 
-describe.sequential('#1456 Seatbelt network policy', () => {
+describe('#1456 Seatbelt network policy', () => {
   let environmentSnapshot: Record<string, string | undefined>;
   let originalCwd: string;
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -21,7 +21,7 @@ const mockVimContext = {
   setVimMode: vi.fn(),
 };
 
-vi.mock('../contexts/VimModeContext.js', () => ({
+void vi.mock('../contexts/VimModeContext.js', () => ({
   useVimMode: () => mockVimContext,
   VimModeProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -59,7 +59,7 @@ function createReducerState(
 
 describe('useVim hook', () => {
   let mockBuffer: Partial<TextBuffer>;
-  let mockHandleFinalSubmit: vi.Mock;
+  let mockHandleFinalSubmit: Mock<(...args: never[]) => unknown>;
 
   const createMockBuffer = (
     text = 'hello world',

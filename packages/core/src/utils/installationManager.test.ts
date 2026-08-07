@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { InstallationManager } from './installationManager.js';
 import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
@@ -14,30 +21,28 @@ import path from 'node:path';
 import { randomUUID } from 'crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    readFileSync: vi.fn(actual.readFileSync),
-    existsSync: vi.fn(actual.existsSync),
-  } as typeof actual;
-});
+const actual = { ...(await import('node:fs')) };
+void vi.mock(
+  'node:fs',
+  () =>
+    ({
+      ...actual,
+      readFileSync: vi.fn(actual.readFileSync),
+      existsSync: vi.fn(actual.existsSync),
+    }) as typeof actual,
+);
 
-vi.mock('os', async (importOriginal) => {
-  const os = await importOriginal<typeof import('os')>();
-  return {
-    ...os,
-    homedir: vi.fn(),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+}));
 
-vi.mock('crypto', async (importOriginal) => {
-  const crypto = await importOriginal<typeof import('crypto')>();
-  return {
-    ...crypto,
-    randomUUID: vi.fn(),
-  };
-});
+const crypto = { ...(await import('crypto')) };
+void vi.mock('crypto', () => ({
+  ...crypto,
+  randomUUID: vi.fn(),
+}));
 
 describe('InstallationManager', () => {
   let tempHomeDir: string;
@@ -49,7 +54,9 @@ describe('InstallationManager', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
-    (os.homedir as Mock).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      tempHomeDir,
+    );
     vi.spyOn(Storage, 'getInstallationIdPath').mockImplementation(() =>
       installationIdFile(),
     );
@@ -64,7 +71,9 @@ describe('InstallationManager', () => {
   describe('getInstallationId', () => {
     it('should create and write a new installation ID if one does not exist', () => {
       const newId = 'new-uuid-123';
-      (randomUUID as Mock).mockReturnValue(newId);
+      (randomUUID as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        newId,
+      );
 
       const installationId = installationManager.getInstallationId();
 
@@ -90,8 +99,8 @@ describe('InstallationManager', () => {
     });
 
     it('should handle read errors and return a fallback ID', () => {
-      vi.mocked(fs.existsSync).mockReturnValueOnce(true);
-      const readSpy = vi.mocked(fs.readFileSync);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValueOnce(true);
+      const readSpy = fs.readFileSync as Mock<typeof fs.readFileSync>;
       readSpy.mockImplementationOnce(() => {
         throw new Error('Read error');
       });

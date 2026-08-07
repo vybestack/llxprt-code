@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { format } from 'node:util';
 import { handleList, listCommand } from './list.js';
 import { loadSettings, type LoadedSettings } from '../../config/settings.js';
@@ -16,44 +25,43 @@ import {
 } from '@vybestack/llxprt-code-core';
 import chalk from 'chalk';
 
-const emitConsoleLog = vi.hoisted(() => vi.fn());
-const debugLogger = vi.hoisted(() => ({
+const realSettingsModule = { ...(await import('../../config/settings.js')) };
+const realConfigModule = { ...(await import('../../config/config.js')) };
+
+const emitConsoleLog = vi.fn();
+const debugLogger = {
   log: vi.fn((message, ...args) => {
     emitConsoleLog('log', format(message, ...args));
   }),
   error: vi.fn((message, ...args) => {
     emitConsoleLog('error', format(message, ...args));
   }),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    // discoverSkillsForConfig owns the session MessageBus + Config.initialize
-    // lifecycle (behaviorally tested in core/skills/skillDiscovery.test.ts).
-    // Here it is stubbed as the external boundary so these tests focus on the
-    // command's display/filtering behavior. The command does not emit through
-    // core events; logging goes through the telemetry-package debugLogger,
-    // whose owner is mocked below.
-    discoverSkillsForConfig: vi.fn(),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  // discoverSkillsForConfig owns the session MessageBus + Config.initialize
+  // lifecycle (behaviorally tested in core/skills/skillDiscovery.test.ts).
+  // Here it is stubbed as the external boundary so these tests focus on the
+  // command's display/filtering behavior. The command does not emit through
+  // core events; logging goes through the telemetry-package debugLogger,
+  // whose owner is mocked below.
+  discoverSkillsForConfig: vi.fn(),
+}));
 
 // list.ts logs through the telemetry-package debugLogger (its owner after
 // #2378), so mock THAT package here — not core — to capture the command's
 // output via the emitConsoleLog spy while core events stay real.
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  Object.assign(actual.debugLogger, debugLogger);
-  return actual;
+const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
+  Object.assign(actualActual.debugLogger, debugLogger);
+  return actualActual;
 });
 
-vi.mock('../../config/settings.js');
-vi.mock('../../config/config.js');
-vi.mock('../utils.js', () => ({
+void vi.mock('../../config/settings.js', () => automock(realSettingsModule));
+void vi.mock('../../config/config.js', () => automock(realConfigModule));
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
@@ -69,9 +77,11 @@ function skill(overrides: Partial<SkillDefinition>): SkillDefinition {
 }
 
 describe('skills list command', () => {
-  const mockLoadSettings = vi.mocked(loadSettings);
-  const mockLoadCliConfig = vi.mocked(loadCliConfig);
-  const mockDiscoverSkills = vi.mocked(discoverSkillsForConfig);
+  const mockLoadSettings = loadSettings as Mock<typeof loadSettings>;
+  const mockLoadCliConfig = loadCliConfig as Mock<typeof loadCliConfig>;
+  const mockDiscoverSkills = discoverSkillsForConfig as Mock<
+    typeof discoverSkillsForConfig
+  >;
   const mockConfig = {} as unknown as Config;
 
   beforeEach(async () => {

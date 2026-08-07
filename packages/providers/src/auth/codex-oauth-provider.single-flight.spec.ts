@@ -4,16 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { TokenStore } from '@vybestack/llxprt-code-auth';
 import type { LocalOAuthCallbackOptions } from './local-oauth-callback.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
-  openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-  shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  () => ({
+    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+  }),
+);
 
-vi.mock('./local-oauth-callback.js', () => ({
+void vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(
     async (options: LocalOAuthCallbackOptions) => ({
       redirectUri: 'http://127.0.0.1:1455/callback',
@@ -59,7 +70,9 @@ describe('CodexOAuthProvider public single-flight', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(shouldLaunchBrowser).mockReturnValue(true);
+    (shouldLaunchBrowser as Mock<typeof shouldLaunchBrowser>).mockReturnValue(
+      true,
+    );
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -88,7 +101,9 @@ describe('CodexOAuthProvider public single-flight', () => {
     ]);
 
     expect({
-      callbackStarts: vi.mocked(startLocalOAuthCallback).mock.calls.length,
+      callbackStarts: (
+        startLocalOAuthCallback as Mock<typeof startLocalOAuthCallback>
+      ).mock.calls.length,
       first: first.access_token,
       second: second.access_token,
     }).toStrictEqual({
@@ -101,14 +116,16 @@ describe('CodexOAuthProvider public single-flight', () => {
   it('shuts down the callback and falls back to device auth when browser launch fails', async () => {
     const shutdown = vi.fn().mockResolvedValue(undefined);
     const waitForCallback = vi.fn();
-    vi.mocked(startLocalOAuthCallback).mockResolvedValueOnce({
+    (
+      startLocalOAuthCallback as Mock<typeof startLocalOAuthCallback>
+    ).mockResolvedValueOnce({
       redirectUri: 'http://127.0.0.1:1455/callback',
       waitForCallback,
       shutdown,
     });
-    vi.mocked(openBrowserSecurely).mockRejectedValueOnce(
-      new Error('No browser available'),
-    );
+    (
+      openBrowserSecurely as Mock<typeof openBrowserSecurely>
+    ).mockRejectedValueOnce(new Error('No browser available'));
 
     const provider = new CodexOAuthProvider(createTokenStore());
     const deviceToken = {

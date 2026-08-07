@@ -8,7 +8,7 @@
  * must still parse and yield the same ContentValidation verdicts.
  * Blocks WITH providerMetadata must round-trip through JSON unchanged.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   ContentValidation,

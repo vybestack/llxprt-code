@@ -9,7 +9,8 @@
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { TaskTool } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
@@ -79,7 +80,7 @@ describe('TaskTool', () => {
         undefined,
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
 
       expect(launch).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -137,7 +138,7 @@ describe('TaskTool', () => {
         undefined,
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
 
       expect(launch).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -204,7 +205,7 @@ describe('TaskTool', () => {
         undefined,
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
 
       // -1 under a finite maximum is bounded by the ceiling (120s = 2min),
       // not unbounded (Issue #3031).
@@ -263,7 +264,7 @@ describe('TaskTool', () => {
         undefined,
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
 
       // Unbounded is reachable only when the operator declines a ceiling.
       expect(launch).toHaveBeenCalledWith(
@@ -332,12 +333,12 @@ describe('TaskTool', () => {
       );
 
       // Wait for runInteractive to be called
-      await vi.advanceTimersByTimeAsync(5);
+      await advanceTimersByTimeAsync(5);
 
       expect(scope.runInteractive).toHaveBeenCalled();
 
       // Now advance time past the timeout (50ms)
-      await vi.advanceTimersByTimeAsync(60);
+      await advanceTimersByTimeAsync(60);
 
       // The timeout should fire and the reject function we captured
       // simulates the subagent detecting the abort and rejecting

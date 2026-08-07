@@ -11,6 +11,12 @@
  * @requirement REQ-OAV-003 - Authentication Support
  */
 
+import {
+  restoreEnv,
+  setEnv,
+  setGlobal,
+  restoreGlobals,
+} from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import { BaseProvider } from '../BaseProvider.js';
@@ -25,6 +31,10 @@ import {
 import { AuthenticationError } from './errors.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+afterEach(() => {
+  restoreGlobals();
+});
 
 /**
  * Helper function to extract URL string from various input types.
@@ -90,18 +100,18 @@ describe('OpenAIVercelProvider', () => {
 
   describe('Default Model (REQ-OAV-004)', () => {
     beforeEach(() => {
-      vi.unstubAllEnvs();
+      restoreEnv();
     });
 
     it('should return default model when LLXPRT_DEFAULT_MODEL is not set', () => {
-      vi.stubEnv('LLXPRT_DEFAULT_MODEL', '');
+      setEnv('LLXPRT_DEFAULT_MODEL', '');
       const provider = new OpenAIVercelProvider('test-api-key');
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('gpt-4o');
     });
 
     it('should return LLXPRT_DEFAULT_MODEL when set', () => {
-      vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'custom-model');
+      setEnv('LLXPRT_DEFAULT_MODEL', 'custom-model');
       const provider = new OpenAIVercelProvider('test-api-key');
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('custom-model');
@@ -143,7 +153,7 @@ describe('OpenAIVercelProvider', () => {
       // Avoid accidental live network calls to the default OpenAI base URL in
       // unit tests. If fetch hangs, Vitest will time out and fail this test.
       const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const provider = new OpenAIVercelProvider('test-api-key');
       const models = await provider.getModels();
@@ -175,7 +185,7 @@ describe('OpenAIVercelProvider', () => {
             ],
           }),
         });
-        vi.stubGlobal('fetch', fetchMock);
+        setGlobal('fetch', fetchMock);
 
         const models = await provider.getModels();
 
@@ -211,7 +221,7 @@ describe('OpenAIVercelProvider', () => {
         );
 
         const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
-        vi.stubGlobal('fetch', fetchMock);
+        setGlobal('fetch', fetchMock);
 
         const models = await provider.getModels();
 
@@ -365,7 +375,7 @@ describe('OpenAIVercelProvider', () => {
         },
       );
 
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
 
       const options = createProviderCallOptions({
         providerName: 'openaivercel',

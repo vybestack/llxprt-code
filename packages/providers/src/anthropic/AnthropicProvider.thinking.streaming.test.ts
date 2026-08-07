@@ -11,7 +11,7 @@
  * streaming (not just at content_block_stop), enabling real-time UI rendering.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type {
   IContent,
   ThinkingBlock,

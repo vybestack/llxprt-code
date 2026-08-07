@@ -1,12 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
+const { mockChatCreate, mockOpenAIConstructor } = (() => {
   const chatCreate = vi.fn();
   const constructor = vi.fn().mockImplementation(() => ({
     chat: {
@@ -16,28 +19,26 @@ const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
     },
   }));
   return { mockChatCreate: chatCreate, mockOpenAIConstructor: constructor };
-});
+})();
 let settingsServiceRef: { current: SettingsService } = {
   current: new SettingsService(),
 };
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: mockOpenAIConstructor,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
 // REQ-RETRY-001: retryWithBackoff removed from providers
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  ),
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => settingsServiceRef.current,
   SETTINGS_REGISTRY: [],
 }));

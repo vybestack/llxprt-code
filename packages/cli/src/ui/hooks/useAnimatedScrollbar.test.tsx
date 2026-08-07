@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
 import { render } from '../../test-utils/render.js';
 import { useAnimatedScrollbar } from './useAnimatedScrollbar.js';
 import { debugState } from '../debug.js';
 import { theme } from '../semantic-colors.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 
 const TestComponent = ({ isFocused = false }: { isFocused?: boolean }) => {
   useAnimatedScrollbar(isFocused, () => {});
@@ -66,7 +67,7 @@ describe('useAnimatedScrollbar', () => {
 
     // Advance timers by enough time for animation to complete (200 + 1000 + 300 + buffer)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await advanceTimersByTimeAsync(2000);
     });
 
     expect(debugState.debugNumAnimatedComponents).toBe(0);
@@ -99,10 +100,8 @@ describe('useAnimatedScrollbar', () => {
   });
 
   it('should not crash if Date.now() goes backwards (regression test)', async () => {
-    // Only fake timers, keep Date real so we can mock it manually
-    vi.useFakeTimers({
-      toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
-    });
+    // Fake timers; Date.now() is mocked manually below
+    vi.useFakeTimers();
     const dateSpy = vi.spyOn(Date, 'now');
     let currentTime = 1000;
     dateSpy.mockImplementation(() => currentTime);

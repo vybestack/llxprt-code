@@ -23,7 +23,7 @@
 
 import { render } from 'ink-testing-library';
 import { act } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // Under Bun, ink is redirected to the stub via a resolution plugin (not
 // vi.mock), so vi.unmock('ink') is not needed and not supported.
@@ -51,8 +51,8 @@ enum TerminalKeys {
 }
 
 // Mock useResponsive hook to control narrow/wide mode
-const mockIsNarrow = vi.hoisted(() => ({ value: false }));
-vi.mock('../../hooks/useResponsive.js', () => ({
+const mockIsNarrow = { value: false };
+void vi.mock('../../hooks/useResponsive.js', () => ({
   useResponsive: () => ({
     width: mockIsNarrow.value ? 60 : 120,
     breakpoint: mockIsNarrow.value ? 'NARROW' : 'WIDE',
@@ -63,7 +63,7 @@ vi.mock('../../hooks/useResponsive.js', () => ({
 }));
 
 // Mock useSessionBrowser hook to control state
-const mockHookState = vi.hoisted(() => ({
+const mockHookState = {
   sessions: [] as EnrichedSessionSummary[],
   filteredSessions: [] as EnrichedSessionSummary[],
   searchTerm: '',
@@ -81,9 +81,9 @@ const mockHookState = vi.hoisted(() => ({
   pageItems: [] as EnrichedSessionSummary[],
   selectedSession: null as EnrichedSessionSummary | null,
   handleKeypress: vi.fn(),
-}));
+};
 
-vi.mock('../../hooks/useSessionBrowser.js', () => ({
+void vi.mock('../../hooks/useSessionBrowser.js', () => ({
   useSessionBrowser: () => mockHookState,
 }));
 

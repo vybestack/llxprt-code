@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {
@@ -289,7 +289,8 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     // All chunks should pass through unchanged
     expect(received).toStrictEqual(chunks);
 
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
       { streaming: true, chunks, completed: true },
@@ -342,7 +343,8 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
 
     // All chunks yielded before the error should pass through
     expect(received).toStrictEqual(chunks);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
       {
@@ -394,7 +396,8 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
       {

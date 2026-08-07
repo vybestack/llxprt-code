@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { skillsCommand } from './skillsCommand.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -17,14 +26,11 @@ import {
   type MergedSettings,
 } from '../../config/settings.js';
 
-vi.mock('../../config/settings.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/settings.js')>();
-  return {
-    ...actual,
-    isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
-  };
-});
+const actual = { ...(await import('../../config/settings.js')) };
+void vi.mock('../../config/settings.js', () => ({
+  ...actual,
+  isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
+}));
 
 function getConfig(
   context: CommandContext,
@@ -313,7 +319,7 @@ describe('skillsCommand', () => {
       expect(context.ui.setPendingItem).not.toHaveBeenCalled();
 
       // Fast forward 100ms to trigger the pending item
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -322,11 +328,11 @@ describe('skillsCommand', () => {
       );
 
       // Fast forward another 100ms (reload complete), but pending item should stay
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(context.ui.setPendingItem).not.toHaveBeenCalledWith(null);
 
       // Fast forward to reach 500ms total
-      await vi.advanceTimersByTimeAsync(300);
+      await advanceTimersByTimeAsync(300);
       await actionPromise;
 
       expect(reloadSkillsMock).toHaveBeenCalled();
@@ -346,7 +352,9 @@ describe('skillsCommand', () => {
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         const skillManager = context.services.config!.getSkillManager();
-        vi.mocked(skillManager.getSkills).mockReturnValue([
+        (
+          skillManager.getSkills as Mock<typeof skillManager.getSkills>
+        ).mockReturnValue([
           { name: 'skill1' },
           { name: 'skill2' },
           { name: 'skill3' },
@@ -371,9 +379,9 @@ describe('skillsCommand', () => {
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         const skillManager = context.services.config!.getSkillManager();
-        vi.mocked(skillManager.getSkills).mockReturnValue([
-          { name: 'skill1' },
-        ] as SkillDefinition[]);
+        (
+          skillManager.getSkills as Mock<typeof skillManager.getSkills>
+        ).mockReturnValue([{ name: 'skill1' }] as SkillDefinition[]);
       });
       getConfig(context).reloadSkills = reloadSkillsMock;
 
@@ -394,7 +402,9 @@ describe('skillsCommand', () => {
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         const skillManager = context.services.config!.getSkillManager();
-        vi.mocked(skillManager.getSkills).mockReturnValue([
+        (
+          skillManager.getSkills as Mock<typeof skillManager.getSkills>
+        ).mockReturnValue([
           { name: 'skill2' }, // skill1 removed, skill3 added
           { name: 'skill3' },
         ] as SkillDefinition[]);
@@ -440,8 +450,8 @@ describe('skillsCommand', () => {
       getConfig(context).reloadSkills = reloadSkillsMock;
 
       const actionPromise = reloadCmd.action!(context, '');
-      await vi.advanceTimersByTimeAsync(100);
-      await vi.advanceTimersByTimeAsync(400);
+      await advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(400);
       await actionPromise;
 
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);
@@ -477,8 +487,12 @@ describe('skillsCommand', () => {
           body: 'body2',
         },
       ];
-      vi.mocked(skillManager.getAllSkills).mockReturnValue(mockSkills);
-      vi.mocked(skillManager.getSkill).mockImplementation(
+      (
+        skillManager.getAllSkills as Mock<typeof skillManager.getAllSkills>
+      ).mockReturnValue(mockSkills);
+      (
+        skillManager.getSkill as Mock<typeof skillManager.getSkill>
+      ).mockImplementation(
         (name: string) => mockSkills.find((s) => s.name === name) ?? null,
       );
 
@@ -507,8 +521,12 @@ describe('skillsCommand', () => {
           body: 'body2',
         },
       ];
-      vi.mocked(skillManager.getAllSkills).mockReturnValue(mockSkills);
-      vi.mocked(skillManager.getSkill).mockImplementation(
+      (
+        skillManager.getAllSkills as Mock<typeof skillManager.getAllSkills>
+      ).mockReturnValue(mockSkills);
+      (
+        skillManager.getSkill as Mock<typeof skillManager.getSkill>
+      ).mockImplementation(
         (name: string) => mockSkills.find((s) => s.name === name) ?? null,
       );
 

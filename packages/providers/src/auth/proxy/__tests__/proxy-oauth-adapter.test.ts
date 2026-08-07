@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { EventEmitter } from 'node:events';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { ProxySocketClient } from '@vybestack/llxprt-code-auth';

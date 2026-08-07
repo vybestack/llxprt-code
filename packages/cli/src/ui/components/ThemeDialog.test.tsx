@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { render } from 'ink-testing-library';
 import { ThemeDialog } from './ThemeDialog.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -14,7 +14,7 @@ import type { UIState } from '../contexts/UIStateContext.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 
 // Mock theme manager
-vi.mock('../themes/theme-manager.js', () => ({
+void vi.mock('../themes/theme-manager.js', () => ({
   themeManager: {
     getAvailableThemes: vi.fn(() => [
       { name: 'Green Screen', type: 'dark' },
@@ -87,22 +87,22 @@ vi.mock('../themes/theme-manager.js', () => ({
 }));
 
 // Mock the hooks
-vi.mock('../hooks/useKeypress.js', () => ({
+void vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: vi.fn(),
 }));
 
 // Mock colorizeCode
-vi.mock('../utils/CodeColorizer.js', () => ({
+void vi.mock('../utils/CodeColorizer.js', () => ({
   colorizeCode: vi.fn(() => null),
 }));
 
 // Mock DiffRenderer
-vi.mock('./messages/DiffRenderer.js', () => ({
+void vi.mock('./messages/DiffRenderer.js', () => ({
   DiffRenderer: vi.fn(() => null),
 }));
 
 // Mock semantic colors
-vi.mock('../semantic-colors.js', () => ({
+void vi.mock('../semantic-colors.js', () => ({
   theme: {
     text: {
       primary: '#ffffff',

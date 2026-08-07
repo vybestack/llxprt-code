@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   checkForExtensionUpdate,
   cloneFromGit,
@@ -25,29 +25,27 @@ import * as archiver from 'archiver';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockArch = vi.hoisted(() => vi.fn());
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
-  return {
-    ...actual,
-    platform: mockPlatform,
-    arch: mockArch,
-  };
-});
+const mockPlatform = vi.fn();
+const mockArch = vi.fn();
+const actual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actual,
+  platform: mockPlatform,
+  arch: mockArch,
+}));
 
-const mockHttpsGet = vi.hoisted(() => vi.fn());
-vi.mock('node:https', () => ({
+const mockHttpsGet = vi.fn();
+void vi.mock('node:https', () => ({
   get: mockHttpsGet,
 }));
 
-const mockSimpleGit = vi.hoisted(() => vi.fn());
-vi.mock('simple-git', () => ({
+const mockSimpleGit = vi.fn();
+void vi.mock('simple-git', () => ({
   simpleGit: mockSimpleGit,
 }));
 
-const mockLoadExtension = vi.hoisted(() => vi.fn());
-vi.mock('../extension.js', () => ({
+const mockLoadExtension = vi.fn();
+void vi.mock('../extension.js', () => ({
   loadExtension: mockLoadExtension,
 }));
 
@@ -185,7 +183,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.NOT_UPDATABLE,
+      );
     });
 
     it('should return ERROR if no remotes found', async () => {
@@ -206,7 +206,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.ERROR);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.ERROR,
+      );
     });
 
     it('should return UPDATE_AVAILABLE when remote hash is different', async () => {
@@ -232,7 +234,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.UPDATE_AVAILABLE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.UPDATE_AVAILABLE,
+      );
     });
 
     it('should return UP_TO_DATE when remote and local hashes are the same', async () => {
@@ -258,7 +262,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.UP_TO_DATE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.UP_TO_DATE,
+      );
     });
 
     it('should return ERROR on git error', async () => {
@@ -280,7 +286,9 @@ describe('git extension helpers', () => {
         extension,
         (newState) => (result = newState),
       );
-      expect(result).toBe(ExtensionUpdateState.ERROR);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.ERROR,
+      );
     });
 
     it('should return NOT_UPDATABLE and use globalThis.console.warn when loadExtension returns null for local extension', async () => {
@@ -314,7 +322,9 @@ describe('git extension helpers', () => {
       );
 
       // Assert: Should use NOT_UPDATABLE (not ERROR)
-      expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
+      expect(result as ExtensionUpdateState | undefined).toBe(
+        ExtensionUpdateState.NOT_UPDATABLE,
+      );
 
       // Assert: Should use debugLogger.warn (not debugLogger.error)
       expect(debugWarnSpy).toHaveBeenCalledWith(

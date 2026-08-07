@@ -16,8 +16,16 @@
  * logic" — fromConfig is mocked only to assert it is NOT called.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Mock } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,
@@ -29,33 +37,33 @@ import { runNonInteractive } from './nonInteractiveCli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { __setWriteToStderrForTesting } from './session/errorReporting.js';
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
-  return {
-    ...original,
-    fromConfig: vi.fn(),
-  };
-});
+const realAtCommandProcessorModule = {
+  ...(await import('./ui/hooks/atCommandProcessor.js')),
+};
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...original,
-    shutdownTelemetry: vi.fn(),
-    isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...original,
+  fromConfig: vi.fn(),
+}));
 
-vi.mock('./utils/cleanup.js', () => ({
+const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualOriginal,
+  shutdownTelemetry: vi.fn(),
+  isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
+}));
+
+void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn().mockResolvedValue(undefined),
   cleanupCheckpoints: vi.fn().mockResolvedValue(undefined),
   registerSyncCleanup: vi.fn(),
 }));
 
-vi.mock('./ui/hooks/atCommandProcessor.js');
-vi.mock('./services/CommandService.js', () => ({
+void vi.mock('./ui/hooks/atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
+void vi.mock('./services/CommandService.js', () => ({
   CommandService: {
     create: vi.fn().mockResolvedValue({ getCommands: () => [] }),
   },
@@ -125,7 +133,7 @@ function makeSettings(): LoadedSettings {
 
 describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   let originalEnv: Map<string, string | undefined>;
-  let fromConfigMock: Mock;
+  let fromConfigMock: Mock<(...args: never[]) => unknown>;
   let capturedStderr: string[];
 
   beforeEach(async () => {
@@ -149,15 +157,19 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       },
     );
 
-    vi.mocked(shutdownTelemetry).mockResolvedValue(undefined);
-    vi.mocked(isTelemetrySdkInitialized).mockReturnValue(true);
+    (shutdownTelemetry as Mock<typeof shutdownTelemetry>).mockResolvedValue(
+      undefined,
+    );
+    (
+      isTelemetrySdkInitialized as Mock<typeof isTelemetrySdkInitialized>
+    ).mockReturnValue(true);
     vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
     vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    fromConfigMock = vi.mocked(fromConfig);
+    fromConfigMock = fromConfig as Mock<typeof fromConfig>;
     fromConfigMock.mockReset();
     fromConfigMock.mockResolvedValue({
       async *stream() {
@@ -174,9 +186,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
     );
-    vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
-      processedQuery: [{ type: 'text', text: query }],
-    }));
+    (handleAtCommand as Mock<typeof handleAtCommand>).mockImplementation(
+      async ({ query }) => ({
+        processedQuery: [{ type: 'text', text: query }],
+      }),
+    );
   });
 
   afterEach(() => {
@@ -276,7 +290,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('runs centralized cleanup before exiting 52 (cleanup ordering)', async () => {
     const { runExitCleanup } = await import('./utils/cleanup.js');
-    const cleanupMock = vi.mocked(runExitCleanup);
+    const cleanupMock = runExitCleanup as Mock<typeof runExitCleanup>;
     cleanupMock.mockClear();
     const exitOrder: string[] = [];
     cleanupMock.mockImplementation(async () => {
@@ -305,7 +319,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('still exits 52 when cleanup throws (cleanup failure does not prevent exit)', async () => {
     const { runExitCleanup } = await import('./utils/cleanup.js');
-    const cleanupMock = vi.mocked(runExitCleanup);
+    const cleanupMock = runExitCleanup as Mock<typeof runExitCleanup>;
     cleanupMock.mockClear();
     cleanupMock.mockRejectedValue(new Error('cleanup exploded'));
 
@@ -325,8 +339,12 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('passes through when a provider IS explicitly configured', async () => {
     const config = makeUnconfiguredConfig();
-    vi.mocked(config.getProvider).mockReturnValue('openai');
-    vi.mocked(config.getProviderManager).mockReturnValue({
+    (config.getProvider as Mock<typeof config.getProvider>).mockReturnValue(
+      'openai',
+    );
+    (
+      config.getProviderManager as Mock<typeof config.getProviderManager>
+    ).mockReturnValue({
       getActiveProviderName: () => 'openai',
       hasActiveProvider: () => true,
       getServerToolsProvider: () => null,
@@ -345,8 +363,12 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   it('passes through when LLXPRT_DEFAULT_PROVIDER selects a provider', async () => {
     process.env.LLXPRT_DEFAULT_PROVIDER = 'anthropic';
     const config = makeUnconfiguredConfig();
-    vi.mocked(config.getProvider).mockReturnValue('anthropic');
-    vi.mocked(config.getProviderManager).mockReturnValue({
+    (config.getProvider as Mock<typeof config.getProvider>).mockReturnValue(
+      'anthropic',
+    );
+    (
+      config.getProviderManager as Mock<typeof config.getProviderManager>
+    ).mockReturnValue({
       getActiveProviderName: () => 'anthropic',
       hasActiveProvider: () => true,
       getServerToolsProvider: () => null,
@@ -365,7 +387,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
 describe('runNonInteractive: unconfigured error output format contracts (#2481)', () => {
   let originalEnv: Map<string, string | undefined>;
-  let fromConfigMock: Mock;
+  let fromConfigMock: Mock<(...args: never[]) => unknown>;
   let capturedStderr: string[];
 
   beforeEach(async () => {
@@ -389,23 +411,29 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
       },
     );
 
-    vi.mocked(shutdownTelemetry).mockResolvedValue(undefined);
-    vi.mocked(isTelemetrySdkInitialized).mockReturnValue(true);
+    (shutdownTelemetry as Mock<typeof shutdownTelemetry>).mockResolvedValue(
+      undefined,
+    );
+    (
+      isTelemetrySdkInitialized as Mock<typeof isTelemetrySdkInitialized>
+    ).mockReturnValue(true);
     vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
     vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
 
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    fromConfigMock = vi.mocked(fromConfig);
+    fromConfigMock = fromConfig as Mock<typeof fromConfig>;
     fromConfigMock.mockReset();
 
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
     );
-    vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
-      processedQuery: [{ type: 'text', text: query }],
-    }));
+    (handleAtCommand as Mock<typeof handleAtCommand>).mockImplementation(
+      async ({ query }) => ({
+        processedQuery: [{ type: 'text', text: query }],
+      }),
+    );
   });
 
   afterEach(() => {
@@ -423,7 +451,9 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
   it('reports error as JSON when output format is JSON', async () => {
     const config = makeUnconfiguredConfig();
-    vi.mocked(config.getOutputFormat).mockReturnValue('json' as never);
+    (
+      config.getOutputFormat as Mock<typeof config.getOutputFormat>
+    ).mockReturnValue('json' as never);
 
     await expect(
       runNonInteractive({
@@ -443,7 +473,9 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
   it('reports error as stream-JSON when output format is STREAM_JSON', async () => {
     const config = makeUnconfiguredConfig();
-    vi.mocked(config.getOutputFormat).mockReturnValue('stream-json' as never);
+    (
+      config.getOutputFormat as Mock<typeof config.getOutputFormat>
+    ).mockReturnValue('stream-json' as never);
 
     await expect(
       runNonInteractive({
@@ -465,7 +497,9 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
   it('reports error as text when output format is TEXT', async () => {
     const config = makeUnconfiguredConfig();
-    vi.mocked(config.getOutputFormat).mockReturnValue('text' as never);
+    (
+      config.getOutputFormat as Mock<typeof config.getOutputFormat>
+    ).mockReturnValue('text' as never);
 
     await expect(
       runNonInteractive({

@@ -12,7 +12,8 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-} from 'vitest';
+  setSystemTime,
+} from 'bun:test';
 import type { LogEntry } from './logger.js';
 import { Logger, MessageSenderType } from './logger.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -86,7 +87,7 @@ describe('Logger JSONL format', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
+    setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
     await cleanupLogFiles();
     await fs.mkdir(TEST_LLXPRT_DIR, { recursive: true });
     logger = new Logger(testSessionId, new Storage(process.cwd()));

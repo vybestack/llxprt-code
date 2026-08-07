@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import vm from 'vm';
 import { normalize, readRootFile } from './ocr-review-workflow-helpers.ts';
 import {
@@ -539,6 +539,9 @@ merge_base=${result.baseSha}
     const step = reviewSteps.find(
       ({ name }) => name === 'Run walkthrough pipeline',
     );
+    if (quotaStep === undefined || step === undefined) {
+      throw new Error('expected quota and walkthrough steps to exist');
+    }
 
     expect(hasSecret(gateJob)).toBe(false);
     expect(hasSecret(reviewJob?.env)).toBe(false);

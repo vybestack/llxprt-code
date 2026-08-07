@@ -4,21 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as path from 'node:path';
 
 // `os.homedir` is a non-configurable property, so it cannot be spied on with
 // vi.spyOn. Instead we mock the entire `os` module, spreading the real
 // implementation and overriding only `homedir`. `vi.hoisted` ensures the mock
 // fn is available inside the hoisted vi.mock factory.
-const { homedirMock } = vi.hoisted(() => ({
+const { homedirMock } = {
   homedirMock: vi.fn<[], string | undefined>(),
-}));
+};
 
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('os')>();
-  return { ...actual, homedir: homedirMock };
-});
+const actual = { ...(await import('os')) };
+void vi.mock('os', () => ({ ...actual, homedir: homedirMock }));
 
 // Imported AFTER vi.mock is established (vi.mock is hoisted above imports).
 import { Storage } from './storage.js';

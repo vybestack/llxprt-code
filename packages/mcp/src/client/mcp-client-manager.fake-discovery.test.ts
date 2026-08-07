@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -151,7 +152,7 @@ describe('McpClientManager fake discovery lifecycle', () => {
       },
     });
     const discovery = manager.startConfiguredMcpServers();
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.CONNECTING),
     );
     const started = Date.now();

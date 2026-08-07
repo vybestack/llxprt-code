@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 
 function integrationMetadata(provider: string): Record<string, unknown> {
   return {
@@ -113,15 +121,25 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       // Given: All auth methods available
       const cliArg = 'cli-api-key-123';
       process.env.OPENAI_API_KEY = 'env-key-456';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.getHigherPriorityAuth).mockResolvedValue(
-        'CLI API Key',
-      );
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token-789');
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockOAuthManager.getHigherPriorityAuth as Mock<
+          typeof mockOAuthManager.getHigherPriorityAuth
+        >
+      ).mockResolvedValue('CLI API Key');
 
       // When: Provider resolves authentication with CLI key
-      vi.mocked(
-        mockDeviceCodeProvider.resolveAuthentication,
+      (
+        mockDeviceCodeProvider.resolveAuthentication as Mock<
+          typeof mockDeviceCodeProvider.resolveAuthentication
+        >
       ).mockImplementation(async () => cliArg);
 
       const resolvedAuth = await mockDeviceCodeProvider.resolveAuthentication();
@@ -141,15 +159,25 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
     it('should fall back to environment variable when no CLI arg', async () => {
       // Given: Env var and OAuth available, no CLI arg
       process.env.OPENAI_API_KEY = 'env-key-456';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.getHigherPriorityAuth).mockResolvedValue(
-        'Environment Variable',
-      );
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token-789');
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockOAuthManager.getHigherPriorityAuth as Mock<
+          typeof mockOAuthManager.getHigherPriorityAuth
+        >
+      ).mockResolvedValue('Environment Variable');
 
       // When: Provider resolves authentication without CLI key
-      vi.mocked(
-        mockDeviceCodeProvider.resolveAuthentication,
+      (
+        mockDeviceCodeProvider.resolveAuthentication as Mock<
+          typeof mockDeviceCodeProvider.resolveAuthentication
+        >
       ).mockImplementation(async () => {
         if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
         return mockOAuthManager.getToken(
@@ -175,13 +203,25 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
     it('should use OAuth as final fallback when no higher precedence auth', async () => {
       // Given: Only OAuth available
       delete process.env.OPENAI_API_KEY;
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.getHigherPriorityAuth).mockResolvedValue(null);
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token-789');
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockOAuthManager.getHigherPriorityAuth as Mock<
+          typeof mockOAuthManager.getHigherPriorityAuth
+        >
+      ).mockResolvedValue(null);
 
       // When: Provider resolves authentication with OAuth only
-      vi.mocked(
-        mockDeviceCodeProvider.resolveAuthentication,
+      (
+        mockDeviceCodeProvider.resolveAuthentication as Mock<
+          typeof mockDeviceCodeProvider.resolveAuthentication
+        >
       ).mockImplementation(async () =>
         mockOAuthManager.getToken(
           'device-code-test',
@@ -210,9 +250,19 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should persist OAuth enablement across system restarts', async () => {
       // Given: OAuth enabled for device-code-test in first session
-      vi.mocked(mockOAuthManager.toggleOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockConfig.getOAuthEnabled).mockReturnValue(true);
+      (
+        mockOAuthManager.toggleOAuthEnabled as Mock<
+          typeof mockOAuthManager.toggleOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockConfig.getOAuthEnabled as Mock<typeof mockConfig.getOAuthEnabled>
+      ).mockReturnValue(true);
 
       // When: Enable OAuth in first session
       const firstToggleResult =
@@ -221,7 +271,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
       // Simulate system restart with new instances
       const newOAuthManager = { ...mockOAuthManager };
-      vi.mocked(newOAuthManager.isOAuthEnabled).mockResolvedValue(true); // Persisted state
+      (
+        newOAuthManager.isOAuthEnabled as Mock<
+          typeof newOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true); // Persisted state
 
       // Then: OAuth should remain enabled after restart
       const persistedState =
@@ -229,7 +283,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(persistedState).toBe(true);
 
       // And: Can be toggled again (disable)
-      vi.mocked(newOAuthManager.toggleOAuthEnabled).mockResolvedValue(false);
+      (
+        newOAuthManager.toggleOAuthEnabled as Mock<
+          typeof newOAuthManager.toggleOAuthEnabled
+        >
+      ).mockResolvedValue(false);
       const secondToggleResult =
         await newOAuthManager.toggleOAuthEnabled('device-code-test');
       expect(secondToggleResult).toBe(false);
@@ -244,7 +302,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should maintain independent OAuth enablement per provider', async () => {
       // Given: Multiple providers with different OAuth states
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockImplementation(
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockImplementation(
         async (provider) => provider === 'device-code-test', // Only device-code-test enabled
       );
 
@@ -258,7 +320,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(geminiEnabled).toBe(false);
 
       // And: Status should reflect independent OAuth enablement
-      vi.mocked(mockOAuthManager.getAuthStatus).mockResolvedValue([
+      (
+        mockOAuthManager.getAuthStatus as Mock<
+          typeof mockOAuthManager.getAuthStatus
+        >
+      ).mockResolvedValue([
         {
           provider: 'device-code-test',
           authenticated: false,
@@ -291,28 +357,34 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should trigger OAuth lazily on first API call and cache for subsequent calls', async () => {
       // Given: OAuth enabled but not yet authenticated
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.getToken)
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>)
         .mockResolvedValueOnce(null) // First call - not authenticated
         .mockResolvedValue('oauth-token-123'); // Subsequent calls - authenticated
 
       const oauthMetadata = integrationMetadata('device-code-test');
 
       // Mock provider API call that triggers lazy authentication
-      vi.mocked(mockDeviceCodeProvider.makeApiCall).mockImplementation(
-        async () => {
-          const token = await mockOAuthManager.getToken(
-            'device-code-test',
-            oauthMetadata,
-          );
-          if (!token) {
-            // Simulate lazy OAuth triggering
-            await mockOAuthManager.getToken('device-code-test', oauthMetadata); // This would trigger OAuth in real implementation
-            return 'api-call-success-with-oauth';
-          }
-          return 'api-call-success-cached';
-        },
-      );
+      (
+        mockDeviceCodeProvider.makeApiCall as Mock<
+          typeof mockDeviceCodeProvider.makeApiCall
+        >
+      ).mockImplementation(async () => {
+        const token = await mockOAuthManager.getToken(
+          'device-code-test',
+          oauthMetadata,
+        );
+        if (!token) {
+          // Simulate lazy OAuth triggering
+          await mockOAuthManager.getToken('device-code-test', oauthMetadata); // This would trigger OAuth in real implementation
+          return 'api-call-success-with-oauth';
+        }
+        return 'api-call-success-cached';
+      });
 
       // When: Make first API call (should trigger OAuth)
       const firstCallResult = await mockDeviceCodeProvider.makeApiCall();
@@ -340,23 +412,31 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should not trigger OAuth when disabled, causing API call to fail', async () => {
       // Given: OAuth disabled, no other auth methods
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(false);
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(false);
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue(null);
       const oauthMetadata = integrationMetadata('device-code-test');
 
       // Mock provider API call that checks authentication
-      vi.mocked(mockDeviceCodeProvider.makeApiCall).mockImplementation(
-        async () => {
-          const token = await mockOAuthManager.getToken(
-            'device-code-test',
-            oauthMetadata,
-          );
-          if (!token) {
-            throw new Error('No authentication available');
-          }
-          return 'api-call-success';
-        },
-      );
+      (
+        mockDeviceCodeProvider.makeApiCall as Mock<
+          typeof mockDeviceCodeProvider.makeApiCall
+        >
+      ).mockImplementation(async () => {
+        const token = await mockOAuthManager.getToken(
+          'device-code-test',
+          oauthMetadata,
+        );
+        if (!token) {
+          throw new Error('No authentication available');
+        }
+        return 'api-call-success';
+      });
 
       // When: Attempt API call without authentication
       await expect(mockDeviceCodeProvider.makeApiCall()).rejects.toThrow(
@@ -382,10 +462,16 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should coordinate multiple providers with shared auth system', async () => {
       // Given: Both providers use same OAuth manager with different states
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockImplementation(
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockImplementation(
         async (provider) => provider === 'device-code-test', // Only Device-code test provider enabled
       );
-      vi.mocked(mockOAuthManager.getToken).mockImplementation(
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockImplementation(
         async (provider) =>
           provider === 'device-code-test' ? 'device-code-oauth-token' : null, // Gemini has no token
       );
@@ -402,13 +488,19 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         runtimeAuthScopeId: 'integration-shared',
       } satisfies Record<string, unknown>;
 
-      vi.mocked(
-        mockDeviceCodeProvider.resolveAuthentication,
+      (
+        mockDeviceCodeProvider.resolveAuthentication as Mock<
+          typeof mockDeviceCodeProvider.resolveAuthentication
+        >
       ).mockImplementation(async () =>
         mockOAuthManager.getToken('device-code-test', deviceCodeMetadata),
       );
-      vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
-        async () => mockOAuthManager.getToken('gemini', geminiMetadata),
+      (
+        mockGeminiProvider.resolveAuthentication as Mock<
+          typeof mockGeminiProvider.resolveAuthentication
+        >
+      ).mockImplementation(async () =>
+        mockOAuthManager.getToken('gemini', geminiMetadata),
       );
 
       // When: Both providers resolve authentication
@@ -440,7 +532,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should provide consistent auth status across multiple providers', async () => {
       // Given: OAuth manager with multiple providers in different states
-      vi.mocked(mockOAuthManager.getAuthStatus).mockResolvedValue([
+      (
+        mockOAuthManager.getAuthStatus as Mock<
+          typeof mockOAuthManager.getAuthStatus
+        >
+      ).mockResolvedValue([
         {
           provider: 'device-code-test',
           authenticated: true,
@@ -489,27 +585,45 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      */
     it('should handle complete user workflow end-to-end', async () => {
       // Step 1: Enable OAuth for device-code-test
-      vi.mocked(mockOAuthManager.toggleOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.getHigherPriorityAuth).mockResolvedValue(null);
+      (
+        mockOAuthManager.toggleOAuthEnabled as Mock<
+          typeof mockOAuthManager.toggleOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockOAuthManager.getHigherPriorityAuth as Mock<
+          typeof mockOAuthManager.getHigherPriorityAuth
+        >
+      ).mockResolvedValue(null);
 
       const enableResult =
         await mockOAuthManager.toggleOAuthEnabled('device-code-test');
       expect(enableResult).toBe(true);
 
       // Step 2: Simulate API call that triggers lazy OAuth
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(
-        'oauth-token-from-lazy-trigger',
-      );
-      vi.mocked(mockDeviceCodeProvider.makeApiCall).mockResolvedValue(
-        'api-success',
-      );
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockResolvedValue(true);
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token-from-lazy-trigger');
+      (
+        mockDeviceCodeProvider.makeApiCall as Mock<
+          typeof mockDeviceCodeProvider.makeApiCall
+        >
+      ).mockResolvedValue('api-success');
 
       const apiResult = await mockDeviceCodeProvider.makeApiCall();
       expect(apiResult).toBe('api-success');
 
       // Step 3: Check status shows OAuth enabled and authenticated
-      vi.mocked(mockOAuthManager.getAuthStatus).mockResolvedValue([
+      (
+        mockOAuthManager.getAuthStatus as Mock<
+          typeof mockOAuthManager.getAuthStatus
+        >
+      ).mockResolvedValue([
         {
           provider: 'device-code-test',
           authenticated: true,
@@ -536,12 +650,17 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
     it('should coordinate mixed authentication methods without interference', async () => {
       // Given: Mixed authentication setup
       process.env.OPENAI_API_KEY = 'env-api-key-for-gemini';
-      vi.mocked(mockOAuthManager.isOAuthEnabled).mockImplementation(
+      (
+        mockOAuthManager.isOAuthEnabled as Mock<
+          typeof mockOAuthManager.isOAuthEnabled
+        >
+      ).mockImplementation(
         async (provider) => provider === 'device-code-test', // Only Device-code test provider uses OAuth
       );
-      vi.mocked(mockOAuthManager.getToken).mockImplementation(
-        async (provider) =>
-          provider === 'device-code-test' ? 'device-code-oauth-token' : null,
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockImplementation(async (provider) =>
+        provider === 'device-code-test' ? 'device-code-oauth-token' : null,
       );
 
       // Mock providers with different auth strategies
@@ -551,13 +670,19 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         runtimeAuthScopeId: 'integration-mixed',
       } satisfies Record<string, unknown>;
 
-      vi.mocked(
-        mockDeviceCodeProvider.resolveAuthentication,
+      (
+        mockDeviceCodeProvider.resolveAuthentication as Mock<
+          typeof mockDeviceCodeProvider.resolveAuthentication
+        >
       ).mockImplementation(
         async () =>
           mockOAuthManager.getToken('device-code-test', deviceCodeMetadata), // OAuth only
       );
-      vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
+      (
+        mockGeminiProvider.resolveAuthentication as Mock<
+          typeof mockGeminiProvider.resolveAuthentication
+        >
+      ).mockImplementation(
         async () =>
           process.env.OPENAI_API_KEY !== '' &&
           process.env.OPENAI_API_KEY !== undefined

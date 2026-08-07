@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildVercelTools } from './vercelModelClient.js';
 import type { OpenAIVercelTool } from './schemaConverter.js';
 

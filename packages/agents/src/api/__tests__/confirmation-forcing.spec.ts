@@ -22,7 +22,7 @@
  *    other registry members delegate unchanged.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   createConfirmationForcingProbe,
   applyForcingPolicy,

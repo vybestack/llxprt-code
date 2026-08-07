@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from '../testApi.js';
+import { describe, expect, it } from 'bun:test';
 import { AgentConfigSchema } from './config-schema.js';
 
 describe('AgentConfigSchema telemetry', () => {

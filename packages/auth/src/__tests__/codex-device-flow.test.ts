@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { z } from 'zod';
 import { CodexOAuthTokenSchema } from '../types.js';
 import { CodexDeviceFlow } from '../flows/codex-device-flow.js';

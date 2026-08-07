@@ -11,10 +11,11 @@
  * File validation tests use real temp files for behavioral correctness.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { toolkeyfileCommand } from './toolkeyfileCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { CommandKind } from './types.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -23,32 +24,29 @@ import { assertDefined } from '../../test-utils/assertions.js';
 
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
 
+const realNodeOsModule = { ...(await import('node:os')) };
+
 const mockKeyfileStore = new Map<string, string>();
-const mockedHomedir = vi.hoisted(() => vi.fn());
+const mockedHomedir = vi.fn();
 
-vi.mock('node:os', async (importOriginal) => {
-  const original = await importOriginal<typeof import('node:os')>();
-  return { ...original, homedir: mockedHomedir };
-});
+const original = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({ ...original, homedir: mockedHomedir }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...original,
-    ToolKeyStorage: class MockToolKeyStorage {
-      async setKeyfilePath(toolName: string, filePath: string): Promise<void> {
-        mockKeyfileStore.set(toolName, filePath);
-      }
-      async getKeyfilePath(toolName: string): Promise<string | null> {
-        return mockKeyfileStore.get(toolName) ?? null;
-      }
-      async clearKeyfilePath(toolName: string): Promise<void> {
-        mockKeyfileStore.delete(toolName);
-      }
-    },
-  };
-});
+const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualOriginal,
+  ToolKeyStorage: class MockToolKeyStorage {
+    async setKeyfilePath(toolName: string, filePath: string): Promise<void> {
+      mockKeyfileStore.set(toolName, filePath);
+    }
+    async getKeyfilePath(toolName: string): Promise<string | null> {
+      return mockKeyfileStore.get(toolName) ?? null;
+    }
+    async clearKeyfilePath(toolName: string): Promise<void> {
+      mockKeyfileStore.delete(toolName);
+    }
+  },
+}));
 
 describe('toolkeyfileCommand', () => {
   let context: CommandContext;
@@ -56,7 +54,7 @@ describe('toolkeyfileCommand', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const actualOs = await vi.importActual<typeof import('node:os')>('node:os');
+    const actualOs = realNodeOsModule;
     mockedHomedir.mockReturnValue(actualOs.homedir());
     mockKeyfileStore.clear();
     context = createMockCommandContext();
@@ -74,7 +72,7 @@ describe('toolkeyfileCommand', () => {
       expect(toolkeyfileCommand.description).toBe(
         'manage API key file for a built-in tool',
       );
-      expect(toolkeyfileCommand.kind).toBe('built-in');
+      expect(toolkeyfileCommand.kind).toBe(CommandKind.BUILT_IN);
     });
 
     it('defines schema for autocomplete and argument hints', () => {

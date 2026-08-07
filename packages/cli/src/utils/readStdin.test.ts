@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { vi, describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { readStdin } from './readStdin.js';
 
 // Mock process.stdin

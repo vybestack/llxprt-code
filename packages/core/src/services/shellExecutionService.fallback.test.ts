@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
   describe,
@@ -12,7 +14,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
@@ -20,27 +22,25 @@ import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
 // Hoisted Mocks
-const mockPtySpawn = vi.hoisted(() => vi.fn());
-const mockCpSpawn = vi.hoisted(() => vi.fn());
-const mockIsBinary = vi.hoisted(() => vi.fn());
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockGetPty = vi.hoisted(() => vi.fn());
+const mockPtySpawn = vi.fn();
+const mockCpSpawn = vi.fn();
+const mockIsBinary = vi.fn();
+const mockPlatform = vi.fn();
+const mockGetPty = vi.fn();
 
 // Top-level Mocks
-vi.mock('@lydell/node-pty', () => ({
+void vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    spawn: mockCpSpawn,
-  };
-});
-vi.mock('../utils/textUtils.js', () => ({
+const actual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => ({
+  ...actual,
+  spawn: mockCpSpawn,
+}));
+void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
-vi.mock('os', () => ({
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: () => '/tmp/test-home',
@@ -60,7 +60,7 @@ vi.mock('os', () => ({
     },
   },
 }));
-vi.mock('../utils/getPty.js', () => ({
+void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
@@ -69,7 +69,7 @@ const mockProcessKill = vi
   .mockImplementation(() => true);
 
 const stubProcessPlatform = (platform: NodeJS.Platform): void => {
-  vi.stubGlobal('process', { ...process, env: process.env, platform });
+  setGlobal('process', { ...process, env: process.env, platform });
 };
 
 describe('ShellExecutionService child_process fallback', () => {
@@ -103,7 +103,7 @@ describe('ShellExecutionService child_process fallback', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
   });
 
   // Default shell execution config for tests
@@ -375,7 +375,7 @@ describe('ShellExecutionService child_process fallback', () => {
       );
 
       // Now, advance time past the timeout
-      await vi.advanceTimersByTimeAsync(250);
+      await advanceTimersByTimeAsync(250);
 
       // Check the second kill signal
       expect(mockProcessKill).toHaveBeenCalledWith(

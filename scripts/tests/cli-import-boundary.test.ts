@@ -13,7 +13,7 @@
  * bloated entrypoint) are caught before merge.
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -330,7 +330,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/template-mock.ts',
-          "import { vi } from 'vitest'; vi.mock(`@vybestack/llxprt-code-providers/runtime/runtimeSettings.js`, () => ({}));\n",
+          "import { vi } from 'bun:test'; vi.mock(`@vybestack/llxprt-code-providers/runtime/runtimeSettings.js`, () => ({}));\n",
         );
         write(...thinIndex());
         return runScript(root, 1);
@@ -344,7 +344,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/mocked.ts',
-          "import { vi } from 'vitest'; vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({}));\n",
+          "import { vi } from 'bun:test'; vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({}));\n",
         );
         write(...thinIndex());
         return runScript(root, 1);
@@ -362,7 +362,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/dynamic-mock.ts',
-          "import { vi } from 'vitest'; const mod = './some.js'; vi.mock(mod, () => ({}));\n",
+          "import { vi } from 'bun:test'; const mod = './some.js'; vi.mock(mod, () => ({}));\n",
         );
         write(...thinIndex());
         return runScript(root, 1);

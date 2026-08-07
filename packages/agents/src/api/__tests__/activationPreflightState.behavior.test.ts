@@ -23,7 +23,7 @@
  * results, token identity) — not mock call counts.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { preflightAgentActivation } from '../preflightAgentActivation.js';
 import { AgentBootstrapError } from '../agentBootstrap.js';
 import type { ProviderActivationIntent } from '../config-types.js';

@@ -16,7 +16,7 @@
  * @pseudocode 003-github-broker.md lines 96-100, 105-109
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   EARLY_POLL_MS,
   STEADY_POLL_MS,

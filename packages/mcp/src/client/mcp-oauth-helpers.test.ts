@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { waitFor } from '../../../test-utils/src/wait-for.js';
+import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { OAuthUtils } from '../auth/oauth-utils.js';
 import {
@@ -177,7 +178,7 @@ describe('handleAutomaticOAuth', () => {
       '',
     );
 
-    await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
     finishAuthentication?.();
     await expect(Promise.all([first, second])).resolves.toStrictEqual([
       true,
@@ -231,7 +232,7 @@ describe('handleAutomaticOAuth', () => {
       'resource_metadata="https://auth.example.com/resource"',
     );
 
-    await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(2));
     finishAuthentications?.();
     await expect(Promise.all([first, second])).resolves.toStrictEqual([
       true,

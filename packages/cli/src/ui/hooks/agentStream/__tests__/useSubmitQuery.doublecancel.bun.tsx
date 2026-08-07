@@ -17,9 +17,9 @@
  * shared React state.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
-import { vi } from '../../../../test-utils/bunTest.js';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
   useSubmitQuery,
@@ -51,10 +51,10 @@ import {
 } from './submitQueryTestFixtures.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
-const prepareQueryForAgentMock = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ queryToSend: 'test-query', shouldProceed: true }),
-);
-vi.mock('../useStreamEventHandlers.js', () => ({
+const prepareQueryForAgentMock = vi
+  .fn()
+  .mockResolvedValue({ queryToSend: 'test-query', shouldProceed: true });
+void vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     displayUserMessage: vi.fn(),
     prepareQueryForAgent: prepareQueryForAgentMock,
@@ -62,20 +62,20 @@ vi.mock('../useStreamEventHandlers.js', () => ({
   }),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,
   }),
 }));
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock streamUtils so we can assert whether handleSubmissionError is called.
-const handleSubmissionErrorMock = vi.hoisted(() => vi.fn());
-vi.mock('../streamUtils.js', () => ({
+const handleSubmissionErrorMock = vi.fn();
+void vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: handleSubmissionErrorMock,
   processSlashCommandResult: vi.fn(),
 }));
@@ -418,23 +418,22 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         rendered.result.current.scheduleNextQueuedSubmission();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(1);
 
       submitQueryRef.current = async () => 'consumed';
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(999);
+        await advanceTimersByTimeAsync(999);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(1);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       expect(queuedSubmissionsRef.current).toHaveLength(0);
     } finally {
       rendered.unmount();
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -476,25 +475,24 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
         rendered.result.current.scheduleNextQueuedSubmission();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
       for (let retry = 0; retry < 3; retry += 1) {
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(1000);
+          await advanceTimersByTimeAsync(1000);
         });
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(1);
+          await advanceTimersByTimeAsync(1);
         });
       }
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
       });
 
       expect(queuedSubmissionsRef.current).toStrictEqual([]);
       expect(processedQueries).toStrictEqual(['next submission']);
     } finally {
       rendered.unmount();
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });

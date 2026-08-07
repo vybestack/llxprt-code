@@ -81,7 +81,7 @@
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "bun scripts/test.ts --shard scripts",
     "test:shell": "./scripts/run-shell-tests.sh",
-    "test:interactive-ui": "cross-env LLXPRT_E2E_TMUX=1 bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/interactive-ui.test.ts",
+    "test:interactive-ui": "cross-env LLXPRT_E2E_TMUX=1 bun test --preload ./scripts/tests/test-setup.ts scripts/tests/interactive-ui.test.ts",
     "test:e2e": "cross-env VERBOSE=true KEEP_OUTPUT=true npm run test:integration:sandbox:none",
     "test:integration:all": "npm run test:integration:sandbox:none && npm run test:integration:sandbox:docker && npm run test:integration:sandbox:podman",
     "test:integration:sandbox:none": "cross-env LLXPRT_SANDBOX=false bun scripts/run_bun_tests.ts --root integration-tests",

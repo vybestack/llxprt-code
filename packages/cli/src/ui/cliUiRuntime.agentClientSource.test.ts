@@ -14,7 +14,7 @@
  * boundary to the underlying Config.createDetachedAgentClient.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import {
   buildSlashCommandRuntime,

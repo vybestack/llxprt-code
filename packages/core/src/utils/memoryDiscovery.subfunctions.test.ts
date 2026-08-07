@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -23,13 +31,11 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+}));
 
 // Simple extension loader for testing
 class SimpleExtensionLoader {
@@ -84,7 +90,7 @@ describe('memoryDiscovery subfunctions', () => {
     process.env['LLXPRT_CONFIG_HOME'] = configDir;
     process.env['LLXPRT_DATA_HOME'] = dataDir;
 
-    vi.mocked(os.homedir).mockReturnValue(homedir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(homedir);
   });
 
   afterEach(async () => {

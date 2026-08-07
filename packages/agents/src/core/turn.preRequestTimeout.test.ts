@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent, StructuredError } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession, StreamEvent } from './chatSession.js';
@@ -25,28 +29,27 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { flushEventLoop } from '../test-utils/eventLoop.js';
 
-const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
+const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),
   mockGetHistory: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock(
+const actual = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js'
+  )),
+};
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js')
-      >();
-    return {
-      // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
-      // real implementation so thinking/tool_call/text detection is correct.
-      analyzeResponseOutcome: actual.analyzeResponseOutcome,
-    };
-  },
+  () => ({
+    // analyzeResponseOutcome now operates on ContentBlock[]; delegate to the
+    // real implementation so thinking/tool_call/text detection is correct.
+    analyzeResponseOutcome: actual.analyzeResponseOutcome,
+  }),
 );
 
 /**
@@ -119,6 +122,20 @@ function createStreamWithStalledFirstNext(): AsyncGenerator<{
   })();
 }
 
+/** Starts a Turn run in the background, returning the collected events and the pending promise. */
+function startRun(
+  turn: Turn,
+  signal: AbortSignal = new AbortController().signal,
+): { events: ServerAgentStreamEvent[]; runPromise: Promise<void> } {
+  const events: ServerAgentStreamEvent[] = [];
+  const runPromise = (async () => {
+    for await (const event of turn.run([{ text: 'Hi' }], signal)) {
+      events.push(event);
+    }
+  })();
+  return { events, runPromise };
+}
+
 describe('Turn - first-response timeout (issue #2379)', () => {
   const originalEnv = process.env;
 
@@ -142,19 +159,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     // Before the default timeout: no events, generator still pending.
-    await vi.advanceTimersByTimeAsync(
+    await advanceTimersByTimeAsync(
       DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS - 1,
     );
     // Let the event loop settle so the consumer processes any pending state.
@@ -164,8 +172,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     // Advance past the default first-response timeout (300000ms). Drain all
     // pending timers/microtasks so the rejection deterministically propagates
     // through handleRunError before we await the consumer loop.
-    await vi.advanceTimersByTimeAsync(2);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(2);
+    await runAllTimersAsync();
     await runPromise;
 
     const timeoutEvent = events.find(
@@ -210,19 +218,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
     mockSendMessageStream.mockReturnValue(new Promise(() => {}));
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
+    const { events, runPromise } = startRun(turn);
 
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
-
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(
@@ -237,19 +236,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
+    const { events, runPromise } = startRun(turn);
 
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
-
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(
@@ -283,18 +273,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         }),
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(events).toContainEqual({
@@ -334,8 +316,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         firstEvents.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await firstRun;
 
     const secondEvents: ServerAgentStreamEvent[] = [];
@@ -347,8 +329,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         secondEvents.push(event);
       }
     })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await secondRun;
 
     expect({ firstEvents, secondEvents }).toStrictEqual({
@@ -454,19 +436,11 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
-    await vi.advanceTimersByTimeAsync(0);
+    const { events, runPromise } = startRun(turn);
+    await advanceTimersByTimeAsync(0);
     await secondTransport;
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(transports).toBe(2);
@@ -505,18 +479,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(events.some((event) => event.type === AgentEventType.Content)).toBe(
@@ -576,19 +542,11 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       [Symbol.asyncIterator]: () => leakyIterator,
     });
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const runPromise = (async () => {
-      for await (const event of turn.run(reqParts, signal)) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     // Let the timeout win the race first.
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     // Release the late first .next() so the losing promise resolves AFTER the
@@ -625,18 +583,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       [Symbol.asyncIterator]: () => iterator,
     });
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
 
     expect(returnCalls).toBe(1);
@@ -665,15 +615,9 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockImplementation(() =>
       acquisitionGate.then(() => ({ [Symbol.asyncIterator]: () => iterator })),
     );
-    const events: ServerAgentStreamEvent[] = [];
-    const signal = new AbortController().signal;
-    const runPromise = (async () => {
-      for await (const event of turn.run([{ text: 'Hi' }], signal)) {
-        events.push(event);
-      }
-    })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    const { events, runPromise } = startRun(turn);
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
     releaseAcquisition();
     const guard = failsafe(2000);
@@ -704,15 +648,9 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockResolvedValue({
       [Symbol.asyncIterator]: () => iterator,
     });
-    const events: ServerAgentStreamEvent[] = [];
-    const signal = new AbortController().signal;
-    const runPromise = (async () => {
-      for await (const event of turn.run([{ text: 'Hi' }], signal)) {
-        events.push(event);
-      }
-    })();
-    await vi.advanceTimersByTimeAsync(25);
-    await vi.runAllTimersAsync();
+    const { events, runPromise } = startRun(turn);
+    await advanceTimersByTimeAsync(25);
+    await runAllTimersAsync();
     await runPromise;
     const timeoutEvent = events.find(
       (e) => e.type === AgentEventType.StreamIdleTimeout,
@@ -892,16 +830,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
     const abortController = new AbortController();
-
-    const iterator = turn.run(reqParts, abortController.signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn, abortController.signal);
 
     // Let the generator body start and reach the first-response wait (past the
     // pre-flight signal.aborted check) BEFORE aborting, so the abort is

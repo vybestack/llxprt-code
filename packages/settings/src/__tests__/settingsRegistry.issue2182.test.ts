@@ -18,7 +18,7 @@
  * so neither value ever reaches the API request body (modelParams).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   resolveAlias,
   getSettingSpec,

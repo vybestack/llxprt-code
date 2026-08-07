@@ -12,7 +12,7 @@
  * safeGetDefaultModel utility instead of calling getDefaultModel directly.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { safeGetDefaultModel } from '../utils/safeDefaultModel.js';

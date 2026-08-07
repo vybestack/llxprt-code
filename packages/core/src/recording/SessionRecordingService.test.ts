@@ -26,7 +26,8 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach, it, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, expect, beforeEach, afterEach, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -793,7 +794,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
         await service.flush();
         await fs.rm(chatsDir, { recursive: true, force: true });
 
-        await vi.waitFor(
+        await waitFor(
           () => {
             expect(errorSpy).toHaveBeenCalledWith(
               expect.stringContaining('chatsDir was removed'),

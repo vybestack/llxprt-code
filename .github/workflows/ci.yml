@@ -880,7 +880,7 @@ jobs:
 
       - name: 'Run script harness tests for the orchestrator'
         run: |-
-          bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
+          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
 
       - name: 'Verify every test file is covered by some executor'
         # Fails when a test file exists on disk that no executor runs (uncovered)
@@ -1374,11 +1374,11 @@ jobs:
           - os: 'ubuntu-latest'
             node-version: '24.x'
             secure-store-mode: 'keyring'
-            test-config: 'vitest.config.native-keyring.ts'
+            test-script: 'test:secure-store:keyring'
           - os: 'ubuntu-latest'
             node-version: '24.x'
             secure-store-mode: 'fallback'
-            test-config: 'vitest.config.fallback-behavior.ts'
+            test-script: 'test:secure-store:fallback'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -1418,7 +1418,7 @@ jobs:
           CI: true
           NO_COLOR: true
           SECURE_STORE_MODE: '${{ matrix.secure-store-mode }}'
-          TEST_CONFIG: '${{ matrix.test-config }}'
+          TEST_SCRIPT: '${{ matrix.test-script }}'
           KEYRING_PASSWORD: 'llxprt-ci-keyring'
         run: |-
           if [[ "$RUNNER_OS" == 'Linux' && "$SECURE_STORE_MODE" == 'keyring' ]]; then
@@ -1482,11 +1482,10 @@ jobs:
                 printf "GNOME login collection is not unlocked: %s\n" "$login_collection_locked" >&2
                 exit 1
               fi
-              npm run test:vitest --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
+              npm run "$TEST_SCRIPT" --workspace @vybestack/llxprt-code-storage
             '
           else
-            npm run test:vitest --workspace @vybestack/llxprt-code-storage -- \
-              --config "$TEST_CONFIG"
+            npm run "$TEST_SCRIPT" --workspace @vybestack/llxprt-code-storage
           fi
 
       - name: 'Publish SecureStore Test Report'

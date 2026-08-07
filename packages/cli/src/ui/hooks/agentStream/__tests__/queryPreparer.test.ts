@@ -12,7 +12,7 @@
  * aborted before preparation is skipped.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { type MessageSenderType } from '@vybestack/llxprt-code-core';
 import {
   prepareQueryForAgent,

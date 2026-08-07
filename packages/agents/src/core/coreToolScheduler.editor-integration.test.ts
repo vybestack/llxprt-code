@@ -23,7 +23,8 @@
  * editor behavior is mocked.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -299,7 +300,7 @@ function makeRequest(
 async function waitForCompletion(
   onAllToolCallsComplete: ReturnType<typeof vi.fn>,
 ): Promise<ToolCall[]> {
-  await vi.waitFor(() => {
+  await waitFor(() => {
     expect(onAllToolCallsComplete).toHaveBeenCalled();
   });
   return onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
@@ -686,7 +687,7 @@ describe('Editor scheduler integration (issue #2659)', () => {
       expect(ctx.onAllToolCallsComplete).not.toHaveBeenCalled();
 
       // Wait for the confirmation request to arrive on the bus.
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(capturedCorrelationId).toBeDefined();
       });
 

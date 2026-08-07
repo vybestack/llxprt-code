@@ -28,7 +28,8 @@
  * RESPONSES_API_MODELS fallback when unauthenticated / fetch fails).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { RESPONSES_API_MODELS } from '../../openai/RESPONSES_API_MODELS.js';
 import type { IModel } from '../../IModel.js';
@@ -60,13 +61,13 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    vi.stubEnv('OPENAI_API_KEY', '');
+    setEnv('OPENAI_API_KEY', '');
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   describe('getDefaultModel', () => {

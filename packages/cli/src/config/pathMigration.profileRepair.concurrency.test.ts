@@ -6,7 +6,7 @@
  * Uses real temp directories and the actual filesystem — no mocking.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'os';

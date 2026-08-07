@@ -4,25 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as crypto from 'node:crypto';
 
 // Mock fs before importing the module under test
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    promises: {
-      ...actual.promises,
-      mkdir: vi.fn(),
-      writeFile: vi.fn(),
-      rename: vi.fn(),
-      readdir: vi.fn(),
-      readFile: vi.fn(),
-      access: vi.fn(),
-    },
-  };
-});
+const actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => ({
+  ...actual,
+  promises: {
+    ...actual.promises,
+    mkdir: vi.fn(),
+    writeFile: vi.fn(),
+    rename: vi.fn(),
+    readdir: vi.fn(),
+    readFile: vi.fn(),
+    access: vi.fn(),
+  },
+}));
 
 import * as fs from 'node:fs';
 import {
@@ -74,9 +80,15 @@ describe('SessionPersistenceService', () => {
 
   describe('save()', () => {
     beforeEach(() => {
-      vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.promises.writeFile).mockResolvedValue();
-      vi.mocked(fs.promises.rename).mockResolvedValue();
+      (fs.promises.mkdir as Mock<typeof fs.promises.mkdir>).mockResolvedValue(
+        undefined,
+      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockResolvedValue();
+      (
+        fs.promises.rename as Mock<typeof fs.promises.rename>
+      ).mockResolvedValue();
     });
 
     it('should create chats directory if not exists', async () => {
@@ -107,11 +119,11 @@ describe('SessionPersistenceService', () => {
 
     it('should include all required fields in saved session', async () => {
       let savedContent = '';
-      vi.mocked(fs.promises.writeFile).mockImplementation(
-        async (_path, content) => {
-          savedContent = content as string;
-        },
-      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockImplementation(async (_path, content) => {
+        savedContent = content as string;
+      });
 
       const history = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
@@ -143,16 +155,16 @@ describe('SessionPersistenceService', () => {
       let firstCreatedAt: string | null = null;
       let secondCreatedAt: string | null = null;
 
-      vi.mocked(fs.promises.writeFile).mockImplementation(
-        async (_path, content) => {
-          const parsed = JSON.parse(content as string) as PersistedSession;
-          if (!firstCreatedAt) {
-            firstCreatedAt = parsed.createdAt;
-          } else {
-            secondCreatedAt = parsed.createdAt;
-          }
-        },
-      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockImplementation(async (_path, content) => {
+        const parsed = JSON.parse(content as string) as PersistedSession;
+        if (!firstCreatedAt) {
+          firstCreatedAt = parsed.createdAt;
+        } else {
+          secondCreatedAt = parsed.createdAt;
+        }
+      });
 
       await service.save([], undefined, []);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -165,16 +177,16 @@ describe('SessionPersistenceService', () => {
       let firstUpdatedAt: string | null = null;
       let secondUpdatedAt: string | null = null;
 
-      vi.mocked(fs.promises.writeFile).mockImplementation(
-        async (_path, content) => {
-          const parsed = JSON.parse(content as string) as PersistedSession;
-          if (!firstUpdatedAt) {
-            firstUpdatedAt = parsed.updatedAt;
-          } else {
-            secondUpdatedAt = parsed.updatedAt;
-          }
-        },
-      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockImplementation(async (_path, content) => {
+        const parsed = JSON.parse(content as string) as PersistedSession;
+        if (!firstUpdatedAt) {
+          firstUpdatedAt = parsed.updatedAt;
+        } else {
+          secondUpdatedAt = parsed.updatedAt;
+        }
+      });
 
       await service.save([], undefined, []);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -184,7 +196,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should throw on mkdir failure', async () => {
-      vi.mocked(fs.promises.mkdir).mockRejectedValue(
+      (fs.promises.mkdir as Mock<typeof fs.promises.mkdir>).mockRejectedValue(
         new Error('Permission denied'),
       );
 
@@ -194,9 +206,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should throw on write failure', async () => {
-      vi.mocked(fs.promises.writeFile).mockRejectedValue(
-        new Error('Disk full'),
-      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockRejectedValue(new Error('Disk full'));
 
       await expect(service.save([], undefined, [])).rejects.toThrow(
         'Disk full',
@@ -204,7 +216,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should throw on rename failure', async () => {
-      vi.mocked(fs.promises.rename).mockRejectedValue(new Error('IO error'));
+      (fs.promises.rename as Mock<typeof fs.promises.rename>).mockRejectedValue(
+        new Error('IO error'),
+      );
 
       await expect(service.save([], undefined, [])).rejects.toThrow('IO error');
     });
@@ -217,7 +231,9 @@ describe('SessionPersistenceService', () => {
     it('should return null if chats directory does not exist', async () => {
       const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
       enoentError.code = 'ENOENT';
-      vi.mocked(fs.promises.readdir).mockRejectedValue(enoentError);
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockRejectedValue(enoentError);
 
       const result = await service.loadMostRecent();
 
@@ -225,7 +241,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should return null if no session files exist', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([] as unknown as []);
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([] as unknown as []);
 
       const result = await service.loadMostRecent();
 
@@ -233,7 +251,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should ignore non-session files', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'other-file.json',
         'persisted-session-backup.json.bak',
         'readme.md',
@@ -245,7 +265,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should load the most recent session file (sorted by filename)', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'persisted-session-2026-01-01T00-00-00-000Z.json',
         'persisted-session-2026-01-03T00-00-00-000Z.json', // Most recent
         'persisted-session-2026-01-02T00-00-00-000Z.json',
@@ -260,9 +282,9 @@ describe('SessionPersistenceService', () => {
         history: [],
       };
 
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(mockSession),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(mockSession));
 
       const result = await service.loadMostRecent();
 
@@ -274,7 +296,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should reject session with wrong project hash', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
 
@@ -287,9 +311,9 @@ describe('SessionPersistenceService', () => {
         history: [],
       };
 
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(mockSession),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(mockSession));
 
       const result = await service.loadMostRecent();
 
@@ -297,7 +321,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should reject session with unknown version', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
 
@@ -310,9 +336,9 @@ describe('SessionPersistenceService', () => {
         history: [],
       };
 
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(mockSession),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(mockSession));
 
       const result = await service.loadMostRecent();
 
@@ -320,11 +346,17 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle corrupted JSON gracefully and backup', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
-      vi.mocked(fs.promises.readFile).mockResolvedValue('{ invalid json }}}');
-      vi.mocked(fs.promises.rename).mockResolvedValue();
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue('{ invalid json }}}');
+      (
+        fs.promises.rename as Mock<typeof fs.promises.rename>
+      ).mockResolvedValue();
 
       const result = await service.loadMostRecent();
 
@@ -337,7 +369,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should return session with UI history when present', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
 
@@ -356,9 +390,9 @@ describe('SessionPersistenceService', () => {
         uiHistory,
       };
 
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(mockSession),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(mockSession));
 
       const result = await service.loadMostRecent();
 
@@ -366,9 +400,9 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle readdir failure gracefully', async () => {
-      vi.mocked(fs.promises.readdir).mockRejectedValue(
-        new Error('Permission denied'),
-      );
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockRejectedValue(new Error('Permission denied'));
 
       const result = await service.loadMostRecent();
 
@@ -376,12 +410,14 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle readFile failure gracefully', async () => {
-      vi.mocked(fs.promises.readdir).mockResolvedValue([
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir>
+      ).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockRejectedValue(new Error('File not found'));
 
       const result = await service.loadMostRecent();
 
@@ -484,9 +520,15 @@ describe('SessionPersistenceService', () => {
 
   describe('edge cases', () => {
     it('should handle empty history array', async () => {
-      vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.promises.writeFile).mockResolvedValue();
-      vi.mocked(fs.promises.rename).mockResolvedValue();
+      (fs.promises.mkdir as Mock<typeof fs.promises.mkdir>).mockResolvedValue(
+        undefined,
+      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockResolvedValue();
+      (
+        fs.promises.rename as Mock<typeof fs.promises.rename>
+      ).mockResolvedValue();
 
       await expect(
         service.save([], undefined, undefined),
@@ -494,9 +536,15 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle large history arrays', async () => {
-      vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.promises.writeFile).mockResolvedValue();
-      vi.mocked(fs.promises.rename).mockResolvedValue();
+      (fs.promises.mkdir as Mock<typeof fs.promises.mkdir>).mockResolvedValue(
+        undefined,
+      );
+      (
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
+      ).mockResolvedValue();
+      (
+        fs.promises.rename as Mock<typeof fs.promises.rename>
+      ).mockResolvedValue();
 
       const largeHistory = Array.from({ length: 1000 }, (_, i) => ({
         speaker: i % 2 === 0 ? 'human' : 'model',
@@ -510,7 +558,9 @@ describe('SessionPersistenceService', () => {
         undefined,
         undefined,
       );
-      expect(vi.mocked(fs.promises.writeFile)).toHaveBeenCalled();
+      expect(
+        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>,
+      ).toHaveBeenCalled();
     });
 
     it('should handle special characters in project path', () => {

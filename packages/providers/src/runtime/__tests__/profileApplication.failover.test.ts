@@ -17,13 +17,16 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
 import type {
   Profile,
   LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
 
+const realRuntimeSettingsModule = {
+  ...(await import('../runtimeSettings.js')),
+};
 type ProviderManagerStub = {
   providers: Map<string, unknown>;
   activeProviderName: string | null;
@@ -202,7 +205,8 @@ function wrapRegisterProviderToCaptureLB(): {
   };
 }
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
+  ...realRuntimeSettingsModule,
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { createCompletionHandler } from '../schema/index.js';
 import type { CommandContext } from '../types.js';
@@ -29,7 +29,7 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-vi.mock('../../contexts/RuntimeContext.js', () => ({
+void vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => mockRuntime,
 }));
 import { setCommand } from '../setCommand.js';

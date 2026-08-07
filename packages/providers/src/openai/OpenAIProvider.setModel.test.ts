@@ -1,7 +1,7 @@
 /**
  * Test for OpenAIProvider setModel and getCurrentModel methods
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';

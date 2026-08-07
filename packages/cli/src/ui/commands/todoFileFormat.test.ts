@@ -19,7 +19,7 @@
  * the load subcommand now use it instead of raw JSON.parse.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { parseTodoFileContent } from './todoOperations.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 

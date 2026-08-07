@@ -14,7 +14,7 @@
  * @requirement R12, R13, R14, R15, R16, R17, R18, R19, R20, R27.2
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -75,42 +75,36 @@ function createTestStorage(
 
 // ─── Mock for Runtime + ProviderKeyStorage ──────────────────────────────────
 
-const mockRuntime = vi.hoisted(() => ({
+const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
   getActiveProviderStatus: vi.fn(),
-}));
+};
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => mockRuntime,
 }));
 
 let mockStorage: ProviderKeyStorage;
 
-vi.mock('@vybestack/llxprt-code-storage', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-storage')>();
-  return {
-    ...actual,
-    getProviderKeyStorage: () => mockStorage,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
+void vi.mock('@vybestack/llxprt-code-storage', () => ({
+  ...actual,
+  getProviderKeyStorage: () => mockStorage,
+}));
 
 // @plan:PLAN-20250214-CREDPROXY.P33
 // Mock the factory to use our test storage. The credential-store factory now
 // lives in the providers package and is consumed via its "./auth.js" barrel,
 // so the mock must target that module to intercept keyCommand's import.
-vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-providers/auth.js')
-    >();
-  return {
-    ...actual,
-    createProviderKeyStorage: () => mockStorage,
-    createTokenStore: () => ({}),
-    resetFactorySingletons: () => {},
-  };
-});
+const actualActual = {
+  ...(await import('@vybestack/llxprt-code-providers/auth.js')),
+};
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+  ...actualActual,
+  createProviderKeyStorage: () => mockStorage,
+  createTokenStore: () => ({}),
+  resetFactorySingletons: () => {},
+}));
 
 // ─── Test Setup ──────────────────────────────────────────────────────────────
 
