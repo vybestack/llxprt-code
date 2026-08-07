@@ -15,7 +15,8 @@
 
 import { readdir } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
+import type { StorageSource } from '../config/capabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
@@ -56,7 +57,7 @@ const logger = new DebugLogger('llxprt:zed-integration:session-loader');
 export async function resumeAgentHistory(
   agent: Agent,
   sessionId: string,
-  sessionConfig: Config,
+  sessionConfig: StorageSource,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<readonly IContent[]> {
   try {
@@ -80,7 +81,7 @@ export async function resumeAgentHistory(
  * is never silently masked.
  */
 async function listSessionFileNames(
-  sessionConfig: Config,
+  sessionConfig: StorageSource,
   listFiles: ChatSessionFileLister,
 ): Promise<readonly string[]> {
   const chatsDir = chatsDirFor(sessionConfig);
@@ -107,7 +108,7 @@ async function listSessionFileNames(
  * ({@link findMatchingSessionFile}), keeping the two in lockstep.
  */
 export async function hasRecordedSessionFile(
-  config: Config,
+  config: StorageSource,
   sessionId: string,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<boolean> {
@@ -166,7 +167,7 @@ export async function readAgentHistoryForReplay(
  * so the probe↔recording filename match can never drift on the location
  * (FINDING C3).
  */
-function chatsDirFor(config: Config): string {
+function chatsDirFor(config: StorageSource): string {
   return config.storage.getProjectChatsDir();
 }
 

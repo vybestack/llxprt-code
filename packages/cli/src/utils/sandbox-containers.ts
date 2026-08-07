@@ -10,7 +10,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { promisify } from 'node:util';
 import { parse } from 'shell-quote';
-import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { DebugModeSource } from '../config/capabilities.js';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
@@ -734,7 +735,7 @@ export function wireProxyContainerCloseHandler(
 /** Wires all cleanup handlers into the sandbox process lifecycle. */
 export function wireCleanupHandlers(
   sandboxProcess: ChildProcess,
-  _cliConfig: Config | undefined,
+  _cliConfig: DebugModeSource | undefined,
   sshResult: SshAgentResult,
   portForwardingResult: PortForwardingResult | undefined,
   credentialProxyBridgeCleanup: (() => void) | undefined,
@@ -829,7 +830,7 @@ export function restoreStdinAfterSandbox(
   sandboxProcess: ChildProcess,
   stdinWasPaused: boolean,
   stdinHadRawMode: boolean,
-  cliConfig?: Config,
+  cliConfig?: DebugModeSource,
 ): void {
   sandboxProcess.on('close', () => {
     if (process.stdin.isTTY === false) {

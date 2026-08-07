@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { ProfileManagerSource } from '../config/capabilities.js';
 import * as acp from '@agentclientprotocol/sdk';
 import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import { parseZedAuthMethodId } from './zed-helpers.js';
 
 export async function initializeZedAgent(
-  config: Config,
+  config: ProfileManagerSource,
 ): Promise<acp.InitializeResponse> {
   let profileNames: string[];
   try {
@@ -44,7 +44,7 @@ export async function initializeZedAgent(
 }
 
 export async function authenticateZedAgent(
-  config: Config,
+  config: ProfileManagerSource,
   methodId: string,
 ): Promise<void> {
   try {
@@ -59,6 +59,8 @@ export async function authenticateZedAgent(
   }
 }
 
-async function getAvailableProfileNames(config: Config): Promise<string[]> {
+async function getAvailableProfileNames(
+  config: ProfileManagerSource,
+): Promise<string[]> {
   return (await config.getProfileManager()?.listProfiles()) ?? [];
 }

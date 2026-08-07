@@ -9,6 +9,7 @@
   },
   "include": [
     "scripts/api-census.ts",
+    "scripts/config-narrow-candidates.ts",
     "scripts/config-contract.ts",
     "scripts/agents-neutral-gate.ts",
     "scripts/agents-neutral-gate-config.ts",

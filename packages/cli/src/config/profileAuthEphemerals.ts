@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { EphemeralSettingsAccess } from './capabilities.js';
 
 const PROFILE_AUTH_EPHEMERAL_KEYS = [
   'auth-key',
@@ -22,7 +22,7 @@ function isPresentEphemeral(value: unknown): boolean {
 }
 
 export function snapshotProfileAuthEphemerals(
-  config: Config,
+  config: EphemeralSettingsAccess,
 ): ProfileAuthEphemeralSnapshot {
   const snapshot: ProfileAuthEphemeralSnapshot = {};
   for (const key of PROFILE_AUTH_EPHEMERAL_KEYS) {
@@ -41,7 +41,7 @@ export function hasProfileAuthEphemerals(
 }
 
 export function reapplyProfileAuthEphemerals(
-  config: Config,
+  config: EphemeralSettingsAccess,
   snapshot: ProfileAuthEphemeralSnapshot,
 ): void {
   for (const key of PROFILE_AUTH_EPHEMERAL_KEYS) {
