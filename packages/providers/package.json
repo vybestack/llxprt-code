@@ -240,7 +240,7 @@
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-storage": "file:../storage",
-    "@vybestack/llxprt-code-telemetry": "0.11.0",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^5.0.104",
     "comment-json": "^4.5.0",
