@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { render as inkRender } from 'ink-testing-library';
 import React, { act, createContext, useContext } from 'react';
-import { vi } from 'vitest';
 
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
@@ -298,7 +298,7 @@ export const waitFor = async (
       // advances the clock and drains microtasks scheduled by timer callbacks,
       // so the next poll sees the resulting React state update.
       try {
-        await vi.advanceTimersByTimeAsync(interval);
+        await advanceTimersByTimeAsync(interval);
       } catch {
         // Real timers: use real setTimeout for the polling interval.
         await new Promise((resolve) => setTimeout(resolve, interval));

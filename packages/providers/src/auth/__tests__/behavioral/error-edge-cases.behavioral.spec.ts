@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ProactiveRenewalManager } from '../../proactive-renewal-manager.js';
 import {
   MemoryTokenStore,
@@ -86,12 +87,12 @@ describe('Error and edge case behavioral scenarios', () => {
 
       proactiveManager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-      await vi.advanceTimersByTimeAsync(305 * 1000);
+      await advanceTimersByTimeAsync(305 * 1000);
 
       expect(acquireRefreshLockSpy).toHaveBeenCalledTimes(1);
       expect(refreshTokenSpy).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(65 * 1000);
+      await advanceTimersByTimeAsync(65 * 1000);
 
       expect(acquireRefreshLockSpy).toHaveBeenCalledTimes(2);
       expect(refreshTokenSpy).toHaveBeenCalled();

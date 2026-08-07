@@ -23,7 +23,7 @@
  * live provider networking.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
@@ -38,7 +38,7 @@ import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
-vi.mock('../useStreamEventHandlers.js', () => ({
+void vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     processStreamEvent: vi.fn(),
     displayUserMessage: vi.fn(),
@@ -49,21 +49,21 @@ vi.mock('../useStreamEventHandlers.js', () => ({
   }),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,
   }),
 }));
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock streamUtils so we can assert whether handleSubmissionError is called
 // (i.e. the activation error is surfaced to the user).
-const handleSubmissionErrorMock = vi.hoisted(() => vi.fn());
-vi.mock('../streamUtils.js', () => ({
+const handleSubmissionErrorMock = vi.fn();
+void vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: handleSubmissionErrorMock,
   processSlashCommandResult: vi.fn(),
 }));

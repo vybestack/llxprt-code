@@ -16,7 +16,7 @@
  *    available, not just config.getModel.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
@@ -55,39 +55,38 @@ class RecordingTokenUsageLogger extends TokenUsageLogger {
   }
 }
 
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
-    const tokenLimit = vi.fn(
-      (_model: string, userContextLimit?: number) =>
-        userContextLimit ?? 1_000_000,
-    );
-    return {
-      ...actual,
-      tokenLimit,
-      resolveEffectiveContextLimit: vi.fn(
-        (model: string, userCtx?: number, provCtx?: number) => {
-          const ok = (v: unknown): v is number =>
-            typeof v === 'number' && Number.isFinite(v) && v > 0;
-          if (ok(userCtx)) return userCtx;
-          if (ok(provCtx)) return provCtx;
-          return tokenLimit(model);
-        },
-      ),
-    };
-  },
-);
+const actual = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn(
+    (_model: string, userContextLimit?: number) =>
+      userContextLimit ?? 1_000_000,
+  );
+  return {
+    ...actual,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
+  };
+});
 
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+const actual2 = { ...(await import('./turn.js')) };
+void vi.mock('./turn.js', () => {
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;
   }
   return {
-    ...actual,
-    Turn: MockTurn as unknown as typeof actual.Turn,
+    ...actual2,
+    Turn: MockTurn as unknown as typeof actual2.Turn,
   };
 });
 
@@ -286,7 +285,7 @@ async function collectModelInfos(
 describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(tokenLimit).mockImplementation(
+    (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
       (_model: string, userContextLimit?: number) =>
         userContextLimit ?? 1_000_000,
     );
@@ -386,8 +385,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     ];
     const { orchestrator } = buildOrchestrator();
     const deps = orchestrator['deps'];
-    vi.mocked(deps.hasChat).mockReturnValue(false);
-    vi.mocked(deps.getPreviousHistory).mockReturnValue(previousHistory);
+    (deps.hasChat as Mock<typeof deps.hasChat>).mockReturnValue(false);
+    (
+      deps.getPreviousHistory as Mock<typeof deps.getPreviousHistory>
+    ).mockReturnValue(previousHistory);
 
     await collectModelInfos(orchestrator, 'prompt-restore-history');
 

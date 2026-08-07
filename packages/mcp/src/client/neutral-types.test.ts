@@ -5,7 +5,7 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   type CallableTool,
   type ContentPart,

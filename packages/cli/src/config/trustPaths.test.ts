@@ -4,20 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { normalizeTrustPathInput } from './trustPaths.js';
 
 const MOCK_HOME = path.resolve('/mock/home/user');
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
-  return {
-    ...actual,
-    homedir: vi.fn(() => MOCK_HOME),
-  };
-});
+const actual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actual,
+  homedir: vi.fn(() => MOCK_HOME),
+}));
 
 describe('normalizeTrustPathInput', () => {
   it('A1: normalizes an absolute path resolving dot-dot segments', () => {

@@ -28,7 +28,7 @@
  * unchanged and are the regression fence for that boundary.
  */
 
-import { describe, it, expect, beforeEach, vi } from '../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -349,7 +349,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     // A non-transient error must still propagate (loop breaks) and must NOT be
     // retried, so the provider is invoked exactly once.
-    expect(collectEvents(stream)).rejects.toThrow('Bad request');
+    await expect(collectEvents(stream)).rejects.toThrow('Bad request');
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -382,7 +382,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('Request aborted');
+    await expect(collectEvents(stream)).rejects.toThrow('Request aborted');
     // The abort must terminate immediately without a retry.
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
@@ -411,7 +411,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     );
 
     // One restart is permitted (maxAttempts: 2); a second failure propagates.
-    expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
     expect(attempt).toBe(2);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
   });
@@ -452,7 +452,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     );
 
     // The error propagates; the aborted signal must suppress the retry.
-    expect(collectEvents(stream)).rejects.toThrow('terminated');
+    await expect(collectEvents(stream)).rejects.toThrow('terminated');
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -486,7 +486,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort-code',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow('terminated');
+    await expect(collectEvents(stream)).rejects.toThrow('terminated');
     // The ABORT_ERR code must classify this as an abort and suppress retry.
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
@@ -566,7 +566,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-invalid-stream',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
+    await expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
     expect(attempt).toBe(1);
   });
 
@@ -597,7 +597,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-empty-stream',
     );
 
-    expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
+    await expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
     expect(attempt).toBe(1);
   });
 
@@ -629,7 +629,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-shared-transport-budget',
     );
 
-    expect(collectEvents(stream)).rejects.toMatchObject({
+    await expect(collectEvents(stream)).rejects.toMatchObject({
       name: 'RetriesExhaustedError',
       category: 'server_error',
       isRetryable: false,

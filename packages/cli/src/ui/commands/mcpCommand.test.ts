@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import {
@@ -22,26 +22,23 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 
 // Mock external dependencies
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
-  return {
-    ...actual,
-    getMCPServerStatus: vi.fn(),
-    mcpServerRequiresOAuth: new Map<string, boolean>(),
-    MCPOAuthProvider: {
-      authenticate: vi.fn(),
-    },
-    MCPOAuthTokenStorage: {
-      getToken: vi.fn(),
-      isTokenExpired: vi.fn(),
-    },
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  ...actual,
+  getMCPServerStatus: vi.fn(),
+  mcpServerRequiresOAuth: new Map<string, boolean>(),
+  MCPOAuthProvider: {
+    authenticate: vi.fn(),
+  },
+  MCPOAuthTokenStorage: {
+    getToken: vi.fn(),
+    isTokenExpired: vi.fn(),
+  },
+}));
 
 function assertMessageAction(
   result: unknown,
@@ -183,7 +180,9 @@ describe('mcpCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
-    vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
+    (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
+      MCPServerStatus.CONNECTED,
+    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -258,7 +257,9 @@ describe('mcpCommand', () => {
     });
 
     it('should display configured MCP servers with status indicators and their tools', async () => {
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+      (
+        getMCPServerStatus as Mock<typeof getMCPServerStatus>
+      ).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         if (serverName === 'server2') return MCPServerStatus.CONNECTED;
         return MCPServerStatus.DISCONNECTED;
@@ -304,7 +305,9 @@ describe('mcpCommand', () => {
     });
 
     it('should include resource counts and resource names in MCP status output', async () => {
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+      (
+        getMCPServerStatus as Mock<typeof getMCPServerStatus>
+      ).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         if (serverName === 'server2') return MCPServerStatus.CONNECTED;
         return MCPServerStatus.DISCONNECTED;
@@ -416,7 +419,9 @@ describe('mcpCommand', () => {
         server2: { command: 'cmd2' },
       });
 
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+      (
+        getMCPServerStatus as Mock<typeof getMCPServerStatus>
+      ).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         return MCPServerStatus.DISCONNECTED;
       });
@@ -448,7 +453,9 @@ describe('mcpCommand', () => {
         server2: { command: 'cmd2' },
       });
 
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+      (
+        getMCPServerStatus as Mock<typeof getMCPServerStatus>
+      ).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         if (serverName === 'server2') return MCPServerStatus.CONNECTING;
         return MCPServerStatus.DISCONNECTED;
@@ -548,7 +555,9 @@ describe('mcpCommand', () => {
     });
 
     it('degrades gracefully when agent.mcp.details() rejects, showing servers and a warning', async () => {
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+      (
+        getMCPServerStatus as Mock<typeof getMCPServerStatus>
+      ).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         return MCPServerStatus.DISCONNECTED;
       });
@@ -592,7 +601,9 @@ describe('mcpCommand', () => {
       mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
       });
-      vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
+      (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
+        MCPServerStatus.CONNECTED,
+      );
 
       const tools = [createMockMCPTool('server1_tool1', 'server1')];
 
@@ -617,7 +628,9 @@ describe('mcpCommand', () => {
       mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
       });
-      vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
+      (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
+        MCPServerStatus.CONNECTED,
+      );
 
       const tools = [createMockMCPTool('server1_tool1', 'server1')];
 

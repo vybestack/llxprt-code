@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+  restoreEnv,
+  setEnv,
+} from '../../packages/test-utils/src/env-test-helpers.js';
+import { afterEach, describe, it, expect } from 'bun:test';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 
@@ -87,14 +91,14 @@ describe('detectInstaller', () => {
 
   it('reads from process.env by default', () => {
     // The lifecycle scripts call detectInstaller() with no argument and rely on
-    // the default reading process.env. Verify that contract using vi.stubEnv so
+    // the default reading process.env. Verify that contract using setEnv so
     // the real environment is restored automatically (see afterEach) instead of
     // hand-rolled try/finally save-and-restore.
-    vi.stubEnv('npm_config_user_agent', 'bun/1.3.14 host');
+    setEnv('npm_config_user_agent', 'bun/1.3.14 host');
     expect(detectInstaller()).toBe('bun');
   });
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  restoreEnv();
 });

@@ -15,7 +15,7 @@
  * silent mismatch cannot ship.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { SCANNED_TREES, validateScannedTrees } from '../legacy-paths/config.ts';
 
 describe('validateScannedTrees', () => {

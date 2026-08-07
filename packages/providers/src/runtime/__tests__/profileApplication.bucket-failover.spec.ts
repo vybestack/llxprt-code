@@ -10,7 +10,7 @@
  * These tests verify bucket failover behavior when rate limits or quota errors occur.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   shouldFailover,
   executeWithBucketFailover,

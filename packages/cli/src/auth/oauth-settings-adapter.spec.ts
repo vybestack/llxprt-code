@@ -4,10 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { setEnv, restoreEnv } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { LoadedSettingsOAuthAdapter } from './oauth-settings-adapter.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
+
+afterEach(() => {
+  restoreEnv();
+});
 
 function createLoadedSettings(userOverrides: Partial<Settings> = {}): {
   settings: LoadedSettings;
@@ -30,7 +35,7 @@ describe('LoadedSettingsOAuthAdapter', () => {
   let settings: LoadedSettings;
 
   beforeEach(() => {
-    vi.stubEnv('HOME', '/tmp/test-home');
+    setEnv('HOME', '/tmp/test-home');
     const result = createLoadedSettings({
       oauthEnabledProviders: { anthropic: true, gemini: false },
       providerApiKeys: { openai: 'sk-test-key' },

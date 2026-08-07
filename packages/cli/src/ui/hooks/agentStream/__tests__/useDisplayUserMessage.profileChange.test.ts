@@ -16,7 +16,7 @@
  * message and track lastProfileNameRef — it must NOT add profile_change items.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type React from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';

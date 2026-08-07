@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { ToolCallDecision } from '@vybestack/llxprt-code-core/telemetry/index.js';
 import * as SessionContext from '../contexts/SessionContext.js';
@@ -15,15 +15,15 @@ import {
 } from './StatsDisplay.testHelpers.js';
 
 // Mock the context to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 
 const renderWithMockedStats = (metrics: TestMetricsInput) => {
   useSessionStatsMock.mockReturnValue({

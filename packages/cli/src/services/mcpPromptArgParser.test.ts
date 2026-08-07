@@ -11,7 +11,7 @@ import {
   parsePromptArgs,
 } from './mcpPromptArgParser.js';
 import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 describe('extractNamedArgs', () => {
   it('extracts a quoted named argument value', () => {

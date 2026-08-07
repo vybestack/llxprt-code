@@ -15,7 +15,7 @@
  * Two-phase swap
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import {
   SessionRecordingService,

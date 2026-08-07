@@ -14,7 +14,7 @@
  * factory resolution, and CompressionContext extensions.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { COMPRESSION_STRATEGIES } from '@vybestack/llxprt-code-core/core/compression/types.js';

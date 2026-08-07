@@ -10,7 +10,7 @@
  * (Bug 2, acceptance rows B1/B2).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   separateSettings,
   normalizeSetting,

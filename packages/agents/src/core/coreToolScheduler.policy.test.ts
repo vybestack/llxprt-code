@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -200,7 +201,7 @@ describe('CoreToolScheduler policy decisions', () => {
       outcome: ToolConfirmationOutcome.ProceedOnce,
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
       const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
         -1,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'bun:test';
 import { lstatSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 

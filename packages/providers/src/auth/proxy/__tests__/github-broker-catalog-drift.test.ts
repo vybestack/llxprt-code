@@ -17,7 +17,7 @@
  * @requirement REQ-008, REQ-012
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { OP_REGISTRY } from '../github-broker-ops.js';
 import { executeGitHubOp } from '../github-broker.js';
 import { BrokerErrorException } from '../github-broker-errors.js';

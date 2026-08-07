@@ -4,15 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
-const mockSpawn = vi.hoisted(() => vi.fn());
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    spawn: mockSpawn,
-  };
-});
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+const mockSpawn = vi.fn();
+const actual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => ({
+  ...actual,
+  spawn: mockSpawn,
+}));
 
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
@@ -20,18 +18,18 @@ import { type ChildProcess } from 'child_process';
 import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
-const mockIsBinary = vi.hoisted(() => vi.fn());
-vi.mock('../utils/textUtils.js', () => ({
+const mockIsBinary = vi.fn();
+void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
 
-const mockGetPty = vi.hoisted(() => vi.fn());
-vi.mock('../utils/getPty.js', () => ({
+const mockGetPty = vi.fn();
+void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-vi.mock('os', () => ({
+const mockPlatform = vi.fn();
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: () => '/tmp/test-home',

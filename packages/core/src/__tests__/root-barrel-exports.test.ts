@@ -16,7 +16,7 @@
  * break under Node's ESM resolution / bundlers that honor `exports`.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 // Import from the root barrel using the canonical public specifier.
 import {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
 import {
   describe,
   it,
@@ -11,9 +12,8 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
 import { IdeContextNotificationSchema } from './ideContext.js';
 import * as fs from 'node:fs';
@@ -24,27 +24,39 @@ import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...(actual as object),
-    promises: {
-      readFile: vi.fn(),
-      readdir: vi.fn(),
-    },
-    realpathSync: (p: string) => p,
-    existsSync: () => false,
-  };
-});
-vi.mock('./process-utils.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
-vi.mock('./detect-ide.js');
-vi.mock('node:os');
+const realProcessUtilsModule = { ...(await import('./process-utils.js')) };
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realStreamableHttpModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/streamableHttp.js')),
+};
+const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
+const realNodeOsModule = { ...(await import('node:os')) };
+
+const actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => ({
+  ...(actual as object),
+  promises: {
+    readFile: vi.fn(),
+    readdir: vi.fn(),
+  },
+  realpathSync: (p: string) => p,
+  existsSync: () => false,
+}));
+void vi.mock('./process-utils.js', () => automock(realProcessUtilsModule));
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+void vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () =>
+  automock(realStreamableHttpModule),
+);
+void vi.mock('./detect-ide.js', () => automock(realDetectIdeModule));
+void vi.mock('node:os', () => automock(realNodeOsModule));
 
 describe('IdeClient', () => {
-  let mockClient: Mocked<Client>;
-  let mockHttpTransport: Mocked<StreamableHTTPClientTransport>;
+  let mockClient: Client;
+  let mockHttpTransport: StreamableHTTPClientTransport;
 
   beforeEach(async () => {
     // Reset singleton instance for test isolation
@@ -60,12 +72,14 @@ describe('IdeClient', () => {
 
     // Mock dependencies
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
-    vi.mocked(detectIde).mockReturnValue(IDE_DEFINITIONS.vscode);
-    vi.mocked(getIdeProcessInfo).mockResolvedValue({
+    (detectIde as Mock<typeof detectIde>).mockReturnValue(
+      IDE_DEFINITIONS.vscode,
+    );
+    (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockResolvedValue({
       pid: 12345,
       command: 'test-ide',
     });
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    (os.tmpdir as Mock<typeof os.tmpdir>).mockReturnValue('/tmp');
 
     // Mock MCP client and transports. The context notification handler is
     // captured and invoked asynchronously (via microtask) so the client's
@@ -90,18 +104,27 @@ describe('IdeClient', () => {
         }
       }),
       callTool: vi.fn(),
-    } as unknown as Mocked<Client>;
+    } as unknown as Client;
     mockHttpTransport = {
       close: vi.fn(),
-    } as unknown as Mocked<StreamableHTTPClientTransport>;
+    } as unknown as StreamableHTTPClientTransport;
 
-    vi.mocked(Client).mockReturnValue(mockClient);
-    vi.mocked(StreamableHTTPClientTransport).mockReturnValue(mockHttpTransport);
+    (Client as unknown as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      mockClient,
+    );
+    (
+      StreamableHTTPClientTransport as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockReturnValue(mockHttpTransport);
 
     await IdeClient.getInstance();
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
     delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
   });
@@ -109,7 +132,9 @@ describe('IdeClient', () => {
   describe('connect', () => {
     it('should connect using HTTP when port is provided in config file', async () => {
       const config = { port: '8080' };
-      vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(config));
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
@@ -130,9 +155,9 @@ describe('IdeClient', () => {
     });
 
     it('should connect using HTTP when port is provided in environment variables', async () => {
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockRejectedValue(new Error('File not found'));
       process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
 
       const ideClient = await IdeClient.getInstance();
@@ -150,7 +175,9 @@ describe('IdeClient', () => {
 
     it('should prioritize file config over environment variables', async () => {
       const config = { port: '8080' };
-      vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(config));
       process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
 
       IdeClient.resetInstance();
@@ -167,9 +194,9 @@ describe('IdeClient', () => {
     });
 
     it('should be disconnected if no config is found', async () => {
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockRejectedValue(new Error('File not found'));
 
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();
@@ -186,13 +213,13 @@ describe('IdeClient', () => {
     it('should discover port file using readdir in new location', async () => {
       const portFileContent = { port: '7070', authToken: 'test-token' };
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue(['llxprt-ide-server-12345-7070.json']);
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(portFileContent),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(portFileContent));
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
@@ -216,13 +243,13 @@ describe('IdeClient', () => {
 
     it('should handle empty directory when discovering port files', async () => {
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue([]);
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockRejectedValue(new Error('File not found'));
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
@@ -238,15 +265,15 @@ describe('IdeClient', () => {
 
     it('should fall back to old location when readdir fails', async () => {
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockRejectedValue(new Error('Directory not found'));
 
       const oldLocationConfig = { port: '6060' };
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(oldLocationConfig),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(oldLocationConfig));
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
@@ -268,7 +295,7 @@ describe('IdeClient', () => {
 
     it('should ignore non-matching files in port directory', async () => {
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue([
@@ -276,9 +303,9 @@ describe('IdeClient', () => {
         'llxprt-ide-server-99999-8080.json', // Wrong PID
         'llxprt-ide-server-12345-9090.txt', // Wrong extension
       ]);
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockRejectedValue(new Error('File not found'));
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
@@ -297,9 +324,11 @@ describe('IdeClient', () => {
     it('passes through auth token from config file when connecting', async () => {
       const authToken = 'test-auth-token';
       const config = { port: '8080', authToken };
-      vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(config));
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue([]);
@@ -324,11 +353,11 @@ describe('IdeClient', () => {
     });
 
     it('should connect with an auth token from environment variable if config file is missing', async () => {
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockRejectedValue(new Error('File not found'));
+      (
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue([]);
@@ -367,7 +396,7 @@ describe('IdeClient', () => {
     // the issue's exact process tree and returns 29396; this test focuses on
     // the downstream PID→port-file resolution and stale-env bypass.
     it('uses the live port file keyed to the Code main PID instead of the stale env port', async () => {
-      vi.mocked(getIdeProcessInfo).mockResolvedValue({
+      (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockResolvedValue({
         pid: 29396,
         command: 'C:\\Program Files\\Microsoft VS Code\\Code.exe',
       });
@@ -380,13 +409,13 @@ describe('IdeClient', () => {
         ideInfo: { name: 'vscode', displayName: 'VS Code' },
       };
       (
-        vi.mocked(fs.promises.readdir) as Mock<
+        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue(['llxprt-ide-server-29396-64365.json']);
-      vi.mocked(fs.promises.readFile).mockResolvedValue(
-        JSON.stringify(liveFile),
-      );
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify(liveFile));
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();

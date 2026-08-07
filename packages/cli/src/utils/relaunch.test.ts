@@ -4,15 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { relaunchAppInChildProcess } from './relaunch.js';
 import { RELAUNCH_EXIT_CODE } from './bootstrap.js';
 
-vi.mock('node:child_process');
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
-const mockedChildProcess = vi.mocked(childProcess);
+void vi.mock('node:child_process', () => automock(realNodeChildProcessModule));
+
+/**
+ * Bun ships no deep-mock type, so the members each suite actually drives are
+ * named explicitly and given Bun's Mock signature.
+ */
+type MockedMembers<T, K extends keyof T> = {
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+};
+
+const mockedChildProcess = childProcess as unknown as MockedMembers<
+  typeof childProcess,
+  'spawn'
+>;
 
 describe('relaunchAppInChildProcess', () => {
   let mockChildProcess: EventEmitter;

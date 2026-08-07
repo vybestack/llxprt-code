@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect } from 'bun:test';
 import { createMockCommandContext } from './mockCommandContext.js';
 
 describe('createMockCommandContext', () => {
@@ -15,7 +15,7 @@ describe('createMockCommandContext', () => {
     // and functions are mocks.
     expect(context).toBeDefined();
     expect(context.ui.addItem).toBeInstanceOf(Function);
-    expect(vi.isMockFunction(context.ui.addItem)).toBe(true);
+    expect(context.ui.addItem).toHaveProperty('mock');
   });
 
   it('should apply top-level overrides correctly', () => {
@@ -34,7 +34,7 @@ describe('createMockCommandContext', () => {
     // Assert that our specific mock was called, not the default
     expect(mockClear).toHaveBeenCalled();
     // And that other defaults are still in place
-    expect(vi.isMockFunction(context.ui.addItem)).toBe(true);
+    expect(context.ui.addItem).toHaveProperty('mock');
   });
 
   it('should apply deeply nested overrides correctly', () => {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -12,7 +13,8 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+  setSystemTime,
+} from 'bun:test';
 import {
   getEnvironmentContext,
   getDirectoryContextString,
@@ -20,11 +22,18 @@ import {
 import type { Config } from '../config/config.js';
 import { getFolderStructure } from './getFolderStructure.js';
 
-vi.mock('../config/config.js');
-vi.mock('./getFolderStructure.js', () => ({
+const realConfigModule = { ...(await import('../config/config.js')) };
+const realLlxprtCodeToolsModule = {
+  ...(await import('@vybestack/llxprt-code-tools')),
+};
+
+void vi.mock('../config/config.js', () => automock(realConfigModule));
+void vi.mock('./getFolderStructure.js', () => ({
   getFolderStructure: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-tools');
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  automock(realLlxprtCodeToolsModule),
+);
 
 describe('getDirectoryContextString', () => {
   let mockConfig: Partial<Config>;
@@ -37,7 +46,9 @@ describe('getDirectoryContextString', () => {
       getFileService: vi.fn(),
       getEnvironmentMemory: vi.fn().mockReturnValue(''),
     };
-    vi.mocked(getFolderStructure).mockResolvedValue('Mock Folder Structure');
+    (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
+      'Mock Folder Structure',
+    );
   });
 
   afterEach(() => {
@@ -56,9 +67,13 @@ describe('getDirectoryContextString', () => {
 
   it('should return context string for multiple directories', async () => {
     (
-      vi.mocked(mockConfig.getWorkspaceContext!)().getDirectories as Mock
+      (
+        mockConfig.getWorkspaceContext! as Mock<
+          typeof mockConfig.getWorkspaceContext
+        >
+      )().getDirectories as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(['/test/dir1', '/test/dir2']);
-    vi.mocked(getFolderStructure)
+    (getFolderStructure as Mock<typeof getFolderStructure>)
       .mockResolvedValueOnce('Structure 1')
       .mockResolvedValueOnce('Structure 2');
 
@@ -74,11 +89,11 @@ describe('getDirectoryContextString', () => {
 
 describe('getEnvironmentContext', () => {
   let mockConfig: Partial<Config>;
-  let mockToolRegistry: { getTool: Mock };
+  let mockToolRegistry: { getTool: Mock<(...args: never[]) => unknown> };
 
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-08-05T12:00:00Z'));
+    setSystemTime(new Date('2025-08-05T12:00:00Z'));
 
     mockToolRegistry = {
       getTool: vi.fn(),
@@ -93,7 +108,9 @@ describe('getEnvironmentContext', () => {
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
     };
 
-    vi.mocked(getFolderStructure).mockResolvedValue('Mock Folder Structure');
+    (getFolderStructure as Mock<typeof getFolderStructure>).mockResolvedValue(
+      'Mock Folder Structure',
+    );
   });
 
   afterEach(() => {
@@ -123,9 +140,13 @@ describe('getEnvironmentContext', () => {
 
   it('should return basic environment context for multiple directories', async () => {
     (
-      vi.mocked(mockConfig.getWorkspaceContext!)().getDirectories as Mock
+      (
+        mockConfig.getWorkspaceContext! as Mock<
+          typeof mockConfig.getWorkspaceContext
+        >
+      )().getDirectories as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(['/test/dir1', '/test/dir2']);
-    vi.mocked(getFolderStructure)
+    (getFolderStructure as Mock<typeof getFolderStructure>)
       .mockResolvedValueOnce('Structure 1')
       .mockResolvedValueOnce('Structure 2');
 

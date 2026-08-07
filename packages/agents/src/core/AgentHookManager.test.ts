@@ -4,14 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { AgentHookManager } from './AgentHookManager.js';
 import { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js', () => ({
-  triggerBeforeAgentHook: vi.fn(),
-  triggerAfterAgentHook: vi.fn(),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js',
+  () => ({
+    triggerBeforeAgentHook: vi.fn(),
+    triggerAfterAgentHook: vi.fn(),
+  }),
+);
 
 import {
   triggerBeforeAgentHook,
@@ -36,10 +39,8 @@ describe('AgentHookManager', () => {
     it('fires hook on first call for a prompt_id', async () => {
       mockBefore.mockResolvedValue(undefined);
       await manager.fireBeforeAgentHookSafe('p1', 'hello');
-      expect(mockBefore).toHaveBeenCalledExactlyOnceWith(
-        expect.anything(),
-        'hello',
-      );
+      expect(mockBefore).toHaveBeenCalledTimes(1);
+      expect(mockBefore).toHaveBeenCalledWith(expect.anything(), 'hello');
     });
 
     it('does not fire hook again for same prompt_id', async () => {

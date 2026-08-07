@@ -21,7 +21,7 @@
  * or Google-shaped internals. Asserts ONLY on observable outcomes.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ConversationManager } from '../ConversationManager.js';
 import {
@@ -376,20 +376,20 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
 // ---------------------------------------------------------------------------
 
 // Mock the heavy dependencies that generateJson pulls in for system prompts.
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
 }));
 
-vi.mock('../clientToolGovernance.js', () => ({
+void vi.mock('../clientToolGovernance.js', () => ({
   getEnabledToolNamesForPrompt: vi.fn().mockReturnValue([]),
   shouldIncludeSubagentDelegationForConfig: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 

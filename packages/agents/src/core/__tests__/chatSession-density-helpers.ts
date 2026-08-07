@@ -10,7 +10,7 @@
  * max-lines disable is needed.
  */
 
-import { vi } from '../../testApi.js';
+import { vi } from 'bun:test';
 import type { ChatSession } from '../chatSession.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {

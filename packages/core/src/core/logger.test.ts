@@ -12,7 +12,8 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-} from 'vitest';
+  setSystemTime,
+} from 'bun:test';
 import type { LogEntry } from './logger.js';
 import { Logger, MessageSenderType } from './logger.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -91,7 +92,7 @@ function toJsonl(entries: LogEntry[]): string {
   return entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
 }
 
-vi.mock('../utils/session.js', () => ({
+void vi.mock('../utils/session.js', () => ({
   sessionId: 'test-session-id',
 }));
 
@@ -102,7 +103,7 @@ describe('Logger', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
+    setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
     // Clean up before the test
     await cleanupLogAndCheckpointFiles();
     // Ensure the directory exists for the test

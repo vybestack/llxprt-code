@@ -6,22 +6,26 @@
 
 import { Colors } from '../colors.js';
 import { Text } from 'ink';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { render } from 'ink-testing-library';
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { MarkdownDisplay } from '../utils/MarkdownDisplay.js';
 
-vi.mock('./shared/RadioButtonSelect.js', () => ({
+void vi.mock('./shared/RadioButtonSelect.js', () => ({
   RadioButtonSelect: vi.fn(() => null),
 }));
 
-vi.mock('../utils/MarkdownDisplay.js', () => ({
+void vi.mock('../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: vi.fn(() => null),
 }));
 
-const MockedRadioButtonSelect = vi.mocked(RadioButtonSelect);
-const MockedMarkdownDisplay = vi.mocked(MarkdownDisplay);
+const MockedRadioButtonSelect = RadioButtonSelect as unknown as Mock<
+  (...args: never[]) => unknown
+>;
+const MockedMarkdownDisplay = MarkdownDisplay as unknown as Mock<
+  (...args: never[]) => unknown
+>;
 
 describe('ConsentPrompt', () => {
   const onConfirm = vi.fn();
@@ -75,7 +79,11 @@ describe('ConsentPrompt', () => {
       />,
     );
 
-    const onSelect = MockedRadioButtonSelect.mock.calls[0][0].onSelect;
+    const onSelect = (
+      MockedRadioButtonSelect.mock.calls[0][0] as {
+        onSelect: (value: boolean) => void;
+      }
+    ).onSelect;
     onSelect(true);
 
     expect(onConfirm).toHaveBeenCalledWith(true);
@@ -91,7 +99,11 @@ describe('ConsentPrompt', () => {
       />,
     );
 
-    const onSelect = MockedRadioButtonSelect.mock.calls[0][0].onSelect;
+    const onSelect = (
+      MockedRadioButtonSelect.mock.calls[0][0] as {
+        onSelect: (value: boolean) => void;
+      }
+    ).onSelect;
     onSelect(false);
 
     expect(onConfirm).toHaveBeenCalledWith(false);

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach } from 'vitest';
+import { beforeEach } from 'bun:test';
 import { getQuotaGuardTrip } from './test-helper.js';
 
 /**

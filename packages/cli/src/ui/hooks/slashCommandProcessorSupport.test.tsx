@@ -3,23 +3,22 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-/** @vitest-environment jsdom */
 
 import { act, useCallback, useState } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { CommandKind, type SlashCommand } from '../commands/types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
 
-const loaderState = vi.hoisted(() => ({
+const loaderState = {
   builtinCommands: [] as SlashCommand[],
   fileCommands: [] as SlashCommand[],
   mcpCommands: [] as SlashCommand[],
-}));
+};
 
-vi.mock('../../services/BuiltinCommandLoader.js', () => ({
+void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: class {
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(loaderState.builtinCommands);
@@ -27,7 +26,7 @@ vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   },
 }));
 
-vi.mock('../../services/FileCommandLoader.js', () => ({
+void vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: class {
     constructor(private readonly config: CliUiRuntime) {}
 
@@ -41,7 +40,7 @@ vi.mock('../../services/FileCommandLoader.js', () => ({
   },
 }));
 
-vi.mock('../../services/McpPromptLoader.js', () => ({
+void vi.mock('../../services/McpPromptLoader.js', () => ({
   McpPromptLoader: class {
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(loaderState.mcpCommands);
@@ -49,30 +48,24 @@ vi.mock('../../services/McpPromptLoader.js', () => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
-  return {
-    ...actual,
-    addMCPStatusChangeListener: vi.fn(),
-    removeMCPStatusChangeListener: vi.fn(),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  ...actual,
+  addMCPStatusChangeListener: vi.fn(),
+  removeMCPStatusChangeListener: vi.fn(),
+}));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    IdeClient: {
-      getInstance: () =>
-        Promise.resolve({
-          addStatusChangeListener: vi.fn(),
-          removeStatusChangeListener: vi.fn(),
-        }),
-    },
-  };
-});
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  IdeClient: {
+    getInstance: () =>
+      Promise.resolve({
+        addStatusChangeListener: vi.fn(),
+        removeStatusChangeListener: vi.fn(),
+      }),
+  },
+}));
 
 function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
   const [reloadTrigger, setReloadTrigger] = useState(0);

@@ -4,16 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-const mockGetBuiltinSkillsDir = vi.hoisted(() => vi.fn());
+const mockGetBuiltinSkillsDir = vi.fn();
 
-vi.mock('./skillLoader.js', (importOriginal) => {
-  const actual = importOriginal() as typeof import('./skillLoader.js');
+const __actual = { ...(await import('./skillLoader.js')) };
+void vi.mock('./skillLoader.js', () => {
+  const actual = __actual as typeof import('./skillLoader.js');
   mockGetBuiltinSkillsDir.mockImplementation(actual.getBuiltinSkillsDir);
   return {
     ...actual,

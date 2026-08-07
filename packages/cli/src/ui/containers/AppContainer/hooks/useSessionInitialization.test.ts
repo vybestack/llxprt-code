@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
@@ -14,10 +14,8 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 // (agent.hooks.triggerSessionStart), so the raw core triggerSessionStartHook is
 // no longer imported by the SUT and does not need to be mocked here.
 
-const iContentToHistoryItemsMock = vi.hoisted(() =>
-  vi.fn().mockReturnValue([]),
-);
-vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
+const iContentToHistoryItemsMock = vi.fn().mockReturnValue([]);
+void vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
   iContentToHistoryItems: iContentToHistoryItemsMock,
 }));
 

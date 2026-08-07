@@ -10,13 +10,25 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 
 // Mock before imports
 // SessionController reads the runtime bridge both as a hook and via the
 // module-level accessor. The real provider resolves the CLI runtime scope,
 // which this container test does not establish.
-vi.mock('../contexts/RuntimeContext.js', () => {
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('../contexts/RuntimeContext.js', () => {
   // resolveModelIdentity formats from status.providerName + status.modelName.
   // Without modelName the identity collapses to the bare provider name, which
   // is why this mock has to carry both.
@@ -49,7 +61,7 @@ vi.mock('../contexts/RuntimeContext.js', () => {
   };
 });
 
-vi.mock('../hooks/useHistoryManager.js', () => ({
+void vi.mock('../hooks/useHistoryManager.js', () => ({
   useHistory: vi.fn(() => ({
     history: [],
     addItem: vi.fn(),
@@ -75,10 +87,10 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { useHistory } from '../hooks/useHistoryManager.js';
 
 // Get references to the mocked functions
-const mockHistoryManager = vi.mocked(useHistory);
+const mockHistoryManager = useHistory as Mock<typeof useHistory>;
 
 // Mock dependencies
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
   () => ({
     getProviderManager: vi.fn(() => ({
@@ -92,7 +104,7 @@ vi.mock(
   }),
 );
 
-vi.mock('../../config/environmentLoader.js', () => ({
+void vi.mock('../../config/environmentLoader.js', () => ({
   loadHierarchicalLlxprtMemory: vi.fn(() =>
     Promise.resolve({
       memoryContent: 'test memory content',
@@ -108,12 +120,12 @@ export const loadSettings = vi.fn((_dir) => ({
   },
 }));
 
-vi.mock('../../config/settings.js', () => ({
+void vi.mock('../../config/settings.js', () => ({
   loadSettings,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
   };
@@ -144,7 +156,6 @@ describe('SessionController', () => {
       isPaidMode: false,
     });
     vi.clearAllMocks();
-    vi.clearAllTimers();
     vi.useFakeTimers();
 
     mockAddItem = vi.fn();
@@ -186,7 +197,6 @@ describe('SessionController', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
-    vi.clearAllTimers();
     vi.restoreAllMocks();
   });
 
@@ -389,8 +399,10 @@ describe('SessionController', () => {
 
   it('should handle memory refresh errors', async () => {
     const envLoaderModule = await import('../../config/environmentLoader.js');
-    vi.mocked(
-      envLoaderModule.loadHierarchicalLlxprtMemory,
+    (
+      envLoaderModule.loadHierarchicalLlxprtMemory as Mock<
+        typeof envLoaderModule.loadHierarchicalLlxprtMemory
+      >
     ).mockRejectedValueOnce(new Error('Memory load failed'));
 
     let contextValue: SessionContextType | undefined;
@@ -446,11 +458,14 @@ describe('SessionController', () => {
     await contextValue!.performMemoryRefresh();
 
     const envLoaderModule = await import('../../config/environmentLoader.js');
-    const mockLoadHierarchicalLlxprtMemory = vi.mocked(
-      envLoaderModule.loadHierarchicalLlxprtMemory,
-    );
+    const mockLoadHierarchicalLlxprtMemory =
+      envLoaderModule.loadHierarchicalLlxprtMemory as Mock<
+        typeof envLoaderModule.loadHierarchicalLlxprtMemory
+      >;
     const settingsModule = await import('../../config/settings.js');
-    const loadSettingsMock = vi.mocked(settingsModule.loadSettings);
+    const loadSettingsMock = settingsModule.loadSettings as Mock<
+      typeof settingsModule.loadSettings
+    >;
 
     expect(loadSettingsMock).toHaveBeenCalledWith(customWorkingDir);
     // The subject of this test is the working directory that is passed, not
@@ -499,7 +514,9 @@ describe('SessionController', () => {
     await contextValue!.performMemoryRefresh();
 
     const settingsModule = await import('../../config/settings.js');
-    const loadSettingsMock = vi.mocked(settingsModule.loadSettings);
+    const loadSettingsMock = settingsModule.loadSettings as Mock<
+      typeof settingsModule.loadSettings
+    >;
 
     expect(loadSettingsMock).toHaveBeenCalledWith(customWorkingDir);
 

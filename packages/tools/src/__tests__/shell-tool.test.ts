@@ -18,7 +18,7 @@
  * ToolResult.returnDisplay — NOT on adapter method call counts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ShellTool } from '../index.js';
 import type {
   IShellExecutionService,
@@ -32,20 +32,18 @@ import type {
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
-const { mockPlatform, mockTmpdir } = vi.hoisted(() => ({
+const { mockPlatform, mockTmpdir } = {
   mockPlatform: vi.fn(() => 'darwin'),
   mockTmpdir: vi.fn(() => '/tmp'),
-}));
+};
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
-    ...actual,
-    platform: mockPlatform,
-    tmpdir: mockTmpdir,
-  };
-});
+const actual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
+  ...actual,
+  platform: mockPlatform,
+  tmpdir: mockTmpdir,
+}));
 
 /**
  * Fake IShellExecutionService that returns controlled stdout/stderr/exitCode.

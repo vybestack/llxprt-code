@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -22,14 +22,14 @@ import type { GenerateChatOptions as ProviderCallOptions } from '../IProvider.js
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-vi.mock('ai', () => ({
+void vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
   extractReasoningMiddleware: vi.fn(() => ({})),
   wrapLanguageModel: vi.fn((config) => config.model),
 }));
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 

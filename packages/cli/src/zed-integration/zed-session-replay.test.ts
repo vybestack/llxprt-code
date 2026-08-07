@@ -18,7 +18,7 @@
  * fidelity is proven by the agents-package behavioral tests.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
 import { mapHistoryToSessionUpdates } from './zed-session-replay.js';

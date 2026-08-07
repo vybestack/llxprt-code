@@ -9,27 +9,23 @@
 // Mock 'os' first.
 import * as osActual from 'os';
 import path, * as pathActual from 'node:path'; // Import for type info for the mock factory
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => '/mock/home/user'),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => '/mock/home/user'),
+  platform: vi.fn(() => 'linux'),
+}));
 
 // Mock './settings.js' to ensure it uses the mocked 'os.homedir()' for its internal constants.
-vi.mock('./settings.js', async (importActual) => {
-  const originalModule = await importActual<typeof import('./settings.js')>();
-  return {
-    __esModule: true, // Ensure correct module shape
-    ...originalModule, // Re-export all original members
-    // We are relying on originalModule's USER_SETTINGS_PATH being constructed with mocked os.homedir()
-  };
-});
+const actualSettingsModule = { ...(await import('./settings.js')) };
+void vi.mock('./settings.js', () => ({
+  __esModule: true, // Ensure correct module shape
+  ...actualSettingsModule, // Re-export all original members
+  // We are relying on originalModule's USER_SETTINGS_PATH being constructed with mocked os.homedir()
+}));
 
 // Mock trustedFolders
-vi.mock('./trustedFolders.js', () => ({
+void vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn(),
   isFolderTrustEnabled: vi.fn(),
 }));
@@ -42,15 +38,15 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type Mocked,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import * as fs from 'fs'; // fs will be mocked separately
 import stripJsonComments from 'strip-json-comments'; // Will be mocked separately
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
+  type Settings,
   type SettingsFile,
   loadSettings,
   saveSettings,
@@ -83,9 +79,10 @@ const MOCK_WORKSPACE_SETTINGS_PATH = pathActual.join(
   'settings.json',
 );
 
-vi.mock('fs', async (importOriginal) => {
+const __actual = { ...(await import('fs')) };
+void vi.mock('fs', () => {
   // Get all the functions from the real 'fs' module
-  const actualFs = await importOriginal<typeof fs>();
+  const actualFs = __actual;
 
   return {
     ...actualFs, // Keep all the real functions
@@ -98,28 +95,25 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-const mockCoreEvents = vi.hoisted(() => ({
+const mockCoreEvents = {
   emitFeedback: vi.fn(),
   emitSettingsChanged: vi.fn(),
+};
+
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  coreEvents: mockCoreEvents,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    coreEvents: mockCoreEvents,
-  };
-});
-
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),
 }));
 
 describe('Settings Loading and Merging', () => {
-  let mockFsExistsSync: Mocked<typeof fs.existsSync>;
-  let mockStripJsonComments: Mocked<typeof stripJsonComments>;
-  let mockFsMkdirSync: Mocked<typeof fs.mkdirSync>;
+  let mockFsExistsSync: Mock<typeof fs.existsSync>;
+  let mockStripJsonComments: Mock<typeof stripJsonComments>;
+  let mockFsMkdirSync: Mock<typeof fs.mkdirSync>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -129,30 +123,34 @@ describe('Settings Loading and Merging', () => {
     process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
       '/mock/system/system-defaults.json';
 
-    mockFsExistsSync = vi.mocked(fs.existsSync);
-    mockFsMkdirSync = vi.mocked(fs.mkdirSync);
-    mockStripJsonComments = vi.mocked(stripJsonComments);
+    mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+    mockFsMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+    mockStripJsonComments = stripJsonComments as Mock<typeof stripJsonComments>;
 
-    vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
-    (mockStripJsonComments as unknown as Mock).mockImplementation(
-      (jsonString: string) => jsonString,
+    (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
+      '/mock/home/user',
     );
-    (mockFsExistsSync as Mock).mockReturnValue(false);
-    (fs.readFileSync as Mock).mockImplementation(
-      (p: fs.PathOrFileDescriptor) => {
-        // Handle system paths specifically
-        if (
-          p === '/mock/system/settings.json' ||
-          p === '/mock/system/system-defaults.json'
-        ) {
-          return '{}'; // Return valid empty JSON for system paths
-        }
-        // Always return valid empty JSON for any path to prevent JSON parsing errors
-        // Individual tests can override this mock for specific paths they need
-        return '{}';
-      },
+    (
+      mockStripJsonComments as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((jsonString: string) => jsonString);
+    (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+      false,
     );
-    (mockFsMkdirSync as Mock).mockImplementation(
+    (
+      fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+      // Handle system paths specifically
+      if (
+        p === '/mock/system/settings.json' ||
+        p === '/mock/system/system-defaults.json'
+      ) {
+        return '{}'; // Return valid empty JSON for system paths
+      }
+      // Always return valid empty JSON for any path to prevent JSON parsing errors
+      // Individual tests can override this mock for specific paths they need
+      return '{}';
+    });
+    (mockFsMkdirSync as Mock<(...args: never[]) => unknown>).mockImplementation(
       (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
         if (!dir || typeof dir !== 'string') {
@@ -161,8 +159,12 @@ describe('Settings Loading and Merging', () => {
         return dir; // Return the created directory path for verification
       },
     );
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
-    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
+    (isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>).mockReturnValue(
+      false,
+    );
   });
 
   afterEach(() => {
@@ -174,10 +176,14 @@ describe('Settings Loading and Merging', () => {
 
   describe('Settings validation and error handling improvements', () => {
     it('should validate directory creation during setValue operations', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       // Test that mkdirSync is called with proper parameters
       loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
@@ -191,15 +197,21 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle file system errors gracefully during directory creation', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       // Mock mkdirSync to throw an error
-      (mockFsMkdirSync as Mock).mockImplementation(() => {
+      (
+        mockFsMkdirSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation(() => {
         throw new Error('Permission denied');
       });
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       // Should not throw but may handle error internally
       expect(() => {
@@ -208,7 +220,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should properly validate JSON structure in settings files', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const complexSettingsContent = {
         theme: 'dark',
         mcpServers: {
@@ -231,13 +245,13 @@ describe('Settings Loading and Merging', () => {
         },
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(complexSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(complexSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       const arbitrary = dynamicSettings(settings);
@@ -252,17 +266,19 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle malformed JSON with detailed error information', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const malformedJson = '{ "theme": "dark", "mcpServers": { "test": } }'; // Missing value
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH) {
-            return malformedJson;
-          }
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH) {
+          return malformedJson;
+        }
+        return '{}';
+      });
 
       // Mock JSON.parse to throw a detailed error only for the malformed JSON
       const parseError = new SyntaxError(
@@ -314,16 +330,16 @@ describe('Settings Loading and Merging', () => {
       process.env['USER'] = 'testuser';
       process.env['HOST'] = 'testhost';
 
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
+      (
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        return '{}';
+      });
 
       const arbitrary = dynamicSettings(loadSettings(MOCK_WORKSPACE_DIR));
 
@@ -350,7 +366,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should properly merge arrays without overwriting in includeDirectories', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(true);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        true,
+      );
       const systemDefaultsContent = {
         includeDirectories: [
           '/system/defaults/common',
@@ -367,19 +385,19 @@ describe('Settings Loading and Merging', () => {
         includeDirectories: ['/workspace/src', '/workspace/tests'],
       };
 
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === getSystemDefaultsPath())
-            return JSON.stringify(systemDefaultsContent);
-          if (p === getSystemSettingsPath())
-            return JSON.stringify(systemSettingsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === getSystemDefaultsPath())
+          return JSON.stringify(systemDefaultsContent);
+        if (p === getSystemSettingsPath())
+          return JSON.stringify(systemSettingsContent);
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+          return JSON.stringify(workspaceSettingsContent);
+        return '{}';
+      });
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
@@ -403,10 +421,14 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should validate setValue operations with complex nested objects', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {},
+      );
 
       // Test setting complex nested configuration
       const complexMcpServer = {
@@ -444,13 +466,17 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should handle concurrent setValue operations correctly', () => {
-      (mockFsExistsSync as Mock).mockReturnValue(false);
+      (mockFsExistsSync as Mock<(...args: never[]) => unknown>).mockReturnValue(
+        false,
+      );
       const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
 
       let writeCallCount = 0;
-      vi.mocked(fs.writeFileSync).mockImplementation(() => {
-        writeCallCount++;
-      });
+      (fs.writeFileSync as Mock<typeof fs.writeFileSync>).mockImplementation(
+        () => {
+          writeCallCount++;
+        },
+      );
 
       // Simulate multiple rapid setValue calls
       loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
@@ -465,7 +491,9 @@ describe('Settings Loading and Merging', () => {
         theme: 'dark',
         sandbox: true,
         contextFileName: 'CONTEXT.md',
-      });
+        // theme/sandbox/contextFileName are freeform user values not modelled in
+        // the InferSettings type, though they are persisted at runtime.
+      } as unknown as Settings);
       expect(dynamicSettings(loadedSettings).merged.theme).toBe('dark');
       expect(loadedSettings.merged.sandbox).toBe(true);
       expect(dynamicSettings(loadedSettings).merged.contextFileName).toBe(
@@ -485,9 +513,15 @@ describe('Settings Loading and Merging', () => {
       delete process.env['TESTTEST']; // reset
       const llxprtEnvPath = path.resolve(path.join(LLXPRT_DIR, '.env'));
 
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(isWorkspaceTrustedValue);
-      vi.mocked(isFolderTrustEnabled).mockReturnValue(folderTrustEnabledValue);
-      (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        isWorkspaceTrustedValue,
+      );
+      (
+        isFolderTrustEnabled as Mock<typeof isFolderTrustEnabled>
+      ).mockReturnValue(folderTrustEnabledValue);
+      (
+        mockFsExistsSync as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathLike) =>
         [USER_SETTINGS_PATH, llxprtEnvPath].includes(p.toString()),
       );
       const userSettingsContent = {
@@ -496,14 +530,14 @@ describe('Settings Loading and Merging', () => {
         folderTrust: folderTrustEnabledValue,
         contextFileName: 'USER_CONTEXT.md',
       };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === llxprtEnvPath) return 'TESTTEST=1234';
-          return '{}';
-        },
-      );
+      (
+        fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
+      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
+        if (p === USER_SETTINGS_PATH)
+          return JSON.stringify(userSettingsContent);
+        if (p === llxprtEnvPath) return 'TESTTEST=1234';
+        return '{}';
+      });
     }
 
     it('sets environment variables from .env files', () => {
@@ -523,8 +557,10 @@ describe('Settings Loading and Merging', () => {
 
   describe('saveSettings', () => {
     it('should save settings to file', () => {
-      const mockFsExistsSync = vi.mocked(fs.existsSync);
-      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      const mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+      const mockFsWriteFileSync = fs.writeFileSync as Mock<
+        typeof fs.writeFileSync
+      >;
       mockFsExistsSync.mockReturnValue(true);
       mockFsWriteFileSync.mockImplementation(() => {});
 
@@ -540,9 +576,11 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should create directory if it does not exist', () => {
-      const mockFsExistsSync = vi.mocked(fs.existsSync);
-      const mockFsMkdirSync = vi.mocked(fs.mkdirSync);
-      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      const mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+      const mockFsMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+      const mockFsWriteFileSync = fs.writeFileSync as Mock<
+        typeof fs.writeFileSync
+      >;
       mockFsExistsSync.mockReturnValue(false);
       mockFsWriteFileSync.mockImplementation(() => {});
 
@@ -561,7 +599,7 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should emit error feedback if saving fails', () => {
-      const mockFsExistsSync = vi.mocked(fs.existsSync);
+      const mockFsExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
       const error = new Error('Write failed');
       mockFsExistsSync.mockImplementation(() => {
         throw error;

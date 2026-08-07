@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, type MockInstance, type Mock } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
@@ -15,31 +23,28 @@ import type { Stats } from 'node:fs';
 
 const mockInstallOrUpdateExtension: Mock<
   typeof extensionModule.installOrUpdateExtension
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadExtensionByName: Mock<
   typeof extensionModule.loadExtensionByName
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockRequestConsentNonInteractive: Mock<
   typeof extensionModule.requestConsentNonInteractive
-> = vi.hoisted(() => vi.fn());
-const mockStat: Mock<typeof fs.stat> = vi.hoisted(() => vi.fn());
+> = vi.fn();
+const mockStat: Mock<typeof fs.stat> = vi.fn();
 
-vi.mock('../../config/extension.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/extension.js')>();
-  return {
-    ...actual,
-    installOrUpdateExtension: mockInstallOrUpdateExtension,
-    loadExtensionByName: mockLoadExtensionByName,
-    requestConsentNonInteractive: mockRequestConsentNonInteractive,
-  };
-});
+const actual = { ...(await import('../../config/extension.js')) };
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  installOrUpdateExtension: mockInstallOrUpdateExtension,
+  loadExtensionByName: mockLoadExtensionByName,
+  requestConsentNonInteractive: mockRequestConsentNonInteractive,
+}));
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: Error) => error.message),
 }));
 
-vi.mock('node:fs/promises', () => ({
+void vi.mock('node:fs/promises', () => ({
   stat: mockStat,
   default: {
     stat: mockStat,
@@ -56,9 +61,9 @@ describe('extensions install command', () => {
 });
 
 describe('handleInstall', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

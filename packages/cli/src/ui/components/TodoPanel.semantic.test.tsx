@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import {
   describe,
@@ -12,8 +13,8 @@ import {
   vi,
   beforeEach,
   afterEach,
-  type MockedFunction,
-} from 'vitest';
+  type Mock,
+} from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';
@@ -24,7 +25,13 @@ import { DefaultDark } from '../themes/default.js';
 import { DefaultLight } from '../themes/default-light.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('../hooks/useTerminalSize.js');
+const realUseTerminalSizeModule = {
+  ...(await import('../hooks/useTerminalSize.js')),
+};
+
+void vi.mock('../hooks/useTerminalSize.js', () =>
+  automock(realUseTerminalSizeModule),
+);
 
 // Mock contexts
 const mockTodoContext = {
@@ -50,13 +57,11 @@ const mockToolCallContext = {
 
 describe('TodoPanel Semantic Colors', () => {
   let originalTheme: string;
-  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+  let mockUseTerminalSize: Mock<typeof useTerminalSize>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseTerminalSize = useTerminalSize as MockedFunction<
-      typeof useTerminalSize
-    >;
+    mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
     // Set wide width to ensure full task details are shown
     mockUseTerminalSize.mockReturnValue({ columns: 150, rows: 20 });
     originalTheme = themeManager.getActiveTheme().name;

@@ -11,13 +11,24 @@ import {
   FILE_COMMANDS_UNTRUSTED_MESSAGE,
   type FileCommandRuntime,
 } from './FileCommandLoader.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
 import type { CommandContext } from '../ui/commands/types.js';
 import { FsMockContext } from './__testhelpers__/mockFs.js';
+
+const realGlobModule = { ...(await import('glob')) };
 
 const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
 
@@ -27,9 +38,9 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
-const mockShellProcess = vi.hoisted(() => vi.fn());
+const mockShellProcess = vi.fn();
 
-vi.mock('./prompt-processors/shellProcessor.js', () => ({
+void vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({
     process: mockShellProcess,
   })),
@@ -47,14 +58,14 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
 // Capture the real constructor before Bun patches the live module namespace.
 // The mock keeps constructor-call assertions while executing the production
 // processor, so changes to argument processing cannot drift from this suite.
-vi.mock('./prompt-processors/argumentProcessor.js', () => ({
+void vi.mock('./prompt-processors/argumentProcessor.js', () => ({
   DefaultArgumentProcessor: vi
     .fn()
     .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
 
 // atFileProcessor.js does not exist in the codebase; the hoisted fn is unused.
-vi.mock('glob', () => ({
+void vi.mock('glob', () => ({
   glob: vi.fn(),
 }));
 
@@ -69,7 +80,7 @@ vi.mock('glob', () => ({
 const fsMock = new FsMockContext();
 const settingsMockHoisted = { mock: fsMock.settingsMock() };
 
-vi.mock('@vybestack/llxprt-code-settings', () => settingsMockHoisted.mock);
+void vi.mock('@vybestack/llxprt-code-settings', () => settingsMockHoisted.mock);
 
 describe('FileCommandLoader', () => {
   const signal: AbortSignal = new AbortController().signal;
@@ -77,9 +88,8 @@ describe('FileCommandLoader', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     fsMock.clear();
-    const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
-      .glob;
-    vi.mocked(glob.glob).mockImplementation(actualGlob);
+    const actualGlob = realGlobModule.glob;
+    (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context.invocation?.args ?? '';
@@ -356,21 +366,28 @@ describe('FileCommandLoader', () => {
     expect(command.description).toBe('My test command');
   });
 
-  it('should sanitize colons in filenames to prevent namespace conflicts', async () => {
-    fsMock.mock({
-      'legacy:command.toml': 'prompt = "This is a legacy command"',
-    });
+  // Windows cannot represent this fixture: NTFS reserves ':' in a filename for
+  // alternate data streams, so `legacy:command.toml` cannot be created and the
+  // loader can never encounter such a name on that platform. The sanitization
+  // it verifies is therefore only reachable on POSIX.
+  it.skipIf(process.platform === 'win32')(
+    'should sanitize colons in filenames to prevent namespace conflicts',
+    async () => {
+      fsMock.mock({
+        'legacy:command.toml': 'prompt = "This is a legacy command"',
+      });
 
-    const loader = new FileCommandLoader(null);
-    const commands = await loader.loadCommands(signal);
+      const loader = new FileCommandLoader(null);
+      const commands = await loader.loadCommands(signal);
 
-    expect(commands).toHaveLength(1);
-    const command = commands[0];
-    expect(command).toBeDefined();
+      expect(commands).toHaveLength(1);
+      const command = commands[0];
+      expect(command).toBeDefined();
 
-    // Verify that the ':' in the filename was replaced with an '_'
-    expect(command.name).toBe('legacy_command');
-  });
+      // Verify that the ':' in the filename was replaced with an '_'
+      expect(command.name).toBe('legacy_command');
+    },
+  );
 
   describe('Processor Instantiation Logic', () => {
     it('instantiates only DefaultArgumentProcessor if no {{args}} or !{} are present', async () => {

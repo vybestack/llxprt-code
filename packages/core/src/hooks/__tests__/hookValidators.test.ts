@@ -7,7 +7,7 @@
  * These tests verify runtime validation at mediated boundaries.
  * All validators are type predicates that narrow TypeScript types.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 
 import {

@@ -9,42 +9,45 @@
  * re-estimates all history tokens with the new provider's tokenizer.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
 }));
 
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn().mockReturnValue(undefined),
   getEnabledToolNamesForPrompt: vi.fn().mockReturnValue(['tool_a', 'tool_b']),
   shouldIncludeSubagentDelegationForConfig: vi.fn().mockResolvedValue(false),
   buildToolDeclarationsFromView: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
   getEnvironmentContext: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('./chatSession.js', () => ({
+void vi.mock('./chatSession.js', () => ({
   ChatSession: vi.fn().mockImplementation(() => ({
     setActiveTodosProvider: vi.fn(),
     getHistoryService: vi.fn().mockReturnValue(null),
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js', () => ({
-  loadAgentRuntime: vi.fn().mockResolvedValue({
-    runtimeContext: {},
-    contentGenerator: {},
-    toolsView: { listToolNames: () => [] },
-    history: {},
-    providerAdapter: {},
-    telemetryAdapter: {},
+void vi.mock(
+  '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js',
+  () => ({
+    loadAgentRuntime: vi.fn().mockResolvedValue({
+      runtimeContext: {},
+      contentGenerator: {},
+      toolsView: { listToolNames: () => [] },
+      history: {},
+      providerAdapter: {},
+      telemetryAdapter: {},
+    }),
   }),
-}));
+);
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
   () => ({
     setProviderRuntimeStateFactory: vi.fn(),
@@ -52,7 +55,7 @@ vi.mock(
   }),
 );
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/services/history/ContentConverters.js',
   () => ({
     ContentConverters: {
@@ -61,11 +64,11 @@ vi.mock(
   }),
 );
 
-vi.mock('@vybestack/llxprt-code-core/utils/toolOutputLimiter.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/toolOutputLimiter.js', () => ({
   estimateTokens: vi.fn().mockReturnValue(50),
 }));
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/services/history/HistoryService.js',
   () => ({
     HistoryService: vi.fn().mockImplementation(() => ({
@@ -84,7 +87,7 @@ vi.mock(
   }),
 );
 
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -216,7 +219,9 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       getTotalTokens: vi.fn().mockReturnValue(0),
       waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
     };
-    vi.mocked(HistoryService).mockImplementationOnce(
+    (
+      HistoryService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementationOnce(
       () => newHistoryInstance as unknown as HistoryService,
     );
 

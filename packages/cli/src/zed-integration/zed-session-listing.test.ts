@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -453,11 +453,16 @@ describe('recorded ACP session listing', () => {
       expect(result.sessions).toHaveLength(1);
       const updatedAt = result.sessions[0].updatedAt;
       expect(updatedAt).toBeDefined();
-      expect(new Date(updatedAt ?? '').toISOString()).toBe(updatedAt);
-      // Allow 1ms of clock granularity: Date.now() around construction can
-      // otherwise flake with "expected T to be >= T+1" under load.
+      expect(new Date(updatedAt ?? '').toISOString()).toBe(updatedAt ?? '');
+      // The assertion under test is that updatedAt is the session's creation
+      // time, not that two clock reads agree to the millisecond. The default
+      // Windows system timer ticks about every 15.6ms, so `startedAt` and the
+      // recorder's own timestamp can legitimately disagree by close to a full
+      // tick in either direction; a 1ms allowance was too tight and flaked on
+      // the Windows runner with "expected T to be >= T+1".
+      const CLOCK_GRANULARITY_MS = 32;
       expect(new Date(updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
-        startedAt - 1,
+        startedAt - CLOCK_GRANULARITY_MS,
       );
       expect(new Date(updatedAt ?? '').getTime()).toBeLessThanOrEqual(
         Date.now(),

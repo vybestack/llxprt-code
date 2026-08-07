@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
@@ -13,23 +21,18 @@ import { type Settings, createTestMergedSettings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn().mockReturnValue(true),
-    isFolderTrustEnabled: vi.fn().mockReturnValue(false),
-  };
-});
+const actual = { ...(await import('./trustedFolders.js')) };
+void vi.mock('./trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn().mockReturnValue(true),
+  isFolderTrustEnabled: vi.fn().mockReturnValue(false),
+}));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    loadServerHierarchicalMemory: vi.fn(),
-  };
-});
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  loadServerHierarchicalMemory: vi.fn(),
+}));
 
 async function buildConfig(
   settings: ReturnType<typeof createTestMergedSettings>,
@@ -52,12 +55,16 @@ describe('Agent Skills Backward Compatibility', () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.mocked(loadServerHierarchicalMemory).mockResolvedValue({
+    (
+      loadServerHierarchicalMemory as Mock<typeof loadServerHierarchicalMemory>
+    ).mockResolvedValue({
       memoryContent: '',
       fileCount: 0,
       filePaths: [],
     });
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
   });
 
   afterEach(() => {

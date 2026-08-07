@@ -20,7 +20,16 @@
  *   CLI --model > profile model > settings.model > env vars > alias default > Gemini default
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -40,23 +49,32 @@ import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock('../trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('../trustedFolders.js')>(
-    '../trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
+const realProfileBootstrapModule = {
+  ...(await import('../profileBootstrap.js')),
+};
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('../trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),
   };
 });
 
-vi.mock('../sandboxConfig.js', () => ({
+void vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([MOCK_CWD, process.cwd()]);
   return {
@@ -74,28 +92,22 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
+}));
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-vi.mock('../profileBootstrap.js', async () => {
-  const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
-    '../profileBootstrap.js',
-  );
-  const { SettingsService: RealSettingsService } = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+void vi.mock('../profileBootstrap.js', () => {
+  const actual = realProfileBootstrapModule;
+  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => ({
@@ -118,7 +130,7 @@ vi.mock('../profileBootstrap.js', async () => {
   };
 });
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -127,9 +139,9 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -259,10 +271,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     IdeClient: {
@@ -322,17 +332,17 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Scrub env vars that may leak from CI environment
     delete process.env.LLXPRT_PROFILE;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -342,7 +352,7 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -354,13 +364,13 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
   });
 
   it('level 3: LLXPRT_DEFAULT_PROVIDER env sets the provider', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({});
     expect(config.getProvider()).toBe('anthropic');
   });
 
   it('level 1: CLI --provider overrides LLXPRT_DEFAULT_PROVIDER env', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
     const config = await runConfig({}, ['--provider', 'openai']);
     expect(config.getProvider()).toBe('openai');
   });
@@ -376,7 +386,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     process.argv = ['node', 'script.js'];
@@ -384,8 +394,8 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
-    vi.unstubAllEnvs();
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    restoreEnv();
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Scrub env vars that may leak from CI environment
     delete process.env.LLXPRT_PROFILE;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
@@ -395,7 +405,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -412,33 +422,33 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
   });
 
   it('level 5: GEMINI_MODEL env provides model when resolved provider is explicit gemini', async () => {
-    vi.stubEnv('GEMINI_MODEL', 'gemini-1.5-flash');
+    setEnv('GEMINI_MODEL', 'gemini-1.5-flash');
     const config = await runConfig({}, ['--provider', 'gemini']);
     expect(config.getProvider()).toBe('gemini');
     expect(config.getModel()).toBe('gemini-1.5-flash');
   });
 
   it('level 5: LLXPRT_DEFAULT_MODEL env provides model when no other override', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'gemini-env-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'gemini-env-model');
     const config = await runConfig({});
     expect(config.getModel()).toBe('gemini-env-model');
   });
 
   it('level 5: LLXPRT_DEFAULT_MODEL beats GEMINI_MODEL', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'preferred-model');
-    vi.stubEnv('GEMINI_MODEL', 'fallback-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'preferred-model');
+    setEnv('GEMINI_MODEL', 'fallback-model');
     const config = await runConfig({});
     expect(config.getModel()).toBe('preferred-model');
   });
 
   it('level 4: settings.model beats env vars', async () => {
-    vi.stubEnv('GEMINI_MODEL', 'env-model');
+    setEnv('GEMINI_MODEL', 'env-model');
     const config = await runConfig({ model: 'settings-model' });
     expect(config.getModel()).toBe('settings-model');
   });
 
   it('level 1: CLI --model beats settings.model and env', async () => {
-    vi.stubEnv('GEMINI_MODEL', 'env-model');
+    setEnv('GEMINI_MODEL', 'env-model');
     const config = await runConfig({ model: 'settings-model' }, [
       '--model',
       'cli-model',
@@ -447,7 +457,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
   });
 
   it('level 1: CLI --model beats LLXPRT_DEFAULT_MODEL env', async () => {
-    vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'env-model');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'env-model');
     const config = await runConfig({}, ['--model', 'cli-model']);
     expect(config.getModel()).toBe('cli-model');
   });

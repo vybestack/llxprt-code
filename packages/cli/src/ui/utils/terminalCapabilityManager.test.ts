@@ -4,17 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { TerminalCapabilityManager } from './terminalCapabilityManager.js';
 import { EventEmitter } from 'node:events';
 
 // Mock fs
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   writeSync: vi.fn(),
 }));
 
 // Mock core
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   enableKittyKeyboardProtocol: vi.fn(),
   disableKittyKeyboardProtocol: vi.fn(),
   enableModifyOtherKeys: vi.fn(),
@@ -319,16 +327,18 @@ describe('TerminalCapabilityManager', () => {
     await promise;
     expect(manager.isKittyProtocolEnabled()).toBe(true);
 
-    vi.mocked(writeSync).mockClear();
+    (writeSync as unknown as Mock<typeof writeSync>).mockClear();
     manager.disableKittyProtocolOnExit();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
 
-    expect(vi.mocked(writeSync).mock.calls).toStrictEqual([
-      [stdout.fd, '\x1b[<u'],
-      [stdout.fd, '\x1b[?1049l'],
-      [stdout.fd, '\x1b[<u'],
-      [stdout.fd, '\x1b[=0;1u'],
-      [stdout.fd, '\x1b[?1006l'],
+    expect(
+      (writeSync as unknown as Mock<typeof writeSync>).mock.calls,
+    ).toStrictEqual([
+      [stdout.fd as number, '\x1b[<u'],
+      [stdout.fd as number, '\x1b[?1049l'],
+      [stdout.fd as number, '\x1b[<u'],
+      [stdout.fd as number, '\x1b[=0;1u'],
+      [stdout.fd as number, '\x1b[?1006l'],
     ]);
   });
 
@@ -343,12 +353,14 @@ describe('TerminalCapabilityManager', () => {
     await promise;
     expect(manager.isKittyProtocolEnabled()).toBe(true);
 
-    vi.mocked(writeSync).mockClear();
+    (writeSync as unknown as Mock<typeof writeSync>).mockClear();
     stdout.isTTY = false;
     manager.disableKittyProtocolOnExit();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
 
-    expect(vi.mocked(writeSync)).not.toHaveBeenCalled();
+    expect(
+      writeSync as unknown as Mock<typeof writeSync>,
+    ).not.toHaveBeenCalled();
   });
 
   it('should re-enable Kitty protocol after disable', async () => {
@@ -363,7 +375,9 @@ describe('TerminalCapabilityManager', () => {
 
     await promise;
 
-    vi.mocked(enableKittyKeyboardProtocol).mockClear();
+    (
+      enableKittyKeyboardProtocol as Mock<typeof enableKittyKeyboardProtocol>
+    ).mockClear();
 
     manager.disableKittyProtocol();
     manager.enableKittyProtocol();

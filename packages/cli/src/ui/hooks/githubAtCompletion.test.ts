@@ -15,7 +15,7 @@
  * @requirement REQ-014
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import {
   GITHUB_SUGGESTION_LIMIT,

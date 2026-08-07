@@ -13,7 +13,7 @@
  * than the viewport can show.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   appendCodeBlockLine,
   CODE_BLOCK_RESERVED_LINES,

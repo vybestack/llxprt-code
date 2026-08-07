@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as child_process from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -15,8 +23,9 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 // Only `spawn` is replaced, and the real module is spread rather than
 // automocked: automocking walks every export, which throws on ChildProcess's
 // private `#stdin` getter under Bun's native runner.
-vi.mock('node:child_process', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:child_process')>()),
+const __actual = { ...(await import('node:child_process')) };
+void vi.mock('node:child_process', () => ({
+  ...__actual,
   spawn: vi.fn(),
 }));
 
@@ -51,7 +60,11 @@ function mockSshAdd(outcome: SshAddOutcome): void {
   const stderr = new PassThrough();
   Object.assign(child, { stdout, stderr });
 
-  vi.mocked(child_process.spawn).mockImplementation(() => {
+  (
+    child_process.spawn as unknown as Mock<
+      (...args: never[]) => child_process.ChildProcess
+    >
+  ).mockImplementation(() => {
     setImmediate(() => {
       if (outcome.spawnError) {
         child.emit('error', outcome.spawnError);

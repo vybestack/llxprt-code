@@ -12,13 +12,13 @@ import {
   afterEach,
   vi,
   beforeAll,
-} from 'vitest';
+} from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Mock } from 'vitest';
+import type { Mock } from 'bun:test';
 
 /**
  * Minimal typed Agent double for the /provider switch path. The command only
@@ -27,11 +27,17 @@ import type { Mock } from 'vitest';
  * cast to `Agent` via the established `as unknown as Agent` idiom at the
  * CommandContext boundary (see mockCommandContext.ts).
  */
+const realProviderAliasesModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-providers/composition/providerAliases.js'
+  )),
+};
+
 interface AgentDouble {
-  setProvider: Mock;
+  setProvider: Mock<(provider: string) => Promise<unknown>>;
 }
 
-const mocks = vi.hoisted(() => {
+const mocks = (() => {
   const runtimeApi = {
     getActiveProviderName: vi.fn(),
     getActiveModelName: vi.fn(),
@@ -46,22 +52,13 @@ const mocks = vi.hoisted(() => {
     getRuntimeApiMock: vi.fn(() => runtimeApi),
     agent,
   };
-});
+})();
 
-// This test writes real alias files, but the workspace test preload replaces
-// providerAliases.js with a stub whose writeProviderAliasConfig is a no-op.
-// Restore the genuine module, then re-export its real functions through the
-// composition.js mock that providerCommand.ts imports from.
-vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
-
-vi.mock('@vybestack/llxprt-code-providers/composition.js', async () => {
-  // vi.importActual resolves the genuine module on both runners: Vitest
-  // bypasses its own mock registry, and the Bun shim returns the snapshot it
-  // captured before the preload registered its stub. It must be read inside
-  // the factory because Vitest hoists this call above the module body.
-  const real = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js')
-  >('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+// This test writes real alias files, so it opts out of the preload's
+// providerAliases stub (see bun-test-setup.ts) and re-exports the genuine
+// functions through the composition.js mock that providerCommand.ts imports.
+void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
+  const real = realProviderAliasesModule;
   return {
     getProviderManager: mocks.getProviderManagerMock,
     refreshAliasProviders: mocks.refreshAliasProvidersMock,
@@ -72,7 +69,7 @@ vi.mock('@vybestack/llxprt-code-providers/composition.js', async () => {
   };
 });
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
   () => ({
     getProviderManager: mocks.getProviderManagerMock,
@@ -80,7 +77,7 @@ vi.mock(
   }),
 );
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: mocks.getRuntimeApiMock,
 }));
 

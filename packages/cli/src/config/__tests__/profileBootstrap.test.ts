@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   DEFAULT_RUNTIME_ID,
   parseBootstrapArgs,
@@ -20,7 +28,7 @@ import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/run
 // packages/providers/src/runtime/assembleCliProviderRuntime.test.ts. Here it
 // is the external boundary: stub it so prepareRuntimeForProfile is exercised
 // as a thin client that supplies declarative context and adopts the result.
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   ephemeralSettingHelp: {},
@@ -233,7 +241,9 @@ describe('profileBootstrap helpers', () => {
 });
 
 describe('prepareRuntimeForProfile delegates assembly to the providers boundary (#2378, issue #2300)', () => {
-  const mockedAssemble = vi.mocked(assembleCliProviderRuntime);
+  const mockedAssemble = assembleCliProviderRuntime as Mock<
+    typeof assembleCliProviderRuntime
+  >;
 
   beforeEach(() => {
     mockedAssemble.mockClear();

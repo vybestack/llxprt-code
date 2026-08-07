@@ -16,7 +16,7 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A1, A2, A9)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   PromptEnvelopeProtocol,
   PromptEnvelopeMethod,

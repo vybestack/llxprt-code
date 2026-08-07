@@ -202,6 +202,10 @@ export class Config extends ConfigBase {
         'Config.initialize requires an explicit session/runtime MessageBus dependency.',
       );
     }
+    const clientFactory = requireAgentClientFactory(
+      this.agentClientFactory,
+      'initialize',
+    );
     this.setRuntimeMessageBus(initializationMessageBus);
     this.cachedEffectiveTrust = this.isTrustedFolder();
     this.ideClient = await IdeClient.getInstance();
@@ -259,10 +263,6 @@ export class Config extends ConfigBase {
     // This ensures agentClient is available for providers on startup
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-001
-    const clientFactory = requireAgentClientFactory(
-      this.agentClientFactory,
-      'initialize',
-    );
     this.agentClient = clientFactory(this, this.runtimeState);
 
     if (this.getJitContextEnabled()) {

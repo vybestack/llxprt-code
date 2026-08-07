@@ -9,7 +9,7 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P25
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs';
 import * as os from 'node:os';

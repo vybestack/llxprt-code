@@ -10,7 +10,7 @@
  * real filesystem operations.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';

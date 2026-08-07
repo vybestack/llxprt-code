@@ -17,7 +17,7 @@
  * verifies each turn retains its own IContent entry with correct speaker.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   normalizeToolInteractionInput,
   createUserContentWithFunctionResponseFix,

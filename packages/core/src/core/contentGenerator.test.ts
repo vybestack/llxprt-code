@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'bun:test';
 import {
   createContentGenerator,
   createContentGeneratorConfig,
 } from './contentGenerator.js';
 import type { Config } from '../config/config.js';
 
-const mockGoogleGenAIWrapperConstructor = vi.hoisted(() => vi.fn());
-const mockGoogleGenAIWrapperInstance = vi.hoisted(() => ({
+const mockGoogleGenAIWrapperConstructor = vi.fn();
+const mockGoogleGenAIWrapperInstance = {
   generateContent: async (): Promise<unknown> => ({}),
   generateContentStream: async (): Promise<AsyncGenerator<unknown>> => {
     async function* emptyStream(): AsyncGenerator<unknown> {
@@ -22,9 +22,9 @@ const mockGoogleGenAIWrapperInstance = vi.hoisted(() => ({
   },
   countTokens: async (): Promise<unknown> => ({}),
   embedContent: async (): Promise<unknown> => ({}),
-}));
+};
 
-vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
+void vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
   GoogleGenAIWrapper: vi
     .fn()
     .mockImplementation((config: unknown, requestOptions: unknown) => {
@@ -33,7 +33,7 @@ vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
     }),
 }));
 
-vi.mock('../utils/installationManager.js', () => ({
+void vi.mock('../utils/installationManager.js', () => ({
   InstallationManager: vi.fn().mockImplementation(() => ({
     getInstallationId: () => 'test-installation-id',
   })),

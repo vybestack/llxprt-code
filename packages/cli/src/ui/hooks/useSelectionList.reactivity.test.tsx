@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import {
@@ -15,9 +24,11 @@ import { useKeypress } from './useKeypress.js';
 
 import type { KeypressHandler, Key } from '../contexts/KeypressContext.js';
 
+const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
+
 type UseKeypressMockOptions = { isActive: boolean };
 
-vi.mock('./useKeypress.js');
+void vi.mock('./useKeypress.js', () => automock(realUseKeypressModule));
 
 let activeKeypressHandler: KeypressHandler | null = null;
 
@@ -34,7 +45,7 @@ describe('useSelectionList', () => {
 
   beforeEach(() => {
     activeKeypressHandler = null;
-    vi.mocked(useKeypress).mockImplementation(
+    (useKeypress as Mock<typeof useKeypress>).mockImplementation(
       (handler: KeypressHandler, options?: UseKeypressMockOptions) => {
         if (options?.isActive === true) {
           activeKeypressHandler = handler;

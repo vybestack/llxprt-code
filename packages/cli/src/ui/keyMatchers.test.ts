@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { keyMatchers, Command, createKeyMatchers } from './keyMatchers.js';
 import type { KeyBindingConfig } from '../config/keyBindings.js';
 import { defaultKeyBindings } from '../config/keyBindings.js';

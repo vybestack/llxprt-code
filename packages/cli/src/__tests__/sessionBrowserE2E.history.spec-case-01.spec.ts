@@ -15,7 +15,7 @@
  * History conversion
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { type IContent } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../ui/types.js';
 import {

@@ -12,7 +12,7 @@
  * These tests verify subscription, routing, correlated responses, and model translation.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { EventEmitter } from 'events';
 import { HookEventHandler } from '../hookEventHandler.js';

@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock, MockInstance } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { createTransport } from '@vybestack/llxprt-code-mcp';
 import { listMcpServers } from './list.js';
@@ -13,59 +14,70 @@ import { loadSettings } from '../../config/settings.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
-vi.mock('../../config/settings.js', () => ({
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+
+void vi.mock('../../config/settings.js', () => ({
   loadSettings: vi.fn(),
 }));
-vi.mock('../../config/extension.js', () => ({
+void vi.mock('../../config/extension.js', () => ({
   loadExtensions: vi.fn(),
   ExtensionStorage: {
     getUserExtensionsDir: vi.fn(),
   },
 }));
-vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
-  return {
-    ...actual,
-    createTransport: vi.fn(),
-    Storage: {
-      getGlobalSettingsPath: vi
-        .fn()
-        .mockReturnValue('/mock/home/.llxprt/settings.json'),
-      getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalConfigDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalDataDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalCacheDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-      getGlobalLogDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-    },
-    MCPServerStatus: {
-      CONNECTED: 'CONNECTED',
-      DISCONNECTED: 'DISCONNECTED',
-    },
-  };
-});
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
+const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  ...actual,
+  createTransport: vi.fn(),
+  Storage: {
+    getGlobalSettingsPath: vi
+      .fn()
+      .mockReturnValue('/mock/home/.llxprt/settings.json'),
+    getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalConfigDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalDataDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalCacheDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    getGlobalLogDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+  },
+  MCPServerStatus: {
+    CONNECTED: 'CONNECTED',
+    DISCONNECTED: 'DISCONNECTED',
+  },
+}));
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
 
 const mockedExtensionStorage = ExtensionStorage as unknown as {
   getUserExtensionsDir: ReturnType<typeof vi.fn>;
 };
-const mockedLoadSettings = loadSettings as Mock;
-const mockedLoadExtensions = loadExtensions as Mock;
-const mockedCreateTransport = createTransport as Mock;
-const MockedClient = Client as Mock;
+const mockedLoadSettings = loadSettings as unknown as Mock<
+  (...args: never[]) => unknown
+>;
+const mockedLoadExtensions = loadExtensions as unknown as Mock<
+  (...args: never[]) => unknown
+>;
+const mockedCreateTransport = createTransport as unknown as Mock<
+  (...args: never[]) => Promise<MockTransport>
+>;
+const MockedClient = Client as unknown as Mock<
+  (...args: never[]) => MockClient
+>;
 
 interface MockClient {
-  connect: Mock;
-  ping: Mock;
-  close: Mock;
+  connect: Mock<(transport: unknown) => Promise<void>>;
+  ping: Mock<() => Promise<unknown>>;
+  close: Mock<() => Promise<void>>;
 }
 
 interface MockTransport {
-  close: Mock;
+  close: Mock<() => Promise<void>>;
 }
 
 describe('mcp list command', () => {
-  let consoleSpy: MockInstance;
+  let consoleSpy: Mock<DebugLogger['log']>;
   let mockClient: MockClient;
   let mockTransport: MockTransport;
 

@@ -12,7 +12,7 @@
  * Split from the original performResume.spec.ts for max-lines compliance.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   performResume,
   SessionLockManager,

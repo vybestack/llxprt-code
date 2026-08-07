@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 import { HookEventName, HookType } from './types.js';
@@ -13,33 +21,33 @@ import type { HookDefinition } from './types.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock fs
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
 }));
 
 // Mock DebugLogger using vi.hoisted
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
-vi.mock('../debug/index.js', () => ({
+void vi.mock('../debug/index.js', () => ({
   DebugLogger: {
     getLogger: vi.fn(() => mockDebugLogger),
   },
 }));
 
 // Mock TrustedHooksManager
-const mockTrustManager = vi.hoisted(() => ({
+const mockTrustManager = {
   load: vi.fn(),
   getUntrustedHooks: vi.fn().mockReturnValue([]),
   trustHooks: vi.fn(),
-}));
+};
 
-vi.mock('./trustedHooks.js', () => ({
+void vi.mock('./trustedHooks.js', () => ({
   TrustedHooksManager: vi.fn(() => mockTrustManager),
 }));
 
@@ -83,7 +91,7 @@ describe('HookRegistry', () => {
 
   describe('initialize', () => {
     it('should initialize successfully with no hooks', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
 
       await hookRegistry.initialize();
 
@@ -110,7 +118,7 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return the hooks configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -143,7 +151,7 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return the hooks configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -173,7 +181,7 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return invalid configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         invalidHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -204,7 +212,7 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return invalid configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -252,7 +260,7 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return the hooks configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -297,7 +305,7 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return the hooks configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -352,14 +360,14 @@ describe('HookRegistry', () => {
       };
 
       // Mock config with disabled hooks
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
       );
-      vi.mocked(mockConfig.getDisabledHooks).mockReturnValue([
-        './hooks/disabled.sh',
-      ]);
+      (
+        mockConfig.getDisabledHooks as Mock<typeof mockConfig.getDisabledHooks>
+      ).mockReturnValue(['./hooks/disabled.sh']);
 
       const newRegistry = new HookRegistry(mockConfig);
       await newRegistry.initialize();
@@ -383,12 +391,14 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
       );
-      vi.mocked(mockConfig.getDisabledHooks).mockReturnValue([]);
+      (
+        mockConfig.getDisabledHooks as Mock<typeof mockConfig.getDisabledHooks>
+      ).mockReturnValue([]);
 
       const newRegistry = new HookRegistry(mockConfig);
       await newRegistry.initialize();
@@ -404,7 +414,7 @@ describe('HookRegistry', () => {
         BeforeTool: 'not-an-array', // Should be an array of HookDefinition
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         malformedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -423,7 +433,7 @@ describe('HookRegistry', () => {
         AfterTool: { hooks: [] }, // Should be an array, not a single object
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         malformedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -442,7 +452,7 @@ describe('HookRegistry', () => {
         BeforeTool: [null], // Invalid: null definition
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         malformedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -467,7 +477,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         malformedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -492,7 +502,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         malformedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -520,7 +530,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         malformedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -551,7 +561,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mixedConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -596,7 +606,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         configWithExtras as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -652,7 +662,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -690,7 +700,7 @@ describe('HookRegistry', () => {
         ],
       };
 
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
@@ -724,12 +734,14 @@ describe('HookRegistry', () => {
       };
 
       // Update mock to return the hooks configuration
-      vi.mocked(mockConfig.getHooks).mockReturnValue(
+      (mockConfig.getHooks as Mock<typeof mockConfig.getHooks>).mockReturnValue(
         mockHooksConfig as unknown as {
           [K in HookEventName]?: HookDefinition[];
         },
       );
-      vi.mocked(mockConfig.getDisabledHooks).mockReturnValue(['disabled-hook']);
+      (
+        mockConfig.getDisabledHooks as Mock<typeof mockConfig.getDisabledHooks>
+      ).mockReturnValue(['disabled-hook']);
 
       await hookRegistry.initialize();
 
@@ -748,24 +760,28 @@ describe('HookRegistry', () => {
     beforeEach(() => {
       coreEventsSpy = vi.spyOn(coreEvents, 'emit');
       // Set up config for a trusted folder with project hooks
-      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder = vi
-        .fn()
-        .mockReturnValue(true);
-      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks = vi
-        .fn()
-        .mockReturnValue({
-          BeforeTool: [
-            {
-              hooks: [
-                {
-                  type: 'command',
-                  command: './hooks/untrusted-script.sh',
-                  name: 'untrusted-hook',
-                },
-              ],
-            },
-          ],
-        });
+      (
+        mockConfig as Record<string, unknown> as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).isTrustedFolder = vi.fn().mockReturnValue(true);
+      (
+        mockConfig as Record<string, unknown> as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).getProjectHooks = vi.fn().mockReturnValue({
+        BeforeTool: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: './hooks/untrusted-script.sh',
+                name: 'untrusted-hook',
+              },
+            ],
+          },
+        ],
+      });
     });
 
     afterEach(() => {
@@ -825,9 +841,11 @@ describe('HookRegistry', () => {
     });
 
     it('does not warn or check trust when no project hooks exist', async () => {
-      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks = vi
-        .fn()
-        .mockReturnValue(undefined);
+      (
+        mockConfig as Record<string, unknown> as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).getProjectHooks = vi.fn().mockReturnValue(undefined);
 
       await hookRegistry.initialize();
 
@@ -839,9 +857,11 @@ describe('HookRegistry', () => {
     });
 
     it('skips trust check when folder is not trusted', async () => {
-      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder = vi
-        .fn()
-        .mockReturnValue(false);
+      (
+        mockConfig as Record<string, unknown> as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).isTrustedFolder = vi.fn().mockReturnValue(false);
 
       await hookRegistry.initialize();
 

@@ -23,7 +23,7 @@
  * @requirement:REQ-003.2
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { extractAfcHistory } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { filterAfcByHookRestrictions } from '../hookToolRestrictions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

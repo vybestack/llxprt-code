@@ -13,7 +13,7 @@
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC1-AC3, AC5, F1, F7, F10)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,14 +31,14 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 // Hoisted mocks for auth module — used by AC12 setupCredentialProxy/wireCleanupHandlers tests
-const authMocks = vi.hoisted(() => ({
+const authMocks = {
   createAndStartProxy: vi.fn(),
   getProxySocketPath: vi.fn(),
   stopProxy: vi.fn(),
   getProxyCapabilityToken: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
   getProxySocketPath: authMocks.getProxySocketPath,
   stopProxy: authMocks.stopProxy,

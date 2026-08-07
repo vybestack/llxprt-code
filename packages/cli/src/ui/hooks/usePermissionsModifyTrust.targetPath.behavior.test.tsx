@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import path from 'node:path';
 import { renderHook } from '../../test-utils/render.js';
 import {
@@ -14,30 +14,30 @@ import {
 } from '../../config/trustedFolders.js';
 import type { PermissionsTrustRuntime } from './usePermissionsModifyTrust.js';
 
-const mockedSetValue = vi.hoisted(() => vi.fn());
-const mockedDeleteValue = vi.hoisted(() => vi.fn());
-const mockedDeleteRuleByKey = vi.hoisted(() => vi.fn());
-const mockedUserConfig = vi.hoisted<{
-  value: Record<string, TrustLevel>;
-}>(() => ({ value: {} }));
-const mockedResolvePathTrust = vi.hoisted<
-  ReturnType<
-    typeof vi.fn<(folderPath: string) => ResolvedTrustRule | undefined>
-  >
->(() => vi.fn(() => undefined));
-const mockedGetValue = vi.hoisted(() =>
-  vi.fn((folderPath: string) => mockedUserConfig.value[folderPath]),
-);
-const mockedSnapshotValue = vi.hoisted(() => vi.fn());
-const mockedRestoreSnapshot = vi.hoisted(() => vi.fn());
-const mockedIdeTrust = vi.hoisted<{ value: boolean | undefined }>(() => ({
-  value: undefined,
-}));
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
 
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../config/trustedFolders.js')
-  >('../../config/trustedFolders.js');
+const mockedSetValue = vi.fn();
+const mockedDeleteValue = vi.fn();
+const mockedDeleteRuleByKey = vi.fn();
+const mockedUserConfig: { value: Record<string, TrustLevel> } = {
+  value: {},
+};
+const mockedResolvePathTrust = vi.fn<
+  (folderPath: string) => ResolvedTrustRule | undefined
+>(() => undefined);
+const mockedGetValue = vi.fn(
+  (folderPath: string) => mockedUserConfig.value[folderPath],
+);
+const mockedSnapshotValue = vi.fn();
+const mockedRestoreSnapshot = vi.fn();
+const mockedIdeTrust: { value: boolean | undefined } = {
+  value: undefined,
+};
+
+void vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -64,17 +64,15 @@ vi.mock('../../config/trustedFolders.js', async () => {
   };
 });
 
-vi.mock('./useIdeTrustListener.js', () => ({
+void vi.mock('./useIdeTrustListener.js', () => ({
   useIdeTrustListener: () => ({ isIdeTrusted: mockedIdeTrust.value }),
 }));
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
-    ...actual,
-    homedir: () => '/mock/home/user',
-  };
-});
+const actual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actual,
+  homedir: () => '/mock/home/user',
+}));
 
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
 

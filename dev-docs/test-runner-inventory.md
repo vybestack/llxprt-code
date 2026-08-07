@@ -88,7 +88,7 @@ run their own bespoke `run-bun-tests.ts`.
 
 All 21 test files are Bun-native. Uses a storage-isolation preload that calls
 `isolateStorageRoots()` before any test module imports Storage, plus the
-shared Vitest-compatibility shim.
+workspace preload.
 
 ### packages/agents
 
@@ -97,8 +97,7 @@ shared Vitest-compatibility shim.
 All 340 test files are Bun-native and the workspace `test`/`test:ci` scripts run
 Bun. **Vitest is gone from this workspace entirely** — no `test:vitest` fallback,
 no `vitest.config.ts`, no `vitest` devDependency, and no test file imports it.
-The test API comes from `src/testApi.ts`, which re-exports `bun:test` with the
-corrections the compat shim actually installs at runtime.
+The test API comes straight from `bun:test`.
 
 The Stryker mutation gate (`test:mutation:api`) was dropped with it: Stryker has
 no Bun runner, and its Vitest runner cannot execute suites that import
@@ -121,7 +120,7 @@ Two Bun behaviours the runner works around:
 Each child writes its own Bun JUnit report and the runner merges them, so CI
 keeps per-test names rather than a file-level summary.
 
-The `bunfig.toml` preloads the compat shim and `test-setup-storage-isolation.ts`,
+The `bunfig.toml` preloads `test-setup-storage-isolation.ts`,
 which isolates Storage roots and sets `LLXPRT_TEST_DISABLE_OS_KEYRING=1` so
 suites use the encrypted-file fallback instead of the developer's real OS
 keychain. The real keyring stays covered by the dedicated `secure_store_backend`
@@ -133,8 +132,8 @@ CI job.
 
 All 352 core test files are Bun-native. The workspace `test`/`test:ci` scripts
 use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
-file under `src` and `test`. A `bunfig.toml` preloads the `augment-bun-vi.ts`
-compat shim and a workspace-specific `bun-preload.ts` that replicates the
+file under `src` and `test`. A `bunfig.toml` preloads a workspace-specific
+`bun-preload.ts` that replicates the
 vitest setupFiles (storage isolation, provider runtime bootstrap).
 
 Migration changes:
@@ -160,7 +159,7 @@ Migration changes:
 
 All 42 auth test files are Bun-native. The workspace `test`/`test:ci` scripts
 use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
-file under `src`. A `bunfig.toml` preloads the compat shim and a
+file under `src`. A `bunfig.toml` preloads a
 workspace-specific `bun-preload.ts` for storage isolation.
 
 Migration changes:
@@ -325,7 +324,6 @@ it.
 
 ### test-setup (3 files at repo root)
 
-- `test-setup/augment-bun-vi.test.ts`
 - `test-setup/stub-helpers.bun.test.ts`
 - `test-setup/vitest-parity.test.ts`
 
@@ -389,18 +387,13 @@ quota-guard Vitest-integration meta-test):
 npm run test
 ```
 
-## Compatibility shim
+## Test API
 
-The root `bunfig.toml` preloads `test-setup/augment-bun-vi.ts`, which augments
-Bun's built-in `vi` object with Vitest-compatible methods. This allows test
-files that `import from 'vitest'` to run under Bun without code changes.
+Tests import `bun:test` directly; no compatibility layer is installed. The
+helpers Bun does not provide - `waitFor`, the async fake-timer wrappers,
+`setEnv`/`setGlobal` and `automock` - come from
+`@vybestack/llxprt-code-test-utils`, and `bun-test-corrections.d.ts` supplies
+the one correction Bun's own type declarations need.
 
-Methods provided by the shim:
-
-- `vi.hoisted`, `vi.mocked`, `vi.stubEnv`, `vi.unstubAllEnvs`,
-  `vi.stubGlobal`, `vi.unstubAllGlobals`
-- `vi.importActual`, `vi.waitFor`
-- `vi.advanceTimersByTimeAsync`, `vi.runAllTimersAsync`,
-  `vi.runOnlyPendingTimersAsync`
-- `vi.clearAllTimers` (guarded no-op when fake timers inactive)
-- `vi.mock` / `vi.doMock` (overridden to pass `importOriginal` to factories)
+See `dev-docs/bun.md` for the mocking rules, in particular that a `vi.mock`
+registration only applies within the file that declares it.

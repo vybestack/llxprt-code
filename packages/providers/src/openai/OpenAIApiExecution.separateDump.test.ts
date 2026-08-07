@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import {
   executeApiRequest,
@@ -167,7 +167,8 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     // All chunks should pass through unchanged
     expect(received).toStrictEqual(chunks);
 
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       { streaming: true, chunks, completed: true },
@@ -211,7 +212,8 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     // All chunks yielded before the error should pass through
     expect(received).toStrictEqual(chunks);
 
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       {
@@ -376,7 +378,8 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
     );
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       opts.requestBody,
@@ -420,13 +423,15 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
     );
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       { error: '400 Tool is not present in the tools list: lookup_weather' },
@@ -470,7 +475,8 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       'Cerebras/Qwen API bug: Tool not found in list. We sent 1 tools. Known API issue.',
     );
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       opts.requestBody,
@@ -533,7 +539,8 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-openai-test12',
       'openai',
       {

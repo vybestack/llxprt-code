@@ -26,7 +26,7 @@
  *    modifier and a Gemini-containing name.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   scanGenaiImports,
   scanGeminiExports,

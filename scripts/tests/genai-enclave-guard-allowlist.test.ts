@@ -13,7 +13,7 @@
  * versions match the real workspace manifests (version cross-check).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';

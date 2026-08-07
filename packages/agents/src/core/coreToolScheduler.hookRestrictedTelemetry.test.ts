@@ -4,28 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 
-vi.mock(
-  '@vybestack/llxprt-code-core/telemetry/loggers.js',
-  (importOriginal) => {
-    const result = importOriginal() as
-      | typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
-      | Promise<
-          typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
-        >;
-    if (result instanceof Promise) {
-      return result.then((actual) => ({
-        ...actual,
-        logToolCall: vi.fn(),
-      }));
-    }
-    return {
-      ...result,
+const __actual = {
+  ...(await import('@vybestack/llxprt-code-core/telemetry/loggers.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/telemetry/loggers.js', () => {
+  const result = __actual as
+    | typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
+    | Promise<
+        typeof import('@vybestack/llxprt-code-core/telemetry/loggers.js')
+      >;
+  if (result instanceof Promise) {
+    return result.then((actual) => ({
+      ...actual,
       logToolCall: vi.fn(),
-    };
-  },
-);
+    }));
+  }
+  return {
+    ...result,
+    logToolCall: vi.fn(),
+  };
+});
 
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { ApprovalMode } from '../index.js';

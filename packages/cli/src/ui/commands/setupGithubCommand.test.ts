@@ -4,11 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 
-import { vi, describe, expect, it, afterEach, beforeEach } from 'vitest';
+import {
+  vi,
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeEach,
+  type Mock,
+} from 'bun:test';
 import * as gitUtils from '../../utils/gitUtils.js';
 import {
   setupGithubCommand,
@@ -19,23 +28,38 @@ import type { CommandContext, ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
 import { assertTruthy } from '../../test-utils/assertions.js';
 
-vi.mock('child_process');
+/**
+ * Bun's vi.spyOn type signature omits the property-getter overload that
+ * exists at runtime. This alias restores it for getter-based spying.
+ */
+const spyOnGetter = vi.spyOn as unknown as <
+  T extends object,
+  K extends keyof T,
+>(
+  obj: T,
+  key: K,
+  accessType: 'get',
+) => Mock<() => T[K]>;
+
+const realChildProcessModule = { ...(await import('child_process')) };
+
+void vi.mock('child_process', () => automock(realChildProcessModule));
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
-vi.mock('../../utils/gitUtils.js', () => ({
+void vi.mock('../../utils/gitUtils.js', () => ({
   isGitHubRepository: vi.fn(),
   getGitRepoRoot: vi.fn(),
   getLatestGitHubRelease: vi.fn(),
   getGitHubRepoInfo: vi.fn(),
 }));
 
-vi.mock('../utils/commandUtils.js', () => ({
+void vi.mock('../utils/commandUtils.js', () => ({
   getUrlOpenCommand: vi.fn(),
 }));
 
-describe('setupGithubCommand', async () => {
+describe('setupGithubCommand', () => {
   let scratchDir = '';
 
   beforeEach(async () => {
@@ -51,7 +75,7 @@ describe('setupGithubCommand', async () => {
   });
 
   it('downloads workflows, updates gitignore, and includes pipefail on non-windows', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
     const fakeRepoOwner = 'fake';
     const fakeRepoName = 'repo';
     const fakeRepoRoot = scratchDir;
@@ -59,27 +83,39 @@ describe('setupGithubCommand', async () => {
 
     const workflows = GITHUB_WORKFLOW_PATHS.map((p) => path.basename(p));
 
-    vi.mocked(global.fetch).mockImplementation(async (url) => {
-      const filename = path.basename(url.toString());
-      return new Response(filename, {
-        status: 200,
-        statusText: 'OK',
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    });
-
-    vi.mocked(gitUtils.isGitHubRepository).mockReturnValueOnce(true);
-    vi.mocked(gitUtils.getGitRepoRoot).mockReturnValueOnce(fakeRepoRoot);
-    vi.mocked(gitUtils.getLatestGitHubRelease).mockResolvedValueOnce(
-      fakeReleaseVersion,
+    (global.fetch as Mock<typeof global.fetch>).mockImplementation(
+      async (url) => {
+        const filename = path.basename(url.toString());
+        return new Response(filename, {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      },
     );
-    vi.mocked(gitUtils.getGitHubRepoInfo).mockReturnValue({
+
+    (
+      gitUtils.isGitHubRepository as Mock<typeof gitUtils.isGitHubRepository>
+    ).mockReturnValueOnce(true);
+    (
+      gitUtils.getGitRepoRoot as Mock<typeof gitUtils.getGitRepoRoot>
+    ).mockReturnValueOnce(fakeRepoRoot);
+    (
+      gitUtils.getLatestGitHubRelease as Mock<
+        typeof gitUtils.getLatestGitHubRelease
+      >
+    ).mockResolvedValueOnce(fakeReleaseVersion);
+    (
+      gitUtils.getGitHubRepoInfo as Mock<typeof gitUtils.getGitHubRepoInfo>
+    ).mockReturnValue({
       owner: fakeRepoOwner,
       repo: fakeRepoName,
     });
-    vi.mocked(commandUtils.getUrlOpenCommand).mockReturnValueOnce(
-      'fakeOpenCommand',
-    );
+    (
+      commandUtils.getUrlOpenCommand as Mock<
+        typeof commandUtils.getUrlOpenCommand
+      >
+    ).mockReturnValueOnce('fakeOpenCommand');
 
     const result = (await setupGithubCommand.action?.(
       {} as CommandContext,
@@ -121,34 +157,46 @@ describe('setupGithubCommand', async () => {
   });
 
   it('downloads workflows, updates gitignore, and does not include pipefail on windows', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    spyOnGetter(process, 'platform', 'get').mockReturnValue('win32');
     const fakeRepoOwner = 'fake';
     const fakeRepoName = 'repo';
     const fakeRepoRoot = scratchDir;
     const fakeReleaseVersion = 'v1.2.3';
 
     const workflows = GITHUB_WORKFLOW_PATHS.map((p) => path.basename(p));
-    vi.mocked(global.fetch).mockImplementation(async (url) => {
-      const filename = path.basename(url.toString());
-      return new Response(filename, {
-        status: 200,
-        statusText: 'OK',
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    });
-
-    vi.mocked(gitUtils.isGitHubRepository).mockReturnValueOnce(true);
-    vi.mocked(gitUtils.getGitRepoRoot).mockReturnValueOnce(fakeRepoRoot);
-    vi.mocked(gitUtils.getLatestGitHubRelease).mockResolvedValueOnce(
-      fakeReleaseVersion,
+    (global.fetch as Mock<typeof global.fetch>).mockImplementation(
+      async (url) => {
+        const filename = path.basename(url.toString());
+        return new Response(filename, {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      },
     );
-    vi.mocked(gitUtils.getGitHubRepoInfo).mockReturnValue({
+
+    (
+      gitUtils.isGitHubRepository as Mock<typeof gitUtils.isGitHubRepository>
+    ).mockReturnValueOnce(true);
+    (
+      gitUtils.getGitRepoRoot as Mock<typeof gitUtils.getGitRepoRoot>
+    ).mockReturnValueOnce(fakeRepoRoot);
+    (
+      gitUtils.getLatestGitHubRelease as Mock<
+        typeof gitUtils.getLatestGitHubRelease
+      >
+    ).mockResolvedValueOnce(fakeReleaseVersion);
+    (
+      gitUtils.getGitHubRepoInfo as Mock<typeof gitUtils.getGitHubRepoInfo>
+    ).mockReturnValue({
       owner: fakeRepoOwner,
       repo: fakeRepoName,
     });
-    vi.mocked(commandUtils.getUrlOpenCommand).mockReturnValueOnce(
-      'fakeOpenCommand',
-    );
+    (
+      commandUtils.getUrlOpenCommand as Mock<
+        typeof commandUtils.getUrlOpenCommand
+      >
+    ).mockReturnValueOnce('fakeOpenCommand');
 
     const result = (await setupGithubCommand.action?.(
       {} as CommandContext,
@@ -193,19 +241,27 @@ describe('setupGithubCommand', async () => {
     const fakeRepoRoot = scratchDir;
     const fakeReleaseVersion = 'v1.2.3';
 
-    vi.mocked(global.fetch).mockResolvedValue(
+    (global.fetch as Mock<typeof global.fetch>).mockResolvedValue(
       new Response('Not Found', {
         status: 404,
         statusText: 'Not Found',
       }),
     );
 
-    vi.mocked(gitUtils.isGitHubRepository).mockReturnValueOnce(true);
-    vi.mocked(gitUtils.getGitRepoRoot).mockReturnValueOnce(fakeRepoRoot);
-    vi.mocked(gitUtils.getLatestGitHubRelease).mockResolvedValueOnce(
-      fakeReleaseVersion,
-    );
-    vi.mocked(gitUtils.getGitHubRepoInfo).mockReturnValue({
+    (
+      gitUtils.isGitHubRepository as Mock<typeof gitUtils.isGitHubRepository>
+    ).mockReturnValueOnce(true);
+    (
+      gitUtils.getGitRepoRoot as Mock<typeof gitUtils.getGitRepoRoot>
+    ).mockReturnValueOnce(fakeRepoRoot);
+    (
+      gitUtils.getLatestGitHubRelease as Mock<
+        typeof gitUtils.getLatestGitHubRelease
+      >
+    ).mockResolvedValueOnce(fakeReleaseVersion);
+    (
+      gitUtils.getGitHubRepoInfo as Mock<typeof gitUtils.getGitHubRepoInfo>
+    ).mockReturnValue({
       owner: 'fake',
       repo: 'repo',
     });

@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 
-const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
+const realLlxprtCodeAuthModule = {
+  ...(await import('@vybestack/llxprt-code-auth')),
+};
+
+const { flushMockRef, providerManagerRef, providerRef } = {
   flushMockRef: {
     current: undefined as ReturnType<typeof vi.fn> | undefined,
   },
@@ -19,12 +22,10 @@ const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   providerRef: {
     current: undefined as unknown,
   },
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
-    '@vybestack/llxprt-code-auth',
-  );
+void vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = realLlxprtCodeAuthModule;
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],

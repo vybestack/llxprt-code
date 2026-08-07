@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
@@ -147,12 +147,15 @@ function resolveBunBinary(): string | null {
 const bunBinary = resolveBunBinary();
 
 /**
- * How many files the `test-setup` root selects, read from the resolver so
- * these subprocess assertions track it rather than restating a literal.
+ * How many files the sample root selects, read from the resolver so these
+ * subprocess assertions track it rather than restating a literal.
  */
 function rootFileCount(): number {
-  return resolveBunTestFiles(repoRoot, 'test-setup').length;
+  return resolveBunTestFiles(repoRoot, SAMPLE_ROOT).length;
 }
+
+/** A small real root, used only to drive the runner end to end. */
+const SAMPLE_ROOT = 'ide-integration';
 
 describe('production Bun native test runner', () => {
   it.skipIf(!bunBinary)(
@@ -163,7 +166,7 @@ describe('production Bun native test runner', () => {
         [
           resolve(repoRoot, 'scripts/run_bun_tests.ts'),
           '--workspace',
-          'test-setup',
+          SAMPLE_ROOT,
           '--dry-run',
         ],
         {
@@ -175,11 +178,11 @@ describe('production Bun native test runner', () => {
 
       expect(child.status, child.stderr).toBe(0);
       // Derived from the resolver: hardcoding the count breaks whenever a file
-      // is added to the test-setup root, which says nothing about the runner.
+      // is added to that root, which says nothing about the runner.
       expect(child.stdout).toContain(
         `Dry run: ${rootFileCount()} files would be executed:`,
       );
-      expect(child.stdout).toContain('test-setup/augment-bun-vi.test.ts');
+      expect(child.stdout).toContain('packages/ide-integration/src/');
     },
   );
 
@@ -191,7 +194,7 @@ describe('production Bun native test runner', () => {
         [
           resolve(repoRoot, 'scripts/run_bun_tests.ts'),
           '--workspace',
-          'test-setup',
+          SAMPLE_ROOT,
           '--tsconfig',
           resolve(repoRoot, 'tsconfig.json'),
         ],

@@ -18,7 +18,7 @@
  *  - Property-based tests for any valid type mapping
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { OutputConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 

@@ -7,7 +7,7 @@
  * @requirement REQ-AUTH-001.1
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { KeyringTokenStore } from '../keyring-token-store.js';
 import type { ISecureStore } from '../interfaces/secure-store.js';
 

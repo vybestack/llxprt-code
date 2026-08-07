@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type {
   BaseProviderConfig,
   NormalizedGenerateChatOptions,
@@ -203,7 +211,9 @@ describe('BaseProvider', () => {
       };
 
       process.env.TEST_API_KEY = 'env-key-789';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token');
 
       const provider = new TestProvider(config);
 
@@ -231,7 +241,9 @@ describe('BaseProvider', () => {
       };
 
       process.env.TEST_API_KEY = 'env-key-789';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token');
 
       const provider = new TestProvider(config);
 
@@ -255,7 +267,9 @@ describe('BaseProvider', () => {
       };
 
       // No environment variables set
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-abc');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token-abc');
 
       const provider = new TestProvider(config);
 
@@ -415,7 +429,9 @@ describe('BaseProvider', () => {
         oauthManager: mockOAuthManager,
       };
 
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token');
 
       const provider = new NonOAuthTestProvider(config);
 
@@ -463,7 +479,9 @@ describe('BaseProvider', () => {
         oauthManager: mockOAuthManager,
       };
 
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token');
 
       // When: Initialize provider
       const provider = new TestProvider(config);
@@ -492,7 +510,9 @@ describe('BaseProvider', () => {
         oauthManager: mockOAuthManager,
       };
 
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token');
 
       const provider = new TestProvider(config);
       const settings = getSettingsService();
@@ -531,10 +551,14 @@ describe('BaseProvider', () => {
       let mockTime = 1000;
       vi.spyOn(Date, 'now').mockImplementation(() => mockTime);
 
-      vi.mocked(mockOAuthManager.getToken)
+      (mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>)
         .mockResolvedValueOnce('oauth-token')
         .mockResolvedValueOnce('oauth-token-2');
-      vi.mocked(mockOAuthManager.getOAuthToken)
+      (
+        mockOAuthManager.getOAuthToken as Mock<
+          typeof mockOAuthManager.getOAuthToken
+        >
+      )
         .mockResolvedValueOnce({
           access_token: 'oauth-token',
           token_type: 'Bearer',
@@ -662,7 +686,7 @@ describe('BaseProvider', () => {
         oauthManager: mockOAuthManager,
       };
 
-      vi.mocked(mockOAuthManager.getToken)
+      (mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>)
         .mockResolvedValueOnce('oauth-token-1')
         .mockResolvedValueOnce('oauth-token-2');
 
@@ -717,7 +741,9 @@ describe('BaseProvider', () => {
           ) => void;
         }
       ).updateOAuthConfig(true, 'test', mockOAuthManager);
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockResolvedValue('oauth-token');
 
       // Should now work with OAuth
       const response = await provider
@@ -740,9 +766,9 @@ describe('BaseProvider', () => {
         oauthManager: mockOAuthManager,
       };
 
-      vi.mocked(mockOAuthManager.getToken).mockRejectedValue(
-        new Error('OAuth failed'),
-      );
+      (
+        mockOAuthManager.getToken as Mock<typeof mockOAuthManager.getToken>
+      ).mockRejectedValue(new Error('OAuth failed'));
 
       const provider = new TestProvider(config);
 

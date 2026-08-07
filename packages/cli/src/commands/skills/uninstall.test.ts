@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
-const mockUninstallSkill = vi.hoisted(() => vi.fn());
+const mockUninstallSkill = vi.fn();
 
-vi.mock('../../utils/skillUtils.js', () => ({
+void vi.mock('../../utils/skillUtils.js', () => ({
   uninstallSkill: mockUninstallSkill,
 }));
 
-vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
   debugLogger: { log: vi.fn(), error: vi.fn() },
 }));
 

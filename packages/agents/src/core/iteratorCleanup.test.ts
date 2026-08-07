@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from '../testApi.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { closeIteratorBounded } from './iteratorCleanup.js';
 
 const CLEANUP_TIMEOUT_MS = 1_000;
@@ -53,12 +54,12 @@ describe('closeIteratorBounded', () => {
     });
 
     expect(cleanupRequested).toBe(true);
-    await vi.advanceTimersByTimeAsync(
+    await advanceTimersByTimeAsync(
       CLEANUP_TIMEOUT_MS - TIMEOUT_BOUNDARY_MARGIN_MS,
     );
     expect(completed).toBe(false);
 
-    await vi.advanceTimersByTimeAsync(TIMEOUT_BOUNDARY_MARGIN_MS);
+    await advanceTimersByTimeAsync(TIMEOUT_BOUNDARY_MARGIN_MS);
     await closing;
     expect(completed).toBe(true);
   });
@@ -75,9 +76,9 @@ describe('closeIteratorBounded', () => {
       completed = true;
     });
 
-    await vi.advanceTimersByTimeAsync(24);
+    await advanceTimersByTimeAsync(24);
     expect(completed).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     await closing;
     expect(completed).toBe(true);
   });

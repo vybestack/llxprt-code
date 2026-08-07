@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,66 +22,58 @@ import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
 
-vi.mock('./config/settings.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./config/settings.js')>();
-  return {
-    ...actual,
-    loadSettings: vi.fn(() => ({
-      merged: {
-        advanced: {},
-        security: { auth: {} },
-        ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
-      },
-      errors: [],
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-    })),
-    migrateDeprecatedSettings: vi.fn(),
-  };
-});
+const actual = { ...(await import('./config/settings.js')) };
+void vi.mock('./config/settings.js', () => ({
+  ...actual,
+  loadSettings: vi.fn(() => ({
+    merged: {
+      advanced: {},
+      security: { auth: {} },
+      ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
+    },
+    errors: [],
+    setValue: vi.fn(),
+    forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+  })),
+  migrateDeprecatedSettings: vi.fn(),
+}));
 
-vi.mock('./config/config.js', () => ({
+void vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn(),
 }));
 
-vi.mock('./config/cliArgParser.js', () => ({
+void vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-providers/runtime.js',
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@vybestack/llxprt-code-providers/runtime.js')
-      >();
-    return {
-      ...actual,
-      setCliRuntimeContext: vi.fn(),
-      switchActiveProvider: vi.fn(async () => ({
-        changed: true,
-        previousProvider: null,
-        nextProvider: 'gemini',
-        infoMessages: [],
-      })),
-      setActiveModel: vi.fn(),
-      setActiveModelParam: vi.fn(),
-      clearActiveModelParam: vi.fn(),
-      getActiveModelParams: vi.fn(() => ({})),
-      loadProfileByName: vi.fn(),
-      applyCliArgumentOverrides: vi.fn(async () => {}),
-    };
-  },
-);
+const actualActual = {
+  ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
+};
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+  ...actualActual,
+  setCliRuntimeContext: vi.fn(),
+  switchActiveProvider: vi.fn(async () => ({
+    changed: true,
+    previousProvider: null,
+    nextProvider: 'gemini',
+    infoMessages: [],
+  })),
+  setActiveModel: vi.fn(),
+  setActiveModelParam: vi.fn(),
+  clearActiveModelParam: vi.fn(),
+  getActiveModelParams: vi.fn(() => ({})),
+  loadProfileByName: vi.fn(),
+  applyCliArgumentOverrides: vi.fn(async () => {}),
+}));
 
-vi.mock('./config/extension.js', () => ({
+void vi.mock('./config/extension.js', () => ({
   ExtensionStorage: {
     getUserExtensionsDir: vi.fn(() => '/tmp/extensions'),
   },
   loadExtensions: vi.fn(() => []),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
@@ -85,26 +85,23 @@ vi.mock('./utils/cleanup.js', () => ({
 // cli.test.tsx). These provider-init tests exercise the --continue /
 // restoreHistory flow, so the agent composition root is mocked at its module
 // boundary to keep the narrow mock Config focused on session restore.
-vi.mock('./cliAgentBootstrap.js', () => ({
+void vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
     dispose: vi.fn().mockResolvedValue(undefined),
     getMessageBus: vi.fn(() => ({ kind: 'session-bus' })),
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    resumeSession: vi.fn(),
-    writeToStdout: vi.fn().mockReturnValue(true),
-    writeToStderr: vi.fn().mockReturnValue(true),
-    patchStdio: vi.fn(() => vi.fn()),
-  };
-});
+const actualActual2 = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual2,
+  resumeSession: vi.fn(),
+  writeToStdout: vi.fn().mockReturnValue(true),
+  writeToStderr: vi.fn().mockReturnValue(true),
+  patchStdio: vi.fn(() => vi.fn()),
+}));
 
-vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(() => Promise.resolve()),
     isKittyProtocolEnabled: vi.fn(() => false),
@@ -115,55 +112,50 @@ vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   },
 }));
 
-vi.mock('./ui/utils/terminalContract.js', () => ({
+void vi.mock('./ui/utils/terminalContract.js', () => ({
   drainStdinBuffer: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('./utils/stdinSafety.js', () => ({
+void vi.mock('./utils/stdinSafety.js', () => ({
   StdinRawModeManager: vi.fn(() => ({
     enable: vi.fn(),
     disable: vi.fn(),
   })),
 }));
 
-vi.mock('./utils/sandbox.js', () => ({
+void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
-vi.mock('./utils/bootstrap.js', () => ({
+void vi.mock('./utils/bootstrap.js', () => ({
   shouldRelaunchForMemory: vi.fn(() => []),
   computeSandboxMemoryArgs: vi.fn(() => ['--max-old-space-size=3072']),
   parseDockerMemoryToMB: vi.fn(() => undefined),
   isDebugMode: vi.fn(() => false),
 }));
 
-vi.mock('./utils/relaunch.js', () => ({
+void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn(() => Promise.resolve(0)),
 }));
 
-vi.mock('./utils/sessionCleanup.js', () => ({
+void vi.mock('./utils/sessionCleanup.js', () => ({
   cleanupExpiredSessions: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('ink', () => ({
+void vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
-const preflightAgentActivationMock = vi.hoisted(() =>
-  vi.fn(async () => ({
-    authFailed: false,
-    token: { established: true },
-  })),
-);
+const preflightAgentActivationMock = vi.fn(async () => ({
+  authFailed: false,
+  token: { established: true },
+}));
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
-  return {
-    ...actual,
-    preflightAgentActivation: preflightAgentActivationMock,
-  };
-});
+const actualActual3 = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actualActual3,
+  preflightAgentActivation: preflightAgentActivationMock,
+}));
 
 function makeResumeResult(historyText = 'resumed'): ResumeResult {
   return {
@@ -277,8 +269,10 @@ describe('cli main provider initialization', () => {
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],
@@ -380,13 +374,17 @@ describe('cli main provider initialization', () => {
     >;
 
     const coreModule = await import('@vybestack/llxprt-code-core');
-    const resumeSessionMock = vi.mocked(coreModule.resumeSession);
+    const resumeSessionMock = coreModule.resumeSession as Mock<
+      typeof coreModule.resumeSession
+    >;
     resumeSessionMock.mockResolvedValueOnce(resumeResult);
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],
@@ -508,13 +506,17 @@ describe('cli main provider initialization', () => {
     >;
 
     const coreModule = await import('@vybestack/llxprt-code-core');
-    const resumeSessionMock = vi.mocked(coreModule.resumeSession);
+    const resumeSessionMock = coreModule.resumeSession as Mock<
+      typeof coreModule.resumeSession
+    >;
     resumeSessionMock.mockResolvedValueOnce(resumeResult);
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    vi.mocked(parseArguments).mockResolvedValueOnce({
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
+      mockConfig,
+    );
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],

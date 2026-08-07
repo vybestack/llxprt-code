@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ChatList } from './ChatList.js';
 import type { ChatDetail } from '../../types.js';
 

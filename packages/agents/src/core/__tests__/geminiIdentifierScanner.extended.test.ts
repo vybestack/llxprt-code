@@ -17,7 +17,7 @@
  * @plan:PLAN-20260608-ISSUE1423.P03
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import ts from 'typescript';
 import {
   extractDeclaredIdentifiers,

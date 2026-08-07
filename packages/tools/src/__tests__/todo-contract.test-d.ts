@@ -19,7 +19,7 @@
  * todo-tools.test.ts (injected ITodoService executes a write -> read cycle).
  */
 
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf } from 'bun:test';
 import type { TodoRead } from '../tools/todo-read.js';
 import type { TodoWrite } from '../tools/todo-write.js';
 import type { TodoPause } from '../tools/todo-pause.js';

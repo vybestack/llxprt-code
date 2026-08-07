@@ -8,7 +8,7 @@
  * Unit tests for streamUtils.ts pure utilities and config-bound helpers.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   UnauthorizedError,
   parseAndFormatApiError,
@@ -36,14 +36,18 @@ import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorForm
 import { testRegex } from '../../../../test-utils/regex.js';
 
 /** Part element type accepted by splitPartsByRole. */
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 type TestPart = Parameters<typeof splitPartsByRole>[0][number];
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-const mockGetCodeAssistServer = vi.hoisted(() => vi.fn());
+const mockGetCodeAssistServer = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getCodeAssistServer: mockGetCodeAssistServer,
@@ -52,7 +56,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('../../../utils/markdownUtilities.js', async () => ({
+void vi.mock('../../../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((text: string) => text.length),
 }));
 
@@ -419,7 +423,8 @@ describe('processSlashCommandResult', () => {
       'prompt-1',
       mockSignal,
     );
-    expect(mockScheduleToolCalls).toHaveBeenCalledExactlyOnceWith(
+    expect(mockScheduleToolCalls).toHaveBeenCalledTimes(1);
+    expect(mockScheduleToolCalls).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'my_tool',
@@ -495,7 +500,9 @@ describe('getActiveProviderNameForApiError', () => {
 describe('handleSubmissionError', () => {
   const mockAddItem = vi.fn();
   const mockOnAuthError = vi.fn();
-  const mockParseAndFormatApiError = vi.mocked(parseAndFormatApiError);
+  const mockParseAndFormatApiError = parseAndFormatApiError as Mock<
+    typeof parseAndFormatApiError
+  >;
   const makeConfig = (activeProvider: unknown, providerManagerName?: string) =>
     createStreamRuntimeForTest({
       getModel: vi.fn(() => 'test-model'),
@@ -539,7 +546,8 @@ describe('handleSubmissionError', () => {
       Date.now(),
     );
     expect(result).toBe(false);
-    expect(mockAddItem).toHaveBeenCalledExactlyOnceWith(
+    expect(mockAddItem).toHaveBeenCalledTimes(1);
+    expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'error' }),
       expect.any(Number),
     );

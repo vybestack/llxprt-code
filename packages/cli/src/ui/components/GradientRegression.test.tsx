@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { renderWithProviders } from '../../test-utils/render.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
@@ -14,29 +14,24 @@ import { ModelsDialog } from './ModelDialog.js';
 import { StatsDisplay } from './StatsDisplay.js';
 
 // Mock the theme module
-vi.mock('../semantic-colors.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('../semantic-colors.js')>();
-  return {
-    ...original,
-    theme: {
-      ...original.theme,
-      ui: {
-        ...original.theme.ui,
-        gradient: [], // Empty array to potentially trigger the crash
-      },
+const original = { ...(await import('../semantic-colors.js')) };
+void vi.mock('../semantic-colors.js', () => ({
+  ...original,
+  theme: {
+    ...original.theme,
+    ui: {
+      ...original.theme.ui,
+      gradient: [], // Empty array to potentially trigger the crash
     },
-  };
-});
+  },
+}));
 
 // Mock the context to provide controlled data for testing
-vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof SessionContext>();
-  return {
-    ...actual,
-    useSessionStats: vi.fn(),
-  };
-});
+const actual = { ...(await import('../contexts/SessionContext.js')) };
+void vi.mock('../contexts/SessionContext.js', () => ({
+  ...actual,
+  useSessionStats: vi.fn(),
+}));
 
 const mockSessionStats: SessionStatsState = {
   sessionId: 'test-session',
@@ -97,7 +92,9 @@ const mockSessionStats: SessionStatsState = {
   },
 };
 
-const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useSessionStatsMock = SessionContext.useSessionStats as Mock<
+  typeof SessionContext.useSessionStats
+>;
 useSessionStatsMock.mockReturnValue({
   stats: mockSessionStats,
   getPromptCount: () => 0,

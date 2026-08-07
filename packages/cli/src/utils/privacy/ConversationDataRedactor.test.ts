@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import type { ITool } from '@vybestack/llxprt-code-providers';
 import { ConversationDataRedactor } from './ConversationDataRedactor.js';

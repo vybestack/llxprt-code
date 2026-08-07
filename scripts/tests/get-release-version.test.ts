@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  setSystemTime,
+  type Mock,
+} from 'bun:test';
 import { getReleaseVersion } from '../get-release-version.ts';
 import { execSync, spawnSync as realSpawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -12,16 +21,14 @@ import * as path from 'node:path';
 import { SpawnSyncReturns } from 'child_process';
 
 // execSync is mocked for getReleaseVersion internals; subprocess tests guard that spawnSync stays real.
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:child_process')>();
-  return {
-    ...actual,
-    execSync: vi.fn(),
-  };
-});
+const actual = { ...(await import('node:child_process')) };
+void vi.mock('node:child_process', () => ({
+  ...actual,
+  execSync: vi.fn(),
+}));
 
-vi.mock('node:fs', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('node:fs')>();
+const mod = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => {
   const readFileSyncMock = vi.fn();
   return {
     ...mod,
@@ -46,10 +53,10 @@ describe('getReleaseVersion', () => {
     delete process.env.IS_PREVIEW;
     delete process.env.MANUAL_VERSION;
     vi.useFakeTimers();
-    vi.mocked(fs.readFileSync).mockReturnValue(
+    (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
       JSON.stringify({ version: '0.1.0' }),
     );
-    vi.mocked(execSync).mockReturnValue('abcdef');
+    (execSync as Mock<typeof execSync>).mockReturnValue('abcdef');
   });
 
   afterEach(() => {
@@ -61,7 +68,7 @@ describe('getReleaseVersion', () => {
   it('should calculate nightly version when IS_NIGHTLY is true', () => {
     process.env.IS_NIGHTLY = 'true';
     const knownDate = new Date('2025-07-20T10:00:00.000Z');
-    vi.setSystemTime(knownDate);
+    setSystemTime(knownDate);
     const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
     expect(releaseTag).toBe('v0.1.0-nightly.250720.abcdef');
     expect(releaseVersion).toBe('0.1.0-nightly.250720.abcdef');
@@ -72,7 +79,7 @@ describe('getReleaseVersion', () => {
     process.env.IS_NIGHTLY = 'true';
     process.env.MANUAL_VERSION = '0.11.0';
     const knownDate = new Date('2025-07-20T10:00:00.000Z');
-    vi.setSystemTime(knownDate);
+    setSystemTime(knownDate);
     const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
     expect(releaseTag).toBe('v0.11.0-nightly.250720.abcdef');
     expect(releaseVersion).toBe('0.11.0-nightly.250720.abcdef');
@@ -83,7 +90,7 @@ describe('getReleaseVersion', () => {
     process.env.IS_NIGHTLY = 'true';
     process.env.MANUAL_VERSION = 'v0.11.0';
     const knownDate = new Date('2025-07-20T10:00:00.000Z');
-    vi.setSystemTime(knownDate);
+    setSystemTime(knownDate);
     const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
     expect(releaseTag).toBe('v0.11.0-nightly.250720.abcdef');
     expect(releaseVersion).toBe('0.11.0-nightly.250720.abcdef');
@@ -94,7 +101,7 @@ describe('getReleaseVersion', () => {
     process.env.IS_NIGHTLY = 'true';
     delete process.env.MANUAL_VERSION;
     const knownDate = new Date('2025-07-20T10:00:00.000Z');
-    vi.setSystemTime(knownDate);
+    setSystemTime(knownDate);
     const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
     expect(releaseTag).toBe('v0.1.0-nightly.250720.abcdef');
     expect(releaseVersion).toBe('0.1.0-nightly.250720.abcdef');
@@ -105,7 +112,7 @@ describe('getReleaseVersion', () => {
     process.env.IS_NIGHTLY = 'true';
     process.env.MANUAL_VERSION = '';
     const knownDate = new Date('2025-07-20T10:00:00.000Z');
-    vi.setSystemTime(knownDate);
+    setSystemTime(knownDate);
     const { releaseTag, releaseVersion, npmTag } = getReleaseVersion();
     expect(releaseTag).toBe('v0.1.0-nightly.250720.abcdef');
     expect(releaseVersion).toBe('0.1.0-nightly.250720.abcdef');
@@ -171,7 +178,7 @@ describe('getReleaseVersion', () => {
   it('should accept zero-valued components in nightly base (0.0.0, 0.10.0)', () => {
     process.env.IS_NIGHTLY = 'true';
     process.env.MANUAL_VERSION = '0.0.0';
-    vi.setSystemTime(new Date('2025-07-20T10:00:00.000Z'));
+    setSystemTime(new Date('2025-07-20T10:00:00.000Z'));
     expect(getReleaseVersion().releaseTag).toBe('v0.0.0-nightly.250720.abcdef');
 
     process.env.MANUAL_VERSION = '0.10.0';

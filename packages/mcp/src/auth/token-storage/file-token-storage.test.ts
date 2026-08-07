@@ -14,7 +14,7 @@
  * errors, path construction) and legacy hex-colon read routing.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -49,7 +49,7 @@ async function decryptWrittenEnvelope(
   return JSON.parse(plaintext) as Record<string, MCPOAuthCredentials>;
 }
 
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),
     writeFile: vi.fn(),
@@ -59,7 +59,7 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-vi.mock('node:os', () => ({
+void vi.mock('node:os', () => ({
   default: {
     homedir: vi.fn(() => '/home/test'),
     hostname: vi.fn(() => 'test-host'),

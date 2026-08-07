@@ -4,9 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -18,14 +28,36 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+const realStdioModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
+};
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realOauthProviderModule = {
+  ...(await import('../auth/oauth-provider.js')),
+};
+const realOauthTokenStorageModule = {
+  ...(await import('../auth/oauth-token-storage.js')),
+};
+const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
 
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
+void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+  automock(realStdioModule),
+);
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+void vi.mock('../auth/oauth-provider.js', () =>
+  automock(realOauthProviderModule),
+);
+void vi.mock('../auth/oauth-token-storage.js', () =>
+  automock(realOauthTokenStorageModule),
+);
+void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
+void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+
+void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },
@@ -83,9 +115,9 @@ describe('mcp-client', () => {
         }),
         request: vi.fn().mockResolvedValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -135,9 +167,9 @@ describe('mcp-client', () => {
           });
         }),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -157,7 +189,7 @@ describe('mcp-client', () => {
       );
       await client.connect();
       const discovery = client.discover(createTrustedConfig());
-      await vi.waitFor(() => expect(resourceSignal).toBeDefined());
+      await waitFor(() => expect(resourceSignal).toBeDefined());
       await client.disconnect();
 
       expect(resourceSignal?.aborted).toBe(true);
@@ -204,9 +236,9 @@ describe('mcp-client', () => {
         }),
         request: vi.fn().mockResolvedValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -248,9 +280,9 @@ describe('mcp-client', () => {
         listPrompts: vi.fn().mockRejectedValue(new Error('Test error')),
         request: vi.fn().mockResolvedValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -291,9 +323,9 @@ describe('mcp-client', () => {
         listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
         request: vi.fn().mockResolvedValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -342,9 +374,9 @@ describe('mcp-client', () => {
         listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
         request: vi.fn().mockResolvedValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -407,9 +439,9 @@ describe('mcp-client', () => {
         }),
         request: vi.fn().mockResolvedValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        mockedClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -434,8 +466,11 @@ describe('mcp-client', () => {
       await client.connect();
       await client.discover(createTrustedConfig());
       expect(mockedToolRegistry.registerTool).toHaveBeenCalledOnce();
-      const registeredTool = vi.mocked(mockedToolRegistry.registerTool).mock
-        .calls[0][0];
+      const registeredTool = (
+        mockedToolRegistry.registerTool as Mock<
+          typeof mockedToolRegistry.registerTool
+        >
+      ).mock.calls[0][0];
       expect(registeredTool.schema.parametersJsonSchema).toStrictEqual({
         type: 'object',
         properties: {

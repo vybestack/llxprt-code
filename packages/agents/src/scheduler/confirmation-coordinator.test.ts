@@ -4,23 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 // Module-scope mock for modifiable-tool — hoisted by the test runner before imports.
-// Per-test behavior can be overridden via vi.mocked().
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...mod,
-    isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
-    modifyWithEditor: vi.fn().mockResolvedValue({
-      updatedParams: { content: 'updated' },
-      updatedDiff: '--- a +++ b @@ updated @@',
-    }),
-  };
-});
+// Per-test behavior can be overridden by casting the mocked export to Mock.
+const mod = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...mod,
+  isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
+  modifyWithEditor: vi.fn().mockResolvedValue({
+    updatedParams: { content: 'updated' },
+    updatedDiff: '--- a +++ b @@ updated @@',
+  }),
+}));
 
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { ToolConfirmationResponse } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
@@ -258,7 +256,7 @@ describe('ConfirmationCoordinator', () => {
         confirmed: true,
       } satisfies ToolConfirmationResponse);
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       // ProceedOnce path → setScheduled
       expect(statusMutator.setScheduled).toHaveBeenCalledWith('call-1');
     });

@@ -8,8 +8,15 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProviderMock,
@@ -32,9 +39,10 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('node:fs/promises', () => {
-  const actual =
-    importActualSync<typeof import('node:fs/promises')>('node:fs/promises');
+const realPromisesModule = { ...(await import('node:fs/promises')) };
+
+void vi.mock('node:fs/promises', () => {
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),
@@ -43,7 +51,7 @@ vi.mock('node:fs/promises', () => {
 
 const mockFs = await import('node:fs/promises');
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
@@ -138,14 +146,18 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should apply keyfile auth to SettingsService BEFORE switching provider', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-file');
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockResolvedValue(
+      'test-api-key-from-file',
+    );
 
     const operationOrder: string[] = [];
 
-    vi.mocked(mockFs.readFile).mockImplementation(async (filePath) => {
-      operationOrder.push(`readFile:${filePath}`);
-      return 'test-api-key-from-file';
-    });
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockImplementation(
+      async (filePath) => {
+        operationOrder.push(`readFile:${filePath}`);
+        return 'test-api-key-from-file';
+      },
+    );
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
       if (key === 'auth-key') {
@@ -377,7 +389,9 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should NOT trigger OAuth when profile has keyfile and provider switch calls getModels', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-keyfile');
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockResolvedValue(
+      'test-api-key-from-keyfile',
+    );
 
     const oauthCalls: string[] = [];
 
@@ -485,7 +499,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   });
 
   it('should handle keyfile loading failure gracefully without blocking provider switch', async () => {
-    vi.mocked(mockFs.readFile).mockRejectedValue(
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockRejectedValue(
       new Error('ENOENT: file not found'),
     );
 

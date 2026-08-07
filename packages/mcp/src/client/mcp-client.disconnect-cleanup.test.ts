@@ -4,12 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '../../../test-utils/src/automock.js';
+import { advanceTimersByTimeAsync } from '../../../test-utils/src/async-timers.js';
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -22,14 +33,36 @@ import {
 } from './mcp-status.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('../auth/oauth-provider.js');
-vi.mock('../auth/oauth-token-storage.js');
-vi.mock('../auth/oauth-utils.js');
-vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+const realStdioModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
+};
+const realIndexModule = {
+  ...(await import('@modelcontextprotocol/sdk/client/index.js')),
+};
+const realOauthProviderModule = {
+  ...(await import('../auth/oauth-provider.js')),
+};
+const realOauthTokenStorageModule = {
+  ...(await import('../auth/oauth-token-storage.js')),
+};
+const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
 
-vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
+void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
+  automock(realStdioModule),
+);
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
+  automock(realIndexModule),
+);
+void vi.mock('../auth/oauth-provider.js', () =>
+  automock(realOauthProviderModule),
+);
+void vi.mock('../auth/oauth-token-storage.js', () =>
+  automock(realOauthTokenStorageModule),
+);
+void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
+void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+
+void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },
@@ -90,9 +123,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       transport as unknown as SdkClientStdioLib.StdioClientTransport,
     );
@@ -124,9 +157,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
@@ -187,9 +220,9 @@ describe('McpClient disconnect cleanup', () => {
         setRequestHandler: vi.fn(),
         getServerCapabilities: vi.fn().mockReturnValue({}),
       };
-      vi.mocked(ClientLib.Client).mockReturnValue(
-        sdkClient as unknown as ClientLib.Client,
-      );
+      (
+        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
       vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
         {} as SdkClientStdioLib.StdioClientTransport,
       );
@@ -210,7 +243,7 @@ describe('McpClient disconnect cleanup', () => {
         () => undefined,
         (error: unknown) => error,
       );
-      await vi.advanceTimersByTimeAsync(10_000);
+      await advanceTimersByTimeAsync(10_000);
 
       await expect(disconnect).resolves.toMatchObject({
         message: "Timed out closing MCP client 'test-server' after 10000ms",
@@ -234,9 +267,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
@@ -267,9 +300,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -306,9 +339,9 @@ describe('McpClient disconnect cleanup', () => {
       setRequestHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -366,9 +399,9 @@ describe('McpClient disconnect cleanup', () => {
         .fn()
         .mockReturnValue({ tools: {}, prompts: {}, resources: {} }),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as SdkClientStdioLib.StdioClientTransport);
@@ -418,7 +451,7 @@ describe('McpClient disconnect cleanup', () => {
       removeMCPStatusChangeListener(throwingStatusListener);
     }
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(sdkClient.close).toHaveBeenCalled();
     });
 
@@ -447,9 +480,9 @@ describe('McpClient disconnect cleanup', () => {
       setNotificationHandler: vi.fn(),
       getServerCapabilities: vi.fn().mockReturnValue({}),
     };
-    vi.mocked(ClientLib.Client).mockReturnValue(
-      sdkClient as unknown as ClientLib.Client,
-    );
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient as unknown as ClientLib.Client);
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );

@@ -23,7 +23,7 @@
  *  - Heap is normalized to 12GB (12288) and a stale inherited limit is replaced
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

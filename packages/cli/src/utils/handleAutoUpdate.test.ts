@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { getInstallationInfo, PackageManager } from './installationInfo.js';
 import { updateEventEmitter } from './updateEventEmitter.js';
 import type { UpdateObject } from '../ui/utils/updateCheck.js';
@@ -17,16 +17,23 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-vi.mock('./installationInfo.js', async () => {
-  const actual = await vi.importActual('./installationInfo.js');
+const realInstallationInfoModule = {
+  ...(await import('./installationInfo.js')),
+};
+const realUpdateEventEmitterModule = {
+  ...(await import('./updateEventEmitter.js')),
+};
+
+void vi.mock('./installationInfo.js', () => {
+  const actual = realInstallationInfoModule;
   return {
     ...actual,
     getInstallationInfo: vi.fn(),
   };
 });
 
-vi.mock('./updateEventEmitter.js', async () => {
-  const actual = await vi.importActual('./updateEventEmitter.js');
+void vi.mock('./updateEventEmitter.js', () => {
+  const actual = realUpdateEventEmitterModule;
   return {
     ...actual,
     updateEventEmitter: {
@@ -36,49 +43,49 @@ vi.mock('./updateEventEmitter.js', async () => {
   };
 });
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof fs>();
-  return {
-    ...actual,
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    writeSync: vi.fn(),
-    openSync: vi.fn(),
-    closeSync: vi.fn(),
-    mkdirSync: vi.fn(),
-    unlinkSync: vi.fn(),
-    readdirSync: vi.fn(),
-    realpathSync: vi.fn(),
-    constants: actual.constants,
-  };
-});
+const actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => ({
+  ...actual,
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  writeSync: vi.fn(),
+  openSync: vi.fn(),
+  closeSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  readdirSync: vi.fn(),
+  realpathSync: vi.fn(),
+  constants: actual.constants,
+}));
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
-  return {
-    ...actual,
-    homedir: vi.fn(),
-  };
-});
+const actualActual = { ...(await import('node:os')) };
+void vi.mock('node:os', () => ({
+  ...actualActual,
+  homedir: vi.fn(),
+}));
 
-const mockGetInstallationInfo = vi.mocked(getInstallationInfo);
-const mockUpdateEventEmitter = vi.mocked(updateEventEmitter);
-const mockExistsSync = vi.mocked(fs.existsSync);
-const mockReadFileSync = vi.mocked(fs.readFileSync);
-const _mockWriteFileSync = vi.mocked(fs.writeFileSync);
-const mockWriteSync = vi.mocked(fs.writeSync);
-const mockOpenSync = vi.mocked(fs.openSync);
-const mockCloseSync = vi.mocked(fs.closeSync);
-const mockMkdirSync = vi.mocked(fs.mkdirSync);
-const mockUnlinkSync = vi.mocked(fs.unlinkSync);
-const mockReaddirSync = vi.mocked(fs.readdirSync);
-const mockRealpathSync = vi.mocked(fs.realpathSync);
-const mockHomedir = vi.mocked(os.homedir);
+const mockGetInstallationInfo = getInstallationInfo as Mock<
+  typeof getInstallationInfo
+>;
+const mockUpdateEventEmitter = updateEventEmitter as Mock<
+  typeof updateEventEmitter
+>;
+const mockExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
+const mockReadFileSync = fs.readFileSync as Mock<typeof fs.readFileSync>;
+const _mockWriteFileSync = fs.writeFileSync as Mock<typeof fs.writeFileSync>;
+const mockWriteSync = fs.writeSync as Mock<typeof fs.writeSync>;
+const mockOpenSync = fs.openSync as Mock<typeof fs.openSync>;
+const mockCloseSync = fs.closeSync as Mock<typeof fs.closeSync>;
+const mockMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
+const mockUnlinkSync = fs.unlinkSync as Mock<typeof fs.unlinkSync>;
+const mockReaddirSync = fs.readdirSync as Mock<typeof fs.readdirSync>;
+const mockRealpathSync = fs.realpathSync as Mock<typeof fs.realpathSync>;
+const mockHomedir = os.homedir as Mock<typeof os.homedir>;
 const TEST_CONFIG_HOME = path.resolve('/tmp/llxprt-test-config-home');
 
 describe('handleAutoUpdate', () => {
-  let mockSpawn: Mock;
+  let mockSpawn: Mock<(...args: never[]) => unknown>;
   let mockUpdateInfo: UpdateObject;
   let mockSettings: LoadedSettings;
   let mockChildProcess: ChildProcess;
@@ -115,9 +122,7 @@ describe('handleAutoUpdate', () => {
       unref: vi.fn(),
     }) as unknown as ChildProcess;
 
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof mockSpawn>,
-    );
+    mockSpawn.mockReturnValue(mockChildProcess as unknown);
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');

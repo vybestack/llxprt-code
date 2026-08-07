@@ -4,12 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
+import {
+  advanceTimersByTimeAsync,
+  waitFor,
+} from '@vybestack/llxprt-code-test-utils';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { type FolderTrustRuntime, useFolderTrust } from './useFolderTrust.js';
@@ -21,17 +31,18 @@ import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 import { createDeferred } from '../../test-utils/async.js';
 
-const mockedCwd = vi.hoisted(() => vi.fn());
+const realNodeProcessModule = { ...(await import('node:process')) };
+
+const mockedCwd = vi.fn();
 // Records the requested exit code instead of throwing. The hook schedules its
 // exit from a timer callback, and throwing from there escapes as an unhandled
 // error rather than something a test can await; asserting on the recorded call
 // tests the same behaviour directly.
-const mockedExit = vi.hoisted(() => vi.fn((_code: number) => undefined));
+const mockedExit = vi.fn((_code: number) => undefined);
 const temporaryDirectories: string[] = [];
 
-vi.mock('node:process', async () => {
-  const actual =
-    await vi.importActual<typeof import('node:process')>('node:process');
+void vi.mock('node:process', () => {
+  const actual = realNodeProcessModule;
   const mockedProcess = {
     ...actual,
     cwd: mockedCwd,
@@ -47,11 +58,11 @@ vi.mock('node:process', async () => {
 describe('useFolderTrust', () => {
   let mockSettings: LoadedSettings;
   let mockTrustedFolders: LoadedTrustedFolders;
-  let loadTrustedFoldersSpy: vi.SpyInstance;
-  let isWorkspaceTrustedSpy: vi.SpyInstance;
-  let addItem: vi.Mock;
+  let loadTrustedFoldersSpy: Mock<(...args: never[]) => unknown>;
+  let isWorkspaceTrustedSpy: Mock<(...args: never[]) => unknown>;
+  let addItem: Mock<(...args: never[]) => unknown>;
   let mockConfig: FolderTrustRuntime & {
-    setTrustedFolderLive: vi.Mock;
+    setTrustedFolderLive: Mock<(...args: never[]) => unknown>;
   };
 
   beforeEach(() => {
@@ -338,7 +349,6 @@ describe('useFolderTrust', () => {
       );
       resolutionSpy.mockRestore();
     } finally {
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -372,7 +382,7 @@ describe('useFolderTrust', () => {
       // Asserted on the mock rather than on a rejection: the behaviour under
       // test is that the deferred exit calls process.exit with the fatal
       // config code, not how a throw inside a timer callback propagates.
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       expect(mockedExit).toHaveBeenCalledWith(ExitCodes.FATAL_CONFIG_ERROR);
     } finally {
       vi.useRealTimers();
@@ -410,7 +420,6 @@ describe('useFolderTrust', () => {
         expect.any(Number),
       );
     } finally {
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -430,13 +439,13 @@ describe('useFolderTrust', () => {
       const selection = result.current.handleFolderTrustSelect(
         FolderTrustChoice.TRUST_FOLDER,
       );
-      await vi.waitFor(() =>
+      await waitFor(() =>
         expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledOnce(),
       );
       unmount();
       liveUpdate.reject(new Error('late live failure'));
       await selection;
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
 
       expect(addItem).not.toHaveBeenCalled();
       expect(mockedExit).not.toHaveBeenCalled();
@@ -470,7 +479,6 @@ describe('useFolderTrust', () => {
         expect.any(Number),
       );
     } finally {
-      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });

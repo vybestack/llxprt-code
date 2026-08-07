@@ -10,7 +10,7 @@
  * Auth Command Logout TDD Tests
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { AuthCommandExecutor } from '../../../src/ui/commands/authCommand.js';
 import {

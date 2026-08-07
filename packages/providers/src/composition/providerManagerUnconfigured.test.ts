@@ -12,7 +12,8 @@
  * active and issues no implicit requests.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   createProviderManager,
   setFileSystem,
@@ -60,7 +61,7 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
   });
 
   function buildUnconfiguredManager() {
@@ -89,7 +90,7 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(new Response('{}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    setGlobal('fetch', fetchMock);
 
     const manager = buildUnconfiguredManager();
     const result = manager.getServerToolsProvider();

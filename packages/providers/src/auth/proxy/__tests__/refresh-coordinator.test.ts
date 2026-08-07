@@ -14,7 +14,7 @@
  * @plan PLAN-20250214-CREDPROXY.P19
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type {
   TokenStore,
   OAuthToken,

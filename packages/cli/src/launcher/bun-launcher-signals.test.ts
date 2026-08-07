@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { relaunchUnderBunIfNeeded } from './bun-launcher.js';
 
@@ -44,7 +45,7 @@ describe('relaunchUnderBunIfNeeded signal handling', () => {
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
     });
 
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    await waitFor(() => expect(capturedChild).not.toBeNull());
     process.emit('SIGTERM', 'SIGTERM');
     expect(capturedChild!.kill).toHaveBeenCalledWith('SIGTERM');
     process.emit('SIGBREAK', 'SIGBREAK');
@@ -76,7 +77,7 @@ describe('relaunchUnderBunIfNeeded signal handling', () => {
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
     });
 
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    await waitFor(() => expect(capturedChild).not.toBeNull());
     capturedChild!.emit('close', null, 'SIGBREAK');
     const result = await promise;
 

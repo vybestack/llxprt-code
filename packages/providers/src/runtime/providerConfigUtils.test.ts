@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
 const {
   sanitizeForByteStringMock,
   needsSanitizationMock,
   updateActiveProviderApiKeyMock,
   updateActiveProviderBaseUrlMock,
-} = vi.hoisted(() => ({
+} = {
   sanitizeForByteStringMock: vi.fn((value: string) => `sanitized-${value}`),
   needsSanitizationMock: vi.fn(() => false),
   updateActiveProviderApiKeyMock: vi.fn(async () => ({
@@ -15,9 +15,9 @@ const {
   updateActiveProviderBaseUrlMock: vi.fn(async () => ({
     message: 'Base URL set',
   })),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   sanitizeForByteString: sanitizeForByteStringMock,
   needsSanitization: needsSanitizationMock,
   DebugLogger: class {
@@ -27,7 +27,7 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
   },
 }));
 
-vi.mock('./providerMutations.js', () => ({
+void vi.mock('./providerMutations.js', () => ({
   updateActiveProviderApiKey: updateActiveProviderApiKeyMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
 }));

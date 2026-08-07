@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { createRuntimeInvocationContext } from './RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

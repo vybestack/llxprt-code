@@ -14,7 +14,7 @@
  * `tiktokenTokens: null` over an existing measurement destroys that column.
  */
 
-import { describe, expect, it } from '../testApi.js';
+import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';

@@ -18,11 +18,11 @@
  * `undefined`.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, mock } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Self-load reads run through strip-json-comments; keep them passthrough.
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
@@ -39,7 +39,7 @@ function makeWrapper(
   };
 }
 
-vi.doMock('../ProviderManager.js', () => {
+void mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
     setConfig(): void {}
     setActiveProvider(): void {}
@@ -47,25 +47,25 @@ vi.doMock('../ProviderManager.js', () => {
   }
   return { ProviderManager: MockProviderManager };
 });
-vi.doMock('../gemini/GeminiProvider.js', () => {
+void mock.module('../gemini/GeminiProvider.js', () => {
   class MockGeminiProvider {
     setConfig(): void {}
   }
   return { GeminiProvider: MockGeminiProvider };
 });
-vi.doMock('../openai/OpenAIProvider.js', () => ({
+void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
 }));
-vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
+void mock.module('../openai-responses/OpenAIResponsesProvider.js', () => ({
   OpenAIResponsesProvider: class {},
 }));
-vi.doMock('../openai-vercel/index.js', () => ({
+void mock.module('../openai-vercel/index.js', () => ({
   OpenAIVercelProvider: class {},
 }));
-vi.doMock('../anthropic/AnthropicProvider.js', () => ({
+void mock.module('../anthropic/AnthropicProvider.js', () => ({
   AnthropicProvider: class {},
 }));
-vi.doMock('./oauth-provider-registration.js', () => ({
+void mock.module('./oauth-provider-registration.js', () => ({
   ensureOAuthProviderRegistered: vi.fn(),
   registerStandardOAuthProviders: vi.fn(),
   isOAuthProviderRegistered: vi.fn(),

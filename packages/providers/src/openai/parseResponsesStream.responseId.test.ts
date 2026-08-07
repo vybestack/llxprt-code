@@ -21,7 +21,7 @@
  * conversations.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { parseResponsesStream } from './parseResponsesStream.js';
 

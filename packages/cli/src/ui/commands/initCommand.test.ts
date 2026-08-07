@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initCommand } from './initCommand.js';
@@ -12,8 +20,10 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { type CommandContext } from './types.js';
 
 // Mock the 'fs' module
-vi.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('fs')>('fs');
+const realFsModule = { ...(await import('fs')) };
+
+void vi.mock('fs', () => {
+  const actual = realFsModule;
   return {
     ...actual,
     default: actual,
@@ -45,7 +55,7 @@ describe('initCommand', () => {
 
   it('should inform the user if LLXPRT.md already exists', async () => {
     // Arrange: Simulate that the file exists
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
 
     // Act: Run the command's action
     const result = await initCommand.action!(mockContext, '');
@@ -63,7 +73,7 @@ describe('initCommand', () => {
 
   it('should create LLXPRT.md and submit a prompt if it does not exist', async () => {
     // Arrange: Simulate that the file does not exist
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
 
     // Act: Run the command's action
     const result = await initCommand.action!(mockContext, '');

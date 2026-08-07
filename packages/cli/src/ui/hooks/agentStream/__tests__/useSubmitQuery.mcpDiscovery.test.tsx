@@ -19,7 +19,7 @@
  * reaching `runStream` (via `runStreamRef`) without live provider networking.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
@@ -39,9 +39,9 @@ import type { QueuedSubmission } from '../types.js';
 // Stable spy for displayUserMessage so tests can assert the documented
 // contract (the user message IS displayed). vi.hoisted keeps the same
 // reference across the module mock factory and the test body.
-const displayUserMessageMock = vi.hoisted(() => vi.fn());
+const displayUserMessageMock = vi.fn();
 
-vi.mock('../useStreamEventHandlers.js', () => ({
+void vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
     processStreamEvent: vi.fn(),
     displayUserMessage: displayUserMessageMock,
@@ -52,18 +52,18 @@ vi.mock('../useStreamEventHandlers.js', () => ({
   }),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,
   }),
 }));
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../streamUtils.js', () => ({
+void vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: vi.fn(),
   processSlashCommandResult: vi.fn(),
 }));

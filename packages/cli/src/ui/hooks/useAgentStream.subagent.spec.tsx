@@ -4,17 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
+import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   TrackedCompletedToolCall,
   TrackedToolCall,
+  ScheduleFn,
+  MarkToolsAsDisplayClearedFn,
 } from './useReactToolScheduler.js';
-import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   AgentClientContract as AgentClient,
   AnyDeclarativeTool,
@@ -34,7 +36,7 @@ import {
   type StreamRuntimeTestOverrides,
 } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 
-const inkMock = vi.hoisted(() => {
+const inkMock = (() => {
   const noop = vi.fn(() => null);
   const write = vi.fn();
   const exit = vi.fn();
@@ -67,13 +69,13 @@ const inkMock = vi.hoisted(() => {
   };
   (module as Record<string, unknown>).default = module;
   return module;
-});
+})();
 
-vi.mock('ink', () => inkMock);
+void vi.mock('ink', () => inkMock);
 
 const mockStartNewPrompt = vi.fn();
 const mockAddUsage = vi.fn();
-vi.mock('../contexts/SessionContext.js', () => ({
+void vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({
     startNewPrompt: mockStartNewPrompt,
     addUsage: mockAddUsage,
@@ -81,11 +83,11 @@ vi.mock('../contexts/SessionContext.js', () => ({
   })),
 }));
 
-vi.mock('./slashCommandProcessor.js', () => ({
+void vi.mock('./slashCommandProcessor.js', () => ({
   handleSlashCommand: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('./useKeypress.js', () => ({
+void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
 }));
 
@@ -143,16 +145,15 @@ class MockedAgentClientClass {
   constructor(_config: unknown) {}
 }
 
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('./useReactToolScheduler.js')>();
-  const { mapToDisplay } = await import('./toolMapping.js');
-  return {
-    ...original,
-    useReactToolScheduler: vi.fn(),
-    mapToDisplay,
-  };
-});
+const originalReactToolScheduler = {
+  ...(await import('./useReactToolScheduler.js')),
+};
+const { mapToDisplay } = await import('./toolMapping.js');
+void vi.mock('./useReactToolScheduler.js', () => ({
+  ...originalReactToolScheduler,
+  useReactToolScheduler: vi.fn(),
+  mapToDisplay,
+}));
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock<
   typeof useReactToolScheduler
@@ -162,11 +163,11 @@ describe('useAgentStream subagent isolation', () => {
   let mockConfig: Config;
   let mockOverrides: StreamRuntimeTestOverrides;
   let mockSettings: LoadedSettings;
-  let mockAddItem: Mock;
-  let mockOnDebugMessage: Mock;
-  let mockHandleSlashCommand: Mock;
-  let mockScheduleToolCalls: Mock;
-  let mockMarkToolsAsDisplayCleared: Mock;
+  let mockAddItem: Mock<(...args: never[]) => unknown>;
+  let mockOnDebugMessage: Mock<(message: string) => void>;
+  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
+  let mockScheduleToolCalls: Mock<ScheduleFn>;
+  let mockMarkToolsAsDisplayCleared: Mock<MarkToolsAsDisplayClearedFn>;
 
   beforeEach(() => {
     vi.clearAllMocks();

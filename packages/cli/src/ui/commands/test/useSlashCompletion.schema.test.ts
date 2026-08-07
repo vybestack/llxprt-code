@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
+import { describe, it, expect, vi } from 'bun:test';
 
-import { describe, it, expect, vi } from 'vitest';
-
-const { schemaHandlerSpy, createHandlerMock } = vi.hoisted(() => {
+const { schemaHandlerSpy, createHandlerMock } = (() => {
   const schemaHandlerSpy = vi.fn().mockResolvedValue({
     suggestions: [
       { value: 'alpha', description: 'alpha option' },
@@ -19,9 +17,9 @@ const { schemaHandlerSpy, createHandlerMock } = vi.hoisted(() => {
   });
   const createHandlerMock = vi.fn(() => schemaHandlerSpy);
   return { schemaHandlerSpy, createHandlerMock };
-});
+})();
 
-vi.mock('../schema/index.js', () => ({
+void vi.mock('../schema/index.js', () => ({
   createCompletionHandler: createHandlerMock,
 }));
 

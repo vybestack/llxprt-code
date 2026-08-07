@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { ConfirmationRequiredError, ShellProcessor } from './shellProcessor.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../../ui/commands/types.js';
@@ -23,20 +23,18 @@ function getExpectedEscapedArgForPlatform(arg: string): string {
   return escapeShellArg(arg, shell);
 }
 
-const mockCheckCommandPermissions = vi.hoisted(() => vi.fn());
+const mockCheckCommandPermissions = vi.fn();
 
-const mockShellExecute = vi.hoisted(() => vi.fn());
+const mockShellExecute = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original = await importOriginal<object>();
-  return {
-    ...original,
-    checkCommandPermissions: mockCheckCommandPermissions,
-    ShellExecutionService: {
-      execute: mockShellExecute,
-    },
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  checkCommandPermissions: mockCheckCommandPermissions,
+  ShellExecutionService: {
+    execute: mockShellExecute,
+  },
+}));
 
 const SUCCESS_RESULT = {
   output: 'default shell output',
@@ -187,7 +185,9 @@ describe('ShellProcessor', () => {
       disallowedCommands: ['rm -rf /'],
     });
     // Override the approval mode for this test
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+    (
+      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(ApprovalMode.YOLO);
     mockShellExecute.mockReturnValue({
       result: Promise.resolve({ ...SUCCESS_RESULT, output: 'deleted' }),
     });
@@ -216,7 +216,9 @@ describe('ShellProcessor', () => {
       blockReason: 'System commands are blocked',
     });
     // Set approval mode to YOLO
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
+    (
+      mockConfig.getApprovalMode as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(ApprovalMode.YOLO);
 
     await expect(processor.process(prompt, context)).rejects.toThrow(
       /Blocked command: "reboot". Reason: System commands are blocked/,

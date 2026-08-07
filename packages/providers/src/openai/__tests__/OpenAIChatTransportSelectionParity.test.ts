@@ -25,7 +25,7 @@
  * @requirement:REQ-PE-001 (issue #2817)
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import {
@@ -35,7 +35,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: class FakeOpenAI {
     readonly chat = {
       completions: { create: vi.fn(async () => ({})) },
@@ -46,7 +46,7 @@ vi.mock('openai', () => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 

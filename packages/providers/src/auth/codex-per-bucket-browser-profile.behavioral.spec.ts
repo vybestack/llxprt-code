@@ -4,19 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import {
   startLocalOAuthCallback,
   type LocalOAuthCallbackOptions,
 } from './local-oauth-callback.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
-  openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-  shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  () => ({
+    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+  }),
+);
 
-vi.mock('./local-oauth-callback.js', () => ({
+void vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(
     async (options: LocalOAuthCallbackOptions) => ({
       redirectUri: 'http://127.0.0.1:1455/callback',
@@ -58,7 +69,9 @@ describe('Codex per-bucket browser profile selection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(shouldLaunchBrowser).mockReturnValue(true);
+    (shouldLaunchBrowser as Mock<typeof shouldLaunchBrowser>).mockReturnValue(
+      true,
+    );
     globalThis.fetch = vi.fn(async (_input, init) => {
       const body = new URLSearchParams(String(init?.body));
       const accountId = body.get('code')?.slice(0, 12) ?? 'codex-account';
@@ -128,19 +141,19 @@ describe('Codex per-bucket browser profile selection', () => {
       workAuth,
       personalAuth,
     ]);
-    const browserLaunches = vi
-      .mocked(openBrowserSecurely)
-      .mock.calls.map(([url, options]) => ({
-        state: new URL(url).searchParams.get('state'),
-        profileDirectory: options?.profileDirectory,
-      }));
+    const browserLaunches = (
+      openBrowserSecurely as Mock<typeof openBrowserSecurely>
+    ).mock.calls.map(([url, options]) => ({
+      state: new URL(url).searchParams.get('state'),
+      profileDirectory: options?.profileDirectory,
+    }));
     const stateToBucket = new Map(
-      vi
-        .mocked(startLocalOAuthCallback)
-        .mock.calls.map(([options], index) => [
-          options.state,
-          index === 0 ? 'work' : 'personal',
-        ]),
+      (
+        startLocalOAuthCallback as Mock<typeof startLocalOAuthCallback>
+      ).mock.calls.map(([options], index) => [
+        options.state,
+        index === 0 ? 'work' : 'personal',
+      ]),
     );
     const bucketProfiles = Object.fromEntries(
       browserLaunches.map(({ state, profileDirectory }) => [

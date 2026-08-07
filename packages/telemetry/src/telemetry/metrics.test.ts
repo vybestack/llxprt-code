@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 
 /**
@@ -20,7 +20,7 @@ const {
   mockCreateHistogramFn,
   mockMeterInstance,
   mockGetMeterFn,
-} = vi.hoisted(() => {
+} = (() => {
   const counterAdd = vi.fn();
   const histogramRecord = vi.fn();
   const createCounter = vi.fn();
@@ -41,9 +41,9 @@ const {
     mockMeterInstance: meterInstance,
     mockGetMeterFn: getMeter,
   };
-});
+})();
 
-vi.mock('@opentelemetry/api', () => ({
+void vi.mock('@opentelemetry/api', () => ({
   metrics: {
     getMeter: mockGetMeterFn,
   },

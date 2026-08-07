@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { Config } from '../config/config.js';
 import {
   resetSettingsService,
@@ -18,16 +18,14 @@ import {
 import process from 'process';
 import { performance } from 'node:perf_hooks';
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    existsSync: vi.fn(() => true),
-    readFileSync: vi.fn(() => '{}'),
-    writeFileSync: vi.fn(),
-    mkdirSync: vi.fn(),
-  };
-});
+const actual = { ...(await import('fs')) };
+void vi.mock('fs', () => ({
+  ...actual,
+  existsSync: vi.fn(() => true),
+  readFileSync: vi.fn(() => '{}'),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
 
 describe('Settings Remediation Integration', () => {
   let config: Config;

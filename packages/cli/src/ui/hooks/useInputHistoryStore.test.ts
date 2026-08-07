@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { useInputHistoryStore } from './useInputHistoryStore.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 

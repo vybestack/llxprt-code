@@ -9,7 +9,7 @@ import { OverflowProvider } from '../../contexts/OverflowContext.js';
 import { MaxSizedBox, setMaxSizedBoxDebugging } from './MaxSizedBox.js';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 describe('<MaxSizedBox />', () => {
   // Make sure MaxSizedBox logs errors on invalid configurations.

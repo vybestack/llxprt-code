@@ -12,30 +12,27 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { handleDisable, disableCommand } from './disable.js';
 import yargs from 'yargs';
 import { FatalConfigError } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
 import type * as extensionModule from '../../config/extension.js';
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
 const mockDisableExtension: Mock<typeof extensionModule.disableExtension> =
-  vi.hoisted(() => vi.fn());
+  vi.fn();
 
-vi.mock('../../config/extension.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/extension.js')>();
-  return {
-    ...actual,
-    disableExtension: mockDisableExtension,
-  };
-});
+const actual = { ...(await import('../../config/extension.js')) };
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  disableExtension: mockDisableExtension,
+}));
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: Error) => error.message),
 }));
 

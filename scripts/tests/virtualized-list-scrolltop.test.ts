@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import React, { createRef } from 'react';
 import { Box, Text } from 'ink';
 import { render } from 'ink-testing-library';

@@ -20,7 +20,7 @@
  * exercised exactly as production runs it.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';

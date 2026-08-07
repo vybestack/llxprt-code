@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
-import type { Mock } from 'vitest';
-import { vi } from 'vitest';
+import type { Mock } from 'bun:test';
+import { vi } from 'bun:test';
 import {
   KeypressProvider,
   useKeypressContext,
@@ -27,13 +26,11 @@ import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
 
 // Mock the 'ink' module to control stdin
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+const original = { ...(await import('ink')) };
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 const PASTE_START = '\x1B[200~';
 const PASTE_END = '\x1B[201~';
@@ -77,7 +74,7 @@ describe('KeypressContext - Kitty Protocol', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });
@@ -412,7 +409,7 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       act(() => writeSequence(pastedText));
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(keyHandler).toHaveBeenCalledTimes(1);
       });
 
@@ -571,7 +568,7 @@ describe('Drag and Drop Handling', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });

@@ -18,7 +18,7 @@
  *   `.gemini/extensions`.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -32,15 +32,13 @@ import {
 } from '../extension.js';
 import { SettingScope } from '../settings.js';
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+const mockedOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
-vi.mock('../settings.js', () => ({
+void vi.mock('../settings.js', () => ({
   loadSettings: vi.fn().mockReturnValue({ merged: {} }),
   SettingScope: {
     User: 'User',

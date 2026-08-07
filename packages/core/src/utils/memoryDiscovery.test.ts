@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -18,13 +26,11 @@ import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(),
+}));
 
 describe('memoryDiscovery', () => {
   const DEFAULT_FOLDER_TRUST = true;
@@ -57,7 +63,7 @@ describe('memoryDiscovery', () => {
     projectRoot = await createEmptyDir(path.join(testRootDir, 'project'));
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
     homedir = await createEmptyDir(path.join(testRootDir, 'userhome'));
-    vi.mocked(os.homedir).mockReturnValue(homedir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(homedir);
     // Point the canonical config/memory/data helpers at this test's homedir so
     // the fixture layout (which places "global" memory under <homedir>/.llxprt)
     // exercises the real global-memory read path without depending on the

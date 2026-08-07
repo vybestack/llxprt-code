@@ -19,7 +19,7 @@
  *       behavior; post-auth client binding; static discovery; no deep imports.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { ProviderInfo, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { buildAgent } from './helpers/agentHarness.js';
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from '../testApi.js';
+import type { Mock } from 'bun:test';
 import { AgentTerminateMode, type SubagentActivityEvent } from './types.js';
 import type { AgentDefinition, OutputConfig } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';

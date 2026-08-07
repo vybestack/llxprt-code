@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { isDestructiveCommand } from '@vybestack/llxprt-code-policy';
 
 describe('CodeQL js/polynomial-redos: dd of= linear scan preserves credential detection', () => {

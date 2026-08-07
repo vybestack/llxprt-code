@@ -20,7 +20,7 @@
  * These execute the REAL bash scripts against the fake gh infrastructure.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { writeFileSync } from 'fs';
 import {
   createFakeRepo,

@@ -17,7 +17,7 @@
  * pulling in PolicyEngine.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { HookSystem } from '../hookSystem.js';
 import {
@@ -74,7 +74,7 @@ class FakeMessageBus {
 // Mock for DebugLogger module (avoids file system access)
 // ---------------------------------------------------------------------------
 
-vi.mock('../../debug/index.js', () => {
+void vi.mock('../../debug/index.js', () => {
   const mockLogger = {
     log: vi.fn(),
     warn: vi.fn(),
@@ -91,7 +91,7 @@ vi.mock('../../debug/index.js', () => {
   };
 });
 
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
   promises: {},

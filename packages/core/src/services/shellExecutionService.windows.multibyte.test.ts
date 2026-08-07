@@ -4,27 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { spawn } from 'child_process';
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { ShellExecutionService } from './shellExecutionService.js';
 import type { ChildProcess } from 'child_process';
 
-const mockPlatform = vi.hoisted(() => vi.fn(() => 'win32'));
-const mockSpawn = vi.hoisted(() => vi.fn());
+const mockPlatform = vi.fn(() => 'win32');
+const mockSpawn = vi.fn();
 
-vi.mock('os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('os');
+const __actual = { ...(await import('os')) };
+void vi.mock('os', () => {
+  const actual = __actual as typeof import('os');
   return { ...actual, platform: mockPlatform };
 });
-vi.mock('child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('child_process');
+const __actual2 = { ...(await import('child_process')) };
+void vi.mock('child_process', () => {
+  const actual = __actual2 as typeof import('child_process');
   return { ...actual, spawn: mockSpawn };
 });
-vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
-vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
-vi.mock('../utils/systemEncoding.js', () => ({
+void vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
+void vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
+void vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('utf-8'),
   getCachedEncodingForBuffer: vi.fn().mockReturnValue('utf-8'),
 }));
@@ -45,7 +48,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       value: platform,
       configurable: true,
     });
-    vi.stubGlobal('process', processStub);
+    setGlobal('process', processStub);
   }
 
   beforeEach(() => {
@@ -68,7 +71,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
   });
 
   it('should handle Japanese text in shell commands without hanging', async () => {

@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
 import { appEvents, AppEvent } from '../../../../utils/events.js';
 import { StreamingState } from '../../../types.js';

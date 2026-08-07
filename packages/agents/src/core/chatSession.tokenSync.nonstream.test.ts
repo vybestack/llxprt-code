@@ -9,7 +9,7 @@
  * (non-streaming responses). Sibling to chatSession.tokenSync.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -132,7 +132,8 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const actualCount = historyService.getTotalTokens();
       expect(actualCount).toBe(5000);
-      expect(recordActual).toHaveBeenCalledExactlyOnceWith('test-prompt-id', {
+      expect(recordActual).toHaveBeenCalledTimes(1);
+      expect(recordActual).toHaveBeenCalledWith('test-prompt-id', {
         actualPromptTokens: 5000,
         cachedTokens: 0,
       });

@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ToolMessageProps } from './ToolMessage.js';
 import { ToolMessage } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
@@ -20,13 +20,15 @@ import { SHELL_COMMAND_NAME, TOOL_STATUS } from '../../constants.js';
 import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 import type { ShellState } from '../../cliUiRuntime.js';
 
-const isActivePtyMock = vi.hoisted(() => vi.fn());
-const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+const isActivePtyMock = vi.fn();
+const getLastActivePtyIdMock = vi.fn();
+
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   return {
     ...actual,
@@ -38,7 +40,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('../RespondingSpinner.js', () => ({
+void vi.mock('../RespondingSpinner.js', () => ({
   RespondingSpinner: ({
     nonRespondingDisplay,
   }: {
@@ -53,7 +55,7 @@ vi.mock('../RespondingSpinner.js', () => ({
     ) : null;
   },
 }));
-vi.mock('./DiffRenderer.js', () => ({
+void vi.mock('./DiffRenderer.js', () => ({
   DiffRenderer: function MockDiffRenderer({
     diffContent,
   }: {
@@ -62,12 +64,12 @@ vi.mock('./DiffRenderer.js', () => ({
     return <Text color={Colors.Foreground}>MockDiff:{diffContent}</Text>;
   },
 }));
-vi.mock('../../utils/MarkdownDisplay.js', () => ({
+void vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({ text }: { text: string }) {
     return <Text color={Colors.Foreground}>MockMarkdown:{text}</Text>;
   },
 }));
-vi.mock('../ShellInputPrompt.js', () => ({
+void vi.mock('../ShellInputPrompt.js', () => ({
   ShellInputPrompt: ({ focus }: { focus: boolean }) =>
     focus ? React.createElement(Text, null, 'MockShellInput') : null,
 }));

@@ -19,7 +19,7 @@
  * images, so a reintroduced pin has to be deliberate rather than accidental.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import yaml from 'js-yaml';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

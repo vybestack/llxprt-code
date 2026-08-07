@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { MessageType } from '../../../types.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';
 
-vi.mock('../../../../config/environmentLoader.js', () => ({
+void vi.mock('../../../../config/environmentLoader.js', () => ({
   loadHierarchicalLlxprtMemory: vi.fn(),
 }));
 
@@ -97,7 +97,9 @@ describe('useMemoryRefreshAction', () => {
   });
 
   it('uses loadHierarchicalLlxprtMemory and config setters when jit mode is disabled', async () => {
-    vi.mocked(loadHierarchicalLlxprtMemory).mockResolvedValue({
+    (
+      loadHierarchicalLlxprtMemory as Mock<typeof loadHierarchicalLlxprtMemory>
+    ).mockResolvedValue({
       memoryContent: 'non-jit memory',
       fileCount: 3,
       filePaths: ['/tmp/a', '/tmp/b', '/tmp/c'],

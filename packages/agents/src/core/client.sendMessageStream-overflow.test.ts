@@ -9,7 +9,16 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type {
   ContentBlock,
   AgentMessageInput,
@@ -27,7 +36,11 @@ import {
 } from './client-test-helpers.js';
 
 // Mock prompts module before imports
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+const realConfigModule = {
+  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
+
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
     Promise.resolve('Test system instruction'),
   ),
@@ -37,7 +50,7 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
-vi.mock('./clientToolGovernance.js', () => ({
+void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
     Array.isArray(v)
@@ -57,19 +70,19 @@ const {
   mockGenerateContentFn,
   mockEmbedContentFn,
   mockTurnRunFn,
-} = vi.hoisted(() => ({
+} = {
   mockChatCreateFn: vi.fn(),
   mockGenerateContentFn: vi.fn(),
   mockEmbedContentFn: vi.fn(),
   mockTurnRunFn: vi.fn(),
-}));
+};
 
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
   todoStoreWritePausedMock,
   mockTodoStoreConstructor,
-} = vi.hoisted(() => {
+} = (() => {
   const readMock = vi.fn();
   const readPausedMock = vi.fn();
   const writePausedMock = vi.fn();
@@ -84,22 +97,25 @@ const {
     todoStoreWritePausedMock: writePausedMock,
     mockTodoStoreConstructor: constructorMock,
   };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-core/services/complexity-analyzer.js', () => ({
-  ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
-    analyzeComplexity: vi.fn().mockReturnValue({
-      complexityScore: 0.2,
-      isComplex: false,
-      detectedTasks: [],
-      sequentialIndicators: [],
-      questionCount: 0,
-      shouldSuggestTodos: false,
-    }),
-  })),
-}));
+void vi.mock(
+  '@vybestack/llxprt-code-core/services/complexity-analyzer.js',
+  () => ({
+    ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
+      analyzeComplexity: vi.fn().mockReturnValue({
+        complexityScore: 0.2,
+        isComplex: false,
+        detectedTasks: [],
+        sequentialIndicators: [],
+        questionCount: 0,
+        shouldSuggestTodos: false,
+      }),
+    })),
+  }),
+);
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
     TodoReminderService: vi.fn().mockImplementation(() => ({
@@ -110,16 +126,14 @@ vi.mock(
     })),
   }),
 );
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  return {
-    ...actual,
-    LocalTodoStore: mockTodoStoreConstructor,
-  };
-});
-vi.mock('./turn', (importOriginal) => {
-  const result = importOriginal() as
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...actual,
+  LocalTodoStore: mockTodoStoreConstructor,
+}));
+const __actual = { ...(await import('./turn')) };
+void vi.mock('./turn', () => {
+  const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
   class MockTurn {
@@ -139,14 +153,16 @@ vi.mock('./turn', (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core/config/config.js');
-vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
+  automock(realConfigModule),
+);
+void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
     getResponseText: (result: MockResponseShape) =>
@@ -155,51 +171,45 @@ vi.mock(
         .join('') ?? undefined,
   }),
 );
-vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
   logApiRequest: vi.fn(),
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
 }));
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual3,
+  ideContext: {
+    ...actual3.ideContext,
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(),
+    setIdeContext: vi.fn(),
+    clearIdeContext: vi.fn(),
+  },
+}));
+const actual4 = {
+  ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
+  const tokenLimit = vi.fn();
   return {
-    ...actual,
-    ideContext: {
-      ...actual.ideContext,
-      getIdeContext: vi.fn(),
-      subscribeToIdeContext: vi.fn(),
-      setIdeContext: vi.fn(),
-      clearIdeContext: vi.fn(),
-    },
+    ...actual4,
+    tokenLimit,
+    resolveEffectiveContextLimit: vi.fn(
+      (model: string, userCtx?: number, provCtx?: number) => {
+        const ok = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v > 0;
+        if (ok(userCtx)) return userCtx;
+        if (ok(provCtx)) return provCtx;
+        return tokenLimit(model);
+      },
+    ),
   };
 });
-vi.mock(
-  '@vybestack/llxprt-code-core/core/tokenLimits.js',
-  async (importOriginal) => {
-    const actual = await importOriginal();
-    const tokenLimit = vi.fn();
-    return {
-      ...actual,
-      tokenLimit,
-      resolveEffectiveContextLimit: vi.fn(
-        (model: string, userCtx?: number, provCtx?: number) => {
-          const ok = (v: unknown): v is number =>
-            typeof v === 'number' && Number.isFinite(v) && v > 0;
-          if (ok(userCtx)) return userCtx;
-          if (ok(provCtx)) return provCtx;
-          return tokenLimit(model);
-        },
-      ),
-    };
-  },
-);
-vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
     getLastPromptTokenCount: vi.fn(),
@@ -246,6 +256,37 @@ describe('AgentClient (client.ts)', () => {
       getContextLimit: vi.fn(() => tokenLimit()),
     });
 
+    /** Builds a mock chat, installs it on the client, and returns it for assertion. */
+    const installMockChat = (
+      tokenCount: number,
+      extras: Partial<ChatSession> = {},
+    ): Partial<ChatSession> => {
+      const chat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        ...baselineFns(tokenCount),
+        ...extras,
+      };
+      client['chat'] = chat as ChatSession;
+      return chat;
+    };
+
+    /** Installs a generator whose countTokens always resolves to 0 tokens. */
+    const installCountTokensGenerator = (): void => {
+      client['contentGenerator'] = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      } as ContentGenerator;
+    };
+
+    /** Makes the mocked Turn yield a single Content "ok" event. */
+    const yieldOkStream = (): void => {
+      mockTurnRunFn.mockReturnValue(
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
+    };
+
     beforeEach(() => {
       (
         client as unknown as {
@@ -262,29 +303,26 @@ describe('AgentClient (client.ts)', () => {
     it('should defer overflow decisions to finalized provider enforcement', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       // Set last prompt token count
       const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
-      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       // Mock the chat to return the lastPromptTokenCount
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      const mockChat = installMockChat(lastPromptTokenCount, {
         performCompression: vi
           .fn()
           .mockResolvedValue(PerformCompressionResult.FAILED),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // Remaining = 100. Threshold (95%) = 95.
       // We need a request > 95 tokens.
@@ -321,37 +359,31 @@ describe('AgentClient (client.ts)', () => {
       // the normal send/compression/enforcement path should attempt to resolve
       // the overflow with the switched model's tokenizer.
       const MOCKED_TOKEN_LIMIT = 200000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       // e.g. 249,442 stored tokens against a 200,000-token model.
       const lastPromptTokenCount = 249442;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
-      );
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: vi
           .fn()
           .mockReturnValue({ speaker: 'human', blocks: [] }),
         estimatePendingTokens: vi.fn().mockResolvedValue(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // A small "continue" request — remaining is -49,442.
       const request: ContentBlock[] = [{ type: 'text', text: 'continue' }];
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Act
       const stream = client.sendMessageStream(
@@ -375,29 +407,26 @@ describe('AgentClient (client.ts)', () => {
       // bare functionResponse part. The negative-remaining short-circuit must
       // defer to the send path rather than tripping a bogus guard.
       const MOCKED_TOKEN_LIMIT = 200000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-
-      const lastPromptTokenCount = 249442;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      const lastPromptTokenCount = 249442;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
+
+      installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: vi.fn().mockReturnValue({
           speaker: 'tool',
           blocks: [],
         }),
         estimatePendingTokens: vi.fn().mockResolvedValue(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // Pure tool_response continuation — 0 tokens by text estimate.
       const request: ContentBlock[] = [
@@ -409,10 +438,7 @@ describe('AgentClient (client.ts)', () => {
         },
       ];
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Act
       const stream = client.sendMessageStream(
@@ -434,25 +460,22 @@ describe('AgentClient (client.ts)', () => {
     it('should defer model-aware tokenization to finalized provider enforcement when remaining capacity is positive', async () => {
       // Arrange — legacy client preflight must not invoke generic tokenization.
       const MOCKED_TOKEN_LIMIT = 10000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 1000;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 1000;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const estimateSpy = vi.fn();
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         estimatePendingTokens: estimateSpy,
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       const request = [{ type: 'text' as const, text: 'continue' }];
 
@@ -474,27 +497,24 @@ describe('AgentClient (client.ts)', () => {
       // Arrange — proves the negative-remaining short-circuit avoids the
       // tokenizer-backed sizing path entirely (it returns before sizing).
       const MOCKED_TOKEN_LIMIT = 200000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 249442;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 249442;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
       const convertSpy = vi.fn();
       const estimateSpy = vi.fn();
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: convertSpy,
         estimatePendingTokens: estimateSpy,
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Act
       const stream = client.sendMessageStream(
@@ -519,23 +539,19 @@ describe('AgentClient (client.ts)', () => {
       // Arrange — a minimal chat double without tokenizer methods must still proceed
       // to finalized provider enforcement.
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 0;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 0;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(lastPromptTokenCount);
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Build a tool_response payload large enough that its JSON/4 exceeds
       // the 95% threshold of the full limit (1000 * 0.95 = 950 tokens).
@@ -569,21 +585,21 @@ describe('AgentClient (client.ts)', () => {
     it('should not invoke the legacy client tokenizer during preflight when it would throw (issue 2402)', async () => {
       // Arrange — the client tokenizer would throw if invoked during preflight.
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 0;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 0;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         estimatePendingTokens: vi
           .fn()
           .mockRejectedValue(new Error('tokenizer unavailable')),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
       const request = [
         {
@@ -613,23 +629,19 @@ describe('AgentClient (client.ts)', () => {
     it('should not let inlineData/fileData binary payloads inflate the preflight estimate (issue 2402)', async () => {
       // Arrange — large binary payloads must not inflate the fallback estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
-      const lastPromptTokenCount = 0;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
       );
+      const lastPromptTokenCount = 0;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(lastPromptTokenCount);
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       const request: ContentBlock[] = [
         { type: 'text', text: 'short' }, // 5 chars → 1 token
@@ -661,22 +673,18 @@ describe('AgentClient (client.ts)', () => {
     it('should defer sticky-model limit enforcement to the finalized provider envelope', async () => {
       const STICKY_MODEL_LIMIT = 1000;
       client['currentSequenceModel'] = 'gemini-1.5-flash';
-      vi.mocked(tokenLimit).mockReturnValue(STICKY_MODEL_LIMIT);
-      const lastPromptTokenCount = 900;
-      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-        lastPromptTokenCount,
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        STICKY_MODEL_LIMIT,
       );
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
-      };
-      client['chat'] = mockChat as ChatSession;
+      const lastPromptTokenCount = 900;
+      (
+        uiTelemetryService.getLastPromptTokenCount as Mock<
+          typeof uiTelemetryService.getLastPromptTokenCount
+        >
+      ).mockReturnValue(lastPromptTokenCount);
+      const mockChat = installMockChat(lastPromptTokenCount);
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // Remaining (sticky) = 100. Threshold (95%) = 95.
       // We need a request > 95 tokens.
@@ -707,14 +715,12 @@ describe('AgentClient (client.ts)', () => {
     it('should forward large binary requests to provider enforcement without client overflow preflight', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000000; // 1M tokens
-      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
+        MOCKED_TOKEN_LIMIT,
+      );
 
       const lastPromptTokenCount = 10000;
-      const mockChat: Partial<ChatSession> = {
-        ...baselineFns(lastPromptTokenCount),
-        getHistory: vi.fn().mockReturnValue([]),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(lastPromptTokenCount);
 
       // Simulate a PDF file with large base64 data (11MB when encoded).
       // The client forwards binary-bearing requests without estimating them;
@@ -771,11 +777,7 @@ describe('AgentClient (client.ts)', () => {
         .mockReturnValueOnce(mockStream1)
         .mockReturnValueOnce(mockStream2);
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
@@ -839,11 +841,7 @@ describe('AgentClient (client.ts)', () => {
 
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
@@ -893,16 +891,9 @@ describe('AgentClient (client.ts)', () => {
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       todoStoreReadMock.mockResolvedValue([]);
 
@@ -959,11 +950,7 @@ describe('AgentClient (client.ts)', () => {
         })(),
       );
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-infinite-invalid-stream';

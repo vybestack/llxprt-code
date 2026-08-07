@@ -5,7 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { HooksList } from './HooksList.js';
 import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
 import {

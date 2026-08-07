@@ -21,13 +21,7 @@
  * then finishes; turn 2 just finishes.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from '../../../testApi.js';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';

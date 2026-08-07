@@ -2,7 +2,7 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P11
  * @requirement REQ-SP2-001
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -19,7 +19,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
@@ -30,7 +30,7 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-vi.mock('@google/genai', () => {
+void vi.mock('@google/genai', () => {
   class FakeGoogleGenAI {
     readonly models: {
       generateContentStream: ReturnType<typeof vi.fn>;

@@ -8,7 +8,8 @@
  * into scripts/pr-review-llm-helpers.ts.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '../../packages/test-utils/src/async-timers.js';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   isParseError,
   runLlxprtPromptWithParse,
@@ -174,7 +175,7 @@ describe('runLlxprtPromptWithParse', () => {
         { maxRetries: 1 },
       );
 
-      await vi.advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(0);
       expect(vi.getTimerCount()).toBe(0);
       await expect(resultPromise).resolves.toMatchObject({ summary: 'ok' });
     } finally {
@@ -228,11 +229,13 @@ describe('runLlxprtPromptWithParse', () => {
 
   it('passes the raw response to the parse-failure artifact saver on final failure', async () => {
     const llm = async () => 'totally not json';
-    let savedRaw: string | null = null;
-    let savedPhase: string | null = null;
+    const captured: { raw: string | null; phase: string | null } = {
+      raw: null,
+      phase: null,
+    };
     const saveFn = async (phase: string, raw: string) => {
-      savedRaw = raw;
-      savedPhase = phase;
+      captured.raw = raw;
+      captured.phase = phase;
     };
     await expect(
       runLlxprtPromptWithParse(llm, parseMapResponse, {
@@ -242,8 +245,8 @@ describe('runLlxprtPromptWithParse', () => {
         saveParseFailure: saveFn,
       }),
     ).rejects.toThrow();
-    expect(savedRaw).toBe('totally not json');
-    expect(savedPhase).toBe('map');
+    expect(captured.raw).toBe('totally not json');
+    expect(captured.phase).toBe('map');
   });
 
   it('does not call saveParseFailure when the LLM succeeds', async () => {

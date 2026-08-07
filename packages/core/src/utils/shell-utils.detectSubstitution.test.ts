@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, vi } from 'vitest';
+import { expect, describe, it, vi } from 'bun:test';
 
 /**
  * Tests for detectCommandSubstitution through the REGEX FALLBACK path.
@@ -14,7 +14,10 @@ import { expect, describe, it, vi } from 'vitest';
  */
 
 // Hoisted mock: applies to all tests in this file.
-vi.mock('./shell-parser.js', () => ({
+
+const realShellParserModule = { ...(await import('./shell-parser.js')) };
+void vi.mock('./shell-parser.js', () => ({
+  ...realShellParserModule,
   isParserAvailable: () => false,
   parseShellCommand: () => null,
   extractCommandNames: () => [],

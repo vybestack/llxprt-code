@@ -28,7 +28,7 @@
 //   - provider-switch model-change guard (line 1130): a differing model reflects;
 //     the no-op same-model case does not error.
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   type AgentEvent,

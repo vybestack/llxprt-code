@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from '../testApi.js';
+import { describe, expect, it, vi } from 'bun:test';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import {
@@ -47,7 +47,8 @@ describe('recordFinalizedPromptEnvelopeEstimate', () => {
       estimate(),
     );
 
-    expect(refineEstimate).toHaveBeenCalledExactlyOnceWith('prompt-finalized', {
+    expect(refineEstimate).toHaveBeenCalledTimes(1);
+    expect(refineEstimate).toHaveBeenCalledWith('prompt-finalized', {
       provider: 'openai',
       model: 'gpt-4o',
       estimatedTokens: 12,

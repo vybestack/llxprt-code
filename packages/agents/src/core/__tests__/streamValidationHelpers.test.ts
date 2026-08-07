@@ -13,7 +13,7 @@
  * @plan:PLAN-20260707-AGENTNEUTRAL.P09
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { validateStreamCompletion } from '../streamValidationHelpers.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';

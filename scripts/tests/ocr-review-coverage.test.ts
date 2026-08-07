@@ -5,7 +5,7 @@
  */
 
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   makeLoadFunction,
   makeLoadFunctionsTogether,

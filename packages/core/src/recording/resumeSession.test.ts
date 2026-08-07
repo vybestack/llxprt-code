@@ -28,7 +28,7 @@
  * — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';

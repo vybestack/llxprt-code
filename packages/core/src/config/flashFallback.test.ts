@@ -4,14 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { Config } from './config.js';
 import { DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 
-vi.mock('node:fs', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:fs');
+const __actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => {
+  const actual = __actual as typeof import('node:fs');
   const mockExistsSync = vi.fn();
   const mockStatSync = vi.fn();
   const mockExports = {
@@ -27,8 +28,8 @@ describe('Flash Model Fallback Configuration', () => {
   let config: Config;
 
   beforeEach(() => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.statSync).mockReturnValue({
+    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+    (fs.statSync as Mock<typeof fs.statSync>).mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
     config = new Config({

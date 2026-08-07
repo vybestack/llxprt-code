@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -40,7 +40,7 @@ function hasSecret(value: unknown): boolean {
 function stepNamed(steps: WorkflowStep[], name: string): WorkflowStep {
   return (
     steps.find((step) => step.name === name) ??
-    expect.fail(`missing step: ${name}`)
+    raiseMissing(`missing step: ${name}`)
   );
 }
 
@@ -118,6 +118,11 @@ function assertJobCheckoutSecurity(
   expect(idxTrusted).toBeLessThan(idxQuota);
   expect(idxQuota).toBeLessThan(idxTarget);
   expect(idxQuota).toBeLessThan(idxInternal);
+}
+
+/** Bun's `expect` has no `fail`; throw so the expression stays `never`. */
+function raiseMissing(message: string): never {
+  throw new Error(message);
 }
 
 describe('quota-selected workflow credentials', () => {

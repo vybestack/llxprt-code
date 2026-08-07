@@ -8,7 +8,7 @@
  * Tests for OpenAI Responses Provider prompt-caching setting support (Issue #1145)
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { sanitizePromptCacheKey } from '../sanitizePromptCacheKey.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

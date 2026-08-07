@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { spawn } from 'child_process';
 
-const mockPlatform = vi.hoisted(() => vi.fn(() => 'win32'));
-vi.mock('os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('os');
+const mockPlatform = vi.fn(() => 'win32');
+const __actual = { ...(await import('os')) };
+void vi.mock('os', () => {
+  const actual = __actual as typeof import('os');
   return { ...actual, platform: mockPlatform };
 });
 
@@ -28,21 +29,20 @@ const fakeChildFactory = () => {
   return child;
 };
 
-vi.mock('child_process', (orig) => {
-  const mod = orig() as typeof import('child_process');
-  return {
-    ...mod,
-    spawn: vi.fn(() => fakeChildFactory()),
-  };
-});
+const realChildProcessModule = { ...(await import('child_process')) };
 
-vi.mock('../utils/systemEncoding.js', () => ({
+void vi.mock('child_process', () => ({
+  ...realChildProcessModule,
+  spawn: vi.fn(() => fakeChildFactory()),
+}));
+
+void vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('shift_jis'),
   getCachedEncodingForBuffer: vi.fn().mockReturnValue('shift_jis'),
 }));
 
-vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
-vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
+void vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
+void vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
 
 import { ShellExecutionService } from './shellExecutionService.js';
 

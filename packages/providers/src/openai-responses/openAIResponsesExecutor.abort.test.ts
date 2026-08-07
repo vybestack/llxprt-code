@@ -20,7 +20,9 @@
  * Uses fake timers/signals deterministically — no wall-clock sleeps.
  */
 
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,
@@ -32,11 +34,9 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
-const getCoreSystemPromptAsyncSpy = vi.hoisted(() =>
-  vi.fn().mockResolvedValue('system prompt'),
-);
+const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
 }));
 
@@ -144,8 +144,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.clearAllTimers();
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 
@@ -159,7 +158,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,
@@ -181,7 +180,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       metadataAbortSignal: controller.signal,
@@ -204,7 +203,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: invocationController.signal,
@@ -231,7 +230,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
           'data: [DONE]\n\n',
         ]),
       });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,
@@ -249,7 +248,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
 
     // Wait for the first fetch to be called (transient failure), then the
     // retry backoff delay begins.
-    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1), {
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1), {
       interval: 1,
       timeout: 200,
     });
@@ -268,7 +267,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
     // First attempt: aborted fetch rejects with an AbortError (not retried).
     const abortError = new DOMException('aborted', 'AbortError');
     const fetchSpy = vi.fn().mockRejectedValueOnce(abortError);
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -17,28 +17,26 @@ let fsyncSyncError: Error | null = null;
 let unlinkSyncError: Error | null = null;
 let closeSyncError: Error | null = null;
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    writeSync: vi.fn((...args: Parameters<typeof fs.writeSync>) => {
-      if (writeSyncError) throw writeSyncError;
-      return actual.writeSync(...args);
-    }),
-    fsyncSync: vi.fn((...args: Parameters<typeof fs.fsyncSync>) => {
-      if (fsyncSyncError) throw fsyncSyncError;
-      return actual.fsyncSync(...args);
-    }),
-    unlinkSync: vi.fn((...args: Parameters<typeof fs.unlinkSync>) => {
-      if (unlinkSyncError) throw unlinkSyncError;
-      return actual.unlinkSync(...args);
-    }),
-    closeSync: vi.fn((...args: Parameters<typeof fs.closeSync>) => {
-      if (closeSyncError) throw closeSyncError;
-      return actual.closeSync(...args);
-    }),
-  };
-});
+const actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => ({
+  ...actual,
+  writeSync: vi.fn((...args: Parameters<typeof fs.writeSync>) => {
+    if (writeSyncError) throw writeSyncError;
+    return actual.writeSync(...args);
+  }),
+  fsyncSync: vi.fn((...args: Parameters<typeof fs.fsyncSync>) => {
+    if (fsyncSyncError) throw fsyncSyncError;
+    return actual.fsyncSync(...args);
+  }),
+  unlinkSync: vi.fn((...args: Parameters<typeof fs.unlinkSync>) => {
+    if (unlinkSyncError) throw unlinkSyncError;
+    return actual.unlinkSync(...args);
+  }),
+  closeSync: vi.fn((...args: Parameters<typeof fs.closeSync>) => {
+    if (closeSyncError) throw closeSyncError;
+    return actual.closeSync(...args);
+  }),
+}));
 
 // Import AFTER the mock is set up.
 const {

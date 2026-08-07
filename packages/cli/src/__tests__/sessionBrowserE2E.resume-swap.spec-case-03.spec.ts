@@ -15,7 +15,7 @@
  * Two-phase swap
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTrue } from '../test-utils/assertions.js';
 import * as fs from 'node:fs/promises';
 import { performResume } from '../services/performResume.js';

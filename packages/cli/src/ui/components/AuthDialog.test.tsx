@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 
@@ -12,7 +12,7 @@ const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
 const mockToggleOAuthEnabled = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getCliOAuthManager: () => ({
       authenticate: mockAuthenticate,

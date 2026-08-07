@@ -6,7 +6,7 @@
  * fail via VALUE MISMATCH against the P03 stubs (which return empty values).
  * P05 implements the real logic that makes them green.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   iContentFromAgentMessageInput,

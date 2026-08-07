@@ -17,7 +17,7 @@
  *    response, so a long response is linear rather than quadratic.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type React from 'react';
 import { EmojiFilter, type ThinkingBlock } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId } from '../../../types.js';

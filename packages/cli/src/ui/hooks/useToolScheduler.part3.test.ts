@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -20,7 +19,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
@@ -43,6 +42,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import type { HistoryItemWithoutId } from '../types.js';
+
+type OnCompleteFn = (
+  schedulerId: symbol,
+  tools: CompletedToolCall[],
+  options: { isPrimary: boolean },
+) => void | Promise<void>;
+type SetPendingHistoryItemFn = React.Dispatch<
+  React.SetStateAction<HistoryItemWithoutId | null>
+>;
 
 const buildRequest = (
   overrides: Partial<ToolCallRequestInfo> = {},
@@ -441,7 +450,9 @@ const mockToolWithLiveOutput = new MockTool({
   canUpdateOutput: true,
   shouldConfirmExecute: vi.fn(),
 });
-let mockOnUserConfirmForToolConfirmation: Mock;
+let mockOnUserConfirmForToolConfirmation: Mock<
+  ToolCallConfirmationDetails['onConfirm']
+>;
 const mockToolRequiresConfirmation = new MockTool({
   name: 'mockToolRequiresConfirmation',
   displayName: 'Mock Tool Requires Confirmation',
@@ -453,9 +464,9 @@ const mockToolRequiresConfirmation = new MockTool({
  * Used across multiple test suites to avoid sonarjs/no-identical-functions.
  */
 const renderScheduler = (
-  onComplete: Mock,
+  onComplete: Mock<OnCompleteFn>,
   mockConfig: Partial<Config>,
-  setPendingHistoryItem: Mock,
+  setPendingHistoryItem: Mock<SetPendingHistoryItemFn>,
 ) =>
   renderHook(() =>
     useReactToolScheduler(
@@ -474,13 +485,15 @@ describe('useReactToolScheduler (split)', () => {
   // live output updates, and cancellations, which are challenging to assert
   // correctly with the current testing setup. Further investigation is needed
   // to find a robust way to test these scenarios.
-  let onComplete: Mock;
-  let setPendingHistoryItem: Mock;
+  let onComplete: Mock<OnCompleteFn>;
+  let setPendingHistoryItem: Mock<SetPendingHistoryItemFn>;
 
   beforeEach(() => {
     onComplete = vi.fn();
     // Reset to DEFAULT approval mode (not YOLO from previous test suite)
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.DEFAULT);
+    (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
+      ApprovalMode.DEFAULT,
+    );
     setPendingHistoryItem = vi.fn();
 
     mockToolRegistry.getTool.mockClear();
@@ -500,9 +513,14 @@ describe('useReactToolScheduler (split)', () => {
       title: 'Mock Tool Requires Confirmation',
     };
     (
-      mockToolRequiresConfirmation.shouldConfirmExecute as Mock
+      mockToolRequiresConfirmation.shouldConfirmExecute as unknown as Mock<
+        (
+          params: Record<string, unknown>,
+          signal: AbortSignal,
+        ) => Promise<ToolCallConfirmationDetails | false>
+      >
     ).mockImplementation(
-      async (): Promise<ToolCallConfirmationDetails | null> =>
+      async (): Promise<ToolCallConfirmationDetails | false> =>
         confirmationDetails,
     );
 
@@ -511,7 +529,6 @@ describe('useReactToolScheduler (split)', () => {
 
   afterEach(() => {
     cleanup();
-    vi.clearAllTimers();
     vi.useRealTimers();
     for (const [sessionId, scheduler] of createdSchedulers.entries()) {
       scheduler.dispose();
@@ -524,7 +541,14 @@ describe('useReactToolScheduler (split)', () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     const confirmError = new Error('Confirmation check failed');
-    (mockTool.shouldConfirmExecute as Mock).mockRejectedValue(confirmError);
+    (
+      mockTool.shouldConfirmExecute as unknown as Mock<
+        (
+          params: Record<string, unknown>,
+          signal: AbortSignal,
+        ) => Promise<ToolCallConfirmationDetails | false>
+      >
+    ).mockRejectedValue(confirmError);
 
     const { result } = renderScheduler(
       onComplete,
@@ -542,7 +566,7 @@ describe('useReactToolScheduler (split)', () => {
       await schedule(request, new AbortController().signal);
     });
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),
@@ -552,7 +576,7 @@ describe('useReactToolScheduler (split)', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    const errorCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const errorCalls = onComplete.mock.calls[0][1];
     expect(errorCalls).toHaveLength(1);
     const errorCall = errorCalls[0];
     expect(errorCall.status).toBe('error');
@@ -564,7 +588,14 @@ describe('useReactToolScheduler (split)', () => {
   it('should handle error during execute', async () => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
-    (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(false);
+    (
+      mockTool.shouldConfirmExecute as unknown as Mock<
+        (
+          params: Record<string, unknown>,
+          signal: AbortSignal,
+        ) => Promise<ToolCallConfirmationDetails | false>
+      >
+    ).mockResolvedValue(false);
     const execError = new Error('Execution failed');
     mockTool.executeFn.mockRejectedValue(execError);
 
@@ -584,7 +615,7 @@ describe('useReactToolScheduler (split)', () => {
       await schedule(request, new AbortController().signal);
     });
 
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(onComplete).toHaveBeenCalledWith(
           expect.anything(),
@@ -594,7 +625,7 @@ describe('useReactToolScheduler (split)', () => {
       { interval: 10, timeout: 5000 },
     );
 
-    const executeCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
+    const executeCalls = onComplete.mock.calls[0][1];
     expect(executeCalls).toHaveLength(1);
     const execCall = executeCalls[0];
     expect(execCall.status).toBe('error');

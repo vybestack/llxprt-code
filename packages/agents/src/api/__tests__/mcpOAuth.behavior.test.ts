@@ -25,7 +25,7 @@
  * `new McpControl(deps)` with no type-defeating cast at the call site.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { McpControl } from '../control/mcpControl.js';
 import type {

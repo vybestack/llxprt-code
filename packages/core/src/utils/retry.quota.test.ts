@@ -7,7 +7,8 @@
  * Split from retry.test.ts for max-lines compliance.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   retryWithBackoff,
   isRetryableError,
@@ -233,7 +234,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     });
 
     // Wait for all timers to complete
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(4);
@@ -293,7 +294,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
       maxDelayMs: 30000,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(3);
@@ -333,7 +334,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
       maxDelayMs: 30000,
     }).catch((error) => error); // Expected to throw - catch it to prevent unhandled rejection
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     const error = await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -348,7 +349,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     for (const call of warnCalls) {
       const messageFn = call[0];
       if (typeof messageFn === 'function') {
-        const message = messageFn();
+        const message = String(messageFn());
         if (
           message.includes('Attempt 2 failed') &&
           message.includes('Max attempts reached')
@@ -396,7 +397,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
       maxDelayMs: 30000,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -410,7 +411,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     for (const call of warnCalls) {
       const messageFn = call[0];
       if (typeof messageFn === 'function') {
-        const message = messageFn();
+        const message = String(messageFn());
         // Look for the message with attempt number and retry delay
         if (
           message.includes('failed') &&
@@ -471,7 +472,7 @@ describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
       (error: unknown) => ({ ok: false as const, error }),
     );
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
 
     expect(await outcome).toStrictEqual({ ok: true, value: 'success' });
     expect(mockFn).toHaveBeenCalledTimes(3);
@@ -487,7 +488,7 @@ describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
       initialDelayMs: 10,
     }).catch((error) => error);
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     const error = await promise;
 
     expect(mockFn).toHaveBeenCalledTimes(2);

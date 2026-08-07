@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, expect, it, vi } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   CoreEvent,
@@ -252,13 +253,13 @@ describe('Zed config options', () => {
 
     try {
       coreEvents.emitSettingsChanged();
-      await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
+      await waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
       coreEvents.emit(CoreEvent.ModelProfileChanged, {
         model: 'alpha',
         providerName: 'test',
         displayLabel: 'test:alpha',
       });
-      await vi.waitFor(() => expect(sendUpdate).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(sendUpdate).toHaveBeenCalledTimes(2));
       stop();
       coreEvents.emitSettingsChanged();
       expect(sendUpdate).toHaveBeenCalledTimes(2);

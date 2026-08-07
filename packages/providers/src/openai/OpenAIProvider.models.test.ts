@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 
 // Use vi.hoisted so the mock is created in the hoisted scope the vi.mock
 // factory runs in. This avoids referencing a module-scoped binding from
 // inside the factory (a fragile pattern under parallel/multi-file runs) and
 // gives each run a cleanly resettable instance.
-const { mockModelsList } = vi.hoisted(() => ({
+const { mockModelsList } = {
   mockModelsList: vi.fn(),
-}));
+};
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: class MockOpenAI {
     readonly models = {
       list: mockModelsList,

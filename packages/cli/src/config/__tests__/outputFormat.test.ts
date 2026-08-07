@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   ApprovalMode,
   DEFAULT_FILE_FILTERING_OPTIONS,
@@ -16,18 +16,15 @@ import type { CliArgs } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import type { ContextResolutionResult } from '../interactiveContext.js';
 
-vi.mock('../policy.js', () => ({
+void vi.mock('../policy.js', () => ({
   createPolicyEngineConfig: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...original,
-    isRipgrepAvailable: vi.fn().mockResolvedValue(false),
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  isRipgrepAvailable: vi.fn().mockResolvedValue(false),
+}));
 
 const baseArgv: CliArgs = {
   model: undefined,

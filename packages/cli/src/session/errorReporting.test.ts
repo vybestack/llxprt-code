@@ -1,17 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { markMachineErrorReported } from './machineErrorReporting.js';
 
-const { writeToStderr } = vi.hoisted(() => ({
+const { writeToStderr } = {
   writeToStderr: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return { ...actual, writeToStderr };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  writeToStderr,
+}));
 
 // Loaded with top-level await instead of a static import so the module under
 // test is evaluated AFTER the core mock above is registered.

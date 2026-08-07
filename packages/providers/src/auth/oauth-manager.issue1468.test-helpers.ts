@@ -19,41 +19,43 @@
  * returning buckets, returning [] if they don't match.
  */
 
-import { vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
-import type * as Core from '@vybestack/llxprt-code-core';
-import type * as SettingsPackage from '@vybestack/llxprt-code-settings';
-import type * as Providers from '@vybestack/llxprt-code-providers';
+import { vi } from 'bun:test';
 
-// Hoisted mocks used by module factories
-const { mockLoadProfile, mockFetchAnthropicUsage } = vi.hoisted(() => ({
+// Real module snapshots captured before the mock registrations below
+const realLlxprtCodeProvidersModule = {
+  ...(await import('@vybestack/llxprt-code-providers')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
+const { mockLoadProfile, mockFetchAnthropicUsage } = {
   mockLoadProfile: vi.fn(),
   mockFetchAnthropicUsage: vi.fn(),
-}));
+};
 
 export { mockFetchAnthropicUsage, mockLoadProfile };
 
-vi.mock('@vybestack/llxprt-code-providers', () => {
-  const actual = importActualSync<typeof Providers>(
-    '@vybestack/llxprt-code-providers',
-  );
+void vi.mock('@vybestack/llxprt-code-providers', () => {
+  const actual = realLlxprtCodeProvidersModule;
   return {
     ...actual,
     fetchAnthropicUsage: mockFetchAnthropicUsage,
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<typeof Core>('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
   };
 });
 
-vi.mock('@vybestack/llxprt-code-settings', () => {
-  const actual = importActualSync<typeof SettingsPackage>(
-    '@vybestack/llxprt-code-settings',
-  );
+void vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     ProfileManager: class MockProfileManager {

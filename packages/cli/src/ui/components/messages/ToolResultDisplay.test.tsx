@@ -5,18 +5,18 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { Text } from 'ink';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 
-vi.mock('../../utils/MarkdownDisplay.js', () => ({
+void vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({ text }: { text: string }) {
     return <Text color="white">{`MockMarkdown:${text}`}</Text>;
   },
 }));
 
-vi.mock('./DiffRenderer.js', () => ({
+void vi.mock('./DiffRenderer.js', () => ({
   DiffRenderer: function MockDiffRenderer({
     diffContent,
     filename,
@@ -28,7 +28,7 @@ vi.mock('./DiffRenderer.js', () => ({
   },
 }));
 
-vi.mock('../AnsiOutput.js', () => ({
+void vi.mock('../AnsiOutput.js', () => ({
   AnsiOutputText: function MockAnsiOutput() {
     return <Text color="white">{`MockAnsiOutput`}</Text>;
   },

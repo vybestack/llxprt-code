@@ -3,7 +3,7 @@
  * @requirement REQ-SP2-001
  * @project-plans/debuglogging/requirements.md
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -19,11 +19,11 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => {
+void vi.mock('@anthropic-ai/sdk', () => {
   class FakeAnthropic {
     static created: Array<{
       instanceId: symbol;

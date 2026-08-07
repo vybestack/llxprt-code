@@ -19,7 +19,16 @@
  *   - argv.allowedMcpServerNames (overrides settings-level filtering)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -38,34 +47,41 @@ import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock('../trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('../trustedFolders.js')>(
-    '../trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
+const realProfileBootstrapModule = {
+  ...(await import('../profileBootstrap.js')),
+};
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('../trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return { ...actual, isWorkspaceTrusted: vi.fn().mockReturnValue(true) };
 });
 
-vi.mock('../sandboxConfig.js', () => ({
+void vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-const reloadSettingsState = vi.hoisted<{ current?: Settings }>(() => ({}));
+const reloadSettingsState = {} as { current?: Settings };
 
-vi.mock('../settings.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../settings.js')>();
-  return {
-    ...actual,
-    loadSettings: vi.fn((cwd: string) =>
-      reloadSettingsState.current === undefined
-        ? actual.loadSettings(cwd)
-        : { merged: reloadSettingsState.current },
-    ),
-  };
-});
+const actual = { ...(await import('../settings.js')) };
+void vi.mock('../settings.js', () => ({
+  ...actual,
+  loadSettings: vi.fn((cwd: string) =>
+    reloadSettingsState.current === undefined
+      ? actual.loadSettings(cwd)
+      : { merged: reloadSettingsState.current },
+  ),
+}));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([MOCK_CWD, process.cwd()]);
   return {
@@ -82,28 +98,22 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
+}));
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-vi.mock('../profileBootstrap.js', async () => {
-  const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
-    '../profileBootstrap.js',
-  );
-  const { SettingsService: RealSettingsService } = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+void vi.mock('../profileBootstrap.js', () => {
+  const actual = realProfileBootstrapModule;
+  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => ({
@@ -126,7 +136,7 @@ vi.mock('../profileBootstrap.js', async () => {
   };
 });
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -135,9 +145,9 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -262,10 +272,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     IdeClient: {
@@ -362,10 +370,10 @@ describe('mcpFilteringParity: MCP server filtering', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
@@ -376,7 +384,7 @@ describe('mcpFilteringParity: MCP server filtering', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });

@@ -25,7 +25,7 @@
  * @requirement:REQ-API-001
  */
 
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as nodeOs from 'node:os';

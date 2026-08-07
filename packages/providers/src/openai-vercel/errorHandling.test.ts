@@ -19,7 +19,8 @@
  * @requirement REQ-OAV-009 - Error Handling
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -48,14 +49,14 @@ interface MockStreamTextResult {
   experimental_providerMetadata: Promise<Record<string, unknown>>;
 }
 
-vi.mock('ai', () => ({
+void vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
   extractReasoningMiddleware: vi.fn(() => ({})),
   wrapLanguageModel: vi.fn((model) => model),
 }));
 
-vi.mock('@ai-sdk/openai', () => ({
+void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
 }));
 
@@ -72,8 +73,12 @@ describe('OpenAIVercelProvider - Error Handling', () => {
     settingsService.set('activeProvider', 'openaivercel');
     config = createRuntimeConfigStub(settingsService);
 
-    mockStreamText = vi.mocked((await import('ai')).streamText);
-    mockGenerateText = vi.mocked((await import('ai')).generateText);
+    mockStreamText = (await import('ai')).streamText as unknown as Mock<
+      (...args: never[]) => unknown
+    >;
+    mockGenerateText = (await import('ai')).generateText as unknown as Mock<
+      (...args: never[]) => unknown
+    >;
 
     provider = new OpenAIVercelProvider('test-api-key', undefined, {
       settingsService,

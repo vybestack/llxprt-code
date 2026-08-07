@@ -31,6 +31,42 @@ export type PtyImplementation = {
 } | null;
 
 /**
+ * How the node-pty backends are loaded.
+ *
+ * Injectable so the backend-selection logic can be exercised with a backend
+ * that loads and one that does not, on every runtime. Substituting the module
+ * registry instead is not portable: this package's suites run under Bun, whose
+ * test runner cannot reset the registry and evaluates a module-mock factory
+ * once, eagerly — so a per-test module mock silently yields the real module
+ * (issue #3061).
+ */
+export interface PtyBackendLoaders {
+  loadPrimary: () => Promise<PtyModule>;
+  loadFallback: () => Promise<PtyModule>;
+}
+
+const DEFAULT_PTY_BACKEND_LOADERS: PtyBackendLoaders = {
+  loadPrimary: () => import('@lydell/node-pty'),
+  loadFallback: () => import('node-pty'),
+};
+
+export async function loadNodePty(
+  loaders: PtyBackendLoaders = DEFAULT_PTY_BACKEND_LOADERS,
+): Promise<PtyImplementation> {
+  try {
+    const module = await loaders.loadPrimary();
+    return { module, name: 'lydell-node-pty' };
+  } catch {
+    try {
+      const module = await loaders.loadFallback();
+      return { module, name: 'node-pty' };
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
  * Resolve the PTY implementation for the current runtime.
  *
  * - **Bun + POSIX**: a `Bun.Terminal` adapter (`bun-pty`). `@lydell/node-pty`
@@ -38,7 +74,9 @@ export type PtyImplementation = {
  * - **Node / Windows**: `@lydell/node-pty` (preferred) with a `node-pty`
  *   fallback.
  */
-export const getPty = async (): Promise<PtyImplementation> => {
+export const getPty = async (
+  loaders: PtyBackendLoaders = DEFAULT_PTY_BACKEND_LOADERS,
+): Promise<PtyImplementation> => {
   if (isBunPosix()) {
     return {
       module: {
@@ -48,17 +86,5 @@ export const getPty = async (): Promise<PtyImplementation> => {
     };
   }
 
-  try {
-    const module = await import('@lydell/node-pty');
-    return { module, name: 'lydell-node-pty' };
-  } catch {
-    // Probe for alternative node-pty implementation
-    try {
-      const module = await import('node-pty');
-      return { module, name: 'node-pty' };
-    } catch {
-      // No node-pty implementation available
-      return null;
-    }
-  }
+  return loadNodePty(loaders);
 };

@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import {
   buildOsc52,
   copyTextToClipboard,
   writeOsc52ToTerminal,
 } from './clipboard.js';
 
-const copyToClipboard = vi.hoisted(() => vi.fn(async () => undefined));
-vi.mock('./commandUtils.js', () => ({
+const copyToClipboard = vi.fn(async () => undefined);
+void vi.mock('./commandUtils.js', () => ({
   copyToClipboard,
 }));
 

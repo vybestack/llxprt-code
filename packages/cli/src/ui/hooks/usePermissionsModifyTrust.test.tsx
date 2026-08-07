@@ -3,15 +3,21 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-/** @vitest-environment jsdom */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { TrustLevel } from '../../config/trustedFolders.js';
 
 // Mock the trustedFolders module
+const realTrustedFoldersModule = {
+  ...(await import('../../config/trustedFolders.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
 const mockSetValue = vi.fn();
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
+void vi.mock('../../config/trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     loadTrustedFolders: vi.fn(() => ({
@@ -26,8 +32,8 @@ vi.mock('../../config/trustedFolders.js', async () => {
 });
 
 // Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     getIdeTrust: vi.fn(() => undefined),
@@ -48,10 +54,17 @@ describe('usePermissionsModifyTrust', () => {
   // through integration tests with PermissionsModifyTrustDialog instead.
 
   it('should export TrustLevel enum values', () => {
-    // Verify the enum values are exported correctly
-    expect(TrustLevel.TRUST_FOLDER).toBe('TRUST_FOLDER');
-    expect(TrustLevel.TRUST_PARENT).toBe('TRUST_PARENT');
-    expect(TrustLevel.DO_NOT_TRUST).toBe('DO_NOT_TRUST');
+    // Verify the enum values are exported correctly. TrustLevel is a string
+    // enum, so the matching literal must be asserted to the enum type.
+    expect(TrustLevel.TRUST_FOLDER).toBe(
+      'TRUST_FOLDER' as unknown as TrustLevel,
+    );
+    expect(TrustLevel.TRUST_PARENT).toBe(
+      'TRUST_PARENT' as unknown as TrustLevel,
+    );
+    expect(TrustLevel.DO_NOT_TRUST).toBe(
+      'DO_NOT_TRUST' as unknown as TrustLevel,
+    );
   });
 
   it('should have mocked loadTrustedFolders', async () => {

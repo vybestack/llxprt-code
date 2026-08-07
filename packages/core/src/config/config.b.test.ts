@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import type { ContractContent } from '../core/clientContract.js';
 import type { IContent } from '../services/history/IContent.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';
@@ -38,7 +38,7 @@ const { USER_MEMORY, TARGET_DIR, TELEMETRY_SETTINGS } =
   sharedConfigTestConstants;
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -46,40 +46,47 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
-vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
+const __actual = { ...(await import('fs')) };
+void vi.mock('fs', () => buildFsMockBody(__actual));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
-vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(importOriginal()),
+const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  buildToolsMockBody(__actual2),
 );
 
 // Mock individual tools if their constructors are complex or have side effects
 
-vi.mock('../core/contentGenerator.js', (importOriginal) =>
-  buildContentGeneratorMockBody(importOriginal()),
+const __actual3 = { ...(await import('../core/contentGenerator.js')) };
+void vi.mock('../core/contentGenerator.js', () =>
+  buildContentGeneratorMockBody(__actual3),
 );
 
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
+void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(importOriginal()),
+const __actual4 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+  buildIdeIntegrationMockBody(__actual4),
 );
 
-vi.mock('../utils/memoryDiscovery.js', () =>
+void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
-vi.mock('../utils/events.js', (importOriginal) =>
-  buildEventsMockBody(importOriginal(), hoistedConfigMocks),
+const __actual5 = { ...(await import('../utils/events.js')) };
+void vi.mock('../utils/events.js', () =>
+  buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
 
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(
@@ -101,7 +108,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       // Set fallback mode to true to ensure it gets reset
       config.setFallbackMode(true);
@@ -134,7 +143,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       // Mock the existing client with some history
       const mockExistingHistory = [
@@ -199,7 +210,9 @@ describe('Server Config (config.ts)', () => {
         model: 'gemini-pro',
         apiKey: 'test-key',
       };
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const carriedHistory: ContractContent[] = [
         { role: 'user', parts: [{ text: 'Remember the passphrase' }] },
@@ -253,7 +266,9 @@ describe('Server Config (config.ts)', () => {
         { role: 'user', parts: [{ text: 'This turn is still retrying' }] },
       ];
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const chatGetHistory = vi.fn().mockReturnValue(committedHistory);
       const mockHistoryService = { setTokenizerFactory: vi.fn() };
@@ -305,7 +320,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -346,7 +363,9 @@ describe('Server Config (config.ts)', () => {
         config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
       ).contentGeneratorConfig = mockContentConfig;
 
-      (createContentGeneratorConfig as Mock).mockReturnValue({
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue({
         ...mockContentConfig,
         vertexai: true,
       });
@@ -417,7 +436,9 @@ describe('Server Config (config.ts)', () => {
         config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
       ).contentGeneratorConfig = mockContentConfig;
 
-      (createContentGeneratorConfig as Mock).mockReturnValue({
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue({
         ...mockContentConfig,
         vertexai: false,
       });
@@ -483,7 +504,9 @@ describe('Server Config (config.ts)', () => {
         oauthManager: mockOAuthManager,
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -543,7 +566,9 @@ describe('Server Config (config.ts)', () => {
         oauthManager: mockOAuthManager,
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
@@ -581,7 +606,9 @@ describe('Server Config (config.ts)', () => {
         apiKey: 'test-key',
       };
 
-      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+      (
+        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(mockContentConfig);
 
       const dispose = vi.fn();
       const mockExistingClient = {

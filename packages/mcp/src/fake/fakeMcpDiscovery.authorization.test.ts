@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '../../../test-utils/src/async-timers.js';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   MCPServerStatus,
@@ -51,9 +52,9 @@ describe('applyFakeServerDiscovery authorization', () => {
       fixtureWithTool(name, 50),
       () => authorized,
     );
-    await vi.advanceTimersByTimeAsync(25);
+    await advanceTimersByTimeAsync(25);
     authorized = false;
-    await vi.advanceTimersByTimeAsync(25);
+    await advanceTimersByTimeAsync(25);
 
     await expect(discovery).resolves.toStrictEqual({
       status: MCPServerStatus.DISCONNECTED,
@@ -86,7 +87,7 @@ describe('applyFakeServerDiscovery authorization', () => {
     const completed = vi.fn();
     void discovery.then(completed);
 
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
 
     expect(completed).toHaveBeenCalledWith({
       status: MCPServerStatus.DISCONNECTED,
@@ -111,7 +112,7 @@ describe('applyFakeServerDiscovery authorization', () => {
       () => true,
       controller.signal,
     );
-    await vi.advanceTimersByTimeAsync(50);
+    await advanceTimersByTimeAsync(50);
     await discovery;
 
     expect(removeEventListener).toHaveBeenCalledWith(

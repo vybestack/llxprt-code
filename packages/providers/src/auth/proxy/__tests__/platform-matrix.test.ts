@@ -14,8 +14,7 @@
  * @requirement R4.1, R4.2, R4.3, R27.1, R27.2, R27.3
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -27,8 +26,10 @@ import * as path from 'node:path';
 // real behavior for every method while making them mockable. Both this file
 // and credential-proxy-server.ts resolve the same mocked module, so a spy here
 // intercepts the server's own fs calls.
-vi.mock('node:fs', () => {
-  const actual = importActualSync<typeof import('node:fs')>('node:fs');
+const realNodeFsModule = { ...(await import('node:fs')) };
+
+void vi.mock('node:fs', () => {
+  const actual = realNodeFsModule;
   return { ...actual };
 });
 
@@ -735,9 +736,9 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         // Confirm the spies were actually installed before relying on
         // not.toHaveBeenCalled(); otherwise a silently failed spy would make
         // the guard assertions meaningless.
-        expect(vi.isMockFunction(fs.mkdirSync)).toBe(true);
-        expect(vi.isMockFunction(fs.chmodSync)).toBe(true);
-        expect(vi.isMockFunction(fs.unlinkSync)).toBe(true);
+        expect(fs.mkdirSync).toHaveProperty('mock');
+        expect(fs.chmodSync).toHaveProperty('mock');
+        expect(fs.unlinkSync).toHaveProperty('mock');
 
         try {
           const pipePath = await server.start();

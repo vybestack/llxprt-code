@@ -9,8 +9,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   debugLogger,
   sanitizeForByteString,
@@ -24,8 +23,10 @@ import {
 } from './providerManagerInstance.js';
 
 // Mock os module and set homedir before imports
-vi.mock('os', () => {
-  const actual = importActualSync<typeof import('os')>('os');
+const realOsModule = { ...(await import('os')) };
+
+void vi.mock('os', () => {
+  const actual = realOsModule;
   return {
     ...actual,
     homedir: vi.fn(() => '/home/user'),
@@ -34,7 +35,7 @@ vi.mock('os', () => {
 });
 
 // Mock stripJsonComments
-vi.mock('strip-json-comments', () => ({
+void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 

@@ -7,19 +7,17 @@
 import type React from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
-import { vi, type Mock } from 'vitest';
+import { vi, type Mock } from 'bun:test';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
 import { MouseProvider, useMouseContext } from './MouseContext.js';
 import { useMouse } from '../hooks/useMouse.js';
 
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+const original = { ...(await import('ink')) };
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 class MockStdin extends EventEmitter {
   isTTY = true;
@@ -40,7 +38,7 @@ describe('MouseContext', () => {
 
   beforeEach(() => {
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: vi.fn(),
     });

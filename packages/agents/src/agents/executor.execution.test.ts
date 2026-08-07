@@ -4,7 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from '../testApi.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { AgentExecutor } from './executor.js';
 import type { AgentInputs } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
@@ -25,31 +35,39 @@ import {
   type MockFn,
 } from './executor-test-helpers.js';
 
-const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } =
-  vi.hoisted(() => ({
-    MockedChatSession: vi.fn(),
-    mockSendMessageStream: vi.fn(),
-    mockExecuteToolCall: vi.fn(),
-  }));
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
 
-vi.mock('../core/chatSession.js', (importOriginal) => {
+const { MockedChatSession, mockSendMessageStream, mockExecuteToolCall } = {
+  MockedChatSession: vi.fn(),
+  mockSendMessageStream: vi.fn(),
+  mockExecuteToolCall: vi.fn(),
+};
+
+const __actual = { ...(await import('../core/chatSession.js')) };
+void vi.mock('../core/chatSession.js', () => {
   const apply = (actual: typeof import('../core/chatSession.js')) => ({
     ...actual,
     ChatSession: MockedChatSession,
   });
-  const result = importOriginal() as
+  const result = __actual as
     | typeof import('../core/chatSession.js')
     | Promise<typeof import('../core/chatSession.js')>;
   return result instanceof Promise ? result.then(apply) : apply(result);
 });
 
-vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
+void vi.mock('../core/nonInteractiveToolExecutor.js', () => ({
   executeToolCall: mockExecuteToolCall,
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js');
+void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
+  automock(realEnvironmentContextModule),
+);
 
-const mockedGetDirectoryContextString = vi.mocked(getDirectoryContextString);
+const mockedGetDirectoryContextString = getDirectoryContextString as Mock<
+  typeof getDirectoryContextString
+>;
 
 describe('AgentExecutor run (Execution Loop and Logic)', () => {
   let fixture: ExecutorTestFixture;
@@ -412,7 +430,7 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     mockExecuteToolCall.mockImplementation(async (_ctx, reqInfo) => {
       callsStarted++;
       const shouldSignal = callsStarted === 2;
-      await vi.advanceTimersByTimeAsync(100);
+      await advanceTimersByTimeAsync(100);
       // Signal after the await to avoid re-entrancy issues.
       void (shouldSignal && resolverHolder.resolve?.());
       return createCompletedToolCallResponse({
@@ -440,10 +458,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     const runPromise = executor.run({ goal: 'Parallel' }, fixture.signal);
 
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     await bothStarted;
-    await vi.advanceTimersByTimeAsync(150);
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(150);
+    await advanceTimersByTimeAsync(1);
 
     const output = await runPromise;
 

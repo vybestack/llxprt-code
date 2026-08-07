@@ -21,7 +21,7 @@
  * during P11 and eventually retired when migration completes.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

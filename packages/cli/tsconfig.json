@@ -6,7 +6,7 @@
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "composite": false,
-    "types": ["node", "vitest/globals", "bun-types/test"],
+    "types": ["node", "bun-types/test"],
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {
@@ -40,6 +40,7 @@
     }
   },
   "include": [
+    "../../bun-test-corrections.d.ts",
     "index.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

@@ -41,7 +41,7 @@ const fetchStub: Mock<[string, unknown], Promise<FetchResponse>> = mock(
 
 // Register the mock BEFORE dynamically importing codesearch.js, so the mock
 // is active when that module resolves its `import fetch from 'node-fetch'`.
-mock.module('node-fetch', () => ({ default: fetchStub }));
+void mock.module('node-fetch', () => ({ default: fetchStub }));
 
 const { CodeSearchTool } = await import('./codesearch.js');
 const { ToolErrorType } = await import('../types/tool-error.js');

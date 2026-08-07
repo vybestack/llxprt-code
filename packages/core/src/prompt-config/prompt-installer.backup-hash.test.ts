@@ -13,7 +13,7 @@
  * temporary directories.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PromptInstaller, MissingBaseDirError } from './prompt-installer.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';

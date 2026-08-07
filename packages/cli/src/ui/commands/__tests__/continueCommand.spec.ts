@@ -7,7 +7,7 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P19
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';

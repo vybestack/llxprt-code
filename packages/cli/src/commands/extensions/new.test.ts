@@ -4,19 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
 import { newCommand } from './new.js';
 import yargs from 'yargs';
 import * as fsPromises from 'node:fs/promises';
 
-vi.mock('node:fs/promises');
+const realPromisesModule = { ...(await import('node:fs/promises')) };
 
-vi.mock('../utils.js', () => ({
+void vi.mock('node:fs/promises', () => automock(realPromisesModule));
+
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
-const mockedFs = vi.mocked(fsPromises);
+/**
+ * Bun ships no deep-mock type, so the members each suite actually drives are
+ * named explicitly and given Bun's Mock signature.
+ */
+type MockedMembers<T, K extends keyof T> = {
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+};
+
+const mockedFs = fsPromises as unknown as MockedMembers<
+  typeof fsPromises,
+  'readdir' | 'access' | 'mkdir' | 'cp'
+>;
 
 describe('extensions new command', () => {
   beforeEach(() => {

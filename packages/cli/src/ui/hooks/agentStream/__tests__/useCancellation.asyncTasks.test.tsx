@@ -10,7 +10,7 @@
  * cancelTask actually aborts the registered AbortController.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useCancellation } from '../useAgentStreamLifecycle.js';

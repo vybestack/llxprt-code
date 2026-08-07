@@ -11,7 +11,7 @@
  * AnthropicResponseParser.issue1844.test.ts.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -19,20 +19,20 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
-const mockMessagesCreate = vi.hoisted(() => vi.fn());
+const mockMessagesCreate = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async () => "You are Claude Code, Anthropic's official CLI for Claude.",
   ),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   getErrorStatus: vi.fn(() => undefined),
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: { create: mockMessagesCreate },
   })),

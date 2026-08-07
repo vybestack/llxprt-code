@@ -16,7 +16,7 @@
  * IProvider port. No assertions on mock call records.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { CompressionHandler } from '../CompressionHandler.js';

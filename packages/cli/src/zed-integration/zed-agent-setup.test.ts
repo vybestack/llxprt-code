@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { enableZedSessionRecording } from './zed-agent-setup.js';
 

@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 

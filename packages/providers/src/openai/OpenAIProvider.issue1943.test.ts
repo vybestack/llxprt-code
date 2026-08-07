@@ -11,7 +11,7 @@
  * 3. The provider name is correctly used for override lookup
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import {
   SettingsService,

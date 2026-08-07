@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ProactiveRenewalManager } from '../../proactive-renewal-manager.js';
 import {
   MemoryTokenStore,
@@ -227,10 +228,10 @@ describe('SB-08: Proactive renewal schedules for token with refresh_token', () =
 
     proactiveManager.scheduleProactiveRenewal(PROVIDER, 'default', token);
 
-    await vi.advanceTimersByTimeAsync(265 * 1000);
+    await advanceTimersByTimeAsync(265 * 1000);
     expect(acquireLockSpy).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(40 * 1000);
+    await advanceTimersByTimeAsync(40 * 1000);
     expect(acquireLockSpy).toHaveBeenCalled();
   });
 });
@@ -273,7 +274,7 @@ describe('SB-09: Proactive renewal skipped for token without refresh_token', () 
       tokenNoRefresh,
     );
 
-    await vi.advanceTimersByTimeAsync(3600 * 1000);
+    await advanceTimersByTimeAsync(3600 * 1000);
 
     expect(acquireLockSpy).not.toHaveBeenCalled();
   });

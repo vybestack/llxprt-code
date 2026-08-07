@@ -4,47 +4,41 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 
-const authMocks = vi.hoisted(() => ({
+const authMocks = {
   createAndStartProxy: vi.fn(),
   getProxySocketPath: vi.fn(),
   stopProxy: vi.fn(),
   getProxyCapabilityToken: vi.fn(),
-}));
-const bridgeMocks = vi.hoisted(() => ({
+};
+const bridgeMocks = {
   setupCredentialProxyDockerMacOS: vi.fn(),
   setupCredentialProxyPodmanMacOS: vi.fn(),
   dockerCleanup: vi.fn(),
   podmanCleanup: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
   getProxySocketPath: authMocks.getProxySocketPath,
   stopProxy: authMocks.stopProxy,
   getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
-vi.mock('./sandbox-ssh.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./sandbox-ssh.js')>();
-  return {
-    ...original,
-    setupCredentialProxyDockerMacOS:
-      bridgeMocks.setupCredentialProxyDockerMacOS,
-  };
-});
-vi.mock('./sandbox-podman.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./sandbox-podman.js')>();
-  return {
-    ...original,
-    setupCredentialProxyPodmanMacOS:
-      bridgeMocks.setupCredentialProxyPodmanMacOS,
-  };
-});
+const original = { ...(await import('./sandbox-ssh.js')) };
+void vi.mock('./sandbox-ssh.js', () => ({
+  ...original,
+  setupCredentialProxyDockerMacOS: bridgeMocks.setupCredentialProxyDockerMacOS,
+}));
+const actualOriginal = { ...(await import('./sandbox-podman.js')) };
+void vi.mock('./sandbox-podman.js', () => ({
+  ...actualOriginal,
+  setupCredentialProxyPodmanMacOS: bridgeMocks.setupCredentialProxyPodmanMacOS,
+}));
 
 import { setupCredentialProxy } from './sandbox-containers.js';
 
@@ -98,7 +92,7 @@ function invokeCredentialSetup(
   };
 }
 
-describe.sequential('#1456 credential proxy network policy', () => {
+describe('#1456 credential proxy network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let tmpDir = '';
   let isolatedHome: string;
@@ -283,7 +277,9 @@ describe.sequential('#1456 credential proxy network policy', () => {
           envFile,
         ]);
         expect(fs.existsSync(envFile)).toBe(true);
-        expect(invocation.prefixes).toStrictEqual(prefix);
+        expect(invocation.prefixes).toStrictEqual(
+          prefix as unknown as string[],
+        );
         expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
         expect(result.credentialProxyBridgeResult?.containerSocketPath).toBe(
           bridgeSocket,

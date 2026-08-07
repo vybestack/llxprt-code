@@ -16,7 +16,7 @@
  * @issue #2488 — Configurable reasoning field name for Ollama (delta.reasoning)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   createCaptureBuffer,

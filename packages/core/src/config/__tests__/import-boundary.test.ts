@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

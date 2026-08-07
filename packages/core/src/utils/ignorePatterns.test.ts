@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   FileExclusions,
   BINARY_EXTENSIONS,
@@ -13,7 +13,7 @@ import {
 import type { Config } from '../config/config.js';
 
 // Mock the memoryTool module
-vi.mock('@vybestack/llxprt-code-tools', () => ({
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
   getCurrentGeminiMdFilename: vi.fn(() => 'GEMINI.md'),
   getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
 }));

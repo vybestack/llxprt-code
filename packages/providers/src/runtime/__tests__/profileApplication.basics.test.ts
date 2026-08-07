@@ -6,7 +6,15 @@
  * Split from profileApplication.test.ts during #2092 lint hardening.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type {
   Profile,
   LoadBalancerProfile,
@@ -33,11 +41,11 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 import type { ProfileApplicationResult } from './profileApplicationTestSetup.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-vi.mock('node:fs/promises', () => {
-  const actual =
-    importActualSync<typeof import('node:fs/promises')>('node:fs/promises');
+const realPromisesModule = { ...(await import('node:fs/promises')) };
+
+void vi.mock('node:fs/promises', () => {
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),
@@ -46,7 +54,7 @@ vi.mock('node:fs/promises', () => {
 
 const mockFs = await import('node:fs/promises');
 
-vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
@@ -144,7 +152,7 @@ describe('Profile application basics', () => {
   });
 
   it('should read keyfile before switching provider (stash→switch→apply pattern)', async () => {
-    const readFileSpy = vi.mocked(mockFs.readFile);
+    const readFileSpy = mockFs.readFile as Mock<typeof mockFs.readFile>;
     readFileSpy.mockResolvedValue('test-api-key-from-file');
 
     const callOrder: string[] = [];
@@ -271,7 +279,9 @@ describe('Profile application basics', () => {
   });
 
   it('should not trigger OAuth when loading profile with keyfile', async () => {
-    vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-keyfile');
+    (mockFs.readFile as Mock<typeof mockFs.readFile>).mockResolvedValue(
+      'test-api-key-from-keyfile',
+    );
 
     const authenticateSpy = vi.fn();
     let switchWasCalledWithAutoOAuth = false;
@@ -312,10 +322,9 @@ describe('Profile application basics', () => {
     });
 
     const expectedPath = path.resolve('/home/user/.anthropic_key');
-    expect(vi.mocked(mockFs.readFile)).toHaveBeenCalledWith(
-      expectedPath,
-      'utf-8',
-    );
+    expect(
+      mockFs.readFile as Mock<typeof mockFs.readFile>,
+    ).toHaveBeenCalledWith(expectedPath, 'utf-8');
 
     expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
       'test-api-key-from-keyfile',

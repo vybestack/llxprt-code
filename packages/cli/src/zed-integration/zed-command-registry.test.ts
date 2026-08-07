@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
@@ -63,7 +63,7 @@ describe('Zed available commands', () => {
 
   it('returns a protocol-visible error without exposing command details', async () => {
     const agent = buildAgent();
-    vi.mocked(agent.compress).mockRejectedValue(
+    (agent.compress as Mock<typeof agent.compress>).mockRejectedValue(
       new Error('secret compression diagnostic'),
     );
     await expect(

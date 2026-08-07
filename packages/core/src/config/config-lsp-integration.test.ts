@@ -10,7 +10,8 @@
  * @pseudocode config-integration.md lines 39-114
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
@@ -22,13 +23,18 @@ import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxp
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 function containsAllSubstrings(value: string, parts: string[]): boolean {
   return parts.every((p) => value.includes(p));
 }
 
 // Mock dependencies
-vi.mock('fs', (importOriginal) => {
-  const actual = importOriginal() as typeof import('fs');
+const __actual = { ...(await import('fs')) };
+void vi.mock('fs', () => {
+  const actual = __actual as typeof import('fs');
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
@@ -39,9 +45,8 @@ vi.mock('fs', (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () => {
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -99,24 +104,27 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('../core/contentGenerator.js', (importOriginal) => {
-  const actual =
-    importOriginal() as typeof import('../core/contentGenerator.js');
+const __actual2 = { ...(await import('../core/contentGenerator.js')) };
+void vi.mock('../core/contentGenerator.js', () => {
+  const actual = __actual2 as typeof import('../core/contentGenerator.js');
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
   };
 });
 
-vi.mock('../telemetry/index.js', () => ({
+void vi.mock('../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
   logCliConfiguration: vi.fn(),
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) => {
+const __actual3 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
   const actual =
-    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration');
+    __actual3 as typeof import('@vybestack/llxprt-code-ide-integration');
   return {
     ...actual,
     IdeClient: {
@@ -128,19 +136,19 @@ vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) => {
   };
 });
 
-vi.mock('../services/fileDiscoveryService.js', () => ({
+void vi.mock('../services/fileDiscoveryService.js', () => ({
   FileDiscoveryService: vi.fn().mockImplementation(() => ({
     discoverFiles: vi.fn().mockResolvedValue([]),
   })),
 }));
 
-vi.mock('../services/gitService.js', () => ({
+void vi.mock('../services/gitService.js', () => ({
   GitService: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
@@ -160,14 +168,14 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
   },
 }));
 
-vi.mock('../utils/extensionLoader.js', () => ({
+void vi.mock('../utils/extensionLoader.js', () => ({
   SimpleExtensionLoader: vi.fn().mockImplementation(() => ({
     start: vi.fn().mockResolvedValue(undefined),
     getExtensions: vi.fn().mockReturnValue([]),
   })),
 }));
 
-vi.mock('../runtime/providerRuntimeContext.js', () => ({
+void vi.mock('../runtime/providerRuntimeContext.js', () => ({
   setProviderRuntimeStateFactory: vi.fn(),
   setActiveProviderRuntimeContext: vi.fn(),
   peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
@@ -186,10 +194,8 @@ vi.mock('../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),
@@ -202,7 +208,7 @@ vi.mock('@vybestack/llxprt-code-settings', async () => ({
 }));
 
 // Mock MCP SDK Client
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+void vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: vi.fn().mockImplementation(() => ({
     connect: vi.fn().mockResolvedValue(undefined),
     getServerCapabilities: vi.fn().mockReturnValue({ tools: {} }),
@@ -231,7 +237,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   })),
 }));
 
-vi.mock('../utils/memoryDiscovery.js', () => ({
+void vi.mock('../utils/memoryDiscovery.js', () => ({
   loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadJitSubdirectoryMemory: vi.fn().mockResolvedValue({ files: [] }),
@@ -240,10 +246,10 @@ vi.mock('../utils/memoryDiscovery.js', () => ({
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/events.js')>();
-  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
-  return actual;
+const actualActual = { ...(await import('../utils/events.js')) };
+void vi.mock('../utils/events.js', () => {
+  vi.spyOn(actualActual.coreEvents, 'emit').mockReturnValue(true);
+  return actualActual;
 });
 
 describe('Config LSP Integration (P33)', () => {
@@ -419,25 +425,33 @@ describe('Config LSP Integration (P33)', () => {
 
   describe('REQ-CFG-070: navigationTools independently disableable', () => {
     it('should not register MCP navigation when navigationTools is false', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-          navigationTools: false,
-        },
-      });
-      const config = new Config(params);
-      await initializeTestConfig(config);
+      const startSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+        .mockResolvedValue(undefined);
+      const isAliveSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+        .mockReturnValue(true);
+      try {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+            navigationTools: false,
+          },
+        });
+        const config = new Config(params);
+        await initializeTestConfig(config);
 
-      const lspConfig = config.getLspConfig();
-      expect(lspConfig?.navigationTools).toBe(false);
+        const lspConfig = config.getLspConfig();
+        expect(lspConfig?.navigationTools).toBe(false);
 
-      // Verify service still starts but navigation disabled
-      const lspClient = config.getLspServiceClient();
-      expect(lspClient).toBeDefined();
-      expect(
-        lspClient?.isAlive() === true ||
-          lspClient?.getUnavailableReason() !== undefined,
-      ).toBe(true);
+        const lspClient = config.getLspServiceClient();
+        expect(lspClient).toBeDefined();
+        expect(startSpy).toHaveBeenCalledOnce();
+        expect(lspClient?.isAlive()).toBe(true);
+      } finally {
+        startSpy.mockRestore();
+        isAliveSpy.mockRestore();
+      }
     });
 
     // Live MCP navigation registration depends on the Bun-backed LSP transport,
@@ -457,7 +471,7 @@ describe('Config LSP Integration (P33)', () => {
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBe(true);
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
           const tools = config.getToolRegistry().getAllTools();
           const lspNavTools = tools.filter(
             (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
@@ -483,7 +497,7 @@ describe('Config LSP Integration (P33)', () => {
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBeUndefined();
 
-        await vi.waitFor(() => {
+        await waitFor(() => {
           const tools = config.getToolRegistry().getAllTools();
           const lspNavTools = tools.filter(
             (t: { serverName?: string }) => t.serverName === 'lsp-navigation',

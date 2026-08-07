@@ -4,11 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getPackageJson } from './package.js';
 import { readPackageUp } from 'read-package-up';
 
-vi.mock('read-package-up', () => ({
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(),
 }));
 
@@ -23,7 +31,7 @@ describe('getPackageJson', () => {
 
   it('should return packageJson when found', async () => {
     const expectedPackageJsonResult = { name: 'test-pkg', version: '1.2.3' };
-    vi.mocked(readPackageUp).mockResolvedValue({
+    (readPackageUp as Mock<typeof readPackageUp>).mockResolvedValue({
       packageJson: expectedPackageJsonResult,
       path: '/path/to/package.json',
     });
@@ -39,13 +47,16 @@ describe('getPackageJson', () => {
   it.each([
     {
       description: 'no package.json is found',
-      setup: () => vi.mocked(readPackageUp).mockResolvedValue(undefined),
+      setup: () =>
+        (readPackageUp as Mock<typeof readPackageUp>).mockResolvedValue(
+          undefined,
+        ),
       expected: undefined,
     },
     {
       description: 'non-semver versions (when normalize is false)',
       setup: () =>
-        vi.mocked(readPackageUp).mockResolvedValue({
+        (readPackageUp as Mock<typeof readPackageUp>).mockResolvedValue({
           packageJson: { name: 'test-pkg', version: '2024.60' },
           path: '/path/to/package.json',
         }),
@@ -54,7 +65,9 @@ describe('getPackageJson', () => {
     {
       description: 'readPackageUp throws',
       setup: () =>
-        vi.mocked(readPackageUp).mockRejectedValue(new Error('Read error')),
+        (readPackageUp as Mock<typeof readPackageUp>).mockRejectedValue(
+          new Error('Read error'),
+        ),
       expected: undefined,
     },
   ])('should handle $description', async ({ setup, expected }) => {

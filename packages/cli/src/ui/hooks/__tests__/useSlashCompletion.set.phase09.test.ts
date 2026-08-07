@@ -17,7 +17,7 @@
  * - Result: 3 passed (schema exposed for useSlashCompletion)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { setCommand } from '../../commands/setCommand.js';
 
 describe('`/set` schema contract for useSlashCompletion @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', () => {

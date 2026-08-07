@@ -10,7 +10,8 @@
  * avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -323,7 +324,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       // incremented before advancing fake timers.
       expect(await waitForCondition(() => pendingReads >= 1)).toBe(true);
       expect(pendingReads).toBeGreaterThanOrEqual(1);
-      await vi.advanceTimersByTimeAsync(timeoutMs + 1);
+      await advanceTimersByTimeAsync(timeoutMs + 1);
       const firstError = await firstSend;
       expect(firstTransportSignal?.aborted).toBe(true);
       expect(firstError).toBeInstanceOf(Error);
@@ -459,7 +460,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       );
 
       // Advance past timeout for BOTH concurrent streams.
-      await vi.advanceTimersByTimeAsync(timeoutMs + 1);
+      await advanceTimersByTimeAsync(timeoutMs + 1);
 
       const [resultA, resultB] = await Promise.all([sendA, sendB]);
 

@@ -14,25 +14,25 @@
  * Acceptance rows covered: B3–B12.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
 }));
 
-vi.mock(
+void vi.mock(
   '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js',
   () => ({
     shouldIncludeSubagentDelegation: vi.fn().mockResolvedValue(false),
   }),
 );
 
-vi.mock('../utils/userMemory.js', () => ({
+void vi.mock('../utils/userMemory.js', () => ({
   resolveUserMemory: vi.fn().mockResolvedValue(''),
 }));
 

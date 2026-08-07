@@ -16,8 +16,7 @@
  * hand-rolled substitute.
  */
 
-import { describe, it, expect, afterEach } from 'bun:test';
-import { vi } from '../test-utils/bunTest.js';
+import { describe, it, expect, afterEach, vi } from 'bun:test';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 

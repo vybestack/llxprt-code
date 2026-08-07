@@ -57,7 +57,7 @@
  * `toBe(0)` after `await agent.dispose()`).
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   buildAgent,
   drain,

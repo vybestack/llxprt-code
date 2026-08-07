@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { GitService } from './gitService.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'path';
@@ -13,19 +13,19 @@ import * as os from 'os';
 import type { ChildProcess } from 'node:child_process';
 import { getProjectHash, LLXPRT_DIR } from '../utils/paths.js';
 
-const hoistedMockExec = vi.hoisted(() => vi.fn());
-vi.mock('node:child_process', () => ({
+const hoistedMockExec = vi.fn();
+void vi.mock('node:child_process', () => ({
   exec: hoistedMockExec,
 }));
 
-const hoistedMockEnv = vi.hoisted(() => vi.fn());
-const hoistedMockSimpleGit = vi.hoisted(() => vi.fn());
-const hoistedMockCheckIsRepo = vi.hoisted(() => vi.fn());
-const hoistedMockInit = vi.hoisted(() => vi.fn());
-const hoistedMockRaw = vi.hoisted(() => vi.fn());
-const hoistedMockAdd = vi.hoisted(() => vi.fn());
-const hoistedMockCommit = vi.hoisted(() => vi.fn());
-vi.mock('simple-git', () => ({
+const hoistedMockEnv = vi.fn();
+const hoistedMockSimpleGit = vi.fn();
+const hoistedMockCheckIsRepo = vi.fn();
+const hoistedMockInit = vi.fn();
+const hoistedMockRaw = vi.fn();
+const hoistedMockAdd = vi.fn();
+const hoistedMockCommit = vi.fn();
+void vi.mock('simple-git', () => ({
   simpleGit: hoistedMockSimpleGit.mockImplementation(() => ({
     checkIsRepo: hoistedMockCheckIsRepo,
     init: hoistedMockInit,
@@ -37,26 +37,24 @@ vi.mock('simple-git', () => ({
   CheckRepoActions: { IS_REPO_ROOT: 'is-repo-root' },
 }));
 
-const hoistedIsGitRepositoryMock = vi.hoisted(() => vi.fn());
-vi.mock('../utils/gitUtils.js', () => ({
+const hoistedIsGitRepositoryMock = vi.fn();
+void vi.mock('../utils/gitUtils.js', () => ({
   isGitRepository: hoistedIsGitRepositoryMock,
 }));
 
-const hoistedMockHomedir = vi.hoisted(() => vi.fn());
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof os>();
-  return {
-    ...actual,
-    homedir: hoistedMockHomedir,
-  };
-});
+const hoistedMockHomedir = vi.fn();
+const actual = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actual,
+  homedir: hoistedMockHomedir,
+}));
 
-const hoistedMockDebugLogger = vi.hoisted(() => ({
+const hoistedMockDebugLogger = {
   debug: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
-}));
-vi.mock('../utils/debugLogger.js', () => ({
+};
+void vi.mock('../utils/debugLogger.js', () => ({
   debugLogger: hoistedMockDebugLogger,
 }));
 

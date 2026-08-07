@@ -7,7 +7,7 @@
  * output (issue #2207).
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { diagnosticsCommand } from './diagnosticsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -20,7 +20,7 @@ const getRuntimeDiagnosticsSnapshotMock = vi.fn();
 const getCliOAuthManagerMock = vi.fn();
 const getSessionTokenUsageMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     getCliOAuthManager: getCliOAuthManagerMock,
     getActiveProviderStatus: getActiveProviderStatusMock,

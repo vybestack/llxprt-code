@@ -13,7 +13,7 @@
  * packages/agents/src/core/coreToolScheduler.editor-integration.test.ts.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { PolicyEngine } from './policy-engine.js';
 import {
   PolicyDecision,

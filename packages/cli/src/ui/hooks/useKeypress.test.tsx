@@ -4,22 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
 import { renderWithProviders as render } from '../../test-utils/render.js';
 import { useKeypress } from './useKeypress.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
-import type { Mock } from 'vitest';
+import type { Mock } from 'bun:test';
 
 // Mock the 'ink' module to control stdin
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+const original = { ...(await import('ink')) };
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 const PASTE_START = '\x1B[200~';
 const PASTE_END = '\x1B[201~';
@@ -71,13 +70,13 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });
 
     originalNodeVersion = process.versions.node;
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   afterEach(() => {
@@ -132,11 +131,11 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
   describe.each([
     {
       description: 'PASTE_WORKAROUND true',
-      setup: () => vi.stubEnv('PASTE_WORKAROUND', 'true'),
+      setup: () => setEnv('PASTE_WORKAROUND', 'true'),
     },
     {
       description: 'PASTE_WORKAROUND false',
-      setup: () => vi.stubEnv('PASTE_WORKAROUND', 'false'),
+      setup: () => setEnv('PASTE_WORKAROUND', 'false'),
     },
   ])('in $description', ({ setup }) => {
     beforeEach(() => {

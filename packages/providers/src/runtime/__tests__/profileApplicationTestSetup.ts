@@ -8,7 +8,7 @@
  * split test files can share the same stubs without exceeding max-lines.
  */
 
-import { vi } from 'vitest';
+import { vi } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
 export type ProfileApplicationResult = {

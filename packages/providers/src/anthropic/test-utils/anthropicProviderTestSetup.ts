@@ -7,7 +7,7 @@
  * Extracted from AnthropicProvider.test.ts to support splitting.
  */
 
-import type { vi } from 'vitest';
+import type { vi } from 'bun:test';
 import { AnthropicProvider } from '../AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../../test-utils/providerTestConfig.js';

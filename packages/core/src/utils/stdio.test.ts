@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { patchStdio, createInkStdio } from './stdio.js';
 import { coreEvents } from './events.js';
 
-vi.mock('./events.js', () => ({
+void vi.mock('./events.js', () => ({
   coreEvents: {
     emitOutput: vi.fn(),
   },

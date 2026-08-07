@@ -4,12 +4,21 @@
  * SPDX-License-Identifier:Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { spawn } from 'child_process';
 import { ClipboardService } from './ClipboardService.js';
 
-vi.mock('child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('child_process');
+const __actual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => {
+  const actual = __actual as typeof import('child_process');
   return {
     ...actual,
     spawn: vi.fn(),
@@ -45,7 +54,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -89,7 +98,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -133,7 +142,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -180,7 +189,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcessForXclip = {
       stdin: {
         write: vi.fn(),
@@ -227,7 +236,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn for this test
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -271,7 +280,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn to simulate failure
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),
@@ -319,7 +328,7 @@ describe('ClipboardService', () => {
     const testUrl = 'https://example.com/oauth?code=12345';
 
     // Mock child_process.spawn to simulate failure with stderr output
-    const mockSpawn = vi.mocked(spawn);
+    const mockSpawn = spawn as Mock<typeof spawn>;
     const mockChildProcess = {
       stdin: {
         write: vi.fn(),

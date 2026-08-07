@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -309,7 +310,7 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Wait for completion
     await schedulePromise;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -419,7 +420,7 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Wait for completion
     await schedulePromise;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
@@ -535,7 +536,7 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     // Wait for completion on scheduler1
     await schedulePromise;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete1).toHaveBeenCalled();
     });
 
@@ -647,7 +648,7 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
 
     // Wait for completion
     await schedulePromise;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 

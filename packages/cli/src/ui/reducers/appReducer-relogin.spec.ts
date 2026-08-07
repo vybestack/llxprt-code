@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { appReducer, initialAppState, type AppAction } from './appReducer.js';
 
 describe('appReducer needsRelogin', () => {

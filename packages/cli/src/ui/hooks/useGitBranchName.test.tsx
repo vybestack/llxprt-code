@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGitBranchName, FETCH_DEBOUNCE_MS } from './useGitBranchName.js';
@@ -20,10 +20,10 @@ const mockWatchFile = vi.fn();
 const mockUnwatchFile = vi.fn();
 const mockAccess = vi.fn();
 
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   exec: mockExecFn,
 }));
-vi.mock('node:fs', () => ({
+void vi.mock('node:fs', () => ({
   default: {
     watchFile: mockWatchFile,
     unwatchFile: mockUnwatchFile,
@@ -33,7 +33,7 @@ vi.mock('node:fs', () => ({
   unwatchFile: mockUnwatchFile,
   constants: { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 },
 }));
-vi.mock('node:fs/promises', () => ({
+void vi.mock('node:fs/promises', () => ({
   default: {
     access: mockAccess,
   },

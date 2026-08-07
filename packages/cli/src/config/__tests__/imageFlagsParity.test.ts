@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { parseArguments } from '../cliArgParser.js';
 import { resolveDirectImageMode } from '../imageModeDispatch.js';
 import { buildNormalizedImageRequest } from '@vybestack/llxprt-code-core/services/image/imageOperation.js';
 import type { Settings } from '../settings.js';
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),

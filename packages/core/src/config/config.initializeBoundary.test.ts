@@ -21,7 +21,7 @@
  * 8. ensureInitialized() after initialize() returns the original promise.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import {
@@ -42,7 +42,7 @@ import {
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -50,37 +50,44 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
-vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
+const __actual = { ...(await import('fs')) };
+void vi.mock('fs', () => buildFsMockBody(__actual));
 
-vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(importOriginal()),
+const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  buildToolsMockBody(__actual2),
 );
 
-vi.mock('../core/contentGenerator.js', (importOriginal) =>
-  buildContentGeneratorMockBody(importOriginal()),
+const __actual3 = { ...(await import('../core/contentGenerator.js')) };
+void vi.mock('../core/contentGenerator.js', () =>
+  buildContentGeneratorMockBody(__actual3),
 );
 
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
+void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(importOriginal()),
+const __actual4 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+  buildIdeIntegrationMockBody(__actual4),
 );
 
-vi.mock('../utils/memoryDiscovery.js', () =>
+void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
-vi.mock('../utils/events.js', (importOriginal) =>
-  buildEventsMockBody(importOriginal(), hoistedConfigMocks),
+const __actual5 = { ...(await import('../utils/events.js')) };
+void vi.mock('../utils/events.js', () =>
+  buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
 
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)', () => {
   let settingsService: ReturnType<typeof getSettingsService>;

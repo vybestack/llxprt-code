@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
@@ -17,10 +17,10 @@ import {
   removeMCPStatusChangeListener,
 } from './mcp-status.js';
 
-const { mockMcpClient } = vi.hoisted(() => ({
+const { mockMcpClient } = {
   mockMcpClient: vi.fn(),
-}));
-vi.mock('./mcp-client.js', () => ({
+};
+void vi.mock('./mcp-client.js', () => ({
   McpClient: mockMcpClient,
   MCPDiscoveryState: {
     NOT_STARTED: 'not_started',

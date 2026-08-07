@@ -11,10 +11,11 @@
  * not on internal mock call patterns.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { toolkeyCommand } from './toolkeyCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { CommandKind } from './types.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
@@ -22,27 +23,24 @@ import { assertDefined } from '../../test-utils/assertions.js';
 
 const mockKeyStore = new Map<string, string>();
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...original,
-    ToolKeyStorage: class MockToolKeyStorage {
-      async saveKey(toolName: string, key: string): Promise<void> {
-        mockKeyStore.set(toolName, key);
-      }
-      async getKey(toolName: string): Promise<string | null> {
-        return mockKeyStore.get(toolName) ?? null;
-      }
-      async deleteKey(toolName: string): Promise<void> {
-        mockKeyStore.delete(toolName);
-      }
-      async hasKey(toolName: string): Promise<boolean> {
-        return mockKeyStore.has(toolName);
-      }
-    },
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  ToolKeyStorage: class MockToolKeyStorage {
+    async saveKey(toolName: string, key: string): Promise<void> {
+      mockKeyStore.set(toolName, key);
+    }
+    async getKey(toolName: string): Promise<string | null> {
+      return mockKeyStore.get(toolName) ?? null;
+    }
+    async deleteKey(toolName: string): Promise<void> {
+      mockKeyStore.delete(toolName);
+    }
+    async hasKey(toolName: string): Promise<boolean> {
+      return mockKeyStore.has(toolName);
+    }
+  },
+}));
 
 describe('toolkeyCommand', () => {
   let context: CommandContext;
@@ -60,7 +58,7 @@ describe('toolkeyCommand', () => {
       expect(toolkeyCommand.description).toBe(
         'set, show, or clear API key for a built-in tool',
       );
-      expect(toolkeyCommand.kind).toBe('built-in');
+      expect(toolkeyCommand.kind).toBe(CommandKind.BUILT_IN);
     });
 
     it('defines schema for autocomplete and argument hints', () => {

@@ -12,7 +12,7 @@
  * a finish chunk. On every one of those paths the blocks accumulated so far
  * must be released rather than carried into the next turn.
  */
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';

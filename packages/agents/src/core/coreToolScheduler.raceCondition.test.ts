@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
@@ -254,7 +255,7 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       );
 
       // Wait for async completion
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       });
 
@@ -317,7 +318,7 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       );
 
       // Wait for async completion
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       });
 
@@ -418,7 +419,7 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       );
 
       // Wait for async completion - should be cancelled, not hung
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(onAllToolCallsComplete).toHaveBeenCalled();
       });
 
@@ -459,7 +460,7 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
         new AbortController().signal,
       );
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(onAllToolCallsComplete).toHaveBeenCalledTimes(1);
       });
 
@@ -477,7 +478,7 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
         new AbortController().signal,
       );
 
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(onAllToolCallsComplete).toHaveBeenCalledTimes(2);
       });
 

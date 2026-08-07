@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import yargs, { type Argv } from 'yargs';
 import { addCommand } from './add.js';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 
-vi.mock('fs/promises', async () => {
-  const actual = await vi.importActual('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
+const realSettingsModule = { ...(await import('../../config/settings.js')) };
+const realLlxprtCodeTelemetryModule = {
+  ...(await import('@vybestack/llxprt-code-telemetry')),
+};
+
+void vi.mock('fs/promises', () => {
+  const actual = realPromisesModule;
   return {
     ...actual,
     readFile: vi.fn(),
@@ -18,7 +24,7 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('os', () => {
+void vi.mock('os', () => {
   const homedir = vi.fn(() => '/home/user');
   return {
     default: {
@@ -28,15 +34,15 @@ vi.mock('os', () => {
   };
 });
 
-vi.mock('../../config/settings.js', async () => {
-  const actual = await vi.importActual('../../config/settings.js');
+void vi.mock('../../config/settings.js', () => {
+  const actual = realSettingsModule;
   return {
     ...actual,
     loadSettings: vi.fn(),
   };
 });
 
-vi.mock('../utils.js', () => ({
+void vi.mock('../utils.js', () => ({
   exitCli: vi.fn((exitCode = 0) => {
     if (exitCode !== 0) {
       throw new Error('process.exit called');
@@ -44,30 +50,32 @@ vi.mock('../utils.js', () => ({
   }),
 }));
 
-const mockDebugLogger = vi.hoisted(() => ({
+const mockDebugLogger = {
   error: vi.fn(),
   warn: vi.fn(),
   info: vi.fn(),
   log: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-telemetry', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-telemetry')
-  >('@vybestack/llxprt-code-telemetry');
+void vi.mock('@vybestack/llxprt-code-telemetry', () => {
+  const actual = realLlxprtCodeTelemetryModule;
   return {
     ...actual,
     debugLogger: mockDebugLogger,
   };
 });
 
-const mockedLoadSettings = loadSettings as Mock;
+const mockedLoadSettings = loadSettings as unknown as Mock<
+  (...args: never[]) => unknown
+>;
 
 describe('mcp add command', () => {
   let parser: Argv;
-  let mockSetValue: Mock;
-  let mockConsoleError: Mock;
+  let mockSetValue: Mock<
+    (scope: SettingScope, key: string, value: Record<string, unknown>) => void
+  >;
+  let mockConsoleError: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -210,10 +218,13 @@ describe('mcp add command', () => {
     );
 
     const callArgs = mockSetValue.mock.calls[0];
-    const serverConfig = callArgs[2]['streamable-server'];
-    expect(serverConfig.type).toBe('streamable-http');
-    expect(serverConfig.transport).toBeUndefined();
-    expect(serverConfig.url).toBe('https://example.com/mcp');
+    const serverConfig = callArgs[2]['streamable-server'] as Record<
+      string,
+      unknown
+    >;
+    expect(serverConfig['type']).toBe('streamable-http');
+    expect(serverConfig['transport']).toBeUndefined();
+    expect(serverConfig['url']).toBe('https://example.com/mcp');
   });
 
   it('should handle MCP server args with -- separator', async () => {

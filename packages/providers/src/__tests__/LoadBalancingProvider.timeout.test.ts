@@ -7,7 +7,8 @@
  * Issue #489 - Advanced Failover with Metrics
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { runAllTimersAsync, waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -97,7 +98,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
         }
       })();
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await genPromise;
 
       expect(chunks).toHaveLength(2);
@@ -419,7 +420,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       return chunks;
     })();
 
-    await vi.waitFor(() => expect(calls).toBe(1), { timeout: 1_000 });
+    await waitFor(() => expect(calls).toBe(1), { timeout: 1_000 });
     controller.abort();
 
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' });

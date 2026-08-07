@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 
 // Mock ink before any imports
 // chalk is deliberately NOT mocked. Ink's colorize calls chalk.hex for hex
@@ -12,29 +12,26 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 // throw before the component could register its keypress handler.
 
 // Mock string-width
-vi.mock('string-width', () => ({
+void vi.mock('string-width', () => ({
   default: (str: string) => str.length,
 }));
 
 // Mock the clipboard module
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    unescapePath: (path: string) => path,
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  unescapePath: (path: string) => path,
+}));
 
 // Mock clipboardy
-vi.mock('clipboardy', () => ({
+void vi.mock('clipboardy', () => ({
   default: {
     read: vi.fn(),
   },
 }));
 
 // Mock the required hooks
-vi.mock('../hooks/useShellHistory.js', () => ({
+void vi.mock('../hooks/useShellHistory.js', () => ({
   useShellHistory: () => ({
     addToHistory: vi.fn(),
     navigateHistory: vi.fn(),
@@ -45,7 +42,7 @@ vi.mock('../hooks/useShellHistory.js', () => ({
   }),
 }));
 
-vi.mock('../hooks/useCompletion.js', () => ({
+void vi.mock('../hooks/useCompletion.js', () => ({
   useCompletion: () => ({
     completionItems: [],
     selectedIndex: 0,
@@ -61,7 +58,7 @@ vi.mock('../hooks/useCompletion.js', () => ({
   }),
 }));
 
-vi.mock('../hooks/useInputHistory.js', () => ({
+void vi.mock('../hooks/useInputHistory.js', () => ({
   useInputHistory: () => ({
     history: [],
     currentIndex: -1,
@@ -71,7 +68,7 @@ vi.mock('../hooks/useInputHistory.js', () => ({
   }),
 }));
 
-vi.mock('../utils/clipboardUtils.js', () => ({
+void vi.mock('../utils/clipboardUtils.js', () => ({
   pasteClipboardImage: vi.fn(),
   clipboardHasImage: vi.fn(),
 }));
@@ -86,7 +83,7 @@ let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 // Mock useKeypress hook to capture the handler
 // Must match the specifier the consumer imports ('.js'), not the file on disk:
 // Bun's mock.module keys on the specifier string.
-vi.mock('../hooks/useKeypress.js', () => ({
+void vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (
     handler: (key: Record<string, unknown>) => void,
     _options?: unknown,
@@ -99,7 +96,7 @@ vi.mock('../hooks/useKeypress.js', () => ({
 }));
 
 // Mock useMouse hook
-vi.mock('../hooks/useMouse.js', () => ({
+void vi.mock('../hooks/useMouse.js', () => ({
   useMouse: vi.fn(),
 }));
 
@@ -235,8 +232,12 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    (mockBuffer.setText as Mock).mockClear();
-    (mockBuffer.insert as Mock).mockClear();
+    (
+      mockBuffer.setText as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
+    (
+      mockBuffer.insert as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
 
     await sendKey({
       name: 'paste',
@@ -376,9 +377,15 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    (mockBuffer.setText as Mock).mockClear();
-    (mockBuffer.insert as Mock).mockClear();
-    (mockBuffer.handleInput as Mock).mockClear();
+    (
+      mockBuffer.setText as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
+    (
+      mockBuffer.insert as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
+    (
+      mockBuffer.handleInput as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
 
     await sendKey({
       name: 'paste',
@@ -468,13 +475,19 @@ describe('InputPrompt paste functionality', () => {
     const mockDispatch = vi.fn();
 
     // Mock clipboardUtils to return false for image check
-    vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(false);
+    (
+      clipboardUtils.clipboardHasImage as Mock<
+        typeof clipboardUtils.clipboardHasImage
+      >
+    ).mockResolvedValue(false);
     // Mock clipboardy to return test text
-    vi.mocked(clipboardy.read).mockResolvedValue('pasted text from mouse');
+    (clipboardy.read as Mock<typeof clipboardy.read>).mockResolvedValue(
+      'pasted text from mouse',
+    );
 
     // Set up useMouse to capture the handler and allow us to trigger it
     let mouseHandler: ((event: MouseEvent) => void) | null = null;
-    vi.mocked(useMouse).mockImplementation((handler) => {
+    (useMouse as Mock<typeof useMouse>).mockImplementation((handler) => {
       mouseHandler = handler;
     });
 
@@ -505,7 +518,11 @@ describe('InputPrompt paste functionality', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Clear any initial calls
-    (mockBuffer.replaceRangeByOffset as Mock).mockClear();
+    (
+      mockBuffer.replaceRangeByOffset as unknown as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockClear();
 
     // Verify useMouse was set up
     expect(mouseHandler).not.toBeNull();

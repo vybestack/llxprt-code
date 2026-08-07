@@ -29,7 +29,7 @@
  * Property-based tests use fast-check (≥30% of core state tests).
  */
 
-import { afterEach, beforeEach, describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -230,10 +230,13 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(resumedTarget).not.toBeNull();
       });
 
-      expect(resumedTarget).toStrictEqual({
+      // resumedTarget is assigned inside an async onSelect callback, so TS
+      // narrows it back to null here; widen to the declared union and assert the
+      // expected against ContinueTarget.
+      expect(resumedTarget as ContinueTarget | null).toStrictEqual({
         kind: 'session',
         session: expect.objectContaining({ sessionId }),
-      });
+      } as unknown as ContinueTarget);
     });
 
     /**

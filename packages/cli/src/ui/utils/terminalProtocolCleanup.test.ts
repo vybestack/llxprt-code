@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { terminalCapabilityManager } from './terminalCapabilityManager.js';
 import {
   restoreTerminalProtocolsSync,
   TERMINAL_PROTOCOL_RESTORE_SEQUENCES,
 } from './terminalProtocolCleanup.js';
 
-const { writeSyncMock } = vi.hoisted(() => ({
+const { writeSyncMock } = {
   writeSyncMock: vi.fn(),
-}));
+};
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+const actual = { ...(await import('node:fs')) };
+void vi.mock('node:fs', () => {
   const actualWithDefault = actual as typeof import('node:fs') & {
     default?: Record<string, unknown>;
   };

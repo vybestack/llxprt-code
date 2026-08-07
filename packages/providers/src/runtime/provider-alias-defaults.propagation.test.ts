@@ -4,19 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-const { aliasEntries } = vi.hoisted(() => ({
+const realProviderAliasesModule = {
+  ...(await import('../composition/providerAliases.js')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+const { aliasEntries } = {
   aliasEntries: [] as Array<Record<string, unknown>>,
-}));
+};
 
 const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
-} = vi.hoisted(() => {
+} = (() => {
   class StubSettingsService {
     providers: Record<string, Record<string, unknown>> = {};
     global: Record<string, unknown> = {};
@@ -138,7 +152,7 @@ const {
   }
 
   return { StubSettingsService, StubConfig, StubProvider };
-});
+})();
 
 type StubSettingsServiceInstance = InstanceType<
   typeof StubSettingsServiceClass
@@ -176,20 +190,16 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('../composition/providerAliases.js', () => {
-  const actual = importActualSync<
-    typeof import('../composition/providerAliases.js')
-  >('../composition/providerAliases.js');
+void vi.mock('../composition/providerAliases.js', () => {
+  const actual = realProviderAliasesModule;
   return {
     ...actual,
     loadProviderAliasEntries: () => aliasEntries,
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
 
   let activeContext: {
     settingsService: StubSettingsServiceInstance;
@@ -448,25 +458,21 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
   describe('Claude Code OAuth maxOutputTokens respect (Issue #1769)', () => {
     const enableOAuth = () =>
-      vi
-        .mocked(
-          (
-            mockOAuthManager as unknown as {
-              isOAuthEnabled: ReturnType<typeof vi.fn>;
-            }
-          ).isOAuthEnabled,
-        )
-        .mockReturnValue(true);
+      (
+        (
+          mockOAuthManager as unknown as {
+            isOAuthEnabled: ReturnType<typeof vi.fn>;
+          }
+        ).isOAuthEnabled as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(true);
     const disableOAuth = () =>
-      vi
-        .mocked(
-          (
-            mockOAuthManager as unknown as {
-              isOAuthEnabled: ReturnType<typeof vi.fn>;
-            }
-          ).isOAuthEnabled,
-        )
-        .mockReturnValue(false);
+      (
+        (
+          mockOAuthManager as unknown as {
+            isOAuthEnabled: ReturnType<typeof vi.fn>;
+          }
+        ).isOAuthEnabled as unknown as Mock<(...args: never[]) => unknown>
+      ).mockReturnValue(false);
 
     it('should restore maxOutputTokens and not inject max_tokens=10000 when user had maxOutputTokens configured', async () => {
       pushClaudeCodeAlias();

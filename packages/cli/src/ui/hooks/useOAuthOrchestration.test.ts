@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useOAuthOrchestration } from './useOAuthOrchestration.js';
 

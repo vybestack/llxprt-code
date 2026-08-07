@@ -2,7 +2,7 @@
  * @plan PLAN-20251202-THINKING.P04
  * @requirement REQ-THINK-001
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { ThinkingBlock, ContentBlock } from '../IContent';
 
 describe('ThinkingBlock @plan:PLAN-20251202-THINKING.P04', () => {

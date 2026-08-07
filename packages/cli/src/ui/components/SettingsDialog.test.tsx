@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 /**
  *
  *
@@ -23,8 +21,17 @@
  *
  */
 
+import { waitFor as waitForCondition } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { waitFor } from '../../test-utils/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
@@ -39,7 +46,14 @@ import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js
 import { testRegex } from '../../test-utils/regex.js';
 
 // Mock useUIState since we don't wrap in UIStateProvider
-vi.mock('../contexts/UIStateContext.js', () => ({
+const realVimModeContextModule = {
+  ...(await import('../contexts/VimModeContext.js')),
+};
+const realSettingsUtilsModule = {
+  ...(await import('../../utils/settingsUtils.js')),
+};
+
+void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: () => ({ mainAreaWidth: 120 }),
 }));
 
@@ -94,8 +108,8 @@ const createMockSettings = (
 // We use the real SETTINGS_SCHEMA from settingsSchema.js
 // Tests that need a custom schema can override it by mocking the module
 
-vi.mock('../contexts/VimModeContext.js', async () => {
-  const actual = await vi.importActual('../contexts/VimModeContext.js');
+void vi.mock('../contexts/VimModeContext.js', () => {
+  const actual = realVimModeContextModule;
   return {
     ...actual,
     useVimMode: () => ({
@@ -107,8 +121,8 @@ vi.mock('../contexts/VimModeContext.js', async () => {
   };
 });
 
-vi.mock('../../utils/settingsUtils.js', async () => {
-  const actual = await vi.importActual('../../utils/settingsUtils.js');
+void vi.mock('../../utils/settingsUtils.js', () => {
+  const actual = realSettingsUtilsModule;
   return {
     ...actual,
     saveModifiedSettings: vi.fn(),
@@ -242,7 +256,7 @@ describe('SettingsDialog', () => {
         stdin.write(down);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         // Second item is Screen Reader Mode (it should now be highlighted/active)
         expect(lastFrame()).toContain('Screen Reader Mode');
       });
@@ -252,7 +266,7 @@ describe('SettingsDialog', () => {
         stdin.write(up);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).toContain('Enable Loading Phrases');
       });
 
@@ -282,7 +296,7 @@ describe('SettingsDialog', () => {
       // on the list's length or its trailing entry name, assert the round trip:
       // up from the first row must leave it, and a following down must return
       // to it. That only holds if up wrapped to the last row.
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).not.toMatch(
           testRegex('● Enable Loading Phrases', ''),
         );
@@ -292,7 +306,7 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.DOWN_ARROW);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).toMatch(testRegex('● Enable Loading Phrases', ''));
       });
 
@@ -301,7 +315,7 @@ describe('SettingsDialog', () => {
   });
   describe('Settings Toggling', () => {
     it('should toggle setting with Enter key', async () => {
-      vi.mocked(saveModifiedSettings).mockClear();
+      (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mockClear();
 
       const settings = createMockSettings();
       const onSelect = vi.fn();
@@ -326,7 +340,7 @@ describe('SettingsDialog', () => {
       act(() => {
         stdin.write(TerminalKeys.DOWN_ARROW as string);
       });
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).toContain('Screen Reader Mode');
       });
 
@@ -345,11 +359,15 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.ESCAPE as string);
       });
 
-      await vi.waitFor(() => {
-        expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalled();
+      await waitForCondition(() => {
+        expect(
+          saveModifiedSettings as Mock<typeof saveModifiedSettings>,
+        ).toHaveBeenCalled();
       });
 
-      expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalledWith(
+      expect(
+        saveModifiedSettings as Mock<typeof saveModifiedSettings>,
+      ).toHaveBeenCalledWith(
         new Set<string>(['accessibility.screenReader']),
         expect.objectContaining({
           accessibility: expect.objectContaining({
@@ -366,7 +384,7 @@ describe('SettingsDialog', () => {
     describe('enum values', () => {
       // Enum toggle tests removed - LLxprt's theme setting is a string, not an enum
       it('should handle enum-like settings correctly', async () => {
-        vi.mocked(saveModifiedSettings).mockClear();
+        (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mockClear();
 
         const settings = createMockSettings();
         const onSelect = vi.fn();
@@ -509,7 +527,7 @@ describe('SettingsDialog', () => {
         stdin.write(TerminalKeys.ESCAPE);
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(onSelect).toHaveBeenCalledWith(undefined, expect.anything());
       });
 
@@ -686,7 +704,7 @@ describe('SettingsDialog', () => {
       // Since we can't easily target specific settings, we test the general behavior
 
       // Should not show restart prompt initially
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(lastFrame()).not.toContain(
           'To see changes, Gemini CLI must be restarted',
         );
@@ -770,7 +788,7 @@ describe('SettingsDialog', () => {
     ])(
       'should $name',
       async ({ toggleCount, accessibilitySettings, expectedSiblings }) => {
-        vi.mocked(saveModifiedSettings).mockClear();
+        (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mockClear();
 
         const settings = createMockSettings({
           accessibility: accessibilitySettings,
@@ -810,13 +828,16 @@ describe('SettingsDialog', () => {
           stdin.write(TerminalKeys.ESCAPE as string);
         });
 
-        await vi.waitFor(() => {
+        await waitForCondition(() => {
           expect(
-            vi.mocked(saveModifiedSettings).mock.calls.length,
+            (saveModifiedSettings as Mock<typeof saveModifiedSettings>).mock
+              .calls.length,
           ).toBeGreaterThan(0);
         });
 
-        const calls = vi.mocked(saveModifiedSettings).mock.calls;
+        const calls = (
+          saveModifiedSettings as Mock<typeof saveModifiedSettings>
+        ).mock.calls;
         const accessibilityCalls = calls.filter(([modifiedKeys]) =>
           modifiedKeys.has('accessibility.enableLoadingPhrases'),
         );

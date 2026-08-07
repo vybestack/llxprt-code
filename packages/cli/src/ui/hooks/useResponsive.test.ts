@@ -4,28 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type MockedFunction,
-} from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useResponsive } from './useResponsive.js';
 import { useTerminalSize } from './useTerminalSize.js';
 
-vi.mock('./useTerminalSize');
+const realUseTerminalSizeModule = { ...(await import('./useTerminalSize.js')) };
+
+void vi.mock('./useTerminalSize', () => automock(realUseTerminalSizeModule));
 
 describe('useResponsive', () => {
-  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+  let mockUseTerminalSize: Mock<typeof useTerminalSize>;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    mockUseTerminalSize = useTerminalSize as MockedFunction<
-      typeof useTerminalSize
-    >;
+    mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
   });
 
   it('should return NARROW breakpoint for narrow widths', () => {

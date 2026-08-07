@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, afterEach } from 'vitest';
+import { beforeEach, afterEach } from 'bun:test';
 
 const execFileAsync = promisify(execFile);
 
@@ -195,7 +195,7 @@ export function runDocPlacementGuardRealRepo(
  *
  * The trick: each call gets its own closure variable, and the hooks are
  * registered within the describe scope where useTempDir() is called. Since
- * vitest hooks are scoped to the describe block they're registered in,
+ * bun:test hooks are scoped to the describe block they're registered in,
  * each describe block gets its own independent setup/teardown.
  *
  * Both docs/ and dev-docs/ directories are pre-created so the fail-fast

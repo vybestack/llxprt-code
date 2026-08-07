@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { type UsageMetadata } from '../types/usage-metadata.js';
 import { ApiResponseEvent } from './api-events.js';
 

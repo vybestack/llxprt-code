@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -12,47 +20,44 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from './config/settings.js';
 
 // Mock writeToStdout for exit-handler tests
-const { mockWriteToStdout } = vi.hoisted(() => ({
+const { mockWriteToStdout } = {
   mockWriteToStdout: vi.fn().mockReturnValue(true),
+};
+
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  createInkStdio: vi.fn(() => ({
+    stdout: process.stdout,
+    stderr: process.stderr,
+  })),
+  writeToStdout: mockWriteToStdout,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    createInkStdio: vi.fn(() => ({
-      stdout: process.stdout,
-      stderr: process.stderr,
-    })),
-    writeToStdout: mockWriteToStdout,
-  };
-});
-
-vi.mock('./utils/version.js', () => ({
+void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./utils/terminalTheme.js', () => ({
+void vi.mock('./utils/terminalTheme.js', () => ({
   setupTerminalAndTheme: vi.fn(() => Promise.resolve(undefined)),
 }));
 
-vi.mock('./ui/utils/updateCheck.js', () => ({
+void vi.mock('./ui/utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('./utils/cleanup.js', () => ({
+void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
   registerSyncCleanup: vi.fn(),
   runExitCleanup: vi.fn(),
 }));
 
-vi.mock('./ui/utils/terminalProtocolCleanup.js', () => ({
+void vi.mock('./ui/utils/terminalProtocolCleanup.js', () => ({
   restoreTerminalProtocolsSync: vi.fn(),
 }));
 
-vi.mock('./ui/utils/mouse.js', () => ({
+void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
   disableMouseEvents: vi.fn(),
   parseMouseEvent: vi.fn(),
@@ -106,7 +111,8 @@ describe('validateDnsResolutionOrder', () => {
 
   it('should return the default "ipv4first" and log a warning for an invalid string', () => {
     expect(validateDnsResolutionOrder('invalid-value')).toBe('ipv4first');
-    expect(debugWarnSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(debugWarnSpy).toHaveBeenCalledTimes(1);
+    expect(debugWarnSpy).toHaveBeenCalledWith(
       'Invalid value for dnsResolutionOrder in settings: "invalid-value". Using default "ipv4first".',
     );
   });
@@ -200,7 +206,8 @@ describe('startInteractiveUI', () => {
     expect(registerCleanup).toHaveBeenCalledTimes(1);
 
     // Verify cleanup handler is registered with unmount function
-    const cleanupFn = vi.mocked(registerCleanup).mock.calls[0][0];
+    const cleanupFn = (registerCleanup as Mock<typeof registerCleanup>).mock
+      .calls[0][0];
     expect(typeof cleanupFn).toBe('function');
 
     // checkForUpdates should be called asynchronously (not waited for)
@@ -215,16 +222,19 @@ describe('startInteractiveUI', () => {
     );
     const { disableMouseEvents } = await import('./ui/utils/mouse.js');
     const exitHandlers: Array<() => void> = [];
-    const processOnSpy = vi
-      .spyOn(process, 'on')
-      .mockImplementation(
-        (event: string | symbol, handler: (...args: unknown[]) => void) => {
-          if (event === 'exit') {
-            exitHandlers.push(handler as () => void);
-          }
-          return process;
-        },
-      );
+    const processOnSpy = (
+      vi.spyOn(process, 'on') as unknown as Mock<
+        (
+          event: string | symbol,
+          handler: (...args: unknown[]) => void,
+        ) => NodeJS.Process
+      >
+    ).mockImplementation((event, handler) => {
+      if (event === 'exit') {
+        exitHandlers.push(handler as () => void);
+      }
+      return process;
+    });
 
     const mouseEnabledConfig = {
       ...mockConfig,
@@ -313,16 +323,19 @@ describe('startInteractiveUI', () => {
       './ui/utils/mouse.js'
     );
     const exitHandlers: Array<() => void> = [];
-    const processOnSpy = vi
-      .spyOn(process, 'on')
-      .mockImplementation(
-        (event: string | symbol, handler: (...args: unknown[]) => void) => {
-          if (event === 'exit') {
-            exitHandlers.push(handler as () => void);
-          }
-          return process;
-        },
-      );
+    const processOnSpy = (
+      vi.spyOn(process, 'on') as unknown as Mock<
+        (
+          event: string | symbol,
+          handler: (...args: unknown[]) => void,
+        ) => NodeJS.Process
+      >
+    ).mockImplementation((event, handler) => {
+      if (event === 'exit') {
+        exitHandlers.push(handler as () => void);
+      }
+      return process;
+    });
 
     const originalIsTTY = process.stdout.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', {

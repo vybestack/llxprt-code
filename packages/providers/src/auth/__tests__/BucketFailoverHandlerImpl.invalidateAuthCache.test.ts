@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { describe, expect, it, vi } from 'bun:test';
 
-vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
-    '@vybestack/llxprt-code-auth',
-  );
+const realLlxprtCodeAuthModule = {
+  ...(await import('@vybestack/llxprt-code-auth')),
+};
+
+void vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = realLlxprtCodeAuthModule;
   return {
     ...actual,
     flushRuntimeAuthScope: vi.fn(),

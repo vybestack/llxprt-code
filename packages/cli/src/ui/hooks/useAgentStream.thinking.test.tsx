@@ -10,14 +10,15 @@
  * @requirement:REQ-THINK-UI-003
  */
 
-import type { Mock } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
 import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
@@ -36,7 +37,11 @@ import type { HistoryItemAi } from '../types.js';
 import { MessageType, StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
-const inkMock = vi.hoisted(() => {
+const realAtCommandProcessorModule = {
+  ...(await import('./atCommandProcessor.js')),
+};
+
+const inkMock = (() => {
   const write = vi.fn();
   const exit = vi.fn();
   const setRawMode = vi.fn();
@@ -73,9 +78,9 @@ const inkMock = vi.hoisted(() => {
   };
   (module as Record<string, unknown>).default = module;
   return module;
-});
+})();
 
-vi.mock('ink', () => inkMock);
+void vi.mock('ink', () => inkMock);
 
 type InternalCarrier = {
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: {
@@ -115,32 +120,36 @@ const ensureReactSharedInternals = () => {
 ensureReactSharedInternals();
 
 // --- MOCKS ---
-vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actualSchedulerModule,
-    useReactToolScheduler: vi.fn(),
-  };
-});
-const mockUseReactToolScheduler = useReactToolScheduler as Mock;
+const actualSchedulerModule = {
+  ...(await import('./useReactToolScheduler.js')),
+};
+void vi.mock('./useReactToolScheduler.js', () => ({
+  ...actualSchedulerModule,
+  useReactToolScheduler: vi.fn(),
+}));
+const mockUseReactToolScheduler = useReactToolScheduler as Mock<
+  (...args: never[]) => unknown
+>;
 
-vi.mock('./useKeypress.js', () => ({
+void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
 }));
 
-vi.mock('./shellCommandProcessor.js', () => ({
+void vi.mock('./shellCommandProcessor.js', () => ({
   useShellCommandProcessor: vi.fn().mockReturnValue({
     handleShellCommand: vi.fn(),
   }),
 }));
 
-vi.mock('./atCommandProcessor.js');
+void vi.mock('./atCommandProcessor.js', () =>
+  automock(realAtCommandProcessorModule),
+);
 
-vi.mock('../utils/markdownUtilities.js', () => ({
+void vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),
 }));
 
-vi.mock('./useStateAndRef.js', () => ({
+void vi.mock('./useStateAndRef.js', () => ({
   useStateAndRef: <T,>(
     initial: T,
   ): [
@@ -165,7 +174,7 @@ vi.mock('./useStateAndRef.js', () => ({
   },
 }));
 
-vi.mock('./useLogger.js', () => ({
+void vi.mock('./useLogger.js', () => ({
   useLogger: vi.fn().mockReturnValue({
     logMessage: vi.fn().mockResolvedValue(undefined),
   }),
@@ -173,7 +182,7 @@ vi.mock('./useLogger.js', () => ({
 
 const mockStartNewPrompt = vi.fn();
 const mockAddUsage = vi.fn();
-vi.mock('../contexts/SessionContext.js', () => ({
+void vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({
     startNewPrompt: mockStartNewPrompt,
     addUsage: mockAddUsage,
@@ -181,21 +190,21 @@ vi.mock('../contexts/SessionContext.js', () => ({
   })),
 }));
 
-vi.mock('./slashCommandProcessor.js', () => ({
+void vi.mock('./slashCommandProcessor.js', () => ({
   handleSlashCommand: vi.fn().mockReturnValue(false),
 }));
 
 // --- END MOCKS ---
 
 describe('useAgentStream - ThinkingBlock Integration', () => {
-  let mockAddItem: Mock;
+  let mockAddItem: Mock<(...args: never[]) => unknown>;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockOnDebugMessage: Mock;
-  let mockHandleSlashCommand: Mock;
-  let mockScheduleToolCalls: Mock;
-  let mockCancelAllToolCalls: Mock;
-  let mockMarkToolsAsDisplayCleared: Mock;
+  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
+  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
+  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockCancelAllToolCalls: Mock<(...args: never[]) => unknown>;
+  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();

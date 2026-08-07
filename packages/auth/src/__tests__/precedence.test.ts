@@ -7,7 +7,7 @@
  * @requirement REQ-AUTH-001.1
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { ISettingsService } from '../interfaces/settings-service.js';
 

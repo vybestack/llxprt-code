@@ -13,25 +13,22 @@
  * `applyRequestBodyOverrides`).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
 }));
 
-vi.mock(
-  '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js',
-  () => ({
-    shouldIncludeSubagentDelegation: vi.fn().mockResolvedValue(false),
-  }),
-);
+void vi.mock('../../prompt-config/subagent-delegation.js', () => ({
+  shouldIncludeSubagentDelegation: vi.fn().mockResolvedValue(false),
+}));
 
-vi.mock('../utils/userMemory.js', () => ({
+void vi.mock('../utils/userMemory.js', () => ({
   resolveUserMemory: vi.fn().mockResolvedValue(''),
 }));
 

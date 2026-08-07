@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,
@@ -17,11 +18,9 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 
-const getCoreSystemPromptAsyncSpy = vi.hoisted(() =>
-  vi.fn().mockResolvedValue('system prompt'),
-);
+const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
 }));
 
@@ -149,14 +148,14 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 
   it('A1: uses the WebSocket transport for Codex mode and yields its events', async () => {
     const transport = makeRecordingTransport('success');
     const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
 
     const options = buildNormalizedOptions();
     const iterator = executeOpenAIResponsesRequest(
@@ -184,7 +183,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         'data: [DONE]\n\n',
       ]),
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
     let transportChecks = 0;
 
     const options = buildNormalizedOptions({
@@ -235,7 +234,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       .mockImplementation(() =>
         Promise.resolve({ ok: true, body: fallbackBody() }),
       );
-    vi.stubGlobal('fetch', fetchSpy);
+    setGlobal('fetch', fetchSpy);
     const transport = makeRecordingTransport('connect-failure');
     let stickyFallback = false;
 

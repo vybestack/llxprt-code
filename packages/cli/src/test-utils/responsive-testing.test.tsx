@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { render } from 'ink-testing-library';
 import type React from 'react';
 import { Box, Text } from 'ink';
@@ -12,10 +13,16 @@ import { Colors } from '../ui/colors.js';
 import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
 import { useResponsive } from '../ui/hooks/useResponsive.js';
 
+const realUseTerminalSizeModule = {
+  ...(await import('../ui/hooks/useTerminalSize.js')),
+};
+
 type RenderResult = ReturnType<typeof render>;
 
 // Mock the useTerminalSize hook
-vi.mock('../ui/hooks/useTerminalSize');
+void vi.mock('../ui/hooks/useTerminalSize', () =>
+  automock(realUseTerminalSizeModule),
+);
 
 // Test component to verify the responsive testing utilities
 function TestComponent(): React.ReactElement {

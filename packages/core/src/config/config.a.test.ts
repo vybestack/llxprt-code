@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Mock } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
@@ -30,7 +30,7 @@ import {
 } from './configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -38,13 +38,11 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 
-const initializeShellParser = vi.hoisted(() =>
-  vi.fn(() => Promise.resolve(true)),
-);
+const initializeShellParser = vi.fn(() => Promise.resolve(true));
 
-vi.mock('../utils/shell-parser.js', () => ({
+void vi.mock('../utils/shell-parser.js', () => ({
   initializeParser: initializeShellParser,
   isParserAvailable: () => true,
   parseShellCommand: () => null,
@@ -55,38 +53,45 @@ vi.mock('../utils/shell-parser.js', () => ({
   hasPromptCommandTransform: () => false,
 }));
 
-vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
+const __actual = { ...(await import('fs')) };
+void vi.mock('fs', () => buildFsMockBody(__actual));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
-vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(importOriginal()),
+const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  buildToolsMockBody(__actual2),
 );
 
 // Mock individual tools if their constructors are complex or have side effects
 
-vi.mock('../core/contentGenerator.js', (importOriginal) =>
-  buildContentGeneratorMockBody(importOriginal()),
+const __actual3 = { ...(await import('../core/contentGenerator.js')) };
+void vi.mock('../core/contentGenerator.js', () =>
+  buildContentGeneratorMockBody(__actual3),
 );
 
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
+void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(importOriginal()),
+const __actual4 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+  buildIdeIntegrationMockBody(__actual4),
 );
 
-vi.mock('../utils/memoryDiscovery.js', () =>
+void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
-vi.mock('../utils/events.js', (importOriginal) =>
-  buildEventsMockBody(importOriginal(), hoistedConfigMocks),
+const __actual5 = { ...(await import('../utils/events.js')) };
+void vi.mock('../utils/events.js', () =>
+  buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
 
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(
@@ -96,7 +101,9 @@ describe('Server Config (config.ts)', () => {
   beforeEach(() => {
     resetAgentClientMock();
     initializeShellParser.mockClear();
-    vi.mocked(ToolRegistry).mockClear();
+    (
+      ToolRegistry as unknown as Mock<(...args: never[]) => unknown>
+    ).mockClear();
   });
 
   describe('initialize', () => {
@@ -109,7 +116,7 @@ describe('Server Config (config.ts)', () => {
       });
 
       const initialization = initializeTestConfig(config);
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(initializeShellParser).toHaveBeenCalledOnce();
       });
 
@@ -120,7 +127,8 @@ describe('Server Config (config.ts)', () => {
 
       expect(ToolRegistry).toHaveBeenCalledOnce();
       expect(initializeShellParser.mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(ToolRegistry).mock.invocationCallOrder[0],
+        (ToolRegistry as unknown as Mock<(...args: never[]) => unknown>).mock
+          .invocationCallOrder[0],
       );
     });
 
@@ -142,7 +150,7 @@ describe('Server Config (config.ts)', () => {
         initializeTestConfig(firstConfig),
         initializeTestConfig(secondConfig),
       ];
-      await vi.waitFor(() => {
+      await waitFor(() => {
         expect(initializeShellParser).toHaveBeenCalledTimes(2);
       });
 
@@ -171,7 +179,9 @@ describe('Server Config (config.ts)', () => {
 
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
+      (
+        GitService.prototype.initialize as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,
@@ -183,7 +193,9 @@ describe('Server Config (config.ts)', () => {
 
     it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
+      (
+        GitService.prototype.initialize as Mock<(...args: never[]) => unknown>
+      ).mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,

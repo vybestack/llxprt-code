@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   fetchKimiUsage,
   formatKimiUsage,
@@ -12,13 +13,17 @@ import {
   formatKimiCodeUsage,
 } from './usageInfo.js';
 
+afterEach(() => {
+  restoreGlobals();
+});
+
 describe('kimiUsageInfo', () => {
   describe('fetchKimiUsage', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {
@@ -232,7 +237,7 @@ describe('kimiUsageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      vi.stubGlobal('fetch', fetchMock);
+      setGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {

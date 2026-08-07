@@ -8,6 +8,7 @@
     "types": ["node", "bun"]
   },
   "include": [
+    "bun-test-corrections.d.ts",
     "scripts/agents-neutral-gate.ts",
     "scripts/agents-neutral-gate-config.ts",
     "scripts/agents-neutral-gate-ast.ts",
@@ -97,10 +98,6 @@
     "scripts/tests/issue-2994-lint-scoped-helpers.ts",
     "scripts/tests/telemetry-doc-accuracy.test.ts",
     "scripts/tests/pr-review-walkthrough-workflow.test.ts",
-    "test-setup/stub-helpers.ts",
-    "test-setup/stub-helpers.bun.test.ts",
-    "test-setup/augment-bun-vi.ts",
-    "test-setup/augment-bun-vi.test.ts",
     "scripts/eslint-guard/**/*.ts",
     "scripts/codemods/**/*.ts",
     "scripts/acp-logging-proxy.ts",

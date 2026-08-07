@@ -11,7 +11,7 @@
  * Comprehensive behavioral tests for formatRelativeTime utility.
  * Tests are deterministic using explicit `now` parameter - no Date mocking.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { formatRelativeTime } from '../formatRelativeTime.js';
 import { testRegex } from '../../test-utils/regex.js';

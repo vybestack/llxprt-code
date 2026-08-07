@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { renderHook } from '../test-utils/render.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 

@@ -17,7 +17,7 @@
  * dependent package (A5).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   existsSync,
   mkdirSync,
@@ -387,7 +387,7 @@ describe('affected-lint-targets selector — type-aware soundness (A5)', () => {
    * This test fails if B is omitted from selection or if ESLint does not report
    * the floating-promise violation in the untouched dependent.
    */
-  it.runIf(existsSync(ESLINT_BIN))(
+  it.skipIf(!existsSync(ESLINT_BIN))(
     'catches a Promise<void> API change in an untouched dependent package',
     async () => {
       const { selectLintTargets } = await loadSelector();

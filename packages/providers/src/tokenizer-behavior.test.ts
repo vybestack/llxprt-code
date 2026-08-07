@@ -21,7 +21,7 @@
  * @requirement:REQ-TEST-001
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 
 // P11: concrete tokenizers are provider-owned; RuntimeTokenizer remains a
 // core-owned structural contract.

@@ -5,7 +5,7 @@
  * from streaming deltas, which is critical for tool response matching.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
 import { ToolCallNormalizer } from './ToolCallNormalizer.js';

@@ -16,7 +16,7 @@
  * @issue #2524 — Shared reasoning-field resolution for OpenAI-compatible providers.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   resolveReasoningField,
   normalizeReasoningFieldName,

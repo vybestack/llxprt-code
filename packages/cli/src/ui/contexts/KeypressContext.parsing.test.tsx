@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
-import type { Mock } from 'vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Key } from './KeypressContext.js';
 import {
   KeypressProvider,
@@ -24,13 +23,11 @@ import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
 
 // Mock the 'ink' module to control stdin
-vi.mock('ink', async (importOriginal) => {
-  const original = await importOriginal<typeof import('ink')>();
-  return {
-    ...original,
-    useStdin: vi.fn(),
-  };
-});
+const original = { ...(await import('ink')) };
+void vi.mock('ink', () => ({
+  ...original,
+  useStdin: vi.fn(),
+}));
 
 // readline will not emit most incomplete kitty sequences but it will give
 // up on sequences like this where the modifier (135) has more than two digits.
@@ -74,7 +71,7 @@ describe('Kitty Sequence Parsing', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     stdin = new MockStdin();
-    (useStdin as Mock).mockReturnValue({
+    (useStdin as Mock<(...args: never[]) => unknown>).mockReturnValue({
       stdin,
       setRawMode: mockSetRawMode,
     });
@@ -418,7 +415,7 @@ describe('Kitty Sequence Parsing', () => {
     }
 
     // Should parse once complete
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'escape',

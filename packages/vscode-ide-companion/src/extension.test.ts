@@ -4,12 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import * as vscode from 'vscode';
 import { activate } from './extension.js';
 import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('vscode', () => ({
+const realLlxprtCodeIdeIntegrationModule = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+
+void vi.mock('vscode', () => ({
   window: {
     createOutputChannel: vi.fn(() => ({
       appendLine: vi.fn(),
@@ -57,18 +69,16 @@ vi.mock('vscode', () => ({
   })),
 }));
 
-const { mockDetectIdeFromEnv } = vi.hoisted(() => {
+const { mockDetectIdeFromEnv } = (() => {
   const mock = vi.fn(() => ({
     name: 'vscode',
     displayName: 'VS Code',
   }));
   return { mockDetectIdeFromEnv: mock };
-});
+})();
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-ide-integration')
-  >('@vybestack/llxprt-code-ide-integration');
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
+  const actual = realLlxprtCodeIdeIntegrationModule;
   return {
     ...actual,
     detectIdeFromEnv: mockDetectIdeFromEnv,
@@ -77,6 +87,7 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async () => {
 
 describe('activate', () => {
   let context: vscode.ExtensionContext;
+  let globalStateGet: Mock<(...args: unknown[]) => unknown>;
 
   beforeEach(() => {
     // Reset the mock implementation to default
@@ -100,13 +111,14 @@ describe('activate', () => {
       }),
     } as Response);
 
+    globalStateGet = vi.fn();
     context = {
       subscriptions: [],
       environmentVariableCollection: {
         replace: vi.fn(),
       },
       globalState: {
-        get: vi.fn(),
+        get: globalStateGet,
         update: vi.fn(),
       },
       extensionUri: {
@@ -121,14 +133,19 @@ describe('activate', () => {
   });
 
   afterEach(() => {
+    // Bun's restoreAllMocks restores implementations but leaves the call
+    // history of module mocks in place, so clear it explicitly.
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
   it('should show the info message on first activation', async () => {
-    const showInformationMessageMock = vi
-      .mocked(vscode.window.showInformationMessage)
-      .mockResolvedValue(undefined);
-    vi.mocked(context.globalState.get).mockReturnValue(undefined);
+    const showInformationMessageMock = (
+      vscode.window.showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >
+    ).mockResolvedValue(undefined);
+    globalStateGet.mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalledWith(
       'LLxprt Code Companion extension successfully installed.',
@@ -136,7 +153,7 @@ describe('activate', () => {
   });
 
   it('should not show the info message on subsequent activations', async () => {
-    vi.mocked(context.globalState.get).mockReturnValue(true);
+    globalStateGet.mockReturnValue(true);
     await activate(context);
     expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
@@ -147,16 +164,20 @@ describe('activate', () => {
   });
 
   it('should launch the LLxprt Code when the user clicks the button', async () => {
-    const showInformationMessageMock = vi
-      .mocked(vscode.window.showInformationMessage)
-      .mockResolvedValue('Re-launch LLxprt Code' as never);
-    vi.mocked(context.globalState.get).mockReturnValue(undefined);
+    const showInformationMessageMock = (
+      vscode.window.showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >
+    ).mockResolvedValue('Re-launch LLxprt Code' as never);
+    globalStateGet.mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalled();
     await new Promise(process.nextTick); // Wait for the promise to resolve
-    const commandCallback = vi
-      .mocked(vscode.commands.registerCommand)
-      .mock.calls.find((call) => call[0] === 'llxprt-code.runLLxprtCode')?.[1];
+    const commandCallback = (
+      vscode.commands.registerCommand as Mock<
+        typeof vscode.commands.registerCommand
+      >
+    ).mock.calls.find((call) => call[0] === 'llxprt-code.runLLxprtCode')?.[1];
 
     expect(commandCallback).toBeDefined();
   });
@@ -164,7 +185,7 @@ describe('activate', () => {
   describe('update notification', () => {
     beforeEach(() => {
       // Prevent the "installed" message from showing
-      vi.mocked(context.globalState.get).mockReturnValue(true);
+      globalStateGet.mockReturnValue(true);
     });
 
     it('should show an update notification if a newer version is available', async () => {
@@ -183,9 +204,10 @@ describe('activate', () => {
         }),
       } as Response);
 
-      const showInformationMessageMock = vi.mocked(
-        vscode.window.showInformationMessage,
-      );
+      const showInformationMessageMock = vscode.window
+        .showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >;
 
       await activate(context);
 
@@ -211,9 +233,10 @@ describe('activate', () => {
         }),
       } as Response);
 
-      const showInformationMessageMock = vi.mocked(
-        vscode.window.showInformationMessage,
-      );
+      const showInformationMessageMock = vscode.window
+        .showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >;
 
       await activate(context);
 
@@ -229,7 +252,7 @@ describe('activate', () => {
       'does not show install or update messages for $ide.name',
       async ({ ide }) => {
         mockDetectIdeFromEnv.mockImplementation(() => ide);
-        vi.mocked(context.globalState.get).mockReturnValue(undefined);
+        globalStateGet.mockReturnValue(undefined);
         vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,
           json: async () => ({
@@ -244,9 +267,10 @@ describe('activate', () => {
             ],
           }),
         } as Response);
-        const showInformationMessageMock = vi.mocked(
-          vscode.window.showInformationMessage,
-        );
+        const showInformationMessageMock = vscode.window
+          .showInformationMessage as Mock<
+          typeof vscode.window.showInformationMessage
+        >;
 
         await activate(context);
 
@@ -270,9 +294,10 @@ describe('activate', () => {
         }),
       } as Response);
 
-      const showInformationMessageMock = vi.mocked(
-        vscode.window.showInformationMessage,
-      );
+      const showInformationMessageMock = vscode.window
+        .showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >;
 
       await activate(context);
 
@@ -294,10 +319,14 @@ describe('activate', () => {
           ],
         }),
       } as Response);
-      vi.mocked(vscode.window.showInformationMessage).mockResolvedValue(
-        'Update to latest version' as never,
-      );
-      const executeCommandMock = vi.mocked(vscode.commands.executeCommand);
+      (
+        vscode.window.showInformationMessage as Mock<
+          typeof vscode.window.showInformationMessage
+        >
+      ).mockResolvedValue('Update to latest version' as never);
+      const executeCommandMock = vscode.commands.executeCommand as Mock<
+        typeof vscode.commands.executeCommand
+      >;
 
       await activate(context);
 
@@ -316,9 +345,10 @@ describe('activate', () => {
         statusText: 'Internal Server Error',
       } as Response);
 
-      const showInformationMessageMock = vi.mocked(
-        vscode.window.showInformationMessage,
-      );
+      const showInformationMessageMock = vscode.window
+        .showInformationMessage as Mock<
+        typeof vscode.window.showInformationMessage
+      >;
 
       await activate(context);
 

@@ -25,7 +25,7 @@
  * is asserted without a provider bootstrap.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
@@ -70,17 +70,15 @@ function recordedFilesLister(...sessionIds: string[]): ChatSessionFileLister {
   return async () => names;
 }
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),

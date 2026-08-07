@@ -24,7 +24,7 @@
  *        mcp.status/listTools still callable while pending.
  */
 
-import { describe, it, expect, beforeEach, vi } from '../../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import {
   buildAgent,
   drain,

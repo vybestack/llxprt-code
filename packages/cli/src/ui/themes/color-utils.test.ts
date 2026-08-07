@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   isValidColor,
   resolveColor,
@@ -376,7 +376,6 @@ describe('Color Utils', () => {
         writable: true,
         configurable: true,
       });
-      vi.clearAllTimers();
     });
 
     it('should return undefined when stdin is not a TTY', async () => {

@@ -7,5 +7,5 @@
     "noEmit": true,
     "types": ["node", "bun"]
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["../bun-test-corrections.d.ts", "**/*.ts", "**/*.tsx"]
 }

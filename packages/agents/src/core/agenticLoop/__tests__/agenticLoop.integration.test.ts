@@ -4,14 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-} from '../../../testApi.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
@@ -38,12 +31,14 @@ import {
   hasFunctionResponse,
 } from './agenticLoop-test-helpers.js';
 
-const { modifyWithEditorMock } = vi.hoisted(() => ({
+const realLlxprtCodeToolsModule = {
+  ...(await import('@vybestack/llxprt-code-tools')),
+};
+const { modifyWithEditorMock } = {
   modifyWithEditorMock: vi.fn(),
-}));
-vi.mock('@vybestack/llxprt-code-tools', async (importActual) => {
-  const actual =
-    await importActual<typeof import('@vybestack/llxprt-code-tools')>();
+};
+void vi.mock('@vybestack/llxprt-code-tools', () => {
+  const actual = realLlxprtCodeToolsModule;
   return { ...actual, modifyWithEditor: modifyWithEditorMock };
 });
 

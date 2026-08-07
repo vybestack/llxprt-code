@@ -17,7 +17,11 @@
  * server.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  restoreEnv,
+  setEnv,
+} from '../../packages/test-utils/src/env-test-helpers.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -28,11 +32,11 @@ const SOCKET_FLAG = IS_WIN32 ? '-L' : '-S';
 
 // Capture spawnSync calls. The module under test imports `spawnSync` from
 // `node:child_process`, so we mock that specifier.
-const { spawnSyncMock } = vi.hoisted(() => ({
+const { spawnSyncMock } = {
   spawnSyncMock: vi.fn(),
-}));
+};
 
-vi.mock('node:child_process', () => ({
+void vi.mock('node:child_process', () => ({
   spawnSync: (...args: unknown[]) => spawnSyncMock(...args),
 }));
 
@@ -86,7 +90,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  restoreEnv();
   spawnSyncMock.mockReset();
   spawnSyncMock.mockReturnValue(okReturn(''));
   // Remove the lazily-created socket temp directory if any test created one.
@@ -279,9 +283,9 @@ describe('issue #2469: tmux socket isolation', () => {
 
 describe('issue #2469: scrub inherited tmux client env vars', () => {
   it('does not pass TMUX/TMUX_PANE/TMUX_TMPDIR through even when set in process.env', () => {
-    vi.stubEnv('TMUX', '/tmp/tmux-1000/default,1234,0');
-    vi.stubEnv('TMUX_PANE', '%1');
-    vi.stubEnv('TMUX_TMPDIR', '/tmp/tmux-1000');
+    setEnv('TMUX', '/tmp/tmux-1000/default,1234,0');
+    setEnv('TMUX_PANE', '%1');
+    setEnv('TMUX_TMPDIR', '/tmp/tmux-1000');
 
     runTmux(['list-sessions']);
 
@@ -292,10 +296,10 @@ describe('issue #2469: scrub inherited tmux client env vars', () => {
   });
 
   it('scrubs tmux env vars when caller passes options.env explicitly', () => {
-    vi.stubEnv('MY_PROCESS_VAR', 'survives-merge');
-    vi.stubEnv('TMUX', '/tmp/tmux-1000/default,9999,0');
-    vi.stubEnv('TMUX_PANE', '%99');
-    vi.stubEnv('TMUX_TMPDIR', '/tmp/tmux-1000');
+    setEnv('MY_PROCESS_VAR', 'survives-merge');
+    setEnv('TMUX', '/tmp/tmux-1000/default,9999,0');
+    setEnv('TMUX_PANE', '%99');
+    setEnv('TMUX_TMPDIR', '/tmp/tmux-1000');
     runTmux(['list-sessions'], {
       env: {
         TMUX: '/tmp/tmux-1000/default,1234,0',
@@ -316,7 +320,7 @@ describe('issue #2469: scrub inherited tmux client env vars', () => {
   });
 
   it('preserves non-tmux env vars from process.env', () => {
-    vi.stubEnv('MY_PROCESS_VAR', 'process-value');
+    setEnv('MY_PROCESS_VAR', 'process-value');
     runTmux(['list-sessions']);
     const [, , options] = spawnSyncMock.mock.calls[0];
     expect(options.env.MY_PROCESS_VAR).toBe('process-value');
@@ -340,7 +344,7 @@ describe('issue #2469: scrub inherited tmux client env vars', () => {
   });
 
   it('handles options without an env property gracefully', () => {
-    vi.stubEnv('TMUX', '/tmp/tmux-1000/default,1234,0');
+    setEnv('TMUX', '/tmp/tmux-1000/default,1234,0');
     runTmux(['list-sessions'], { cwd: '/some/cwd' });
 
     const [, , options] = spawnSyncMock.mock.calls[0];
@@ -405,9 +409,9 @@ describe('issue #2469: error messages include socket flag', () => {
   });
 
   it('tryTmux also scrubs inherited tmux env vars', () => {
-    vi.stubEnv('TMUX', '/tmp/tmux-1000/default,1234,0');
-    vi.stubEnv('TMUX_PANE', '%1');
-    vi.stubEnv('TMUX_TMPDIR', '/tmp/tmux-1000');
+    setEnv('TMUX', '/tmp/tmux-1000/default,1234,0');
+    setEnv('TMUX_PANE', '%1');
+    setEnv('TMUX_TMPDIR', '/tmp/tmux-1000');
 
     expect(tryTmux(['list-sessions'])).toBe('');
     expect(spawnSyncMock).toHaveBeenCalledTimes(1);

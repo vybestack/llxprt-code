@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 /**
  *
  *
@@ -23,8 +21,9 @@
  *
  */
 
+import { waitFor as waitForCondition } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { waitFor } from '../../test-utils/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings } from '../../config/settings.js';
@@ -34,7 +33,14 @@ import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js
 import { testRegex } from '../../test-utils/regex.js';
 
 // Mock useUIState since we don't wrap in UIStateProvider
-vi.mock('../contexts/UIStateContext.js', () => ({
+const realVimModeContextModule = {
+  ...(await import('../contexts/VimModeContext.js')),
+};
+const realSettingsUtilsModule = {
+  ...(await import('../../utils/settingsUtils.js')),
+};
+
+void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: () => ({ mainAreaWidth: 120 }),
 }));
 
@@ -89,8 +95,8 @@ const createMockSettings = (
 // We use the real SETTINGS_SCHEMA from settingsSchema.js
 // Tests that need a custom schema can override it by mocking the module
 
-vi.mock('../contexts/VimModeContext.js', async () => {
-  const actual = await vi.importActual('../contexts/VimModeContext.js');
+void vi.mock('../contexts/VimModeContext.js', () => {
+  const actual = realVimModeContextModule;
   return {
     ...actual,
     useVimMode: () => ({
@@ -102,8 +108,8 @@ vi.mock('../contexts/VimModeContext.js', async () => {
   };
 });
 
-vi.mock('../../utils/settingsUtils.js', async () => {
-  const actual = await vi.importActual('../../utils/settingsUtils.js');
+void vi.mock('../../utils/settingsUtils.js', () => {
+  const actual = realSettingsUtilsModule;
   return {
     ...actual,
     saveModifiedSettings: vi.fn(),
@@ -292,7 +298,7 @@ describe('SettingsDialog', () => {
         stdin.write('\u001B');
       });
 
-      await vi.waitFor(() => {
+      await waitForCondition(() => {
         expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
       });
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as vscode from 'vscode';
 import { DiffContentProvider, DiffManager } from './diff-manager.js';
 import { IDEServer } from './ide-server.js';
@@ -17,6 +17,30 @@ import * as path from 'node:path';
 import * as http from 'node:http';
 import { fileURLToPath } from 'node:url';
 
+const originalEnvValues = new Map<string, string | undefined>();
+
+function setEnv(key: string, value: string | undefined): void {
+  if (!originalEnvValues.has(key)) {
+    originalEnvValues.set(key, process.env[key]);
+  }
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}
+
+function restoreEnv(): void {
+  for (const [key, value] of originalEnvValues) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  originalEnvValues.clear();
+}
+
 const companionFile = fileURLToPath(import.meta.url);
 const srcDir = path.dirname(companionFile);
 const companionDir = path.dirname(srcDir);
@@ -24,7 +48,7 @@ const packagesDir = path.dirname(companionDir);
 const repositoryRoot = path.dirname(packagesDir);
 const readmePath = path.join(repositoryRoot, 'README.md');
 
-vi.mock('vscode', () => {
+void vi.mock('vscode', () => {
   class TestEventEmitter<T> {
     private readonly listeners = new Set<(event: T) => unknown>();
 
@@ -111,7 +135,7 @@ function createExtensionContext(): vscode.ExtensionContext {
     environmentVariableCollection: {
       replace: (variable: string, value: string) => {
         environmentVariables.add(variable);
-        vi.stubEnv(variable, value);
+        setEnv(variable, value);
       },
       clear: () => {
         for (const variable of environmentVariables) {
@@ -490,7 +514,7 @@ describe('IDEServer initial-context delivery concurrency', () => {
         configurable: true,
         value: undefined,
       });
-      vi.unstubAllEnvs();
+      restoreEnv();
       ideServer = undefined;
     }
   });

@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { UserMessage } from './UserMessage.js';
 import { themeManager } from '../../themes/theme-manager.js';
 import { AtomOneDark } from '../../themes/atom-one-dark.js';

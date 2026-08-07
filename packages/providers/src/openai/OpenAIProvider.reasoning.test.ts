@@ -4,7 +4,7 @@
  * @plan PLAN-20251202-THINKING.P10
  * @requirement REQ-THINK-003
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';

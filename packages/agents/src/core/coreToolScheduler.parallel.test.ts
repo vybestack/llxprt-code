@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -131,7 +132,7 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
     );
 
     // Wait for all calls to complete
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(completionOrder.length).toBe(3);
       expect(publishOrder.length).toBe(3);
     });
@@ -253,7 +254,7 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
     );
 
     // Wait for all calls to complete
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(completionOrder.length).toBe(3);
       expect(publishOrder.length).toBe(3);
     });

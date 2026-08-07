@@ -2,19 +2,28 @@
  * Integration tests for Phase 12: Provider Settings Integration
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderWithRuntime } from '../test-utils/runtime.js';
 
 // Mock the settings service instance
-vi.mock('@vybestack/llxprt-code-settings', (importOriginal) => ({
-  ...(importOriginal() as typeof import('@vybestack/llxprt-code-settings')),
+const __actual = { ...(await import('@vybestack/llxprt-code-settings')) };
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...(__actual as typeof import('@vybestack/llxprt-code-settings')),
   getSettingsService: vi.fn(),
 }));
 
-const mockGetSettingsService = getSettingsService as vi.MockedFunction<
+const mockGetSettingsService = getSettingsService as Mock<
   typeof getSettingsService
 >;
 

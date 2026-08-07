@@ -15,7 +15,7 @@
  * Session locking
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertFalse } from '../test-utils/assertions.js';
 import { SessionLockManager } from '@vybestack/llxprt-code-core';
 import { performResume } from '../services/performResume.js';

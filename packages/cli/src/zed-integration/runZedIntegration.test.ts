@@ -24,7 +24,7 @@
 
 import { EventEmitter } from 'node:events';
 import { Readable, Writable } from 'node:stream';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import * as acp from '@agentclientprotocol/sdk';
 import type { Agent as AcpAgent } from '@agentclientprotocol/sdk';
 import {

@@ -12,16 +12,27 @@
  * 3. Handles TOCTOU race conditions correctly
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // --------------------------------------------------------------------------
 // Test helpers
 // --------------------------------------------------------------------------
+
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
 function makeToken(
   accessToken: string,
@@ -183,10 +194,8 @@ function makeCoordinator(opts?: {
 // Register runtime accessors via the bridge
 
 // Mock @vybestack/llxprt-code-core ProfileManager
-vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-core');
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     ProfileManager: class MockProfileManager {
@@ -372,7 +381,11 @@ describe('TokenAccessCoordinator forceRefreshToken', () => {
     });
 
     // Make lock acquisition fail
-    vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(false);
+    (
+      tokenStore.acquireRefreshLock as Mock<
+        typeof tokenStore.acquireRefreshLock
+      >
+    ).mockResolvedValue(false);
 
     const result = await coordinator.forceRefreshToken(
       'anthropic',

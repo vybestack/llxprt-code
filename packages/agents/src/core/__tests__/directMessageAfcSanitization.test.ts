@@ -20,7 +20,7 @@
  * @requirement:REQ-004.1
  */
 
-import { describe, it, expect, vi, type Mock } from '../../testApi.js';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { ChatSession } from '../chatSession.js';
@@ -48,7 +48,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 
-vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
 

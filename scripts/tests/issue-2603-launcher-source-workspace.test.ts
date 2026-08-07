@@ -10,7 +10,7 @@
  * the max-lines lint limit.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,

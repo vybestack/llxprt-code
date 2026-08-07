@@ -4,27 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { copyCommand } from './copyCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { copyToClipboard } from '../utils/commandUtils.js';
 
-vi.mock('../utils/commandUtils.js', () => ({
+void vi.mock('../utils/commandUtils.js', () => ({
   copyToClipboard: vi.fn(),
 }));
 
 describe('copyCommand', () => {
   let mockContext: CommandContext;
-  let mockCopyToClipboard: Mock;
-  let mockGetChat: Mock;
-  let mockGetHistory: Mock;
+  let mockCopyToClipboard: Mock<(...args: never[]) => unknown>;
+  let mockGetChat: Mock<(...args: never[]) => unknown>;
+  let mockGetHistory: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockCopyToClipboard = vi.mocked(copyToClipboard);
+    mockCopyToClipboard = copyToClipboard as Mock<typeof copyToClipboard>;
     mockGetChat = vi.fn();
     mockGetHistory = vi.fn();
 

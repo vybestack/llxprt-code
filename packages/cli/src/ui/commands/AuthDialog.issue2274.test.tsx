@@ -13,7 +13,7 @@
  * API-key-only (supportsOAuth false) and `claudecode` as OAuth (true).
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 
@@ -21,9 +21,13 @@ const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
 const mockToggleOAuthEnabled = vi.fn();
 
-vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+const realRealInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('ink', () => realRealInkModule);
+
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getCliOAuthManager: () => ({
       authenticate: mockAuthenticate,

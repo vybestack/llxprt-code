@@ -18,9 +18,8 @@
  * @requirement REQ-3048-008 REQ-3048-009
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
-import { vi } from '../../../../test-utils/bunTest.js';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
@@ -42,11 +41,11 @@ import {
   createQueueOperations,
 } from './submitQueryTestFixtures.js';
 
-vi.mock('../turnPreparation.js', () => ({
+void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../contexts/SessionContext.js', () => ({
+void vi.mock('../../../contexts/SessionContext.js', () => ({
   useSessionStats: () => ({
     startNewPrompt: vi.fn(),
     getPromptCount: () => 0,

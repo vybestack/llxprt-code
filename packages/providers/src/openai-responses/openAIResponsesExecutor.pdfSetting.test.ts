@@ -15,7 +15,7 @@
  * enforcement, so a TypeError here would take down the whole send.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { isResponsesPdfEnabled } from './openAIResponsesExecutor.js';
 

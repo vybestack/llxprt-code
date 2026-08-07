@@ -10,7 +10,7 @@
  * 4. Logging is skipped when conversation logging is disabled
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { invokeServerToolWithLogging } from './serverToolLogger.js';
 import type { ServerToolLogContext } from './serverToolLogger.js';
 import type { IProvider } from '../IProvider.js';

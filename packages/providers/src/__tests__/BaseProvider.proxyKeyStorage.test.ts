@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -186,7 +186,7 @@ function buildChatOptions(settings: SettingsService) {
 const PROXY_SERVED_KEY = 'proxy-served-secret-key-2946';
 const NAMED_KEY = 'my-named-key';
 
-describe.sequential('#2946 BaseProvider proxy-aware key storage', () => {
+describe('#2946 BaseProvider proxy-aware key storage', () => {
   let tmpDir: string;
   let priorSocketEnv: string | undefined;
   let server: CredentialProxyServer | undefined;

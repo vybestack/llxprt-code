@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect } from 'vitest';
+import { expect } from 'bun:test';
 
 /**
  * Ink's test renderer occasionally yields empty frames on some CI platforms

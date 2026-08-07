@@ -13,7 +13,7 @@
  * MiddleOutStrategy. The test asserts on the sanitized text output (AC14).
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeHistoryForCompression } from './utils.js';
 

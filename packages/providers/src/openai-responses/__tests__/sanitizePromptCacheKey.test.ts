@@ -8,7 +8,7 @@
  * Unit tests for sanitizePromptCacheKey (issue #2135).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   sanitizePromptCacheKey,
   MAX_PROMPT_CACHE_KEY_LENGTH,

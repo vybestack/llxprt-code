@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
@@ -30,7 +30,7 @@ import {
 } from './configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
     emitFeedback: vi.fn(),
@@ -38,43 +38,50 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
     emitConsoleLog: vi.fn(),
   },
   setGlobalProxy: vi.fn(),
-}));
+} as HoistedConfigMocks;
 // Exposed for assertions in the Proxy Configuration tests below.
 const mockCoreEvents = hoistedConfigMocks.coreEvents;
 const mockSetGlobalProxy = hoistedConfigMocks.setGlobalProxy;
 
-vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
+const __actual = { ...(await import('fs')) };
+void vi.mock('fs', () => buildFsMockBody(__actual));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
-vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(importOriginal()),
+const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
+void vi.mock('@vybestack/llxprt-code-tools', () =>
+  buildToolsMockBody(__actual2),
 );
 
 // Mock individual tools if their constructors are complex or have side effects
 
-vi.mock('../core/contentGenerator.js', (importOriginal) =>
-  buildContentGeneratorMockBody(importOriginal()),
+const __actual3 = { ...(await import('../core/contentGenerator.js')) };
+void vi.mock('../core/contentGenerator.js', () =>
+  buildContentGeneratorMockBody(__actual3),
 );
 
-vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
+void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
+void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
+void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
-vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(importOriginal()),
+const __actual4 = {
+  ...(await import('@vybestack/llxprt-code-ide-integration')),
+};
+void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
+  buildIdeIntegrationMockBody(__actual4),
 );
 
-vi.mock('../utils/memoryDiscovery.js', () =>
+void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
 
-vi.mock('../utils/events.js', (importOriginal) =>
-  buildEventsMockBody(importOriginal(), hoistedConfigMocks),
+const __actual5 = { ...(await import('../utils/events.js')) };
+void vi.mock('../utils/events.js', () =>
+  buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
 
-vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
+void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(
@@ -488,17 +495,22 @@ describe('Server Config (config.ts)', () => {
       await initializeTestConfig(config);
 
       // The ToolRegistry class is mocked, so inspect the created instance method.
-      const registerToolMock = vi.mocked(config.getToolRegistry().registerTool);
+      const registerToolMock = config.getToolRegistry()
+        .registerTool as unknown as Mock<(...args: never[]) => unknown>;
 
       // Check that registerTool was called for ShellTool
       const wasShellToolRegistered = registerToolMock.mock.calls.some(
-        (call) => call[0] instanceof vi.mocked(ShellTool),
+        (call) =>
+          call[0] instanceof
+          (ShellTool as unknown as Mock<(...args: never[]) => unknown>),
       );
       expect(wasShellToolRegistered).toBe(true);
 
       // Check that registerTool was NOT called for ReadFileTool
       const wasReadFileToolRegistered = registerToolMock.mock.calls.some(
-        (call) => call[0] instanceof vi.mocked(ReadFileTool),
+        (call) =>
+          call[0] instanceof
+          (ReadFileTool as unknown as Mock<(...args: never[]) => unknown>),
       );
       expect(wasReadFileToolRegistered).toBe(false);
     });

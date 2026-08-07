@@ -15,7 +15,7 @@
  * These exercise the real ToolFormatter with real in-memory inputs — no mocks.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ToolFormatter } from './ToolFormatter.js';

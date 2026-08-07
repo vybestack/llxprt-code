@@ -13,7 +13,7 @@
  * 3. Wait for lock if recent, or break if stale
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { KeyringTokenStore } from '../keyring-token-store.js';
 import type { OAuthToken } from '../types.js';
 import type { IDebugLogger, ISecureStore } from '../interfaces/index.js';

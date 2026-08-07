@@ -18,7 +18,7 @@
  * interface contract defined in the auth package.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { OAuthManager } from '../precedence.js';
 import type { OAuthToken } from '../types.js';

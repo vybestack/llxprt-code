@@ -4,15 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { automock } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type MockedFunction,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';
@@ -20,7 +14,13 @@ import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../../test-utils/regex.js';
 
-vi.mock('../hooks/useTerminalSize.js');
+const realUseTerminalSizeModule = {
+  ...(await import('../hooks/useTerminalSize.js')),
+};
+
+void vi.mock('../hooks/useTerminalSize.js', () =>
+  automock(realUseTerminalSizeModule),
+);
 
 // Mock contexts
 const mockTodoContext = {
@@ -64,13 +64,11 @@ const testTodos: Todo[] = [
 ];
 
 describe('TodoPanel Responsive Behavior', () => {
-  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+  let mockUseTerminalSize: Mock<typeof useTerminalSize>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseTerminalSize = useTerminalSize as MockedFunction<
-      typeof useTerminalSize
-    >;
+    mockUseTerminalSize = useTerminalSize as Mock<typeof useTerminalSize>;
     mockTodoContext.todos = testTodos;
   });
 

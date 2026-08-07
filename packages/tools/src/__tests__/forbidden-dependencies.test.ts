@@ -18,7 +18,7 @@
  * runtime import boundary tests in forbidden-imports.test.ts.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 

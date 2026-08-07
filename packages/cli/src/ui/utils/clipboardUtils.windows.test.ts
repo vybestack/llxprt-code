@@ -4,23 +4,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs/promises';
 import type { Stats } from 'fs';
 import { saveClipboardImage } from './clipboardUtils.js';
 
 // Mock dependencies
-vi.mock('fs/promises');
+const realPromisesModule = { ...(await import('fs/promises')) };
 
-const { mockSpawn } = vi.hoisted(() => ({
+void vi.mock('fs/promises', () => automock(realPromisesModule));
+
+const { mockSpawn } = {
   mockSpawn: vi.fn(),
-}));
+};
 
 // Must use a synchronous factory — async factories with importOriginal cause
 // the module under test to capture the real spawn before the mock resolves.
 // We also provide a promisify-compatible exec to keep secure-browser-launcher
 // (imported transitively via @vybestack/llxprt-code-core) from throwing.
-vi.mock('child_process', () => {
+void vi.mock('child_process', () => {
   const execFn = Object.assign(vi.fn(), {
     [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
   });
@@ -45,8 +56,8 @@ describe('saveClipboardImage Windows Path Escaping', () => {
     });
 
     // Mock fs calls to succeed
-    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-    vi.mocked(fs.stat).mockResolvedValue({ size: 100 } as Stats);
+    (fs.mkdir as Mock<typeof fs.mkdir>).mockResolvedValue(undefined);
+    (fs.stat as Mock<typeof fs.stat>).mockResolvedValue({ size: 100 } as Stats);
   });
 
   afterEach(() => {

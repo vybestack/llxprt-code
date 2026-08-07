@@ -15,7 +15,7 @@
  * surface for the first-response watchdog.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   resolveAlias,
   getSettingSpec,

@@ -4,23 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  automock,
+  restoreEnv,
+  setEnv,
+} from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import open from 'open';
 import { bugCommand } from './bugCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getCliVersion } from '../../utils/version.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 
-vi.mock('open');
-vi.mock('../../utils/version.js');
-vi.mock('../utils/formatters.js');
+const realOpenModule = { ...(await import('open')) };
+const realVersionModule = { ...(await import('../../utils/version.js')) };
+const realFormattersModule = { ...(await import('../utils/formatters.js')) };
+
+void vi.mock('open', () => automock(realOpenModule));
+void vi.mock('../../utils/version.js', () => automock(realVersionModule));
+void vi.mock('../utils/formatters.js', () => automock(realFormattersModule));
 // Mock the git-commit loader to a deterministic value so the assertion below
 // verifies bugCommand embeds the loader's return value, rather than comparing
 // the real loader's output against itself (a tautology).
-vi.mock('../../utils/gitCommitInfo.js', () => ({
+void vi.mock('../../utils/gitCommitInfo.js', () => ({
   getGitCommitInfo: vi.fn().mockReturnValue('test-commit-hash'),
 }));
-vi.mock('node:process', () => ({
+void vi.mock('node:process', () => ({
   default: {
     platform: 'test-platform',
     version: 'v20.0.0',
@@ -30,7 +47,7 @@ vi.mock('node:process', () => ({
   },
 }));
 
-vi.mock('../utils/terminalCapabilityManager.js', () => ({
+void vi.mock('../utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     getTerminalName: vi.fn().mockReturnValue('Test Terminal'),
     getTerminalBackgroundColor: vi.fn().mockReturnValue('#000000'),
@@ -40,13 +57,15 @@ vi.mock('../utils/terminalCapabilityManager.js', () => ({
 
 describe('bugCommand', () => {
   beforeEach(() => {
-    vi.mocked(getCliVersion).mockResolvedValue('0.1.0');
-    vi.mocked(formatMemoryUsage).mockReturnValue('100 MB');
-    vi.stubEnv('SANDBOX', 'gemini-test');
+    (getCliVersion as Mock<typeof getCliVersion>).mockResolvedValue('0.1.0');
+    (formatMemoryUsage as Mock<typeof formatMemoryUsage>).mockReturnValue(
+      '100 MB',
+    );
+    setEnv('SANDBOX', 'gemini-test');
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.clearAllMocks();
   });
 

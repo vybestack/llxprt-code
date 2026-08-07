@@ -12,34 +12,30 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-  type MockInstance,
-} from 'vitest';
+} from 'bun:test';
 import { handleLink } from './link.js';
 import type * as extensionModule from '../../config/extension.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockInstallOrUpdateExtension: Mock<
   typeof extensionModule.installOrUpdateExtension
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockLoadExtensionByName: Mock<
   typeof extensionModule.loadExtensionByName
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 const mockRequestConsentNonInteractive: Mock<
   typeof extensionModule.requestConsentNonInteractive
-> = vi.hoisted(() => vi.fn());
+> = vi.fn();
 
-vi.mock('../../config/extension.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../config/extension.js')>();
-  return {
-    ...actual,
-    installOrUpdateExtension: mockInstallOrUpdateExtension,
-    loadExtensionByName: mockLoadExtensionByName,
-    requestConsentNonInteractive: mockRequestConsentNonInteractive,
-  };
-});
+const actual = { ...(await import('../../config/extension.js')) };
+void vi.mock('../../config/extension.js', () => ({
+  ...actual,
+  installOrUpdateExtension: mockInstallOrUpdateExtension,
+  loadExtensionByName: mockLoadExtensionByName,
+  requestConsentNonInteractive: mockRequestConsentNonInteractive,
+}));
 
-vi.mock('../../utils/errors.js', () => ({
+void vi.mock('../../utils/errors.js', () => ({
   getErrorMessage: vi.fn((error: unknown) => {
     if (error instanceof Error) {
       return error.message;
@@ -52,9 +48,9 @@ vi.mock('../../utils/errors.js', () => ({
 }));
 
 describe('handleLink', () => {
-  let consoleLogSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
-  let processSpy: MockInstance;
+  let consoleLogSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

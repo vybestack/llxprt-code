@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { HttpError } from './retry.js';
 import {
   retryWithBackoff,
@@ -68,7 +72,7 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 10,
     });
 
-    await vi.runAllTimersAsync(); // Ensure all delays and retries complete
+    await runAllTimersAsync(); // Ensure all delays and retries complete
 
     const result = await promise;
     expect(result).toBe('success');
@@ -86,7 +90,7 @@ describe('retryWithBackoff', () => {
 
     // 2. Drain timers, then assert the rejection (sequential under Bun).
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Simulated error attempt 3');
 
     // 3. Finally, assert the number of calls.
@@ -101,7 +105,7 @@ describe('retryWithBackoff', () => {
 
     // Expect it to fail with the error from the 5th attempt.
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Simulated error attempt 5');
 
     expect(mockFn).toHaveBeenCalledTimes(5);
@@ -115,7 +119,7 @@ describe('retryWithBackoff', () => {
 
     // Expect it to fail with the error from the 5th attempt.
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Simulated error attempt 5');
 
     expect(mockFn).toHaveBeenCalledTimes(5);
@@ -162,7 +166,7 @@ describe('retryWithBackoff', () => {
     });
 
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Too Many Requests');
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -198,7 +202,7 @@ describe('retryWithBackoff', () => {
 
     // Run timers and await expectation (sequential under Bun).
     promise.catch(() => {});
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).rejects.toThrow('Too Many Requests');
 
     expect(mockFn).toHaveBeenCalledTimes(2);
@@ -302,7 +306,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -324,7 +328,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -349,7 +353,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -371,7 +375,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -393,7 +397,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -417,7 +421,7 @@ describe('retryWithBackoff', () => {
         initialDelayMs: 10,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -472,7 +476,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first 429 error
@@ -520,7 +524,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first overloaded_error
@@ -558,7 +562,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
       expect(failoverCallback).toHaveBeenCalledWith(expect.any(Error));
       expect(mockFn).toHaveBeenCalledTimes(2);
@@ -595,7 +599,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledTimes(3);
@@ -627,7 +631,7 @@ describe('retryWithBackoff', () => {
 
       // Properly handle the rejection
       const resultPromise = promise.catch((error) => error);
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       const result = await resultPromise;
 
       expect(result).toBeInstanceOf(Error);
@@ -673,7 +677,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first overloaded_error
@@ -720,7 +724,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
       // onPersistent429 should be called after the first rate_limit_error
@@ -762,7 +766,7 @@ describe('retryWithBackoff', () => {
         onPersistent429: failoverCallback,
       });
 
-      await vi.runAllTimersAsync();
+      await runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       // Should retry once for refresh attempt, then failover, then succeed
@@ -783,7 +787,7 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 100,
       signal: abortController.signal,
     });
-    await vi.advanceTimersByTimeAsync(50);
+    await advanceTimersByTimeAsync(50);
     abortController.abort();
 
     await expect(promise).rejects.toThrow(
@@ -833,7 +837,7 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 100,
     });
 
-    await vi.runAllTimersAsync();
+    await runAllTimersAsync();
     await expect(promise).resolves.toBe('success after api_error retry');
     expect(mockFn).toHaveBeenCalledTimes(2);
   });

@@ -17,15 +17,30 @@
  * - Edge cases and boundary conditions
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import type { Config, DiscoveredTool } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { Settings } from './config/settingsSchema.js';
 import { generateDynamicToolSettings } from './utils/dynamicSettings.js';
 
 // Mock the settings utilities
-vi.mock('./utils/settingsUtils.js', async () => {
-  const actual = await vi.importActual('./utils/settingsUtils.js');
+const realSettingsUtilsModule = {
+  ...(await import('./utils/settingsUtils.js')),
+};
+const realSingleSettingSaverModule = {
+  ...(await import('./utils/singleSettingSaver.js')),
+};
+
+void vi.mock('./utils/settingsUtils.js', () => {
+  const actual = realSettingsUtilsModule;
   return {
     ...actual,
     saveSingleSetting: vi.fn(),
@@ -34,8 +49,8 @@ vi.mock('./utils/settingsUtils.js', async () => {
   };
 });
 
-vi.mock('./utils/singleSettingSaver.js', async () => {
-  const actual = await vi.importActual('./utils/singleSettingSaver.js');
+void vi.mock('./utils/singleSettingSaver.js', () => {
+  const actual = realSingleSettingSaverModule;
   return {
     ...actual,
     saveSingleSetting: vi.fn(),
@@ -433,7 +448,7 @@ describe('generateDynamicToolSettings', () => {
     it('should properly get effective values for excludeTools and allowedTools', async () => {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
-      vi.mocked(getEffectiveValue).mockImplementation(
+      (getEffectiveValue as Mock<typeof getEffectiveValue>).mockImplementation(
         (key: string, _settings: Settings, _mergedSettings: Settings) => {
           if (key === 'excludeTools') return ['Tool1', 'Tool2'];
           if (key === 'allowedTools') return ['Tool3'];
@@ -451,7 +466,7 @@ describe('generateDynamicToolSettings', () => {
     it('should handle empty arrays for excludeTools and allowedTools', async () => {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
-      vi.mocked(getEffectiveValue).mockImplementation(
+      (getEffectiveValue as Mock<typeof getEffectiveValue>).mockImplementation(
         (key: string, _settings: Settings, _mergedSettings: Settings) => {
           if (key === 'excludeTools') return [];
           if (key === 'allowedTools') return [];
@@ -469,7 +484,7 @@ describe('generateDynamicToolSettings', () => {
     it('should handle undefined values for excludeTools and allowedTools', async () => {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
-      vi.mocked(getEffectiveValue).mockImplementation(
+      (getEffectiveValue as Mock<typeof getEffectiveValue>).mockImplementation(
         (key: string, _settings: Settings, _mergedSettings: Settings) => {
           if (key === 'excludeTools') return undefined;
           if (key === 'allowedTools') return undefined;

@@ -7,7 +7,7 @@
 import * as path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ExtensionEnablementManager, Override } from './extensionEnablement.js';
 import { coreEvents, type LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../settings.js';

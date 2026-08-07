@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import chalk from 'chalk';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -25,25 +25,25 @@ import type { ExtensionConfig } from '../extension.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core';
 
-const mockReadline = vi.hoisted(() => ({
+const mockReadline = {
   createInterface: vi.fn().mockReturnValue({
     question: vi.fn(),
     close: vi.fn(),
   }),
-}));
+};
 
-const mockReaddir = vi.hoisted(() => vi.fn());
-const originalReaddir = vi.hoisted(() => ({
+const mockReaddir = vi.fn();
+const originalReaddir = {
   current: null as typeof fs.readdir | null,
-}));
+};
 
-vi.mock('node:readline', () => ({
+void vi.mock('node:readline', () => ({
   default: mockReadline,
   createInterface: mockReadline.createInterface,
 }));
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+const actual = { ...(await import('node:fs/promises')) };
+void vi.mock('node:fs/promises', () => {
   originalReaddir.current = actual.readdir;
   return {
     ...actual,
@@ -51,16 +51,13 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  return {
-    ...actual,
-    debugLogger: {
-      log: vi.fn(),
-    },
-  };
-});
+const actualActual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actualActual,
+  debugLogger: {
+    log: vi.fn(),
+  },
+}));
 
 describe('consent', () => {
   let tempDir: string;

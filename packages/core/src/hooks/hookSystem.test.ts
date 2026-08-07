@@ -10,31 +10,34 @@
  * @pseudocode:analysis/pseudocode/01-hook-system-lifecycle.md
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Config } from '../config/config.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 
 // Mock DebugLogger
-const mockDebugLogger = vi.hoisted(() => ({
+
+const realDebugModule = { ...(await import('../debug/index.js')) };
+const mockDebugLogger = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-}));
+};
 
-vi.mock('../debug/index.js', () => {
+void vi.mock('../debug/index.js', () => {
   // Create a constructor function that returns the mock
   const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
   // Add getLogger as a static method
   DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
 
   return {
+    ...realDebugModule,
     DebugLogger,
   };
 });
 
 // Mock fs for HookRegistry
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
   promises: {},

@@ -19,7 +19,7 @@
  * which the finding explicitly sanctions.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type {
   IContent,
   ToolCallBlock,

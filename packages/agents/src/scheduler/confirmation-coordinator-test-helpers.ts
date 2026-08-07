@@ -14,7 +14,7 @@
  * hoisted by the test runner on a per-file basis and cannot be shared.
  */
 
-import { vi } from '../testApi.js';
+import { vi } from 'bun:test';
 import {
   ConfirmationCoordinator,
   type StatusMutator,

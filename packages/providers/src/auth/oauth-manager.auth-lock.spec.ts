@@ -7,7 +7,7 @@
  * Related to issue #1652: Prevents concurrent authentication and token contamination
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';

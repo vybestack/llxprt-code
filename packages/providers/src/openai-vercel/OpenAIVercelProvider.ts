@@ -326,6 +326,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       const res = await fetch(url, {
         headers,
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!res.ok) {

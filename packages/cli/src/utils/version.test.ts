@@ -4,22 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { getCliVersion, __resetVersionCacheForTesting } from './version.js';
 import { getPackageJson } from '@vybestack/llxprt-code-core';
 
 const originalCliVersion = process.env.CLI_VERSION;
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    getPackageJson: vi.fn(),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  getPackageJson: vi.fn(),
+}));
 
-const mockGetPackageJson = vi.mocked(getPackageJson);
+const mockGetPackageJson = getPackageJson as Mock<typeof getPackageJson>;
 
 describe('getCliVersion', () => {
   beforeEach(() => {

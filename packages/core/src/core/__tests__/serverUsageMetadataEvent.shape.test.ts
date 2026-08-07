@@ -18,8 +18,8 @@
  *      (neutral, live-path) — NOT a Gemini-named shape.
  */
 
-import { describe, it, expect } from 'vitest';
-import { expectTypeOf } from 'vitest';
+import { describe, it, expect } from 'bun:test';
+import { expectTypeOf } from 'bun:test';
 import { readFileSync, readdirSync, statSync, type Stats } from 'node:fs';
 import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';

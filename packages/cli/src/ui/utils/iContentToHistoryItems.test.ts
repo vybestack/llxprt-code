@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
 import { iContentToHistoryItems } from './iContentToHistoryItems.js';

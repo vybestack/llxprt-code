@@ -9,10 +9,10 @@ import { promisify } from 'node:util';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { asRecord, parseWorkflowYaml, jobSteps } from './typed-test-helpers.ts';
 import type { WorkflowJob, WorkflowStep } from './typed-test-helpers.ts';
-import { beforeAll } from 'vitest';
+import { beforeAll } from 'bun:test';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const execFileAsync = promisify(execFile);

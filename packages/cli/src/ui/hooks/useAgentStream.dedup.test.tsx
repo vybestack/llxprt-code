@@ -14,7 +14,7 @@
  * merge test, which is a pure function and does not require hook rendering.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
 
 describe('useAgentStream duplicate tool call deduplication (issue #1040)', () => {

@@ -14,7 +14,7 @@
  * (no unconfigured ephemeral) while generators advertise the public 300000.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   buildSettingSchema,
   buildMarkdownDescription,

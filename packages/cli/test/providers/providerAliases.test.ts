@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// This integration test needs real config files, not the global mock.
-vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+// This integration test exercises the real alias config files, so it opts
+// out of the preload's providerAliases stub (see bun-test-setup.ts).
 
 // Loaded with top-level await rather than a static import so the modules that
 // consume providerAliases are evaluated AFTER the unmock above. Static imports
@@ -27,11 +27,13 @@ const {
 const { NodeFileSystem } = await import(
   '@vybestack/llxprt-code-providers/composition/IFileSystem.js'
 );
-import {
+// Also deferred: this barrel transitively pulls in the alias consumers, and a
+// static import would be hoisted above the re-registration above.
+const {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
+} = await import('@vybestack/llxprt-code-core');
 
 describe('Provider alias integration', () => {
   let tempDir: string;

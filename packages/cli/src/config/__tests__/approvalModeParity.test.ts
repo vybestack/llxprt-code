@@ -21,7 +21,16 @@
  *   - trustedFolder true / false
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -42,23 +51,32 @@ import { isWorkspaceTrusted } from '../trustedFolders.js';
 
 // ─── Mocks matching config.test.ts patterns exactly ───────────────────────────
 
-vi.mock('../trustedFolders.js', async () => {
-  const actual = await vi.importActual<typeof import('../trustedFolders.js')>(
-    '../trustedFolders.js',
-  );
+const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
+const realProfileBootstrapModule = {
+  ...(await import('../profileBootstrap.js')),
+};
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
+
+void vi.mock('../trustedFolders.js', () => {
+  const actual = realTrustedFoldersModule;
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),
   };
 });
 
-vi.mock('../sandboxConfig.js', () => ({
+void vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  const pathMod = await import('node:path');
+const pathMod = await import('node:path');
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => {
   const MOCK_CWD = pathMod.resolve(pathMod.sep, 'home', 'user', 'project');
   const mockPaths = new Set([
     MOCK_CWD,
@@ -80,28 +98,22 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
-  };
-});
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => path.resolve(path.sep, 'mock', 'home', 'user')),
+}));
 
-vi.mock('open', () => ({ default: vi.fn() }));
-vi.mock('read-package-up', () => ({
+void vi.mock('open', () => ({ default: vi.fn() }));
+void vi.mock('read-package-up', () => ({
   readPackageUp: vi.fn(() =>
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
 
-vi.mock('../profileBootstrap.js', async () => {
-  const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
-    '../profileBootstrap.js',
-  );
-  const { SettingsService: RealSettingsService } = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
+void vi.mock('../profileBootstrap.js', () => {
+  const actual = realProfileBootstrapModule;
+  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => ({
@@ -124,7 +136,7 @@ vi.mock('../profileBootstrap.js', async () => {
   };
 });
 
-const runtimeSettingsState = vi.hoisted(() => ({
+const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -133,9 +145,9 @@ const runtimeSettingsState = vi.hoisted(() => ({
   } | null,
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -265,10 +277,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<typeof ServerConfig>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     IdeClient: {
@@ -331,17 +341,19 @@ describe('approvalModeParity: approval mode resolution', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue(
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setEnv('GEMINI_API_KEY', 'test-api-key');
     // Scrub env vars that may leak from CI environment
     delete process.env.LLXPRT_PROFILE;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
     process.argv = ['node', 'script.js'];
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+      true,
+    );
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
@@ -350,7 +362,7 @@ describe('approvalModeParity: approval mode resolution', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
-    vi.unstubAllEnvs();
+    restoreEnv();
     vi.restoreAllMocks();
     clearActiveProviderRuntimeContext();
   });
@@ -443,7 +455,9 @@ describe('approvalModeParity: approval mode resolution', () => {
 
   describe('when folder is NOT trusted (isWorkspaceTrusted returns false)', () => {
     beforeEach(() => {
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        false,
+      );
     });
 
     it('--approval-mode=yolo overridden to DEFAULT', async () => {
@@ -477,7 +491,9 @@ describe('approvalModeParity: approval mode resolution', () => {
   describe('when folderTrust feature is disabled (default)', () => {
     beforeEach(() => {
       // folderTrust: false means the feature is off → always trusted
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        true,
+      );
     });
 
     it('--approval-mode=yolo is honoured when folder trust disabled', async () => {

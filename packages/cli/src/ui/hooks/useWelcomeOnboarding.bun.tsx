@@ -4,12 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { vi } from '../../test-utils/bunTest.js';
 import { createMockSettings, renderHook } from '../../test-utils/render.js';
 import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent.js';
 
@@ -18,7 +17,7 @@ const stubRuntime = {
   listAvailableModels: async () => [],
   setActiveModel: async () => {},
 };
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => stubRuntime,
 }));
 

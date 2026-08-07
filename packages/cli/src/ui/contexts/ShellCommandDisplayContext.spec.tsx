@@ -5,7 +5,7 @@
  */
 
 import React, { act, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   createMockSettings,
   renderWithProviders,
@@ -15,11 +15,11 @@ import type { KeypressHandler } from './KeypressContext.js';
 import { ToolCallStatus } from '../types.js';
 import { useShellCommandDisplay } from './ShellCommandDisplayContext.js';
 
-const keypress = vi.hoisted(() => ({
+const keypress = {
   handler: undefined as KeypressHandler | undefined,
-}));
+};
 
-vi.mock('../hooks/useKeypress.js', () => ({
+void vi.mock('../hooks/useKeypress.js', () => ({
   useKeypress: (handler: KeypressHandler): void => {
     keypress.handler = handler;
   },

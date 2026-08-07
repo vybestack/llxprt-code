@@ -14,7 +14,7 @@
  * the produced CancelledToolCall (AC18).
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import type {
   ExecutingToolCall,

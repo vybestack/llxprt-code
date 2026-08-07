@@ -21,7 +21,7 @@
  * and read the real built-in tool classes.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   listProviders as staticListProviders,
   listTools as staticListTools,

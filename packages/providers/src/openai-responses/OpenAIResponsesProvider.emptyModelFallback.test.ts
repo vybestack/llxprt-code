@@ -17,7 +17,8 @@
  * @issue #2483
  */
 
-import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,
@@ -28,11 +29,9 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
-const getCoreSystemPromptAsyncSpy = vi.hoisted(() =>
-  vi.fn().mockResolvedValue('system prompt'),
-);
+const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
 }));
 
@@ -107,7 +106,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   beforeEach(() => {
     vi.clearAllMocks();
     getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
-    vi.stubGlobal(
+    setGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
@@ -117,7 +116,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.restoreAllMocks();
   });
 

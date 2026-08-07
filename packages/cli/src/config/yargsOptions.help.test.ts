@@ -13,7 +13,7 @@
  *
  * These tests read the REAL exported options object — no mocks.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { rootOptions, innerCommandOptions } from './yargsOptions.js';
 
 describe('yargs help text is category-neutral (no legacy ~/.llxprt)', () => {

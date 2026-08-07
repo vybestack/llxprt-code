@@ -4,13 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 // Mock Storage before importing PersistentState
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-settings');
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
+void vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = realLlxprtCodeSettingsModule;
   return {
     ...actual,
     Storage: {

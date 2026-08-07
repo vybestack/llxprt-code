@@ -6,17 +6,19 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { mockRandomBytes } = vi.hoisted(() => ({
-  mockRandomBytes: vi.fn(),
-}));
+const realNodeCryptoModule = { ...(await import('node:crypto')) };
 
-vi.mock('node:crypto', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:crypto')>();
+const { mockRandomBytes } = {
+  mockRandomBytes: vi.fn(),
+};
+
+const actual = { ...(await import('node:crypto')) };
+void vi.mock('node:crypto', () => {
   mockRandomBytes.mockImplementation((size: number) =>
     actual.randomBytes(size),
   );
@@ -339,8 +341,7 @@ describe('historyExportUtils', () => {
     );
 
     it('should retry when the exporter candidate path already exists', async () => {
-      const actualCrypto =
-        await vi.importActual<typeof import('node:crypto')>('node:crypto');
+      const actualCrypto = realNodeCryptoModule;
       const fixedTime = '2026-07-28T12:34:56.789Z';
       const firstRandom = Buffer.alloc(8, 1);
       const secondRandom = Buffer.alloc(8, 2);

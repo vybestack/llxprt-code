@@ -16,7 +16,7 @@
  * @requirement REQ-3048-007
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   ServerAgentStreamEvent,
@@ -31,10 +31,11 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 
+const realTurnJsModule = { ...(await import('./turn.js')) };
 const mockTurnRun = vi.fn();
 
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+void vi.mock('./turn.js', () => {
+  const actual = realTurnJsModule;
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;

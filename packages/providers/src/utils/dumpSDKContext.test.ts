@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 
@@ -90,7 +90,8 @@ describe('dumpSDKErrorRequestResponse', () => {
     );
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       undefined,
       'openai',
       { error: 'Rate limit' },
@@ -135,7 +136,8 @@ describe('wrapStreamWithDump', () => {
     }
 
     expect(received).toStrictEqual(chunks);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       'base-123',
       'openai',
       { streaming: true, chunks, completed: true },
@@ -167,7 +169,8 @@ describe('wrapStreamWithDump', () => {
     ).rejects.toThrow('stream failed');
 
     expect(received).toStrictEqual([firstChunk]);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       'base-456',
       'anthropic',
       {
@@ -202,7 +205,8 @@ describe('wrapStreamWithDump', () => {
     }
 
     expect(received).toStrictEqual([chunks[0]]);
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       'base-cancelled',
       'gemini',
       { streaming: true, chunks: [chunks[0]], completed: false },
@@ -245,13 +249,15 @@ describe('wrapStreamWithDump', () => {
     ).rejects.toThrow('stream failed');
 
     expect(received).toStrictEqual([firstChunk]);
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
       requestBody,
       'https://api.openai.com/v1',
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       'base-789',
       'openai',
       {
@@ -301,7 +307,8 @@ describe('wrapStreamWithDump', () => {
     ).rejects.toThrow('stream failed');
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       undefined,
       'openai',
       {

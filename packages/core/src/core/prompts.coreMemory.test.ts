@@ -13,7 +13,15 @@
  * 3. model.allMemoriesAreCore merges user memory into core memory
  */
 
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  beforeAll,
+  vi,
+  type Mock,
+} from 'bun:test';
 import {
   getCoreSystemPromptAsync,
   loadCoreMemoryContent,
@@ -26,28 +34,26 @@ import path from 'node:path';
 import os from 'node:os';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 const PROJECT_DIR = path.resolve('/my/project');
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return {
-    ...actual,
-    readFile: vi
-      .fn()
-      .mockRejectedValue(
-        Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
-      ),
-  };
-});
+const actual = { ...(await import('node:fs/promises')) };
+void vi.mock('node:fs/promises', () => ({
+  ...actual,
+  readFile: vi
+    .fn()
+    .mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })),
+}));
 
 const mockSettingsService = {
   get: vi.fn().mockReturnValue(undefined),
   set: vi.fn(),
 };
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
   getSettingsService: () => mockSettingsService,
 }));
 
@@ -69,8 +75,8 @@ describe('Core (System) Memory', () => {
   });
 
   beforeEach(() => {
-    vi.mocked(fsPromises.readFile).mockReset();
-    vi.mocked(fsPromises.readFile).mockRejectedValue(
+    (fsPromises.readFile as Mock<typeof fsPromises.readFile>).mockReset();
+    (fsPromises.readFile as Mock<typeof fsPromises.readFile>).mockRejectedValue(
       Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
     );
     mockSettingsService.get.mockReturnValue(undefined);
@@ -87,7 +93,9 @@ describe('Core (System) Memory', () => {
         Storage.getGlobalMemoryDir(),
         '.LLXPRT_SYSTEM',
       );
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
@@ -104,7 +112,9 @@ describe('Core (System) Memory', () => {
     });
 
     it('should load project .LLXPRT_SYSTEM content', async () => {
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
@@ -127,7 +137,9 @@ describe('Core (System) Memory', () => {
         Storage.getGlobalMemoryDir(),
         '.LLXPRT_SYSTEM',
       );
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
@@ -154,7 +166,9 @@ describe('Core (System) Memory', () => {
         Storage.getGlobalMemoryDir(),
         '.LLXPRT_SYSTEM',
       );
-      vi.mocked(fsPromises.readFile).mockImplementation(
+      (
+        fsPromises.readFile as Mock<typeof fsPromises.readFile>
+      ).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();

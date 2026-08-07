@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import {
   vi,
   describe,
@@ -14,7 +12,8 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-} from 'vitest';
+  type Mock,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -53,7 +52,7 @@ const mockGit = {
   path: vi.fn(),
 };
 
-vi.mock('simple-git', () => ({
+void vi.mock('simple-git', () => ({
   simpleGit: vi.fn((path?: string) => {
     if (path) {
       mockGit.path.mockReturnValue(path);
@@ -62,54 +61,45 @@ vi.mock('simple-git', () => ({
   }),
 }));
 
-vi.mock('os', async (importOriginal) => {
-  const mockedOs = await importOriginal<typeof os>();
-  return {
-    ...mockedOs,
-    homedir: vi.fn(),
-  };
-});
+const mockedOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...mockedOs,
+  homedir: vi.fn(),
+}));
 
-vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
-  return {
-    ...actual,
-    isWorkspaceTrusted: vi.fn(),
-  };
-});
+const actual = { ...(await import('./trustedFolders.js')) };
+void vi.mock('./trustedFolders.js', () => ({
+  ...actual,
+  isWorkspaceTrusted: vi.fn(),
+}));
 
-const mockLogExtensionEnable = vi.hoisted(() => vi.fn());
-const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
-const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
-const mockLogExtensionDisable = vi.hoisted(() => vi.fn());
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...actual,
+const mockLogExtensionEnable = vi.fn();
+const mockLogExtensionInstallEvent = vi.fn();
+const mockLogExtensionUninstall = vi.fn();
+const mockLogExtensionDisable = vi.fn();
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
 
-    logExtensionEnable: mockLogExtensionEnable,
-    logExtensionInstallEvent: mockLogExtensionInstallEvent,
-    logExtensionUninstall: mockLogExtensionUninstall,
-    logExtensionDisable: mockLogExtensionDisable,
-    ExtensionEnableEvent: vi.fn(),
-    ExtensionInstallEvent: vi.fn(),
-    ExtensionUninstallEvent: vi.fn(),
-    ExtensionDisableEvent: vi.fn(),
-  };
-});
+  logExtensionEnable: mockLogExtensionEnable,
+  logExtensionInstallEvent: mockLogExtensionInstallEvent,
+  logExtensionUninstall: mockLogExtensionUninstall,
+  logExtensionDisable: mockLogExtensionDisable,
+  ExtensionEnableEvent: vi.fn(),
+  ExtensionInstallEvent: vi.fn(),
+  ExtensionUninstallEvent: vi.fn(),
+  ExtensionDisableEvent: vi.fn(),
+}));
 
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('child_process')>();
-  return {
-    ...actual,
-    execSync: vi.fn(),
-  };
-});
+const actualActual2 = { ...(await import('child_process')) };
+void vi.mock('child_process', () => ({
+  ...actualActual2,
+  execSync: vi.fn(),
+}));
 
-const mockLoadSettings = vi.hoisted(() => vi.fn());
+const mockLoadSettings = vi.fn();
 
-vi.mock('./settings.js', () => ({
+void vi.mock('./settings.js', () => ({
   loadSettings: mockLoadSettings,
   SettingScope: {
     User: 'User',
@@ -158,18 +148,28 @@ describe('extension tests', () => {
       );
       fs.mkdirSync(userExtensionsDir, { recursive: true });
 
-      vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+      (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
+      (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+        true,
+      );
       vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
-      vi.mocked(execSync).mockClear();
+      (execSync as Mock<typeof execSync>).mockClear();
       Object.values(mockGit).forEach((fn) => fn.mockReset());
       mockLogExtensionInstallEvent.mockReset();
       mockLogExtensionUninstall.mockReset();
       mockLogExtensionEnable.mockReset();
       mockLogExtensionDisable.mockReset();
-      vi.mocked(ExtensionUninstallEvent).mockClear();
-      vi.mocked(ExtensionDisableEvent).mockClear();
-      vi.mocked(ExtensionEnableEvent).mockClear();
+      (
+        ExtensionUninstallEvent as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockClear();
+      (
+        ExtensionDisableEvent as unknown as Mock<(...args: never[]) => unknown>
+      ).mockClear();
+      (
+        ExtensionEnableEvent as unknown as Mock<(...args: never[]) => unknown>
+      ).mockClear();
       // Default: extensions are enabled with extensionConfig enabled for tests
       mockLoadSettings.mockReturnValue({
         merged: {
@@ -225,7 +225,9 @@ describe('extension tests', () => {
 
     describe('folder trust', () => {
       it('refuses to install extensions from untrusted folders when user declines trust', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+        (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+          false,
+        );
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',
@@ -246,7 +248,9 @@ describe('extension tests', () => {
       });
 
       it('does not copy extensions to the user dir when user declines trust', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+        (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+          false,
+        );
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',
@@ -268,7 +272,9 @@ describe('extension tests', () => {
       });
 
       it('does not load any extensions in the workspace config when user declines trust', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+        (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+          false,
+        );
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',
@@ -294,7 +300,9 @@ describe('extension tests', () => {
       });
 
       it('allows extension install when user approves trust prompt', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+        (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
+          false,
+        );
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',

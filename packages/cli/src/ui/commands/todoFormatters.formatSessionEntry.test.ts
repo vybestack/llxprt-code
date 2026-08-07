@@ -9,18 +9,18 @@
  * { todos, paused } envelope format that TodoStore writes to disk.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { formatSessionEntry } from './todoFormatters.js';
 import type { TodoSessionFile } from './todoOperations.js';
 
 // vi.mock is hoisted above imports — the factory must not reference any
 // top-level variable. vi.hoisted gives us a stable mock function that is
 // available both inside the factory and in the test body.
-const { readFileSyncMock } = vi.hoisted(() => ({
+const { readFileSyncMock } = {
   readFileSyncMock: vi.fn(),
-}));
+};
 
-vi.mock('fs', () => ({
+void vi.mock('fs', () => ({
   readFileSync: readFileSyncMock,
 }));
 

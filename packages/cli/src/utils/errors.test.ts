@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, type MockInstance } from 'vitest';
+import { vi, type Mock } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalInputError } from '@vybestack/llxprt-code-core';
 import {
@@ -16,41 +16,37 @@ import {
 } from './errors.js';
 
 // Mock the core modules
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-
-  return {
-    ...original,
-    parseAndFormatApiError: vi.fn((error: unknown) => {
-      if (error instanceof Error) {
-        return `API Error: ${error.message}`;
-      }
-      return `API Error: ${String(error)}`;
-    }),
-    FatalToolExecutionError: class extends Error {
-      constructor(message: string) {
-        super(message);
-        this.name = 'FatalToolExecutionError';
-        this.exitCode = 54;
-      }
-      exitCode: number;
-    },
-    FatalCancellationError: class extends Error {
-      constructor(message: string) {
-        super(message);
-        this.name = 'FatalCancellationError';
-        this.exitCode = 130;
-      }
-      exitCode: number;
-    },
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  parseAndFormatApiError: vi.fn((error: unknown) => {
+    if (error instanceof Error) {
+      return `API Error: ${error.message}`;
+    }
+    return `API Error: ${String(error)}`;
+  }),
+  FatalToolExecutionError: class extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'FatalToolExecutionError';
+      this.exitCode = 54;
+    }
+    exitCode: number;
+  },
+  FatalCancellationError: class extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'FatalCancellationError';
+      this.exitCode = 130;
+    }
+    exitCode: number;
+  },
+}));
 
 describe('errors', () => {
   let mockConfig: Config;
-  let processExitSpy: MockInstance;
-  let consoleErrorSpy: MockInstance;
+  let processExitSpy: Mock<(...args: never[]) => unknown>;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     // Reset mocks

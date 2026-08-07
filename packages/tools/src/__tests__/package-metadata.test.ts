@@ -17,7 +17,7 @@
  * scripts, and no forbidden runtime dependencies.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 

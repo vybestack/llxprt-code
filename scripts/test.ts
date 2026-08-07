@@ -260,10 +260,7 @@ function createRunnerWithPATH(rootDir: string): CommandRunner {
  * reads this list to prove every root has exactly one executor, and the root
  * `test:scripts` script delegates here rather than restating it.
  */
-export const SCRIPTS_SHARD_ROOTS: readonly string[] = [
-  'scripts-tests',
-  'test-setup',
-];
+export const SCRIPTS_SHARD_ROOTS: readonly string[] = ['scripts-tests'];
 
 export function scriptsRootCommand(root: string): string {
   return `bun scripts/run_bun_tests.ts --root ${root}`;

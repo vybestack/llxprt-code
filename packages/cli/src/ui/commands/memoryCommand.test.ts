@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { memoryCommand } from './memoryCommand.js';
 import type { SlashCommand, CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -19,38 +19,34 @@ import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...original,
-    getErrorMessage: vi.fn((error: unknown) => {
-      if (error instanceof Error) return error.message;
-      return String(error);
-    }),
-    getGlobalCoreMemoryFilePath: vi.fn(
-      () => '/mock/home/.llxprt/.LLXPRT_SYSTEM',
-    ),
-    getProjectCoreMemoryFilePath: vi.fn(
-      (dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`,
-    ),
-    MemoryTool: {
-      ...original.MemoryTool,
-      performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
-    },
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...original,
+  getErrorMessage: vi.fn((error: unknown) => {
+    if (error instanceof Error) return error.message;
+    return String(error);
+  }),
+  getGlobalCoreMemoryFilePath: vi.fn(() => '/mock/home/.llxprt/.LLXPRT_SYSTEM'),
+  getProjectCoreMemoryFilePath: vi.fn(
+    (dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`,
+  ),
+  MemoryTool: {
+    ...original.MemoryTool,
+    performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
-vi.mock('../../config/environmentLoader.js', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('../../config/environmentLoader.js')>();
-  return {
-    ...original,
-    loadHierarchicalLlxprtMemory: vi.fn(),
-  };
-});
+const actualOriginal = {
+  ...(await import('../../config/environmentLoader.js')),
+};
+void vi.mock('../../config/environmentLoader.js', () => ({
+  ...actualOriginal,
+  loadHierarchicalLlxprtMemory: vi.fn(),
+}));
 
-const mockLoadHierarchicalLlxprtMemory = loadHierarchicalLlxprtMemory as Mock;
+const mockLoadHierarchicalLlxprtMemory = loadHierarchicalLlxprtMemory as Mock<
+  (...args: never[]) => unknown
+>;
 
 describe('memoryCommand', () => {
   let mockContext: CommandContext;
@@ -67,8 +63,8 @@ describe('memoryCommand', () => {
 
   describe('/memory show', () => {
     let showCommand: SlashCommand;
-    let mockGetUserMemory: Mock;
-    let mockGetLlxprtMdFileCount: Mock;
+    let mockGetUserMemory: Mock<(...args: never[]) => unknown>;
+    let mockGetLlxprtMdFileCount: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
       showCommand = getSubCommand('show');
@@ -335,9 +331,9 @@ describe('memoryCommand', () => {
 
   describe('/memory refresh', () => {
     let refreshCommand: SlashCommand;
-    let mockSetUserMemory: Mock;
-    let mockSetLlxprtMdFileCount: Mock;
-    let mockSetLlxprtMdFilePaths: Mock;
+    let mockSetUserMemory: Mock<(...args: never[]) => unknown>;
+    let mockSetLlxprtMdFileCount: Mock<(...args: never[]) => unknown>;
+    let mockSetLlxprtMdFilePaths: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
       refreshCommand = getSubCommand('refresh');
@@ -521,7 +517,8 @@ describe('memoryCommand', () => {
 
       await refreshCommand.action!(jitContext, '');
 
-      expect(mockRefresh).toHaveBeenCalledExactlyOnceWith();
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      expect(mockRefresh).toHaveBeenCalledWith();
       expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
       expect(jitContext.ui.setLlxprtMdFileCount).toHaveBeenCalledWith(3);
       expect(jitContext.ui.addItem).toHaveBeenCalledWith(
@@ -536,7 +533,7 @@ describe('memoryCommand', () => {
 
   describe('/memory list', () => {
     let listCommand: SlashCommand;
-    let mockGetLlxprtMdFilePaths: Mock;
+    let mockGetLlxprtMdFilePaths: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
       listCommand = getSubCommand('list');

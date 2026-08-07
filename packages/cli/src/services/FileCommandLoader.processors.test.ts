@@ -7,7 +7,10 @@
 import * as glob from 'glob';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FileCommandLoader } from './FileCommandLoader.js';
-import { vi } from 'vitest';
+import { vi, type Mock } from 'bun:test';
+
+const realMockFsModule = { ...(await import('./__testhelpers__/mockFs.js')) };
+const realGlobModule = { ...(await import('glob')) };
 
 function assert(condition: unknown, message: string): asserts condition {
   if (condition === undefined || condition === null || condition === false) {
@@ -29,8 +32,8 @@ import type { CommandContext } from '../ui/commands/types.js';
 type PromptPipelineContent = Array<{ text: string }>;
 
 const RealDefaultArgumentProcessor = DefaultArgumentProcessor;
-const mockShellProcess = vi.hoisted(() => vi.fn());
-const mockAtFileProcess = vi.hoisted(() => vi.fn());
+const mockShellProcess = vi.fn();
+const mockAtFileProcess = vi.fn();
 
 // The settings mock must be available before vi.mock runs (Bun evaluates the
 // factory eagerly at vi.mock() call time). Use vi.hoisted with createRequire
@@ -40,21 +43,19 @@ const settingsMockHoisted: {
   ctx?: InstanceType<
     typeof import('./__testhelpers__/mockFs.js').FsMockContext
   >;
-} = vi.hoisted(() => ({}));
+} = {};
 
-vi.mock('@vybestack/llxprt-code-settings', async () => {
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   // Resolved with vi.importActual inside the factory: it returns the genuine
   // module on both runners, and the factory is the earliest point at which the
   // helper can be loaded on Vitest (which hoists this call above the imports).
-  const { FsMockContext } = await vi.importActual<
-    typeof import('./__testhelpers__/mockFs.js')
-  >('./__testhelpers__/mockFs.js');
+  const { FsMockContext } = realMockFsModule;
   const ctx = new FsMockContext();
   settingsMockHoisted.ctx = ctx;
   return ctx.settingsMock();
 });
 
-vi.mock('./prompt-processors/shellProcessor.js', () => ({
+void vi.mock('./prompt-processors/shellProcessor.js', () => ({
   ShellProcessor: vi.fn().mockImplementation(() => ({
     process: mockShellProcess,
   })),
@@ -71,13 +72,13 @@ vi.mock('./prompt-processors/shellProcessor.js', () => ({
 
 // Capture the real constructor before Bun patches the live module namespace.
 // Constructor calls stay observable while processor behavior remains real.
-vi.mock('./prompt-processors/argumentProcessor.js', () => ({
+void vi.mock('./prompt-processors/argumentProcessor.js', () => ({
   DefaultArgumentProcessor: vi
     .fn()
     .mockImplementation(() => new RealDefaultArgumentProcessor()),
 }));
 
-vi.mock('glob', () => ({
+void vi.mock('glob', () => ({
   glob: vi.fn(),
 }));
 
@@ -107,9 +108,10 @@ describe('FileCommandLoader (processors)', () => {
     // real module snapshot captured at mock-registration time, but
     // vi.clearAllMocks() resets the mock function's implementation, so we
     // restore it here.
-    const actualGlob = (await vi.importActual<typeof import('glob')>('glob'))
-      .glob;
-    vi.mocked(glob.glob).mockImplementation(actualGlob);
+    const actualGlob = realGlobModule.glob;
+    (glob.glob as unknown as Mock<typeof glob.glob>).mockImplementation(
+      actualGlob,
+    );
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context.invocation?.args ?? '';
@@ -287,7 +289,11 @@ describe('FileCommandLoader (processors)', () => {
         Promise.resolve(`${p}-shell-processed`),
       );
 
-      vi.mocked(DefaultArgumentProcessor).mockImplementation(
+      (
+        DefaultArgumentProcessor as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockImplementation(
         () =>
           ({
             process: defaultProcessMock,
@@ -353,7 +359,11 @@ describe('FileCommandLoader (processors)', () => {
       );
 
       // Prevent default processor from interfering
-      vi.mocked(DefaultArgumentProcessor).mockImplementation(
+      (
+        DefaultArgumentProcessor as unknown as Mock<
+          (...args: never[]) => unknown
+        >
+      ).mockImplementation(
         () =>
           ({
             process: (p: PromptPipelineContent) => Promise.resolve(p),
@@ -446,10 +456,13 @@ describe('FileCommandLoader (processors)', () => {
 
       // Mock glob to throw an AbortError
       const abortError = new DOMException('Aborted', 'AbortError');
-      vi.mocked(glob.glob).mockImplementation(async () => {
-        controller.abort(); // Ensure the signal is aborted when the service checks
-        throw abortError;
-      });
+      (glob.glob as unknown as Mock<typeof glob.glob>).mockImplementation(
+        // The throwing impl is a subset of glob's overloaded+namespaced type.
+        (async () => {
+          controller.abort(); // Ensure the signal is aborted when the service checks
+          throw abortError;
+        }) as unknown as typeof glob.glob,
+      );
 
       await loader.loadCommands(abortSignal);
 

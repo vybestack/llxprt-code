@@ -13,7 +13,7 @@
  * everything above the preserved messages.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type {
   IContent,
   MediaBlock,

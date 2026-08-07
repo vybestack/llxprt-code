@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { act, useCallback } from 'react';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { render } from '../../test-utils/render.js';
 import { useConsoleMessages } from './useConsoleMessages.js';
 
@@ -72,7 +73,7 @@ describe('useConsoleMessages', () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
     });
 
     expect(result.current.consoleMessages).toStrictEqual([
@@ -90,7 +91,7 @@ describe('useConsoleMessages', () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
     });
 
     expect(result.current.consoleMessages).toStrictEqual([
@@ -107,7 +108,7 @@ describe('useConsoleMessages', () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
     });
 
     expect(result.current.consoleMessages).toStrictEqual([
@@ -124,7 +125,7 @@ describe('useConsoleMessages', () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20);
+      await advanceTimersByTimeAsync(20);
     });
 
     expect(result.current.consoleMessages).toHaveLength(1);

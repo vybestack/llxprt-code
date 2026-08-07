@@ -12,7 +12,7 @@
  * Explicit provider/model configuration is still preserved.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createAgentRuntimeStateFromConfig } from './runtimeStateFactory.js';
 import type { RuntimeStateConfigSource } from './runtimeStateFactory.js';
 import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from '../config/models.js';

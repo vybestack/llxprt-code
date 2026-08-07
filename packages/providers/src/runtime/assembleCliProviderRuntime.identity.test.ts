@@ -20,7 +20,7 @@
  *    same bus identity (end-to-end provenance)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { MessageBus, Config as ConfigClass } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';

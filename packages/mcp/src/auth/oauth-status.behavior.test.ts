@@ -7,7 +7,7 @@
  * @requirement REQ-001,REQ-INT-001
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fc from 'fast-check';
 import type { OAuthCredentials, TokenStorage } from './token-storage/types.js';
 import type { MCPOAuthToken } from './token-store.js';

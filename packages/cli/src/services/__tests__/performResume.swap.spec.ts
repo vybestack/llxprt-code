@@ -13,7 +13,7 @@
  * compliance.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HistoryService } from '../../../../core/src/services/history/HistoryService.js';
 import { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import {

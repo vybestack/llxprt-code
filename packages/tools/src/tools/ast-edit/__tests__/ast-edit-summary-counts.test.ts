@@ -14,7 +14,7 @@
  * ASTEditTool instances. No mocking of the tool under test.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {

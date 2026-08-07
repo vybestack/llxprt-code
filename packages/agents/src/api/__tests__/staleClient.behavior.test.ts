@@ -17,7 +17,7 @@
  *     ?? config.getModel), proving live-client resolution.
  */
 
-import { describe, it, expect, vi } from '../../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 import {
   buildAgent,
   drain,

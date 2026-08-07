@@ -4,19 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { execSync } from 'child_process';
 import * as os from 'os';
 import { detect as chardetDetect } from 'chardet';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
-vi.mock('child_process', (importOriginal) => {
-  const actual = importOriginal() as typeof import('child_process');
+const __actual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => {
+  const actual = __actual as typeof import('child_process');
   return { ...actual, execSync: vi.fn() };
 });
-vi.mock('node:os', (importOriginal) => {
-  const actual = importOriginal() as typeof import('node:os');
+const __actual2 = { ...(await import('node:os')) };
+void vi.mock('node:os', () => {
+  const actual = __actual2 as typeof import('node:os');
   const mockPlatform = vi.fn(() => actual.platform());
   const mockHomedir = vi.fn(() => actual.homedir());
   const mockExports = {
@@ -27,8 +37,9 @@ vi.mock('node:os', (importOriginal) => {
   // Source uses `import os from 'os'` (default import); provide default too
   return { ...mockExports, default: mockExports };
 });
-vi.mock('chardet', (importOriginal) => {
-  const actual = importOriginal() as typeof import('chardet');
+const __actual3 = { ...(await import('chardet')) };
+void vi.mock('chardet', () => {
+  const actual = __actual3 as typeof import('chardet');
   return { ...actual, detect: vi.fn() };
 });
 
@@ -43,15 +54,15 @@ import {
 
 describe('Shell Command Processor - Encoding Functions', () => {
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
-  let mockedExecSync: ReturnType<typeof vi.mocked<typeof execSync>>;
-  let mockedOsPlatform: ReturnType<typeof vi.mocked<() => string>>;
-  let mockedChardetDetect: ReturnType<typeof vi.mocked<typeof chardetDetect>>;
+  let mockedExecSync: Mock<typeof execSync>;
+  let mockedOsPlatform: Mock<() => string>;
+  let mockedChardetDetect: Mock<typeof chardetDetect>;
 
   beforeEach(() => {
     consoleWarnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
-    mockedExecSync = vi.mocked(execSync);
-    mockedOsPlatform = vi.mocked(os.platform);
-    mockedChardetDetect = vi.mocked(chardetDetect);
+    mockedExecSync = execSync as Mock<typeof execSync>;
+    mockedOsPlatform = os.platform as Mock<typeof os.platform>;
+    mockedChardetDetect = chardetDetect as Mock<typeof chardetDetect>;
 
     // Clear mock call history and implementations from previous tests
     vi.clearAllMocks();

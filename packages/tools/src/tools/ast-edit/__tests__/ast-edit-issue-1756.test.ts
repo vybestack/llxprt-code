@@ -13,7 +13,7 @@
  * Providing enough surrounding context to match exactly once must still succeed.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {

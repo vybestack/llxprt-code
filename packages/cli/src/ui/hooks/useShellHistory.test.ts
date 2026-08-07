@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useShellHistory } from './useShellHistory.js';
@@ -14,7 +14,10 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 
-vi.mock('fs/promises', () => ({
+const realOsModule = { ...(await import('os')) };
+const realCryptoModule = { ...(await import('crypto')) };
+
+void vi.mock('fs/promises', () => ({
   default: {
     readFile: vi.fn(),
     writeFile: vi.fn(),
@@ -24,19 +27,16 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
 }));
-vi.mock('os');
-vi.mock('crypto');
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof import('fs')>();
-  return {
-    ...actualFs,
-    mkdirSync: vi.fn(),
-  };
-});
-vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  const pathModule = await import('path');
+void vi.mock('os', () => automock(realOsModule));
+void vi.mock('crypto', () => automock(realCryptoModule));
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => ({
+  ...actualFs,
+  mkdirSync: vi.fn(),
+}));
+const pathModule = await import('path');
+const actual = { ...(await import('@vybestack/llxprt-code-settings')) };
+void vi.mock('@vybestack/llxprt-code-settings', () => {
   class Storage {
     getProjectTempDir(): string {
       return pathModule.join('/test/home/', '.llxprt', 'tmp', 'mocked_hash');
@@ -73,9 +73,17 @@ const MOCKED_HISTORY_DIR = path.join(
 const MOCKED_HISTORY_FILE = path.join(MOCKED_HISTORY_DIR, 'shell_history');
 
 describe('useShellHistory', () => {
-  const mockedFs = vi.mocked(fs);
-  const mockedOs = vi.mocked(os);
-  const mockedCrypto = vi.mocked(crypto);
+  // The module mocks above replace these exports with Bun mock functions, so
+  // each namespace is narrowed to the mocked members the tests drive.
+  const mockedFs = fs as unknown as {
+    readFile: Mock<typeof fs.readFile>;
+    writeFile: Mock<typeof fs.writeFile>;
+    mkdir: Mock<typeof fs.mkdir>;
+  };
+  const mockedOs = os as unknown as { homedir: Mock<typeof os.homedir> };
+  const mockedCrypto = crypto as unknown as {
+    createHash: Mock<typeof crypto.createHash>;
+  };
 
   beforeEach(() => {
     vi.resetAllMocks();

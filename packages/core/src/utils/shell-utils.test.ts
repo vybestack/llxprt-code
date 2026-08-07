@@ -12,7 +12,7 @@ import {
   beforeAll,
   vi,
   afterEach,
-} from 'vitest';
+} from 'bun:test';
 import {
   checkCommandPermissions,
   getCommandRoots,
@@ -24,9 +24,9 @@ import { initializeParser as initializeShellParsers } from './shell-parser.js';
 import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockHomedir = vi.hoisted(() => vi.fn());
-vi.mock('os', () => ({
+const mockPlatform = vi.fn();
+const mockHomedir = vi.fn();
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: mockHomedir,
@@ -35,8 +35,8 @@ vi.mock('os', () => ({
   homedir: mockHomedir,
 }));
 
-const mockQuote = vi.hoisted(() => vi.fn());
-vi.mock('shell-quote', () => ({
+const mockQuote = vi.fn();
+void vi.mock('shell-quote', () => ({
   quote: mockQuote,
 }));
 

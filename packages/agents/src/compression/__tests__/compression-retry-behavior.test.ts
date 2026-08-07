@@ -13,15 +13,8 @@
  * compression-retry.test.ts.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-} from '../../testApi.js';
-import type { Mock } from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../core/turn.js';
@@ -39,7 +32,7 @@ import {
 } from './compression-retry-helpers.js';
 
 // Mock the delay utility so retryWithBackoff doesn't actually wait in tests
-vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
   delay: vi.fn().mockResolvedValue(undefined),
   createAbortError: () => {
     const err = new Error('Aborted');

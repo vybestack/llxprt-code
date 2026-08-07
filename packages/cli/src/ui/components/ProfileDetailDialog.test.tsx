@@ -5,12 +5,12 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { ProfileDetailDialog } from './ProfileDetailDialog.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
-vi.mock('../hooks/useTerminalSize.js', () => ({
+void vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: () => ({ columns: 100, rows: 30 }),
 }));
 

@@ -13,7 +13,7 @@
  * observable via the debug logger so they are not silently swallowed.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // Capture debugLogger calls without mocking the module under test.
@@ -24,23 +24,20 @@ import type { Config } from '@vybestack/llxprt-code-core';
 // so the spy intercepts the SAME singleton the production code writes to; a
 // stale mock on the core re-export would observe a different object and never
 // see the warn call.
-const debugLoggerMock = vi.hoisted(() => ({
+const debugLoggerMock = {
   warn: vi.fn(),
   error: vi.fn(),
-}));
+};
 
-vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-telemetry')>();
-  return {
-    ...actual,
-    debugLogger: {
-      ...actual.debugLogger,
-      warn: debugLoggerMock.warn,
-      error: debugLoggerMock.error,
-    },
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...actual,
+  debugLogger: {
+    ...actual.debugLogger,
+    warn: debugLoggerMock.warn,
+    error: debugLoggerMock.error,
+  },
+}));
 
 import { ensureAcpProviderActivated } from './cliProviderInit.js';
 

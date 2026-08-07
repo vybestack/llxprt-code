@@ -29,7 +29,7 @@
  *  11. variant config filename classification
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   scanGenaiImports,
   scanGeminiExports,

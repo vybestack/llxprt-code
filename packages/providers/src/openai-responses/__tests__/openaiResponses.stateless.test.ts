@@ -2,7 +2,15 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isUserMemoryProfileProvider } from '../../utils/userMemory.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
@@ -20,7 +28,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => ({
+void vi.mock('openai', () => ({
   default: class FakeOpenAI {
     readonly options: Record<string, unknown>;
     static requests: Array<{ request: Record<string, unknown> }> = [];
@@ -49,7 +57,7 @@ vi.mock('openai', () => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async (options) =>
       `mock system prompt with memory: ${options.userMemory ?? 'none'}`,
@@ -97,7 +105,9 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
     const runtimeConfigEphemeralSettings = options.invocation.ephemerals;
 
     // Simulate the system prompt generation (don't actually call OpenAI)
-    const promptSpy = vi.mocked(getCoreSystemPromptAsync);
+    const promptSpy = getCoreSystemPromptAsync as Mock<
+      typeof getCoreSystemPromptAsync
+    >;
     promptSpy.mockClear();
 
     // Generate the system prompt as the real implementation would
@@ -218,7 +228,9 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       'token-per-call',
       'https://api.openai.com/v1',
     );
-    const promptSpy = vi.mocked(getCoreSystemPromptAsync);
+    const promptSpy = getCoreSystemPromptAsync as Mock<
+      typeof getCoreSystemPromptAsync
+    >;
     promptSpy.mockClear();
 
     const settingsA = createSettings('conversation-A', 'parent-A');

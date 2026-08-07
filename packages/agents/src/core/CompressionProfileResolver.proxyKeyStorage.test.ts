@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from '../testApi.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -129,84 +129,77 @@ class InMemoryProviderKeyStorage implements ProviderKeyStorageLike {
   }
 }
 
-describe.sequential(
-  '#2946 CompressionProfileResolver proxy-aware key storage',
-  () => {
-    let tmpDir: string;
-    let priorSocketEnv: string | undefined;
-    let server: CredentialProxyServer | undefined;
+describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
+  let tmpDir: string;
+  let priorSocketEnv: string | undefined;
+  let server: CredentialProxyServer | undefined;
 
-    beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpr-'));
-      priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpr-'));
+    priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    resetFactorySingletons();
+  });
+
+  afterEach(async () => {
+    if (priorSocketEnv === undefined) {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      resetFactorySingletons();
+    } else {
+      process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
+    }
+    resetFactorySingletons();
+    if (server !== undefined) {
+      // No catch: each test starts the server exactly once and never stops
+      // it, so a failure here is a real teardown defect (an unreleased Unix
+      // socket would break the next run) and should fail the test.
+      await server.stop();
+      server = undefined;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('resolves auth-key-name through the credential proxy socket', async () => {
+    const keyStorage = new InMemoryProviderKeyStorage();
+    await keyStorage.saveKey(NAMED_KEY, PROXY_SERVED_KEY);
+    server = new CredentialProxyServer({
+      tokenStore: new InMemoryTokenStore(),
+      providerKeyStorage: keyStorage,
+      socketDir: tmpDir,
     });
+    const socketPath = await server.start();
+    process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
 
-    afterEach(async () => {
-      if (priorSocketEnv === undefined) {
-        delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      } else {
-        process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
-      }
-      resetFactorySingletons();
-      if (server !== undefined) {
-        // No catch: each test starts the server exactly once and never stops
-        // it, so a failure here is a real teardown defect (an unreleased Unix
-        // socket would break the next run) and should fail the test.
-        await server.stop();
-        server = undefined;
-      }
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+    const profileSettings = new SettingsService();
+    profileSettings.setProviderSetting('gemini', 'auth-key-name', NAMED_KEY);
+
+    const result = await resolveCompressionProfileAuthToken(
+      profileSettings,
+      'gemini',
+    );
+
+    expect(result).toStrictEqual({ authToken: PROXY_SERVED_KEY });
+  });
+
+  // When the proxy serves no such key the resolver must report "no auth"
+  // rather than falling back to the host keyring, which is unreachable
+  // from inside the container anyway.
+  it('returns no auth when the named key is absent from proxy storage', async () => {
+    server = new CredentialProxyServer({
+      tokenStore: new InMemoryTokenStore(),
+      providerKeyStorage: new InMemoryProviderKeyStorage(),
+      socketDir: tmpDir,
     });
+    const socketPath = await server.start();
+    process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
 
-    it('resolves auth-key-name through the credential proxy socket', async () => {
-      const keyStorage = new InMemoryProviderKeyStorage();
-      await keyStorage.saveKey(NAMED_KEY, PROXY_SERVED_KEY);
-      server = new CredentialProxyServer({
-        tokenStore: new InMemoryTokenStore(),
-        providerKeyStorage: keyStorage,
-        socketDir: tmpDir,
-      });
-      const socketPath = await server.start();
-      process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
+    const profileSettings = new SettingsService();
+    profileSettings.setProviderSetting('gemini', 'auth-key-name', 'absent-key');
 
-      const profileSettings = new SettingsService();
-      profileSettings.setProviderSetting('gemini', 'auth-key-name', NAMED_KEY);
+    const result = await resolveCompressionProfileAuthToken(
+      profileSettings,
+      'gemini',
+    );
 
-      const result = await resolveCompressionProfileAuthToken(
-        profileSettings,
-        'gemini',
-      );
-
-      expect(result).toStrictEqual({ authToken: PROXY_SERVED_KEY });
-    });
-
-    // When the proxy serves no such key the resolver must report "no auth"
-    // rather than falling back to the host keyring, which is unreachable
-    // from inside the container anyway.
-    it('returns no auth when the named key is absent from proxy storage', async () => {
-      server = new CredentialProxyServer({
-        tokenStore: new InMemoryTokenStore(),
-        providerKeyStorage: new InMemoryProviderKeyStorage(),
-        socketDir: tmpDir,
-      });
-      const socketPath = await server.start();
-      process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
-
-      const profileSettings = new SettingsService();
-      profileSettings.setProviderSetting(
-        'gemini',
-        'auth-key-name',
-        'absent-key',
-      );
-
-      const result = await resolveCompressionProfileAuthToken(
-        profileSettings,
-        'gemini',
-      );
-
-      expect(result).toStrictEqual({});
-    });
-  },
-);
+    expect(result).toStrictEqual({});
+  });
+});

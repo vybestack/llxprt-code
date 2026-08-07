@@ -9,7 +9,7 @@
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC5)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -6,7 +6,7 @@
  * Shared test helpers for ReplayEngine behavioral tests.
  */
 
-import { expect } from 'vitest';
+import { expect } from 'bun:test';
 import * as fs from 'fs/promises';
 import type { ReplayResult } from './types.js';
 import { SessionRecordingService } from './SessionRecordingService.js';

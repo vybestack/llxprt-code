@@ -4,20 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 
-const runWithScopeMock = vi.hoisted(() => vi.fn());
-const createDetachedAutoPromptClientMock = vi.hoisted(() => vi.fn());
+const runWithScopeMock = vi.fn();
+const createDetachedAutoPromptClientMock = vi.fn();
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: () => ({
     runWithScope: runWithScopeMock,
   }),
 }));
 
-vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
+void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
   createDetachedAutoPromptClient: createDetachedAutoPromptClientMock,
 }));
 
@@ -210,9 +210,11 @@ describe('generateAutoPrompt', () => {
 
   it('disposes detached clients when generation fails', async () => {
     const detachedClient = makeClient('unused');
-    vi.mocked(detachedClient.generateDirectMessage).mockRejectedValueOnce(
-      new Error('network failed'),
-    );
+    (
+      detachedClient.generateDirectMessage as Mock<
+        typeof detachedClient.generateDirectMessage
+      >
+    ).mockRejectedValueOnce(new Error('network failed'));
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(

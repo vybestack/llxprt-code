@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'bun:test';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from '../turnPreparation.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';

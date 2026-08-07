@@ -4,15 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
-const ideClient = vi.hoisted(() => ({
+const ideClient = {
   addTrustChangeListener: vi.fn(),
   removeTrustChangeListener: vi.fn(),
-}));
-const getIdeClient = vi.hoisted(() => vi.fn());
+};
+const getIdeClient = vi.fn();
 let trustChangeListener: ((trusted: boolean | undefined) => void) | undefined;
-const mcpManager = vi.hoisted(() => ({
+const mcpManager = {
   startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
   onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
   onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
@@ -20,20 +21,15 @@ const mcpManager = vi.hoisted(() => ({
   whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn().mockResolvedValue(undefined),
   getMcpInstructions: vi.fn().mockReturnValue(''),
+};
+
+const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
+void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
+  ...actual,
+  IdeClient: { getInstance: getIdeClient },
 }));
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    IdeClient: { getInstance: getIdeClient },
-  };
-});
-
-vi.mock('@vybestack/llxprt-code-mcp', () => ({
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn(() => mcpManager),
 }));
 
@@ -76,7 +72,7 @@ describe('Config live IDE trust', () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
 
     const initialization = initializeTestConfig(config);
-    await vi.waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
     await config.setTrustedFolderLive(false);
     resolveIdeClient?.({});
     await initialization;
@@ -112,7 +108,7 @@ describe('Config live IDE trust', () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
 
     const initialization = initializeTestConfig(config);
-    await vi.waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
     ideContext.setIdeContext({ workspaceState: { isTrusted: false } });
     resolveIdeClient?.(ideClient);
     await initialization;

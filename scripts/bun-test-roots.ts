@@ -147,10 +147,7 @@ export function getErrorCode(error: unknown): string | undefined {
 export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   {
     root: 'a2a-server',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'bun-preload-storage-isolation.ts',
-    ],
+    preload: ['bun-preload-storage-isolation.ts'],
   },
   {
     root: 'agents',
@@ -169,10 +166,7 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   },
   {
     root: 'telemetry',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     // Both preloads are explicit because run_bun_tests.ts passes them as
@@ -187,48 +181,31 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   },
   {
     root: 'test-utils',
-    preload: ['../../test-setup/augment-bun-vi.ts'],
   },
   {
     root: 'settings',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     root: 'ide-integration',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-      'test-setup.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts', 'test-setup.ts'],
   },
   {
     root: 'vscode-ide-companion',
-    preload: [
-      '../../test-setup/augment-bun-vi.ts',
-      'test-setup-storage-isolation.ts',
-    ],
+    preload: ['test-setup-storage-isolation.ts'],
     tsconfig: 'tsconfig.bun-test.json',
   },
   {
     root: 'policy',
-    preload: ['../../test-setup/augment-bun-vi.ts'],
   },
   {
     root: 'lsp',
   },
   {
-    root: 'test-setup',
-    cwd: '.',
-    directories: ['test-setup'],
-  },
-  {
     root: 'scripts-tests',
     cwd: '.',
     directories: ['scripts/tests'],
-    preload: ['test-setup/augment-bun-vi.ts', 'scripts/tests/test-setup.ts'],
+    preload: ['scripts/tests/test-setup.ts'],
     timeoutOverrides: [
       { pattern: /issue-2603-release-install\.test\.ts$/, timeout: 300_000 },
     ],
@@ -236,7 +213,6 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   {
     root: 'evals',
     cwd: 'evals',
-    preload: ['../test-setup/augment-bun-vi.ts'],
     pattern: /\.eval\.ts$/,
     globalSetup: 'globalSetup.ts',
     timeout: 300_000,
@@ -245,7 +221,7 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   {
     root: 'integration-tests',
     cwd: 'integration-tests',
-    preload: ['../test-setup/augment-bun-vi.ts', 'setup-quota-guard.ts'],
+    preload: ['setup-quota-guard.ts'],
     globalSetup: 'globalSetup.ts',
     timeout: 300_000,
     retries: 2,

@@ -4,8 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import {
   MemoryTool,
   setLlxprtMdFilename,
@@ -21,20 +29,20 @@ import { ToolErrorType } from '../types/tool-error.js';
 import type { IStorageService } from '../interfaces/index.js';
 
 // Mock dependencies
-vi.mock('fs/promises', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    mkdir: vi.fn(),
-    readFile: vi.fn(),
-  };
-});
+const realOsModule = { ...(await import('os')) };
 
-vi.mock('fs', () => ({
+const actual = { ...(await import('fs/promises')) };
+void vi.mock('fs/promises', () => ({
+  ...actual,
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+}));
+
+void vi.mock('fs', () => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('os');
+void vi.mock('os', () => automock(realOsModule));
 
 const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
@@ -89,7 +97,7 @@ describe('MemoryTool', () => {
     // are mocked. Use clearly-fake paths rather than real-looking temp dirs.
     mockWorkingDir = path.join('/mock', 'project');
     tempHomeDir = path.join('/mock', 'home');
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+    (os.homedir as Mock<typeof os.homedir>).mockReturnValue(tempHomeDir);
     mockFsAdapter.readFile.mockReset();
     mockFsAdapter.writeFile.mockReset().mockResolvedValue(undefined);
     mockFsAdapter.mkdir
@@ -231,9 +239,7 @@ describe('MemoryTool', () => {
       // Spy on the static method for these tests
       performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
       // Cast needed as spyOn returns MockInstance
     });
 
@@ -339,7 +345,7 @@ describe('MemoryTool', () => {
         }
       ).allowlist.clear();
       // Mock fs.readFile to return empty string (file doesn't exist)
-      vi.mocked(fs.readFile).mockResolvedValue('');
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
     });
 
     it('should return confirmation details when memory file is not allowlisted', async () => {
@@ -472,7 +478,9 @@ describe('MemoryTool', () => {
         'Some existing content.\n\n## LLxprt Code Added Memories\n- Old fact\n';
 
       // Mock fs.readFile to return existing content
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent);
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue(
+        existingContent,
+      );
 
       const invocation = memoryTool.build(params);
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
@@ -525,9 +533,7 @@ describe('MemoryTool', () => {
     it('should save to project directory when scope is "project"', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = {
         fact: 'Project-specific fact',
@@ -558,9 +564,7 @@ describe('MemoryTool', () => {
     it('should save to project directory by default (when scope is undefined and workingDir is set)', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = { fact: 'Project fact by default' };
       const invocation = memoryTool.build(params);
@@ -586,9 +590,7 @@ describe('MemoryTool', () => {
     it('should save to global directory when scope is explicitly "global"', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = { fact: 'Global fact', scope: 'global' as const };
       const invocation = memoryTool.build(params);
@@ -613,9 +615,7 @@ describe('MemoryTool', () => {
     it('should fallback to global when scope is "project" but no working directory is set', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
-        .mockResolvedValue(undefined) as Mock<
-        typeof MemoryTool.performAddMemoryEntry
-      >;
+        .mockResolvedValue(undefined);
 
       const params = { fact: 'Project fact without workdir', scope: 'project' };
       const invocation = memoryTool.build(params);
@@ -638,7 +638,7 @@ describe('MemoryTool', () => {
     });
 
     it('should show correct file path in confirmation for project scope', async () => {
-      vi.mocked(fs.readFile).mockResolvedValue('');
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
       const params = { fact: 'Test fact', scope: 'project' };
       const invocation = memoryTool.build(params);
@@ -690,7 +690,7 @@ describe('MemoryTool', () => {
 
     it('should resolve core.global file path to .LLXPRT_SYSTEM in global dir', () => {
       mockSettingsService.getSetting.mockReturnValue(true);
-      vi.mocked(fs.readFile).mockResolvedValue('');
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
       const params = {
         fact: 'Test core directive',
@@ -704,7 +704,7 @@ describe('MemoryTool', () => {
 
     it('should resolve core.project file path to .LLXPRT_SYSTEM in project dir', () => {
       mockSettingsService.getSetting.mockReturnValue(true);
-      vi.mocked(fs.readFile).mockResolvedValue('');
+      (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
       const params = {
         fact: 'Test core directive',

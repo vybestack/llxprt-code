@@ -29,7 +29,7 @@ import {
 // therefore only strictly required when this file runs ON a Windows host; it is
 // harmless elsewhere, and the clipboard is irrelevant to key-binding
 // resolution.
-mock.module('clipboardy', () => ({
+void mock.module('clipboardy', () => ({
   default: {
     write: async () => {},
     read: async () => '',

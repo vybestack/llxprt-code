@@ -14,7 +14,7 @@
  * agreement. They do NOT mock.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { globSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repoRoot } from './doc-guard-helpers.ts';

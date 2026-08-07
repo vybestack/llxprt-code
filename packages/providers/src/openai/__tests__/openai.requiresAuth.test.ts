@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
@@ -12,7 +13,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
-vi.mock('openai', () => {
+void vi.mock('openai', () => {
   class FakeOpenAI {
     static created: symbol[] = [];
     static lastOptions: Record<string, unknown> | null = null;
@@ -100,8 +101,8 @@ function buildCallOptions(
 describe('requires-auth setting', () => {
   beforeEach(() => {
     FakeOpenAIClass.reset();
-    vi.stubEnv('OPENAI_API_KEY', '');
-    vi.stubEnv('OPENAI_BASE_URL', '');
+    setEnv('OPENAI_API_KEY', '');
+    setEnv('OPENAI_BASE_URL', '');
 
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
@@ -113,7 +114,7 @@ describe('requires-auth setting', () => {
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
-    vi.unstubAllEnvs();
+    restoreEnv();
   });
 
   it('allows connection to remote endpoint without auth when requires-auth is false', async () => {

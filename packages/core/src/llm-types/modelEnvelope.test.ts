@@ -3,7 +3,7 @@
  * @requirement REQ-005.1, REQ-005.2, REQ-005.3, REQ-005.4, REQ-005.5
  * @pseudocode lines 10-52
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   emptyModelOutput,

@@ -17,48 +17,44 @@ import {
   it,
   vi,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import { loadSettings, USER_SETTINGS_PATH } from './settings.js';
 import { resetTrustedFoldersForTesting, TrustLevel } from './trustedFolders.js';
 
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof osActual>();
-  return {
-    ...actualOs,
-    homedir: vi.fn(() => '/mock/home/user'),
-    platform: vi.fn(() => 'linux'),
-  };
-});
+const realFsModule = { ...(await import('fs')) };
+const realOsModule = { ...(await import('os')) };
 
-vi.mock('fs', async (importOriginal) => {
-  const actualFs = await importOriginal<typeof fs>();
-  return {
-    ...actualFs,
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    mkdirSync: vi.fn(),
-    realpathSync: vi.fn((location: fs.PathLike): string => String(location)),
-  };
-});
-
-const realFs = await vi.importActual<typeof import('fs')>('fs');
-const realOs = await vi.importActual<typeof import('os')>('os');
-
-const mockCoreEvents = vi.hoisted(() => ({
-  emitFeedback: vi.fn(),
-  emitSettingsChanged: vi.fn(),
+const actualOs = { ...(await import('os')) };
+void vi.mock('os', () => ({
+  ...actualOs,
+  homedir: vi.fn(() => '/mock/home/user'),
+  platform: vi.fn(() => 'linux'),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    coreEvents: mockCoreEvents,
-    getIdeTrust: () => undefined,
-  };
-});
+const actualFs = { ...(await import('fs')) };
+void vi.mock('fs', () => ({
+  ...actualFs,
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  realpathSync: vi.fn((location: fs.PathLike): string => String(location)),
+}));
+
+const realFs = realFsModule;
+const realOs = realOsModule;
+
+const mockCoreEvents = {
+  emitFeedback: vi.fn(),
+  emitSettingsChanged: vi.fn(),
+};
+
+const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actual,
+  coreEvents: mockCoreEvents,
+  getIdeTrust: () => undefined,
+}));
 
 const TRUSTED_FOLDERS_PATH = '/mock/home/user/trustedFolders.json';
 const temporaryDirectories: string[] = [];
@@ -66,15 +62,19 @@ const temporaryDirectories: string[] = [];
 describe('settingsLoader workspace trust provenance', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
-      (location: fs.PathLike): string => String(location),
-    );
+    (
+      fs.realpathSync as unknown as Mock<
+        typeof fs.realpathSync
+      > as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((location: fs.PathLike): string => String(location));
     resetTrustedFoldersForTesting();
     process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
     process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
       '/mock/system/system-defaults.json';
     process.env.LLXPRT_CODE_TRUSTED_FOLDERS_PATH = TRUSTED_FOLDERS_PATH;
-    vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
+    (osActual.homedir as Mock<typeof osActual.homedir>).mockReturnValue(
+      '/mock/home/user',
+    );
   });
 
   afterEach(() => {
@@ -89,24 +89,30 @@ describe('settingsLoader workspace trust provenance', () => {
   });
 
   function exposeTrustRules(rules: Record<string, TrustLevel>): void {
-    (vi.mocked(fs.existsSync) as Mock).mockImplementation(
+    (
+      fs.existsSync as Mock<typeof fs.existsSync> as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockImplementation(
       (path: fs.PathLike) =>
         path === USER_SETTINGS_PATH || path === TRUSTED_FOLDERS_PATH,
     );
-    (vi.mocked(fs.readFileSync) as Mock).mockImplementation(
-      (path: fs.PathOrFileDescriptor) => {
-        if (path === USER_SETTINGS_PATH) {
-          return JSON.stringify({
-            folderTrustFeature: true,
-            folderTrust: true,
-          });
-        }
-        if (path === TRUSTED_FOLDERS_PATH) {
-          return JSON.stringify(rules);
-        }
-        return '{}';
-      },
-    );
+    (
+      fs.readFileSync as Mock<typeof fs.readFileSync> as Mock<
+        (...args: never[]) => unknown
+      >
+    ).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (path === USER_SETTINGS_PATH) {
+        return JSON.stringify({
+          folderTrustFeature: true,
+          folderTrust: true,
+        });
+      }
+      if (path === TRUSTED_FOLDERS_PATH) {
+        return JSON.stringify(rules);
+      }
+      return '{}';
+    });
   }
 
   it('uses the explicit workspace path instead of a denied process cwd', () => {
@@ -147,11 +153,14 @@ describe('settingsLoader workspace trust provenance', () => {
       [canonicalTarget]: TrustLevel.DO_NOT_TRUST,
       [workspaceSymlink]: TrustLevel.TRUST_FOLDER,
     });
-    (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
-      (location: fs.PathLike): string =>
-        String(location) === path.resolve('/mock/home/user')
-          ? String(location)
-          : realFs.realpathSync(location),
+    (
+      fs.realpathSync as unknown as Mock<
+        typeof fs.realpathSync
+      > as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((location: fs.PathLike): string =>
+      String(location) === path.resolve('/mock/home/user')
+        ? String(location)
+        : realFs.realpathSync(location),
     );
 
     const settings = loadSettings(workspaceSymlink);
@@ -172,14 +181,16 @@ describe('settingsLoader workspace trust provenance', () => {
   it('fails closed when the workspace canonical identity cannot be resolved', () => {
     const workspace = '/trusted/workspace';
     exposeTrustRules({ [workspace]: TrustLevel.TRUST_FOLDER });
-    (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
-      (location: fs.PathLike): string => {
-        if (String(location) === path.resolve(workspace)) {
-          throw new Error('canonical identity unavailable');
-        }
-        return String(location);
-      },
-    );
+    (
+      fs.realpathSync as unknown as Mock<
+        typeof fs.realpathSync
+      > as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((location: fs.PathLike): string => {
+      if (String(location) === path.resolve(workspace)) {
+        throw new Error('canonical identity unavailable');
+      }
+      return String(location);
+    });
 
     const settings = loadSettings(workspace);
 

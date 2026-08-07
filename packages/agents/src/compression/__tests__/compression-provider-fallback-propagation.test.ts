@@ -24,14 +24,7 @@
  * were called with specific arguments.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-} from '../../testApi.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   makeUserMessage,
@@ -64,17 +57,14 @@ function makeLogger(): DebugLogger {
   } as unknown as DebugLogger;
 }
 
-vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...original,
-    Storage: {
-      ...original.Storage,
-      getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
-    },
-  };
-});
+const original = { ...(await import('@vybestack/llxprt-code-settings')) };
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...original,
+  Storage: {
+    ...original.Storage,
+    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Finding 1: Provider fallback failure propagation through real wiring

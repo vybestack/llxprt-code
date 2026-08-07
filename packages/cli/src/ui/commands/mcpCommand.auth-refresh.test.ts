@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { MessageActionReturn } from './types.js';
@@ -15,26 +15,23 @@ import {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // Mock external dependencies
-vi.mock('open', () => ({
+void vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
-  return {
-    ...actual,
-    getMCPServerStatus: vi.fn(),
-    mcpServerRequiresOAuth: new Map<string, boolean>(),
-    MCPOAuthProvider: {
-      authenticate: vi.fn(),
-    },
-    MCPOAuthTokenStorage: {
-      getToken: vi.fn(),
-      isTokenExpired: vi.fn(),
-    },
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
+void vi.mock('@vybestack/llxprt-code-mcp', () => ({
+  ...actual,
+  getMCPServerStatus: vi.fn(),
+  mcpServerRequiresOAuth: new Map<string, boolean>(),
+  MCPOAuthProvider: {
+    authenticate: vi.fn(),
+  },
+  MCPOAuthTokenStorage: {
+    getToken: vi.fn(),
+    isTokenExpired: vi.fn(),
+  },
+}));
 
 function assertMessageAction(
   result: unknown,
@@ -104,7 +101,9 @@ describe('mcpCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
-    vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
+    (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
+      MCPServerStatus.CONNECTED,
+    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),

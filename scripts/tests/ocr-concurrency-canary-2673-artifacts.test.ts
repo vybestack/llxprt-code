@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import { asOptionalRecord, jobSteps } from './typed-test-helpers.ts';
 import { commandText, stepNamed } from './ocr-review-workflow-helpers.ts';
 import {

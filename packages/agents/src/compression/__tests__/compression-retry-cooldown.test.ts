@@ -12,14 +12,7 @@
  * logic. Extracted from the original monolithic compression-retry.test.ts.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-} from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -27,7 +20,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import { makeHttpError, makeChatSession } from './compression-retry-helpers.js';
 
 // Mock the delay utility so retryWithBackoff doesn't actually wait in tests
-vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
+void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
   delay: vi.fn().mockResolvedValue(undefined),
   createAbortError: () => {
     const err = new Error('Aborted');

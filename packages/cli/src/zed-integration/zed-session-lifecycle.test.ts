@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -28,19 +28,17 @@ function makeTmpRoot(): string {
 
 const emptyChatsLister: ChatSessionFileLister = async () => [];
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
 
-const mockDeleteSessionById = vi.hoisted(() => vi.fn());
+const mockDeleteSessionById = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),
@@ -49,15 +47,13 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   setCliRuntimeContext: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    deleteSessionById: (...args: Parameters<typeof actual.deleteSessionById>) =>
-      mockDeleteSessionById(...args),
-  };
-});
+const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
+void vi.mock('@vybestack/llxprt-code-core', () => ({
+  ...actualActual,
+  deleteSessionById: (
+    ...args: Parameters<typeof actualActual.deleteSessionById>
+  ) => mockDeleteSessionById(...args),
+}));
 
 interface StubAgentHandle {
   readonly agent: Agent;

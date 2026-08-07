@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   BucketFailoverOAuthManagerLike,
   OAuthManagerRuntimeMessageBusDeps,
@@ -13,7 +13,7 @@ import type {
   TokenStore,
 } from './types.js';
 
-const wiring = vi.hoisted(() => {
+const wiring = (() => {
   const state = {
     providerRegistry: {} as Record<string, unknown>,
     proactiveRenewalManager: {} as Record<string, unknown>,
@@ -50,27 +50,27 @@ const wiring = vi.hoisted(() => {
     getAllCodexRateLimitResetCredits,
     getHigherPriorityAuth,
   };
-});
+})();
 
-vi.mock('./provider-registry.js', () => ({
+void vi.mock('./provider-registry.js', () => ({
   ProviderRegistry: wiring.ProviderRegistry,
 }));
-vi.mock('./proactive-renewal-manager.js', () => ({
+void vi.mock('./proactive-renewal-manager.js', () => ({
   ProactiveRenewalManager: wiring.ProactiveRenewalManager,
 }));
-vi.mock('./OAuthBucketManager.js', () => ({
+void vi.mock('./OAuthBucketManager.js', () => ({
   OAuthBucketManager: wiring.OAuthBucketManager,
 }));
-vi.mock('./token-access-coordinator.js', () => ({
+void vi.mock('./token-access-coordinator.js', () => ({
   TokenAccessCoordinator: wiring.TokenAccessCoordinator,
 }));
-vi.mock('./auth-flow-orchestrator.js', () => ({
+void vi.mock('./auth-flow-orchestrator.js', () => ({
   AuthFlowOrchestrator: wiring.AuthFlowOrchestrator,
 }));
-vi.mock('./auth-status-service.js', () => ({
+void vi.mock('./auth-status-service.js', () => ({
   AuthStatusService: wiring.AuthStatusService,
 }));
-vi.mock('./provider-usage-info.js', () => ({
+void vi.mock('./provider-usage-info.js', () => ({
   getAnthropicUsageInfo: wiring.getAnthropicUsageInfo,
   getAllAnthropicUsageInfo: wiring.getAllAnthropicUsageInfo,
   getAllCodexUsageInfo: wiring.getAllCodexUsageInfo,

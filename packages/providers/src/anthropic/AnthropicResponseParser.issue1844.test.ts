@@ -10,7 +10,7 @@
  * into IContent.metadata so downstream turn handling and telemetry work.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { ResponseParserOptions } from './AnthropicResponseParser.js';

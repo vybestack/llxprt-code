@@ -14,7 +14,7 @@
  * and a mocked buildZedTerminalSetup that throws — no result-shaped mocks.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -22,27 +22,23 @@ import type { LoadedSettings } from '../config/settings.js';
 
 import { RecordingConnection } from './zed-test-helpers.js';
 
-const mockFromConfig = vi.hoisted(() => vi.fn());
-const mockBuildZedTerminalSetup = vi.hoisted(() => vi.fn());
+const mockFromConfig = vi.fn();
+const mockBuildZedTerminalSetup = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-  };
-});
+const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+void vi.mock('@vybestack/llxprt-code-agents', () => ({
+  ...actual,
+  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+}));
 
-vi.mock('./zed-terminal-setup.js', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    buildZedTerminalSetup: (...args: unknown[]) =>
-      mockBuildZedTerminalSetup(...args),
-  };
-});
+const actualActual = { ...(await import('./zed-terminal-setup.js')) };
+void vi.mock('./zed-terminal-setup.js', () => ({
+  ...actualActual,
+  buildZedTerminalSetup: (...args: unknown[]) =>
+    mockBuildZedTerminalSetup(...args),
+}));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),

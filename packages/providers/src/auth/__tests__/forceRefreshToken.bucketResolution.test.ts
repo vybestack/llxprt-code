@@ -21,12 +21,15 @@
  * explicit bucket is supplied.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { importActualSync } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+
+const realLlxprtCodeCoreModule = {
+  ...(await import('@vybestack/llxprt-code-core')),
+};
 
 function makeToken(
   accessToken: string,
@@ -180,10 +183,8 @@ function makeCoordinator(opts?: {
   };
 }
 
-vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = importActualSync<typeof import('@vybestack/llxprt-code-core')>(
-    '@vybestack/llxprt-code-core',
-  );
+void vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
     ProfileManager: class MockProfileManager {

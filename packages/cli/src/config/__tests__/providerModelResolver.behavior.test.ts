@@ -12,12 +12,12 @@
  * explicit Gemini configurations still resolve correctly.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { resolveProviderAndModel } from '../providerModelResolver.js';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 
-vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
+void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
   loadProviderAliasEntries: vi.fn(() => []),
 }));
 
@@ -401,7 +401,9 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
 
 describe('resolveProviderAndModel: alias default model preserved (#2481)', () => {
   it('falls back to alias default model for a non-gemini provider with no explicit model', () => {
-    vi.mocked(loadProviderAliasEntries).mockReturnValue([
+    (
+      loadProviderAliasEntries as Mock<typeof loadProviderAliasEntries>
+    ).mockReturnValue([
       {
         alias: 'myalias',
         config: {
@@ -428,7 +430,9 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
   });
 
   it('prefers an explicit provider alias default over an unrelated environment model', () => {
-    vi.mocked(loadProviderAliasEntries).mockReturnValue([
+    (
+      loadProviderAliasEntries as Mock<typeof loadProviderAliasEntries>
+    ).mockReturnValue([
       {
         alias: 'myalias',
         config: {
@@ -455,7 +459,9 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
   });
 
   it('treats a canonical provider entry as a provider default, not an explicit alias default', () => {
-    vi.mocked(loadProviderAliasEntries).mockReturnValue([
+    (
+      loadProviderAliasEntries as Mock<typeof loadProviderAliasEntries>
+    ).mockReturnValue([
       {
         alias: 'gemini',
         config: {

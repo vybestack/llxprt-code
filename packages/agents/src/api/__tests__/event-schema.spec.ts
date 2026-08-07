@@ -17,7 +17,7 @@
  * as observable accept/reject behavior — no mock theater; only parse outcomes.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   STRUCTURED_ERROR_CATEGORIES,

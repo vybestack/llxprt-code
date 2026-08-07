@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { expect, describe, it, beforeEach, afterEach, vi } from 'bun:test';
 import { escapeShellArg, getShellConfiguration } from './shell-utils.js';
 
-const mockQuote = vi.hoisted(() => vi.fn());
-vi.mock('shell-quote', () => ({
+const mockQuote = vi.fn();
+void vi.mock('shell-quote', () => ({
   quote: mockQuote,
 }));
 
@@ -82,12 +83,12 @@ describe('getShellConfiguration', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.unstubAllGlobals();
+    restoreGlobals();
     vi.clearAllMocks();
   });
 
   it('should return bash configuration on Linux', () => {
-    vi.stubGlobal('process', { ...process, platform: 'linux' });
+    setGlobal('process', { ...process, platform: 'linux' });
     const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
     expect(config.argsPrefix).toStrictEqual(['-c']);
@@ -95,7 +96,7 @@ describe('getShellConfiguration', () => {
   });
 
   it('should return bash configuration on macOS (darwin)', () => {
-    vi.stubGlobal('process', { ...process, platform: 'darwin' });
+    setGlobal('process', { ...process, platform: 'darwin' });
     const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
     expect(config.argsPrefix).toStrictEqual(['-c']);
@@ -104,7 +105,7 @@ describe('getShellConfiguration', () => {
 
   describe('on Windows', () => {
     beforeEach(() => {
-      vi.stubGlobal('process', {
+      setGlobal('process', {
         ...process,
         platform: 'win32',
         env: { ...process.env },

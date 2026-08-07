@@ -4,21 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+} from '@vybestack/llxprt-code-test-utils';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
+import type { UpdateInfo } from 'update-notifier';
 import type { LoadedSettings } from '../../config/settings.js';
 
-const getPackageJson = vi.hoisted(() => vi.fn());
-const debugLogger = vi.hoisted(() => ({
+const getPackageJson = vi.fn();
+const debugLogger = {
   warn: vi.fn(),
-}));
-vi.mock('@vybestack/llxprt-code-core', () => ({
+};
+void vi.mock('@vybestack/llxprt-code-core', () => ({
   getPackageJson,
   debugLogger,
 }));
 
-const updateNotifier = vi.hoisted(() => vi.fn());
-vi.mock('update-notifier', () => ({
+const updateNotifier = vi.fn();
+void vi.mock('update-notifier', () => ({
   default: updateNotifier,
 }));
 
@@ -28,7 +33,6 @@ describe('checkForUpdates', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    vi.clearAllTimers();
     // Clear DEV environment variable before each test
     delete process.env.DEV;
 
@@ -100,7 +104,11 @@ describe('checkForUpdates', () => {
 
     const result = await checkForUpdates(mockSettings);
     expect(result?.message).toContain('1.0.0 → 1.1.0');
-    expect(result?.update).toStrictEqual({ current: '1.0.0', latest: '1.1.0' });
+    expect(result?.update).toStrictEqual({
+      current: '1.0.0',
+      latest: '1.1.0',
+      // UpdateInfo also requires type/name which the mock omits.
+    } as unknown as UpdateInfo);
   });
 
   it('should return null if the latest version is the same as the current version', async () => {
@@ -241,8 +249,8 @@ describe('checkForUpdates', () => {
       const checkPromise = checkForUpdates(mockSettings);
 
       // Advance timers to trigger the timeout
-      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);
-      await vi.runAllTimersAsync();
+      await advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);
+      await runAllTimersAsync();
 
       const result = await checkPromise;
       expect(result).toBeNull();

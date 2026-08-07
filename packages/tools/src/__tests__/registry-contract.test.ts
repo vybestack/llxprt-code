@@ -22,7 +22,7 @@
  * would interact with the registry through the tools-owned interfaces.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type {
   IToolHost,
   IToolMessageBus,

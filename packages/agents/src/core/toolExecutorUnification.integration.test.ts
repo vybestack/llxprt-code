@@ -17,7 +17,7 @@
  * 3. agentId preservation - agentId flows correctly through execution paths
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,

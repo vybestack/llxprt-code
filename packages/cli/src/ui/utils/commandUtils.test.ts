@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterAll } from 'vitest';
+import type { Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterAll } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import clipboardy from 'clipboardy';
@@ -22,7 +22,7 @@ const BEL = '\u0007';
 const ST = '\u001B\\';
 
 // Mock clipboardy
-vi.mock('clipboardy', () => ({
+void vi.mock('clipboardy', () => ({
   default: {
     write: vi.fn(),
   },
@@ -30,8 +30,8 @@ vi.mock('clipboardy', () => ({
 
 // Mock child_process — provide an explicit factory so spawn is a vi.fn()
 // under Bun (automocking of builtins differs from Vitest).
-const mockSpawnHoisted = vi.hoisted(() => vi.fn());
-vi.mock('node:child_process', () => ({
+const mockSpawnHoisted = vi.fn();
+void vi.mock('node:child_process', () => ({
   spawn: mockSpawnHoisted,
   exec: vi.fn(),
   execSync: vi.fn(),
@@ -39,21 +39,21 @@ vi.mock('node:child_process', () => ({
 }));
 
 // fs (for /dev/tty)
-const mockFs = vi.hoisted(() => ({
+const mockFs = {
   createWriteStream: vi.fn(),
   writeSync: vi.fn(),
   constants: { W_OK: 2 },
-}));
-vi.mock('node:fs', () => ({
+};
+void vi.mock('node:fs', () => ({
   default: mockFs,
 }));
 
 // Mock process.platform for platform-specific tests
-// Use Object.defineProperty directly on process (not vi.stubGlobal) so the
-// getter persists across nested describe beforeEach hooks. vi.stubGlobal
-// restores the original process in afterEach, causing the stub to be lost
-// before nested describe beforeEach runs.
-const mockProcess = vi.hoisted(() => ({ platform: 'darwin' }));
+// Use Object.defineProperty directly on process (not setGlobal) so the
+// getter persists across nested describe beforeEach hooks. setGlobal is
+// undone in afterEach, which would lose the stub before a nested describe
+// beforeEach runs.
+const mockProcess = { platform: 'darwin' };
 
 // The per-test hooks below replace process.stdout / process.stderr with mock
 // writables. Under Bun the test file IS the process, so the real streams must
@@ -92,10 +92,10 @@ const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
     off: EventEmitter.prototype.off,
     removeAllListeners: EventEmitter.prototype.removeAllListeners,
   }) as unknown as EventEmitter & {
-    write: Mock;
-    end: Mock;
+    write: Mock<(data: unknown) => boolean>;
+    end: Mock<() => void>;
     isTTY?: boolean;
-    removeAllListeners: Mock;
+    removeAllListeners: Mock<(event: string) => EventEmitter>;
   };
   return stream;
 };
@@ -116,8 +116,8 @@ const resetEnv = () => {
 
 interface MockChildProcess extends EventEmitter {
   stdin: EventEmitter & {
-    write: Mock;
-    end: Mock;
+    write: Mock<(data: unknown) => boolean>;
+    end: Mock<() => void>;
   };
   stderr: EventEmitter;
 }
@@ -125,9 +125,9 @@ interface MockChildProcess extends EventEmitter {
 describe('commandUtils', () => {
   afterAll(restoreRealStdio);
 
-  let mockSpawn: Mock;
+  let mockSpawn: Mock<(...args: never[]) => unknown>;
   let mockChild: MockChildProcess;
-  let mockClipboardyWrite: Mock;
+  let mockClipboardyWrite: Mock<(text: string) => Promise<void>>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -155,7 +155,9 @@ describe('commandUtils', () => {
     mockSpawn.mockReturnValue(mockChild as unknown as ChildProcess);
 
     // Setup clipboardy mock
-    mockClipboardyWrite = clipboardy.write as Mock;
+    mockClipboardyWrite = clipboardy.write as Mock<
+      (text: string) => Promise<void>
+    >;
 
     // default: /dev/tty creation succeeds and emits 'open'
     mockFs.createWriteStream.mockImplementation(() => {
@@ -474,8 +476,12 @@ describe('commandUtils', () => {
       await copyToClipboard('');
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
       // ensure no accidental writes to stdio either
-      const stderrStream = process.stderr as unknown as { write: Mock };
-      const stdoutStream = process.stdout as unknown as { write: Mock };
+      const stderrStream = process.stderr as unknown as {
+        write: Mock<(data: unknown) => boolean>;
+      };
+      const stdoutStream = process.stdout as unknown as {
+        write: Mock<(data: unknown) => boolean>;
+      };
       expect(stderrStream.write).not.toHaveBeenCalled();
       expect(stdoutStream.write).not.toHaveBeenCalled();
     });

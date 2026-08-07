@@ -18,7 +18,7 @@
  * and is the canonical source of truth for the runtime-vs-app-service boundary.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { COMMAND_API_MAP } from '@vybestack/llxprt-code-agents/app-service.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';

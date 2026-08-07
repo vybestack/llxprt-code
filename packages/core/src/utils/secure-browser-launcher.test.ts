@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 // IMPORTANT: Must import mock setup BEFORE importing the source module.
 // Bun's mock.module only applies if registered before the source module loads.
 import { secureBrowserMocks } from './secure-browser-launcher-mock-setup.js';
@@ -16,6 +16,8 @@ import {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './secure-browser-launcher.js';
+
+const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
 const mockExecFile = secureBrowserMocks.execFile;
 const mockStat = secureBrowserMocks.stat;
@@ -161,10 +163,7 @@ describe('secure-browser-launcher', () => {
           join(tmpdir(), 'llxprt-browser-launch-'),
         );
         const sentinelPath = join(directory, 'parent-sentinel.txt');
-        const { execFile: executeFile } =
-          await vi.importActual<typeof import('node:child_process')>(
-            'node:child_process',
-          );
+        const { execFile: executeFile } = realNodeChildProcessModule;
 
         mockExecFile.mockImplementationOnce(async (command, args, options) => {
           await new Promise<void>((resolve, reject) => {

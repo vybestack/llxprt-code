@@ -13,7 +13,7 @@
  * they validate the real exported values and the validation guard.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   COMPRESSION_TOKEN_THRESHOLD,
   COMPRESSION_PRESERVE_THRESHOLD,

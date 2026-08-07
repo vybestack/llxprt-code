@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from 'vitest';
+} from 'bun:test';
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
@@ -20,27 +20,25 @@ import type { ShellOutputEvent } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
 // Hoisted Mocks
-const mockPtySpawn = vi.hoisted(() => vi.fn());
-const mockCpSpawn = vi.hoisted(() => vi.fn());
-const mockIsBinary = vi.hoisted(() => vi.fn());
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockGetPty = vi.hoisted(() => vi.fn());
+const mockPtySpawn = vi.fn();
+const mockCpSpawn = vi.fn();
+const mockIsBinary = vi.fn();
+const mockPlatform = vi.fn();
+const mockGetPty = vi.fn();
 
 // Top-level Mocks
-vi.mock('@lydell/node-pty', () => ({
+void vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    spawn: mockCpSpawn,
-  };
-});
-vi.mock('../utils/textUtils.js', () => ({
+const actual = { ...(await import('child_process')) };
+void vi.mock('child_process', () => ({
+  ...actual,
+  spawn: mockCpSpawn,
+}));
+void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
-vi.mock('os', () => ({
+void vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: () => '/tmp/test-home',
@@ -60,7 +58,7 @@ vi.mock('os', () => ({
     },
   },
 }));
-vi.mock('../utils/getPty.js', () => ({
+void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
@@ -394,9 +392,9 @@ describe('ShellExecutionService execution method selection', () => {
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
 
@@ -407,9 +405,9 @@ describe('ShellExecutionService execution method selection', () => {
     // Mock for pty
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
@@ -513,9 +511,9 @@ describe('ShellExecutionService environment sanitization wiring', () => {
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
   let mockPtyProcess: EventEmitter & {
     pid: number;
-    kill: Mock;
-    onData: Mock;
-    onExit: Mock;
+    kill: Mock<(...args: never[]) => unknown>;
+    onData: Mock<(...args: never[]) => unknown>;
+    onExit: Mock<(...args: never[]) => unknown>;
   };
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
 
@@ -535,9 +533,9 @@ describe('ShellExecutionService environment sanitization wiring', () => {
     // Mock for pty
     mockPtyProcess = new EventEmitter() as EventEmitter & {
       pid: number;
-      kill: Mock;
-      onData: Mock;
-      onExit: Mock;
+      kill: Mock<(...args: never[]) => unknown>;
+      onData: Mock<(...args: never[]) => unknown>;
+      onExit: Mock<(...args: never[]) => unknown>;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();

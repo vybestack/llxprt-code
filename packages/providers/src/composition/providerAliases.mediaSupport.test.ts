@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -33,7 +41,9 @@ async function loadWithTempConfig(
   try {
     return loadProviderAliasEntries();
   } finally {
-    vi.mocked(Storage.getGlobalDataDir).mockRestore();
+    (
+      Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
+    ).mockRestore();
   }
 }
 

@@ -13,7 +13,7 @@
  * @requirement:REQ-003.1,REQ-003.2
  */
 
-import { describe, it, expect, vi, type Mock } from '../../testApi.js';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import {
   createFullLoopHarness,
   runFullLoop,

@@ -14,17 +14,18 @@
  * @issue #2274 — Split Claude Code OAuth from Anthropic API-key access
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 // Stub the Anthropic SDK at the HTTP boundary so the real alias factory +
 // AnthropicProvider can exercise the dynamic /models listing path without a
 // network call. We capture the constructor args to prove API-key wiring.
-const mockBetaModelsList = vi.hoisted(() => vi.fn());
-const sdkConstructorCalls = vi.hoisted<
-  Array<{ apiKey?: string; authToken?: string }>
->(() => []);
+const mockBetaModelsList = vi.fn();
+const sdkConstructorCalls = [] as Array<{
+  apiKey?: string;
+  authToken?: string;
+}>;
 
-vi.mock('@anthropic-ai/sdk', () => ({
+void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation((opts: Record<string, unknown>) => {
     sdkConstructorCalls.push({
       apiKey: opts.apiKey as string | undefined,
