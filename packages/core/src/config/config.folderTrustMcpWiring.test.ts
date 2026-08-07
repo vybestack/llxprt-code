@@ -6,7 +6,6 @@
 
 import {
   advanceTimersByTimeAsync,
-  runAllTimersAsync,
   waitFor,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';

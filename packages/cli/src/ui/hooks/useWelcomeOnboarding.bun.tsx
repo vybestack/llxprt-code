@@ -17,7 +17,7 @@ const stubRuntime = {
   listAvailableModels: async () => [],
   setActiveModel: async () => {},
 };
-vi.mock('../contexts/RuntimeContext.js', () => ({
+void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => stubRuntime,
 }));
 

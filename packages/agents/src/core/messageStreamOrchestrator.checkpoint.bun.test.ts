@@ -17,7 +17,7 @@
  * @requirement REQ-3048-007 (review findings 2, 3, 4)
  */
 
-import { describe, it, expect, vi, beforeEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   ServerAgentStreamEvent,
@@ -35,10 +35,14 @@ import { TodoContinuationService } from './TodoContinuationService.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 
+const realTurnJsModule = { ...(await import('./turn.js')) };
+const realLlxprtCodeToolsModule = {
+  ...(await import('@vybestack/llxprt-code-tools')),
+};
 const mockTurnRun = vi.fn();
 
-vi.mock('./turn.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./turn.js')>();
+void vi.mock('./turn.js', () => {
+  const actual = realTurnJsModule;
   class MockTurn {
     pendingToolCalls: unknown[] = [];
     run = mockTurnRun;
@@ -49,9 +53,8 @@ vi.mock('./turn.js', async (importOriginal) => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+void vi.mock('@vybestack/llxprt-code-tools', () => {
+  const actual = realLlxprtCodeToolsModule;
   const fakeStore = () => ({
     readTodos: vi.fn().mockResolvedValue([]),
     readPausedState: vi.fn().mockResolvedValue(false),

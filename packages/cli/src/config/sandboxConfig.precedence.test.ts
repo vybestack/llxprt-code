@@ -30,7 +30,7 @@ const { commandSyncMock } = {
   commandSyncMock: vi.fn(),
 };
 
-vi.mock('command-exists', () => ({
+void vi.mock('command-exists', () => ({
   default: {
     sync: commandSyncMock,
   },
