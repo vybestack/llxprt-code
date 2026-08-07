@@ -61,6 +61,7 @@ import {
   safeJsonStringify,
 } from './turnJsonUtils.js';
 import { buildCitationEvent } from './turnCitations.js';
+import { buildErrorReportContext } from './turnErrorReportContext.js';
 import {
   DEFAULT_AGENT_ID,
   AgentEventType,
@@ -584,12 +585,10 @@ export class Turn {
     if (error instanceof UnauthorizedError) {
       throw error;
     }
-
-    const contextForReport = [...this.chat.getHistory(/*curated*/ true), req];
     await reportError(
       error,
       `Error when talking to ${this.providerName} API`,
-      contextForReport,
+      buildErrorReportContext(this.chat.getHistory(/*curated*/ true), req),
       'Turn.run-sendMessageStream',
     );
     const structuredError = buildStructuredError(error);

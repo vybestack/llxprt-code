@@ -159,7 +159,7 @@ export interface CreateChatSessionDeps {
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
   clearStoredHistoryService: () => void;
-  extraHistory?: IContent[];
+  extraHistory?: readonly IContent[];
   generateContentConfig: ModelGenerationSettings;
   todoContinuationService: TodoContinuationService;
   toolRegistry: ToolRegistry | undefined;
@@ -176,7 +176,7 @@ export interface CreateChatSessionDeps {
  */
 function loadExtraHistory(
   historyService: HistoryService,
-  extraHistory: IContent[] | undefined,
+  extraHistory: readonly IContent[] | undefined,
   currentModel: string,
 ): void {
   if (!extraHistory || extraHistory.length === 0) {
@@ -204,7 +204,7 @@ function loadExtraHistory(
  */
 function setupHistoryService(
   storedHistoryService: HistoryService | undefined,
-  extraHistory: IContent[] | undefined,
+  extraHistory: readonly IContent[] | undefined,
   runtimeState: AgentRuntimeState,
   createHistoryService: () => HistoryService,
 ): { historyService: HistoryService; reused: boolean } {
@@ -428,7 +428,7 @@ export async function createChatSessionSafe(
     await reportError(
       error,
       'Error initializing chat session.',
-      deps.extraHistory ?? [],
+      deps.extraHistory ? [...deps.extraHistory] : [],
       'startChat',
     );
     throw new Error(`Failed to initialize chat: ${getErrorMessage(error)}`);

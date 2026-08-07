@@ -92,8 +92,8 @@ export interface AgentChatContract {
     params: AgentClientMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput>;
-  getHistory(): IContent[];
-  setHistory(history: IContent[]): void;
+  getHistory(): readonly IContent[];
+  setHistory(history: readonly IContent[]): void;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
@@ -113,25 +113,25 @@ export interface AgentClientContract {
   isInitialized(): boolean;
   hasChatInitialized(): boolean;
   getChat(): AgentChatContract;
-  getHistory(): Promise<IContent[]>;
+  getHistory(): Promise<readonly IContent[]>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
-  storeHistoryForLaterUse(history: IContent[]): void;
+  storeHistoryForLaterUse(history: readonly IContent[]): void;
   dispose(): void;
   setTools(): Promise<void>;
   clearTools(): void;
   updateSystemInstruction(): Promise<void>;
   addHistory(content: IContent): Promise<void>;
   resetChat(): Promise<void>;
-  resumeChat(history: IContent[]): Promise<void>;
+  resumeChat(history: readonly IContent[]): Promise<void>;
   setHistory(
-    history: IContent[],
+    history: readonly IContent[],
     options?: { stripThoughts?: boolean },
   ): Promise<void>;
-  restoreHistory(historyItems: IContent[]): Promise<void>;
+  restoreHistory(historyItems: readonly IContent[]): Promise<void>;
   addDirectoryContext(): Promise<void>;
   getContentGenerator(): ContentGenerator;
-  startChat(extraHistory?: IContent[]): Promise<AgentChatContract>;
+  startChat(extraHistory?: readonly IContent[]): Promise<AgentChatContract>;
   generateDirectMessage(
     params: AgentClientMessageParams,
     promptId: string,
