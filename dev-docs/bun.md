@@ -560,44 +560,55 @@ The isolation (one fresh Bun process per test file) preserves the same
 module-level mock isolation that Vitest provides per file, because Bun's
 `mock.module` is process-wide.
 
-### Vitest compatibility shim (`augment-bun-vi.ts`)
+### Writing tests against Bun's API
 
-Bun's test runner injects its own partial Vitest API for `import ... from
-'vitest'`, but this built-in handler bypasses both `mock.module` and Bun
-plugins. The shim at `test-setup/augment-bun-vi.ts` augments Bun's injected
-`vi` object in-place with the missing Vitest-compatible methods:
+Tests import `bun:test` directly. Bun does not provide everything Vitest did,
+so a few patterns are worth knowing.
 
-- `vi.hoisted` — hoisted mock factory
-- `vi.mocked` — typed mock introspection
-- `vi.stubEnv` / `vi.unstubAllEnvs` — environment-variable stubbing
-- `vi.stubGlobal` / `vi.unstubAllGlobals` — global stubbing
-- `vi.importActual` — real module loading via query-string bypass
-- `vi.waitFor` — async wait helper
-- `vi.advanceTimersByTimeAsync` / `vi.runAllTimersAsync` /
-  `vi.runOnlyPendingTimersAsync` — async timer helpers. Bun provides only the
-  **sync** variants (`advanceTimersByTime`, `advanceTimersToNextTimer`,
-  `runAllTimers`, `runOnlyPendingTimers`). The elapsed-time helper advances
-  between scheduled timer boundaries, preserves fractional advances across
-  calls, and drains microtasks after each fired callback. `runAllTimersAsync`
-  performs a bounded, interleaved timer/microtask drain so a timer scheduled
-  after an awaited timer callback also runs. `runOnlyPendingTimersAsync` uses
-  Bun's pending-timer primitive once, preserving the initial last-timer
-  boundary: a timer scheduled after `await` runs only when its due time is at
-  or before that boundary. These semantics preserve async timer scheduling
-  without work proportional to elapsed milliseconds and enable `waitFor` to
-  auto-advance fake timers under Bun (see `setWaitForScheduler` in
-  `stub-helpers.ts`).
-- `vi.mock` / `vi.doMock` — overridden to pass `importOriginal` to factories
-- `vi.clearAllTimers` — guarded no-op when fake timers are not active
-  (Vitest treats this as a no-op; Bun throws "Fake timers are not active")
+**Replacing a module.** `vi.mock` is hoisted above the importing file's own
+imports, which is what lets it affect that file's static imports. It only works
+in the file that needs it: a registration placed in a helper module does **not**
+apply to the suite that imports it, and the suite will keep passing while
+exercising the real module. Keep `vi.mock` calls in the test file.
 
-The root `bunfig.toml` and migrated workspace configurations preload this
-shim. Workspace paths are relative to that workspace, for example:
+**Preserving the untouched exports.** `mock.module` replaces the whole
+namespace, so a factory that lists two exports drops the rest. Capture the real
+module first and spread it:
 
-```toml
-[test]
-preload = ["../../test-setup/augment-bun-vi.ts"]
+```ts
+const realFoo = { ...(await import('./foo.js')) };
+void vi.mock('./foo.js', () => ({ ...realFoo, bar: vi.fn() }));
 ```
+
+`automock(realFoo)` from `@vybestack/llxprt-code-test-utils` does the same for a
+whole module when every export should become a mock. The factory must be
+synchronous — Bun awaits whatever it returns, so an `async` factory or a bare
+`import()` deadlocks the module graph.
+
+**Referring to a mocked binding.** A `const` captures the value before the mock
+applies. Read it through a function instead:
+
+```ts
+const mockedFoo = (): Mock<(...args: never[]) => unknown> =>
+  Foo as unknown as Mock<(...args: never[]) => unknown>;
+```
+
+**Helpers Bun lacks.** `waitFor`, the async timer helpers
+(`advanceTimersByTimeAsync`, `runAllTimersAsync`,
+`runOnlyPendingTimersAsync`), `setEnv`/`setGlobal` with their restore
+counterparts, and `automock` all live in
+`@vybestack/llxprt-code-test-utils`. Bun ships only the synchronous timer
+primitives; the async wrappers advance to the next scheduled boundary and drain
+microtasks after each fired callback.
+
+**Teardown.** Bun's `restoreAllMocks` restores implementations but keeps the
+recorded calls of module mocks, so a suite that asserts call counts should also
+call `vi.clearAllMocks()`. `vi.clearAllTimers()` throws unless fake timers are
+active — `useFakeTimers`/`useRealTimers` already discard pending timers, so it
+is usually redundant.
+
+**Types.** `bun-test-corrections.d.ts` narrows `.rejects`/`.resolves`, which Bun
+declares as returning `void` though they return an awaitable promise.
 
 ### CLI workspace specifics
 
