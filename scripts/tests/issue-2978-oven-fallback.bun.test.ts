@@ -66,13 +66,6 @@ const installNativeLaunchers = require(
 };
 
 /**
- * Creating a symlink on Windows requires elevation or Developer Mode, so
- * `symlinkSync` throws EPERM on an unprivileged host. Mirrors the pattern in
- * issue-2603-launcher.bun.test.ts.
- */
-const itNeedsSymlinks = process.platform === 'win32' ? it.skip : it;
-
-/**
  * The POSIX launcher (`#!/bin/sh`) requires `sh` on PATH. On stock Windows
  * there is no POSIX shell, so launcher-execution tests are skipped there.
  * Pure-logic, manifest, detection, and resolveBunExe tests still run
@@ -88,6 +81,20 @@ const itPosix = process.platform === 'win32' ? it.skip : it;
  */
 const describePosixOnly =
   process.platform === 'win32' ? describe.skip : describe;
+
+/**
+ * Several hosts resolve to exactly one @oven candidate (darwin/arm64,
+ * linux/arm64 on glibc, win32/arm64). A fall-through-to-the-next-variant test
+ * cannot mean anything there, and silently reusing the only variant would make
+ * the test pass by restoring the package it just emptied. Report those hosts as
+ * skipped rather than vacuously green.
+ */
+const hostHasSecondOvenVariant = (() => {
+  const host = detectHostPlatform();
+  return host !== null && selectOvenVariants(host).length > 1;
+})();
+const itPosixMultiVariant =
+  process.platform === 'win32' || !hostHasSecondOvenVariant ? it.skip : it;
 
 const BUNDLED_MARKER = 'BUNDLED_BUN_RAN_ENTRY';
 const OVEN_MARKER = 'OVEN_BUN_RAN_ENTRY';
@@ -662,7 +669,7 @@ describePosixOnly('issue #2978 @oven fallback — launcher behavior', () => {
     expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
   });
 
-  itPosix(
+  itPosixMultiVariant(
     'skips an emptied @oven bin and falls through to a second variant',
     () => {
       const { pkgRoot, launcherTarget } = makeNpmV12Layout(
@@ -683,7 +690,13 @@ describePosixOnly('issue #2978 @oven fallback — launcher behavior', () => {
         throw new Error('host detection failed');
       }
       const variants = selectOvenVariants(host);
-      const fallback = variants[1] ?? variants[0];
+      const fallback = variants[1];
+      if (fallback === undefined) {
+        // Unreachable: itPosixMultiVariant skips single-variant hosts. Falling
+        // back to variants[0] here would re-create the binary in the directory
+        // emptied above and pass without ever exercising fall-through.
+        throw new Error('expected a second @oven variant on this host');
+      }
       writeOvenPackage(
         join(pkgRoot, 'node_modules'),
         { packageName: fallback.packageName, exeName: fallback.exeNames[0] },
@@ -736,7 +749,7 @@ describePosixOnly('issue #2978 @oven fallback — launcher behavior', () => {
     },
   );
 
-  itNeedsSymlinks(
+  itPosix(
     'accepts a hoisted @oven binary within enclosing node_modules',
     () => {
       // npm may hoist the @oven package to the enclosing node_modules level.
@@ -818,42 +831,43 @@ describePosixOnly('issue #2978 @oven fallback — launcher behavior', () => {
   );
 });
 
-describePosixOnly(
-  'issue #2978 @oven fallback — resolveBunExe parity (.cjs)',
-  () => {
-    let tempDir: string;
+// Not gated on POSIX: resolveBunExe is platform-agnostic filesystem logic and
+// never spawns the `#!/bin/sh` launcher, so it must be exercised on Windows too
+// — this PR changes Windows entry points, and Windows path handling is exactly
+// where a regression would hide.
+describe('issue #2978 @oven fallback — resolveBunExe parity (.cjs)', () => {
+  let tempDir: string;
 
-    beforeEach(() => {
-      tempDir = mkdtempSync(join(tmpdir(), 'llxprt-resolveBunExe-'));
-    });
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-resolveBunExe-'));
+  });
 
-    afterEach(() => {
-      rmSync(tempDir, { recursive: true, force: true });
-    });
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
 
-    it('resolves the @oven binary from an npm-v12-shaped layout', () => {
-      const { pkgRoot } = makeNpmV12Layout(tempDir, 'process.exit(0);');
-      const resolved = installNativeLaunchers._testing.resolveBunExe(pkgRoot);
-      if (resolved === null) {
-        throw new Error('resolveBunExe returned null for an @oven layout');
-      }
-      expect(resolved).toContain('@oven');
-      expect(existsSync(resolved)).toBe(true);
-    });
+  it('resolves the @oven binary from an npm-v12-shaped layout', () => {
+    const { pkgRoot } = makeNpmV12Layout(tempDir, 'process.exit(0);');
+    const resolved = installNativeLaunchers._testing.resolveBunExe(pkgRoot);
+    if (resolved === null) {
+      throw new Error('resolveBunExe returned null for an @oven layout');
+    }
+    expect(resolved).toContain('@oven');
+    expect(existsSync(resolved)).toBe(true);
+  });
 
-    it('prefers bundled bun over @oven when both exist', () => {
-      const { pkgRoot } = makeNpmV12Layout(tempDir, 'process.exit(0);');
-      // Add the bundled binary.
-      const bunBinDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-      mkdirSync(bunBinDir, { recursive: true });
-      copyFileSync(ensureBun(), join(bunBinDir, 'bun.exe'));
+  it('prefers bundled bun over @oven when both exist', () => {
+    const { pkgRoot } = makeNpmV12Layout(tempDir, 'process.exit(0);');
+    // Add the bundled binary.
+    const bunBinDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
+    mkdirSync(bunBinDir, { recursive: true });
+    copyFileSync(ensureBun(), join(bunBinDir, 'bun.exe'));
 
-      const resolved = installNativeLaunchers._testing.resolveBunExe(pkgRoot);
-      if (resolved === null) {
-        throw new Error('resolveBunExe returned null when bundled bun exists');
-      }
-      expect(resolved).not.toContain('@oven');
-      expect(resolved).toContain('bun');
-    });
-  },
-);
+    const resolved = installNativeLaunchers._testing.resolveBunExe(pkgRoot);
+    if (resolved === null) {
+      throw new Error('resolveBunExe returned null when bundled bun exists');
+    }
+    expect(resolved).not.toContain('@oven');
+    expect(resolved).toContain('bun');
+  });
+});

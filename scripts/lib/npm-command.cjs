@@ -72,6 +72,11 @@ function existsSyncOptional(options, p) {
  * Resolution order:
  *   1. npm_execpath — only when it is a real .js path that exists.
  *   2. <node-dir>/node_modules/npm/bin/npm-cli.js — only when it exists.
+ *   3. PATH — the first directory holding npm.cmd whose sibling
+ *      node_modules/npm/bin/npm-cli.js exists. This is what finds npm when the
+ *      running process is not node (e.g. Bun), where step 2 probes the wrong
+ *      directory.
+ *   4. NPM_CONFIG_PREFIX / APPDATA prefix candidates.
  *
  * Throws NpmCliNotFoundError when neither candidate exists, so the failure is
  * actionable instead of surfacing as an opaque Node MODULE_NOT_FOUND at spawn.
@@ -106,11 +111,12 @@ function createNpmCliNotFoundError(probed) {
   return new NpmCliNotFoundError(
     `npm-cli.js could not be resolved on Windows (probed: ${probed.join(', ')}). ` +
       'Ensure npm is installed and accessible. This code checks the node.exe ' +
-      'directory (setup-node / official installers), NPM_CONFIG_PREFIX, and ' +
-      'APPDATA locations (nvm-windows, Volta, global installs). If none apply, ' +
-      'install Node via setup-node or an official installer that ships npm ' +
-      'alongside node.exe, or verify that NPM_CONFIG_PREFIX / APPDATA point to ' +
-      'a valid npm installation.',
+      'directory (setup-node / official installers), PATH (via npm.cmd, which ' +
+      'is how npm is found when the current runtime is not node — e.g. Bun), ' +
+      'NPM_CONFIG_PREFIX, and APPDATA locations (nvm-windows, Volta, global ' +
+      'installs). If none apply, install Node via setup-node or an official ' +
+      'installer that ships npm alongside node.exe, or verify that PATH / ' +
+      'NPM_CONFIG_PREFIX / APPDATA point to a valid npm installation.',
     { probed },
   );
 }

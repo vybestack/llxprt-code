@@ -38,7 +38,7 @@ interface PlatformRow {
   readonly os: string;
   readonly arch: string;
   readonly avx2?: boolean;
-  readonly abi?: string;
+  readonly abi?: HostAbi;
   readonly bin: string;
   readonly exe: string;
 }

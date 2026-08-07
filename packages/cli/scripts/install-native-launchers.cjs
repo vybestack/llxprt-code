@@ -548,15 +548,22 @@ function ovenLinuxHasAvx2() {
 
 function ovenDarwinHasAvx2() {
   try {
+    // machdep.cpu on its own resolves to the CPU *brand string* ("Intel(R)
+    // Core(TM) i7-5557U CPU @ 3.10GHz"), which never names a feature, so
+    // querying it reported "no AVX2" on every Intel Mac and silently pinned
+    // them to the slower baseline build. The feature flags live in
+    // machdep.cpu.features and machdep.cpu.leaf7_features; AVX2 is a leaf7
+    // feature, but both are requested so the check stays correct if Apple
+    // ever moves it.
     const r = require('child_process').spawnSync(
       'sysctl',
-      ['-n', 'machdep.cpu'],
+      ['-n', 'machdep.cpu.features', 'machdep.cpu.leaf7_features'],
       {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
       },
     );
-    return r.status === 0 && (r.stdout || '').includes('AVX2');
+    return r.status === 0 && /\bAVX2\b/i.test(r.stdout || '');
   } catch {
     return false;
   }

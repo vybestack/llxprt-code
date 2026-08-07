@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const { npmInvocation, npxInvocation, resolveNpmCliJs, NpmCliNotFoundError } =
@@ -203,7 +204,7 @@ describe('resolveNpmCliJs existence verification', () => {
     });
     expect(result).not.toBe('relative/npm-cli.js');
     // Falls through to the node-dir fallback.
-    expect(result).toMatch(/node_modules[/]npm[/]bin[/]npm-cli\.js$/);
+    expect(result).toMatch(/node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/);
   });
 
   it('ignores npm_execpath when it is not a .js path (e.g. a .cmd wrapper) and falls back', () => {
@@ -384,5 +385,139 @@ describe('resolveNpmCliJs existence verification', () => {
         expect(probedStr).toContain('C:\\\\appdata');
       }
     });
+  });
+});
+
+/**
+ * Coverage for the PATH/npm.cmd resolution strategy.
+ *
+ * This strategy exists because under a non-node runtime (Bun) process.execPath
+ * is the runtime binary, so the node-dir probe looks in the wrong directory and
+ * npm is never found. The scenarios below drive the real resolver through its
+ * injected `existsSync` and `env` seams; nothing about the unit under test is
+ * stubbed. Directory names are separator-free and PATH is joined with
+ * `path.delimiter`, so the same expectations hold on Windows (`;`) and POSIX
+ * (`:`) without the split mangling drive letters.
+ */
+describe('resolveNpmCliJs PATH/npm.cmd fallback', () => {
+  const cliUnder = (dir: string): string =>
+    path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const npmCmdIn = (dir: string): string => path.join(dir, 'npm.cmd');
+
+  // A runtime that is not node (Bun): its directory holds no npm at all.
+  const RUNTIME_EXEC_PATH = path.join('runtime-dir', 'bun.exe');
+  const PATH_DIR = 'path-npm-dir';
+  const UNRELATED_DIR = 'unrelated-dir';
+  // path.isAbsolute('/prefix') is true on Windows too, so this passes the
+  // resolver's absolute-path guard on every platform.
+  const PREFIX = '/prefix';
+
+  const joinPath = (...dirs: string[]): string => dirs.join(path.delimiter);
+
+  /** Builds an existsSync seam that records every path it was asked about. */
+  const existsAmong = (
+    present: readonly string[],
+  ): { existsSync: (p: string) => boolean; asked: string[] } => {
+    const asked: string[] = [];
+    const set = new Set(present);
+    return {
+      asked,
+      existsSync: (p: string) => {
+        asked.push(p);
+        return set.has(p);
+      },
+    };
+  };
+
+  it('resolves from PATH before falling back to NPM_CONFIG_PREFIX', () => {
+    const { existsSync } = existsAmong([
+      npmCmdIn(PATH_DIR),
+      cliUnder(PATH_DIR),
+      cliUnder(PREFIX),
+    ]);
+
+    const resolved = resolveNpmCliJs({
+      execPath: RUNTIME_EXEC_PATH,
+      env: { PATH: joinPath(PATH_DIR), NPM_CONFIG_PREFIX: PREFIX },
+      existsSync,
+    });
+
+    expect(resolved).toBe(cliUnder(PATH_DIR));
+  });
+
+  it('picks the one PATH entry holding npm.cmd and probes no unrelated entry', () => {
+    const { existsSync, asked } = existsAmong([
+      npmCmdIn(PATH_DIR),
+      cliUnder(PATH_DIR),
+    ]);
+
+    const resolved = resolveNpmCliJs({
+      execPath: RUNTIME_EXEC_PATH,
+      env: { PATH: joinPath(UNRELATED_DIR, PATH_DIR) },
+      existsSync,
+    });
+
+    expect(resolved).toBe(cliUnder(PATH_DIR));
+    // A PATH entry without npm.cmd must never contribute an npm-cli.js
+    // candidate, otherwise the not-found error fills with noise.
+    expect(asked).toContain(npmCmdIn(UNRELATED_DIR));
+    expect(asked).not.toContain(cliUnder(UNRELATED_DIR));
+  });
+
+  it('continues to NPM_CONFIG_PREFIX when npm.cmd has no sibling npm-cli.js', () => {
+    const { existsSync } = existsAmong([npmCmdIn(PATH_DIR), cliUnder(PREFIX)]);
+
+    const resolved = resolveNpmCliJs({
+      execPath: RUNTIME_EXEC_PATH,
+      env: { PATH: joinPath(PATH_DIR), NPM_CONFIG_PREFIX: PREFIX },
+      existsSync,
+    });
+
+    expect(resolved).toBe(cliUnder(PREFIX));
+  });
+
+  it('reports the PATH candidate as probed when nothing resolves', () => {
+    const { existsSync } = existsAmong([npmCmdIn(PATH_DIR)]);
+
+    expect(() =>
+      resolveNpmCliJs({
+        execPath: RUNTIME_EXEC_PATH,
+        env: { PATH: joinPath(PATH_DIR) },
+        existsSync,
+      }),
+    ).toThrow(NpmCliNotFoundError);
+
+    try {
+      resolveNpmCliJs({
+        execPath: RUNTIME_EXEC_PATH,
+        env: { PATH: joinPath(PATH_DIR) },
+        existsSync,
+      });
+      expect.unreachable('resolveNpmCliJs should have thrown');
+    } catch (e) {
+      const err = e as Error & { details?: { probed: string[] } };
+      expect(err.details?.probed).toContain(cliUnder(PATH_DIR));
+      expect(err.message).toContain('npm.cmd');
+    }
+  });
+
+  it('does not throw on a missing or empty PATH', () => {
+    const { existsSync } = existsAmong([cliUnder(PREFIX)]);
+
+    expect(
+      resolveNpmCliJs({
+        execPath: RUNTIME_EXEC_PATH,
+        env: { PATH: '', NPM_CONFIG_PREFIX: PREFIX },
+        existsSync,
+      }),
+    ).toBe(cliUnder(PREFIX));
+
+    expect(
+      resolveNpmCliJs({
+        execPath: RUNTIME_EXEC_PATH,
+        env: { NPM_CONFIG_PREFIX: PREFIX },
+        existsSync,
+      }),
+    ).toBe(cliUnder(PREFIX));
   });
 });
