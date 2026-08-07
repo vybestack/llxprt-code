@@ -18,6 +18,25 @@ import {
 } from './bootstrap.js';
 
 describe('bootstrap utilities', () => {
+  const originalBunDescriptor = Object.getOwnPropertyDescriptor(
+    process.versions,
+    'bun',
+  );
+
+  beforeEach(() => {
+    Object.defineProperty(process.versions, 'bun', {
+      value: '',
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    if (originalBunDescriptor) {
+      Object.defineProperty(process.versions, 'bun', originalBunDescriptor);
+    }
+  });
+
   describe('isDebugMode', () => {
     const originalEnv = process.env;
 
@@ -401,6 +420,104 @@ describe('bootstrap utilities', () => {
   describe('MAX_HEAP_CAP_MB', () => {
     it('should be 8192 (8GB)', () => {
       expect(MAX_HEAP_CAP_MB).toBe(8192);
+    });
+  });
+
+  describe('Bun never relaunches for --max-old-space-size', () => {
+    const originalNoRelaunch = process.env.LLXPRT_CODE_NO_RELAUNCH;
+    let totalmemSpy: ReturnType<typeof vi.spyOn>;
+    let heapStatsSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      Object.defineProperty(process.versions, 'bun', {
+        value: '1.3.14',
+        writable: true,
+        configurable: true,
+      });
+      delete process.env.LLXPRT_CODE_NO_RELAUNCH;
+      totalmemSpy = vi.spyOn(os, 'totalmem').mockReturnValue(17179869184);
+      heapStatsSpy = vi.spyOn(v8, 'getHeapStatistics').mockReturnValue({
+        total_heap_size: 0,
+        total_heap_size_executable: 0,
+        total_physical_size: 0,
+        total_available_size: 0,
+        used_heap_size: 0,
+        heap_size_limit: 1073741824,
+        malloced_memory: 0,
+        peak_malloced_memory: 0,
+        does_zap_garbage: 0,
+        number_of_native_contexts: 0,
+        number_of_detached_contexts: 0,
+        total_global_handles_size: 0,
+        used_global_handles_size: 0,
+        external_memory: 0,
+      });
+    });
+
+    afterEach(() => {
+      totalmemSpy.mockRestore();
+      heapStatsSpy.mockRestore();
+      if (originalNoRelaunch === undefined) {
+        delete process.env.LLXPRT_CODE_NO_RELAUNCH;
+      } else {
+        process.env.LLXPRT_CODE_NO_RELAUNCH = originalNoRelaunch;
+      }
+    });
+
+    it('shouldRelaunchForMemory returns [] even with inputs that produce a flag on Node', () => {
+      const result = shouldRelaunchForMemory(false, 4096);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('shouldRelaunchForMemory returns [] with a large custom cap that would flag on Node', () => {
+      const result = shouldRelaunchForMemory(false, 32768);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('shouldRelaunchForMemory returns [] in debug mode', () => {
+      const result = shouldRelaunchForMemory(true, 4096);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('shouldRelaunchForMemory returns [] when LLXPRT_CODE_NO_RELAUNCH is set', () => {
+      process.env.LLXPRT_CODE_NO_RELAUNCH = 'true';
+      const result = shouldRelaunchForMemory(false, 4096);
+      expect(result).toStrictEqual([]);
+      delete process.env.LLXPRT_CODE_NO_RELAUNCH;
+    });
+
+    it('shouldRelaunchForMemory returns [] even when os.totalmem and v8.getHeapStatistics would throw if evaluated', () => {
+      totalmemSpy.mockImplementation(() => {
+        throw new Error('totalmem unavailable');
+      });
+      heapStatsSpy.mockImplementation(() => {
+        throw new Error('getHeapStatistics unavailable');
+      });
+      const result = shouldRelaunchForMemory(false, 4096);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('computeSandboxMemoryArgs returns [] with explicit container memory', () => {
+      const result = computeSandboxMemoryArgs(false, 6144);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('computeSandboxMemoryArgs returns [] with a custom cap', () => {
+      const result = computeSandboxMemoryArgs(false, 131072, 2048);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('computeSandboxMemoryArgs returns [] in debug mode with container memory', () => {
+      const result = computeSandboxMemoryArgs(true, 6144);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('computeSandboxMemoryArgs returns [] with host-derived memory even when os.totalmem would throw if evaluated', () => {
+      totalmemSpy.mockImplementation(() => {
+        throw new Error('totalmem unavailable');
+      });
+      const result = computeSandboxMemoryArgs(false);
+      expect(result).toStrictEqual([]);
     });
   });
 });

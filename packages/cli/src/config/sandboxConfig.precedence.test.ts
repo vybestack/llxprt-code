@@ -16,7 +16,7 @@
  * dependent.
  *
  * Test APIs come from `bun:test`; `vi` is imported from
- * `../test-utils/bunTest.js`, the typed wrapper over Bun's `vi` that the
+ * `bun:test`, whose `vi` the
  * repository preload (`test-setup/augment-bun-vi.ts`) augments at runtime with
  * the Vitest-compatible methods (`vi.mock`, `vi.hoisted`, `vi.restoreAllMocks`).
  */

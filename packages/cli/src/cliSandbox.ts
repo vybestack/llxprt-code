@@ -47,8 +47,9 @@ export function resolveContainerMemoryMB(): number | undefined {
 
 /**
  * Compute the memory args to pass when relaunching into the sandbox.
- * Always returns args (the sandbox starts fresh with Node's default heap),
- * unlike the host-relaunch heuristic at the top of main().
+ * Under Bun this returns an empty array (Bun ignores --max-old-space-size);
+ * under Node it returns the computed heap argument unless auto-configure is
+ * disabled, unlike the host-relaunch heuristic at the top of main().
  */
 export function computeSandboxMemoryArgsFromEnv(
   config: Config,
