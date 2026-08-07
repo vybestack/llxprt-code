@@ -168,7 +168,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(secureStoreJob?.['timeout-minutes']).toBe(15);
   });
 
-  it('keyring rows select the native-keyring vitest config on Ubuntu only (issue #2876)', () => {
+  it('keyring rows select the native-keyring bun test script on Ubuntu only (issue #2876)', () => {
     // Issue #2876: macOS keyring coverage moved to the nightly workflow.
     // The PR secure_store_backend matrix is ubuntu-only.
     const includes = matrixInclude(secureStoreJob);
@@ -182,14 +182,14 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     ]);
 
     for (const row of keyringRows) {
-      expect(row['test-config']).toBe('vitest.config.native-keyring.ts');
+      expect(row['test-script']).toBe('test:secure-store:keyring');
     }
 
-    const nativeConfig = readRootFile(
-      'packages/storage/vitest.config.native-keyring.ts',
-    );
-    expect(nativeConfig).toContain(
-      "'src/secure-store/secure-store.native-keyring.test.ts'",
+    const storageScripts = JSON.parse(
+      readRootFile('packages/storage/package.json'),
+    ) as { scripts: Record<string, string> };
+    expect(storageScripts.scripts['test:secure-store:keyring']).toContain(
+      'src/secure-store/secure-store.native-keyring.test.ts',
     );
   });
 
@@ -204,18 +204,19 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
         os: 'ubuntu-latest',
         'node-version': '24.x',
         'secure-store-mode': 'fallback',
-        'test-config': 'vitest.config.fallback-behavior.ts',
+        'test-script': 'test:secure-store:fallback',
       },
     ]);
 
-    const fallbackConfig = readRootFile(
-      'packages/storage/vitest.config.fallback-behavior.ts',
+    const storageScripts = JSON.parse(
+      readRootFile('packages/storage/package.json'),
+    ) as { scripts: Record<string, string> };
+    const fallbackScript = storageScripts.scripts['test:secure-store:fallback'];
+    expect(fallbackScript).toContain(
+      'src/secure-store/secure-store.fallback-behavior.test.ts',
     );
-    expect(fallbackConfig).toContain(
-      "'src/secure-store/secure-store.fallback-behavior.test.ts'",
-    );
-    expect(fallbackConfig).toContain(
-      "'src/secure-store/provider-key-storage.fallback.test.ts'",
+    expect(fallbackScript).toContain(
+      'src/secure-store/provider-key-storage.fallback.test.ts',
     );
   });
 
@@ -343,7 +344,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       collectionProbe,
     );
     const nativeTestStart = runText.indexOf(
-      'npm run test:vitest --workspace @vybestack/llxprt-code-storage',
+      'npm run "$TEST_SCRIPT" --workspace @vybestack/llxprt-code-storage',
       unlockedCheck,
     );
     const sessionEnd = runText.indexOf("\n  '\nelse", nativeTestStart);
@@ -361,13 +362,13 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(sessionEnd).toBeGreaterThan(nativeTestStart);
   });
 
-  it('backend test step uses the per-row vitest config (semantic selection, not a static glob)', () => {
+  it('backend test step uses the per-row bun test script (semantic selection, not a static glob)', () => {
     const backendStep = stepNamed(
       secureStoreJob,
       'Run SecureStore backend tests',
     );
-    expect(backendStep.env?.['TEST_CONFIG']).toBe('${{ matrix.test-config }}');
-    expect(backendStep.run).toContain('--config "$TEST_CONFIG"');
+    expect(backendStep.env?.['TEST_SCRIPT']).toBe('${{ matrix.test-script }}');
+    expect(backendStep.run).toContain('npm run "$TEST_SCRIPT"');
     expect(backendStep.run).not.toContain('src/secure-store');
     expect(backendStep.run).not.toContain('--reporter=');
     expect(backendStep.run).not.toContain('--outputFile.junit=');
