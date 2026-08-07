@@ -26,15 +26,15 @@ import { ThemedGradient } from './ThemedGradient.js';
 
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 
-// Lazily compute the heap limit so test mocks for `node:v8` can take effect
-// before the value is first read.
-let _heapSizeLimit: number | undefined;
+function isBunRuntime(): boolean {
+  return (
+    typeof process.versions.bun === 'string' && process.versions.bun.length > 0
+  );
+}
+
 function getHeapSizeLimit(): number {
-  if (_heapSizeLimit === undefined) {
-    const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
-    _heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
-  }
-  return _heapSizeLimit;
+  const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
+  return rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
 }
 
 function areFooterStablePropsEqual(
@@ -108,10 +108,12 @@ function formatMemoryUsage(
   detailed: boolean,
 ): string {
   const heapUsed = formatGigabytes(usage.heapUsed);
-  const heapLimit = formatGigabytes(getHeapSizeLimit());
   const rssValue = formatGigabytes(usage.rss);
-  const heap = `Heap: ${heapUsed}${compact ? 'G' : 'GB'}/${heapLimit}${compact ? 'G' : 'GB'}`;
+  const heapSuffix = compact ? 'G' : 'GB';
   const rss = `RSS: ${rssValue}${compact ? 'G' : 'GB'}`;
+  const heap = isBunRuntime()
+    ? `Heap: ${heapUsed}${heapSuffix}`
+    : `Heap: ${heapUsed}${heapSuffix}/${formatGigabytes(getHeapSizeLimit())}${heapSuffix}`;
   if (compact || !detailed) {
     return `${heap} ${rss}`;
   }
