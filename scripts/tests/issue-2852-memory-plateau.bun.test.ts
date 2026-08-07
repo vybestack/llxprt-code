@@ -130,10 +130,12 @@ describe('multi-metric post-GC plateau verdict (issue #3114)', () => {
   });
 
   describe('parsePostGcRecords', () => {
-    it('keeps only post-GC records and drops blank lines', () => {
+    it('keeps only post-GC records and drops blank and whitespace-only lines', () => {
       const contents = [
         JSON.stringify({ name: 'turn-1-pre-gc', jsc: { heapSize: 1 } }),
         '',
+        '   ',
+        '\t',
         JSON.stringify({ name: 'turn-1-post-gc', jsc: { heapSize: 2 } }),
         '',
       ].join('\n');

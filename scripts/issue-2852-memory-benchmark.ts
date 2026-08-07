@@ -116,7 +116,7 @@ export function parsePostGcRecords(
   return contents
     .split('\n')
     .map((line, index) => ({ line, lineNumber: index + 1 }))
-    .filter(({ line }) => line.length > 0)
+    .filter(({ line }) => line.trim().length > 0)
     .map(({ line, lineNumber }) => {
       try {
         return JSON.parse(line) as CheckpointRecord;
