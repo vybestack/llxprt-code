@@ -199,22 +199,37 @@ interface CheckpointRecord {
   readonly processMemory?: { readonly external?: number };
 }
 
-/** Post-GC JSC heap size for each turn, oldest first. */
-function readPostGcHeapBytes(path: string): number[] {
+/**
+ * Post-GC checkpoint records from the target's JSONL, oldest first.
+ *
+ * A parse failure names the offending line, because the alternative is a bare
+ * SyntaxError that says nothing about which of several hundred checkpoint
+ * records is malformed. The error is re-thrown, not swallowed: a corrupt
+ * artifact must still fail the run.
+ */
+function readPostGcRecords(path: string): CheckpointRecord[] {
   return readFileSync(path, 'utf8')
     .split('\n')
     .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as CheckpointRecord)
-    .filter((record) => record.name?.endsWith('-post-gc') === true)
-    .map((record) => {
-      const heapSize = record.jsc?.heapSize;
-      if (typeof heapSize !== 'number' || !Number.isFinite(heapSize)) {
+    .map((line, index) => {
+      try {
+        return JSON.parse(line) as CheckpointRecord;
+      } catch (error) {
         throw new Error(
-          `Checkpoint ${record.name} has no usable JSC heap size`,
+          `${path} line ${index + 1} is not valid JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
       }
-      return heapSize;
-    });
+    })
+    .filter((record) => record.name?.endsWith('-post-gc') === true);
+}
+
+/** Post-GC JSC heap size for each turn, oldest first. */
+function readPostGcHeapBytes(path: string): number[] {
+  return readPostGcRecords(path).map((record) =>
+    requireMetric(record.jsc?.heapSize, 'jscHeap', record.name),
+  );
 }
 
 /**
@@ -226,31 +241,22 @@ function readPostGcMetrics(
   path: string,
   osCheckpoints: ReadonlyMap<string, OsCheckpoint>,
 ): PostGcMetrics[] {
-  return readFileSync(path, 'utf8')
-    .split('\n')
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as CheckpointRecord)
-    .filter((record) => record.name?.endsWith('-post-gc') === true)
-    .map((record) => {
-      const osCheckpoint = osCheckpoints.get(record.name ?? '');
-      return {
-        jscHeapBytes: requireMetric(
-          record.jsc?.heapSize,
-          'jscHeap',
-          record.name,
-        ),
-        externalBytes: requireMetric(
-          record.processMemory?.external,
-          'external',
-          record.name,
-        ),
-        webkitMallocDirtyBytes: requireMetric(
-          osCheckpoint?.vmmap.webkitMallocDirtyBytes,
-          'webkitMallocDirty',
-          record.name,
-        ),
-      };
-    });
+  return readPostGcRecords(path).map((record) => {
+    const osCheckpoint = osCheckpoints.get(record.name ?? '');
+    return {
+      jscHeapBytes: requireMetric(record.jsc?.heapSize, 'jscHeap', record.name),
+      externalBytes: requireMetric(
+        record.processMemory?.external,
+        'external',
+        record.name,
+      ),
+      webkitMallocDirtyBytes: requireMetric(
+        osCheckpoint?.vmmap.webkitMallocDirtyBytes,
+        'webkitMallocDirty',
+        record.name,
+      ),
+    };
+  });
 }
 
 /**

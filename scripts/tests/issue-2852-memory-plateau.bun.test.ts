@@ -122,6 +122,8 @@ describe('multi-metric post-GC plateau verdict (issue #3114)', () => {
       );
       const heap = result.metrics.find((m) => m.name === 'jscHeap');
       expect(heap?.settledBaselineBytes).toBe(50_000_000);
+      expect(heap?.maxBytes).toBe(55_000_000);
+      expect(heap?.growthRatio).toBeCloseTo(0.1, 10);
       expect(heap?.withinTolerance).toBe(false);
     });
   });

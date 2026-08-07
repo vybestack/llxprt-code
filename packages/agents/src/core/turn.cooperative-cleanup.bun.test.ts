@@ -203,8 +203,9 @@ describe('Turn run - cooperative iterator cleanup (issue #3114)', () => {
       traceId: undefined,
     });
     expect(returnCalled).toBe(true);
-    // The bounded cleanup timeout is 1s. The turn must finish within a
-    // reasonable margin of that bound, not hang forever.
-    expect(elapsed).toBeLessThan(5_000);
+    // The bounded cleanup timeout is 1s. The margin absorbs scheduling jitter
+    // on a loaded CI runner while still failing a regression that adds another
+    // whole second to every turn.
+    expect(elapsed).toBeLessThan(2_500);
   });
 });
