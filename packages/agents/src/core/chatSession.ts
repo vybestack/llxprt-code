@@ -195,7 +195,7 @@ export class ChatSession {
     view: AgentRuntimeContext,
     contentGenerator: ContentGenerator,
     generationConfig: ChatSessionConfig = {},
-    initialHistory: IContent[] = [],
+    initialHistory: readonly IContent[] = [],
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
   ) {
     this.runtimeContext = view;
@@ -562,7 +562,7 @@ export class ChatSession {
     this.generationConfig.tools = undefined;
   }
 
-  getHistory(curated: boolean = false): IContent[] {
+  getHistory(curated: boolean = false): readonly IContent[] {
     return this.conversationManager.getHistory(curated);
   }
 
@@ -574,7 +574,7 @@ export class ChatSession {
     this.conversationManager.addHistory(content);
   }
 
-  setHistory(history: IContent[]): void {
+  setHistory(history: readonly IContent[]): void {
     this.conversationManager.setHistory(history);
   }
 

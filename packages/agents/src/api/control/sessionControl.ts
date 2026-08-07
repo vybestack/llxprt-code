@@ -272,7 +272,7 @@ export class SessionControl implements AgentSessionControl {
   private async commitPreparedSession(
     recording: SessionRecordingService,
     lockHandle: LockHandle,
-    history: IContent[],
+    history: readonly IContent[],
   ): Promise<void> {
     const priorRecording = this.recording;
     const priorIntegration = this.integration;
