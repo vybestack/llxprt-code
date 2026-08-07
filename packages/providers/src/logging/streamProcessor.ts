@@ -6,7 +6,7 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionSource } from '../config/capabilities.js';
 import {
   extractChunkMetadata,
   hasTokenBearingOutput,
@@ -199,7 +199,7 @@ export function processLoggedStreamChunk(
 }
 
 export async function* processStreamWithRecorderGen(
-  config: Config | undefined,
+  config: RedactionSource | undefined,
   stream: AsyncIterableIterator<IContent>,
   modelName: string,
   _promptId: string,
@@ -290,7 +290,7 @@ async function handleLoggedStreamError(
   modelName: string,
   acc: StreamAccumulatorState,
   recorder: AttemptRecorder,
-  config: Config,
+  config: RedactionSource,
   ctx: StreamProcessContext,
   writeLog: (
     content: string,
@@ -342,7 +342,7 @@ async function handleLoggedStreamError(
 }
 
 export async function* logResponseStreamWithRecorderGen(
-  config: Config,
+  config: RedactionSource,
   stream: AsyncIterableIterator<IContent>,
   promptId: string,
   modelName: string,

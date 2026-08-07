@@ -10,7 +10,7 @@
  * line budget.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionSource } from '../config/capabilities.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 export interface AccumulableTokenCounts {
@@ -29,7 +29,7 @@ export interface AccumulableTokenCounts {
  */
 export function accumulateTokenUsage(
   tokenCounts: AccumulableTokenCounts,
-  config: Config | undefined,
+  config: RedactionSource | undefined,
   providerName: string,
   debug: DebugLogger,
 ): void {
@@ -81,8 +81,10 @@ export function accumulateTokenUsage(
   }
 }
 
-/** Resolve a candidate value into a Config when it has the logging method. */
-export function resolveLoggingConfig(candidate: unknown): Config | undefined {
+/** Resolve a candidate value into a RedactionSource when it has the logging method. */
+export function resolveLoggingConfig(
+  candidate: unknown,
+): RedactionSource | undefined {
   if (
     typeof candidate === 'object' &&
     candidate !== null &&
@@ -90,7 +92,7 @@ export function resolveLoggingConfig(candidate: unknown): Config | undefined {
     typeof (candidate as { getConversationLoggingEnabled?: unknown })
       .getConversationLoggingEnabled === 'function'
   ) {
-    return candidate as Config;
+    return candidate as RedactionSource;
   }
   return undefined;
 }

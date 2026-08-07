@@ -13,7 +13,7 @@ import {
 } from './IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionSource } from './config/capabilities.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
@@ -99,7 +99,7 @@ export class LoggingProviderWrapper implements IProvider {
    */
   constructor(
     private readonly wrapped: IProvider,
-    configOrRedactor?: Config | ConversationDataRedactor | null,
+    configOrRedactor?: RedactionSource | ConversationDataRedactor | null,
     injectedRedactor?: ConversationDataRedactor,
   ) {
     this.conversationId = this.generateConversationId();
@@ -345,14 +345,14 @@ export class LoggingProviderWrapper implements IProvider {
   /** Resolve config and validate it has required prototype methods. */
   private resolveAndValidateConfig(
     normalizedOptions: GenerateChatOptions,
-  ): Config {
+  ): RedactionSource {
     return resolveAndValidateConfig(normalizedOptions, this.debug);
   }
 
   /** Set up per-call redactor and check conversation logging flag. */
   private setupRedactorAndLogging(
     normalizedOptions: GenerateChatOptions,
-    activeConfig: Config,
+    activeConfig: RedactionSource,
   ): void {
     this.redactor = setupRedactor(normalizedOptions, activeConfig, {
       providerName: this.wrapped.name,
@@ -366,13 +366,15 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /** Check whether conversation logging is enabled, re-throwing on failure. */
-  private checkConversationLoggingEnabled(activeConfig: Config): boolean {
+  private checkConversationLoggingEnabled(
+    activeConfig: RedactionSource,
+  ): boolean {
     return checkConversationLoggingEnabled(activeConfig, this.debug);
   }
 
   /** Log the request if conversation logging is enabled. */
   private async logRequestIfEnabled(
-    activeConfig: Config,
+    activeConfig: RedactionSource,
     normalizedOptions: GenerateChatOptions,
     promptId: string,
   ): Promise<void> {
@@ -395,7 +397,7 @@ export class LoggingProviderWrapper implements IProvider {
 
   /** Log API request telemetry event. */
   private logApiRequestTelemetry(
-    activeConfig: Config,
+    activeConfig: RedactionSource,
     normalizedOptions: GenerateChatOptions,
     promptId: string,
   ): void {
@@ -410,7 +412,7 @@ export class LoggingProviderWrapper implements IProvider {
 
   /** Write a conversation response log entry to telemetry and disk (fail-open). */
   private async writeResponseLog(
-    config: Config,
+    config: RedactionSource,
     content: string,
     promptId: string,
     duration: number,
@@ -437,7 +439,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *processStreamWithRecorder(
-    config: Config | undefined,
+    config: RedactionSource | undefined,
     stream: AsyncIterableIterator<IContent>,
     modelName: string,
     promptId: string,
@@ -458,7 +460,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *logResponseStreamWithRecorder(
-    config: Config,
+    config: RedactionSource,
     stream: AsyncIterableIterator<IContent>,
     promptId: string,
     modelName: string,

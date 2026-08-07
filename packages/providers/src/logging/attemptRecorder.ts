@@ -9,7 +9,7 @@ import type {
   AttemptLifecycleObserver,
   AttemptStartInfo,
 } from './attemptLifecycle.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionSource } from '../config/capabilities.js';
 import { logApiError } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ApiErrorEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
@@ -67,7 +67,7 @@ interface ActiveAttempt {
 export interface AttemptRecorderOptions {
   readonly providerName: string;
   readonly defaultModelName: string;
-  readonly config: Config | undefined;
+  readonly config: RedactionSource | undefined;
   readonly logicalRequestId: string;
   /**
    * When true, the wrapper (LoggingProviderWrapper) is the sole lifecycle
@@ -110,7 +110,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   private readonly wrapperOwned: boolean;
   private readonly providerName: string;
   private readonly defaultModelName: string;
-  private readonly config: Config | undefined;
+  private readonly config: RedactionSource | undefined;
   private readonly logicalRequestId: string;
 
   constructor(opts: AttemptRecorderOptions) {

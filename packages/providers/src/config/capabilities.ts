@@ -5,6 +5,7 @@
  */
 
 import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
 
 /**
  * Narrow capability interfaces over core's `Config`.
@@ -65,4 +66,22 @@ export interface ProviderSettingsAccess extends EphemeralSettingsAccess {
  */
 export interface ConversationLogWriterConfig extends TelemetryConfig {
   getConversationLogPath(): string;
+}
+
+/**
+ * The conversation-logging surface the wrapper and request helpers read.
+ *
+ * getConversationLoggingEnabled comes from TelemetryConfig, telemetry's own
+ * declared contract; only the redaction settings are additional.
+ */
+export interface RedactionSource extends ConversationLogWriterConfig {
+  getProviderManager(): RuntimeProviderManager | undefined;
+  getRedactionConfig(): {
+    redactApiKeys: boolean;
+    redactCredentials: boolean;
+    redactFilePaths: boolean;
+    redactUrls: boolean;
+    redactEmails: boolean;
+    redactPersonalInfo: boolean;
+  };
 }

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionSource } from '../config/capabilities.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { ConfigBasedRedactor } from './ConfigBasedRedactor.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
@@ -26,7 +26,7 @@ export interface RequestSetupContext {
  */
 export function setupRedactor(
   normalizedOptions: GenerateChatOptions,
-  activeConfig: Config,
+  activeConfig: RedactionSource,
   ctx: RequestSetupContext,
 ): ConversationDataRedactor | null {
   const invocation = normalizedOptions.invocation;
@@ -49,7 +49,7 @@ export function setupRedactor(
  * Check whether conversation logging is enabled, re-throwing on failure.
  */
 export function checkConversationLoggingEnabled(
-  activeConfig: Config,
+  activeConfig: RedactionSource,
   debug: DebugLogger,
 ): boolean {
   try {
@@ -70,7 +70,7 @@ export function checkConversationLoggingEnabled(
  * Log the request if conversation logging is enabled.
  */
 export async function logRequestIfEnabled(
-  activeConfig: Config,
+  activeConfig: RedactionSource,
   normalizedOptions: GenerateChatOptions,
   promptId: string,
   redactor: ConversationDataRedactor | null,

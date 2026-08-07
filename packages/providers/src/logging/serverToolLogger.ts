@@ -5,7 +5,7 @@
  */
 
 import type { IProvider } from '../IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RedactionSource } from '../config/capabilities.js';
 import { logToolCallEntry } from './conversationLogger.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
@@ -24,7 +24,7 @@ export interface ServerToolLogContext {
  * Log a tool call entry to the conversation log (fail-open).
  */
 export async function logToolCall(
-  config: Config | undefined,
+  config: RedactionSource | undefined,
   toolName: string,
   params: unknown,
   result: unknown,
