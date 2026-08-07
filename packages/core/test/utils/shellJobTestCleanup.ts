@@ -5,7 +5,6 @@
  */
 
 import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { boundedTaskkill } from '../../src/services/shellProcessKill.js';
 import {
   ShellJobDisposalError,
@@ -89,24 +88,30 @@ function errorCodeOf(error: unknown): string | undefined {
   return undefined;
 }
 
-function isPidAliveWindows(pid: number): boolean {
-  const result = spawnSync(
-    'tasklist',
-    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
-    { encoding: 'utf8', timeout: 5000 },
-  );
-  if (result.error !== undefined) {
-    throw new Error(`tasklist failed while checking PID ${pid}`, {
-      cause: result.error,
-    });
+/**
+ * Reports whether `pid` currently exists, using the OS process table directly.
+ *
+ * Signal 0 performs the kernel's existence check without delivering a signal:
+ * it succeeds for a live pid, reports ESRCH for one that is gone, and reports
+ * EPERM for one that exists but belongs to another security context. Any other
+ * errno is a genuine fault and is rethrown rather than reported as liveness.
+ *
+ * This deliberately does NOT shell out to `tasklist`. That command enumerates
+ * every process on the machine, and these probes run inside polling loops, so
+ * on a loaded Windows runner the repeated spawns were both the slowest part of
+ * the poll and a source of spurious ETIMEDOUT failures in tests whose subject
+ * had behaved correctly.
+ */
+export function isPidAliveWindows(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    const code = errorCodeOf(error);
+    if (code === 'ESRCH') return false;
+    if (code === 'EPERM') return true;
+    throw error;
   }
-  if (result.status !== 0) {
-    const output = result.stderr || result.stdout || '(no output)';
-    throw new Error(
-      `tasklist exited with status ${result.status} while checking PID ${pid}: ${output}`,
-    );
-  }
-  return result.stdout.includes(String(pid));
 }
 
 /**

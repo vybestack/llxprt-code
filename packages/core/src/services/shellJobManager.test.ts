@@ -21,6 +21,7 @@ import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
 import {
   buildInnerPidMarkerCommand,
   disposeAndCleanupWindowsTest,
+  isPidAliveWindows,
   reapAndRemoveWindowsTestDir,
   readInnerPidFromMarker,
   waitForPidFile,
@@ -513,15 +514,6 @@ describe.skipIf(os.platform() === 'win32')('ShellJobManager', () => {
 // ---------------------------------------------------------------------------
 // Windows-only suite
 // ---------------------------------------------------------------------------
-function isPidAliveWindows(pid: number): boolean {
-  const result = spawnSync(
-    'tasklist',
-    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
-    { encoding: 'utf8', timeout: 5000 },
-  );
-  return result.stdout.includes(String(pid));
-}
-
 async function waitForPidGoneWindows(
   pid: number,
   timeoutMs = 10000,

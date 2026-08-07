@@ -16,6 +16,7 @@ import {
   normalizeShellLogMaxBytes,
   getOrCreateShellJobManager,
 } from './asyncTaskServices.js';
+import { isPidAliveWindows } from '../../test/utils/shellJobTestCleanup.js';
 
 function makeTempBase(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'shell-job-cfg-test-'));
@@ -27,20 +28,6 @@ function pgidOf(pid: number): number | null {
   });
   const parsed = parseInt(result.stdout.trim(), 10);
   return Number.isNaN(parsed) ? null : parsed;
-}
-
-function isPidAliveWindows(pid: number): boolean {
-  const result = spawnSync(
-    'tasklist',
-    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
-    { encoding: 'utf8', timeout: 5000 },
-  );
-  if (result.error !== undefined) {
-    throw new Error(
-      `isPidAliveWindows: tasklist failed to spawn for pid ${pid}: ${result.error.message}`,
-    );
-  }
-  return result.stdout.includes(String(pid));
 }
 
 /**

@@ -8,40 +8,17 @@ import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 import { ShellJobManager, ShellJobDisposalError } from './shellJobManager.js';
 import type { ShellJob } from './shellJobManager.js';
 import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
 import {
   buildInnerPidMarkerCommand,
+  isPidAliveWindows,
   reapAndRemoveWindowsTestDir,
   readInnerPidFromMarker,
+  waitForPidStateWindows,
 } from '../../test/utils/shellJobTestCleanup.js';
-
-function isPidAliveWindows(pid: number): boolean {
-  const result = spawnSync(
-    'tasklist',
-    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
-    { encoding: 'utf8', timeout: 5000 },
-  );
-  return result.stdout.includes(String(pid));
-}
-
-async function waitForPidStateWindows(
-  pid: number,
-  alive: boolean,
-  timeoutMs = 10000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (isPidAliveWindows(pid) === alive) return;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(
-    `PID ${pid} did not become ${alive ? 'alive' : 'gone'} within ${timeoutMs}ms`,
-  );
-}
 
 async function waitForPidGoneWindows(
   pid: number,
