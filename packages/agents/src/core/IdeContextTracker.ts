@@ -10,7 +10,7 @@ import {
   type File,
 } from '@vybestack/llxprt-code-ide-integration';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { DebugModeSource } from '../config/capabilities.js';
 
 /**
  * Tracks IDE context state and computes full vs incremental deltas
@@ -21,9 +21,9 @@ export class IdeContextTracker {
   private forceFullIdeContext = true;
 
   private readonly logger: DebugLogger;
-  private readonly config: Config;
+  private readonly config: DebugModeSource;
 
-  constructor(config: Config) {
+  constructor(config: DebugModeSource) {
     this.config = config;
     this.logger = new DebugLogger('llxprt:core:ideContextTracker');
   }

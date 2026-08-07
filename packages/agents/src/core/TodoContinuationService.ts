@@ -14,7 +14,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentEventType } from './turn.js';
 import type { ServerAgentStreamEvent, ToolCallResponseInfo } from './turn.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionIdSource } from '../config/capabilities.js';
 import { DEFAULT_AGENT_ID } from './turn.js';
 
 import type { ComplexityAnalysisResult } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
@@ -171,7 +171,7 @@ export class TodoContinuationService {
   lastTodoSnapshot?: Todo[];
 
   private readonly todoReminderService: TodoReminderService;
-  private readonly config: Config;
+  private readonly config: SessionIdSource;
   private readonly todoDataDirResolver: () => string;
 
   constructor({
@@ -180,7 +180,7 @@ export class TodoContinuationService {
     complexitySuggestionCooldown,
     todoDataDirResolver,
   }: {
-    config: Config;
+    config: SessionIdSource;
     todoReminderService: TodoReminderService;
     complexitySuggestionCooldown: number;
     /**
