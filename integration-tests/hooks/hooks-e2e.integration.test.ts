@@ -180,6 +180,7 @@ process.exit(2);
 
     it('should allow tool execution when hook script exits with code 0', async () => {
       const scriptContent = `import process from 'node:process';
+import { readFileSync } from 'node:fs';
 
 const input = readFileSync(0, 'utf-8');
 let parsed;
@@ -220,6 +221,7 @@ process.exit(0);
   describe('Real Hook Modifies Input', () => {
     it('should return modified tool_input from hook script', async () => {
       const scriptContent = `import process from 'node:process';
+import { readFileSync } from 'node:fs';
 
 const input = readFileSync(0, 'utf-8');
 let parsed;
@@ -310,6 +312,7 @@ setTimeout(() => {
   describe('Real BeforeModel Hook', () => {
     it('should block with synthetic response when content filter triggers', async () => {
       const scriptContent = `import process from 'node:process';
+import { readFileSync } from 'node:fs';
 
 const input = readFileSync(0, 'utf-8');
 try { JSON.parse(input); } catch (e) { process.stderr.write('Invalid hook input: ' + (e as Error).message); process.exit(1); }
@@ -368,6 +371,7 @@ process.exit(0);
 
     it('should allow request when content filter does not trigger', async () => {
       const scriptContent = `import process from 'node:process';
+import { readFileSync } from 'node:fs';
 
 const input = readFileSync(0, 'utf-8');
 try { JSON.parse(input); } catch (e) { process.stderr.write('Invalid hook input: ' + (e as Error).message); process.exit(1); }
