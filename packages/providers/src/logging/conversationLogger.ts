@@ -10,7 +10,7 @@
  * line budget.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ConversationLogWriterConfig } from '../config/capabilities.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { logConversationRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
@@ -28,7 +28,7 @@ export interface ConversationLogContext {
 
 /** Log a conversation request event to telemetry and disk. */
 export async function logConversationRequestEntry(
-  config: Config,
+  config: ConversationLogWriterConfig,
   content: IContent[],
   tools: ProviderToolset | undefined,
   promptId: string | undefined,
@@ -64,7 +64,7 @@ export async function logConversationRequestEntry(
 
 /** Log a tool call event to disk with optional redaction. */
 export async function logToolCallEntry(
-  config: Config | undefined,
+  config: ConversationLogWriterConfig | undefined,
   toolName: string,
   params: unknown,
   result: unknown,

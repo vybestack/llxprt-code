@@ -9,7 +9,7 @@
  * the main wrapper file under the lint line budget.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ConversationLogWriterConfig } from '../config/capabilities.js';
 import {
   logTokenUsage,
   logApiResponse,
@@ -40,7 +40,7 @@ export interface AttemptTelemetryMeta {
 
 /** Emit API response telemetry for local /stats tracking and SDK export. */
 export function emitMetricsTelemetry(
-  config: Config | undefined,
+  config: ConversationLogWriterConfig | undefined,
   tokenCounts: ResponseTokenCounts,
   modelName: string,
   duration: number,
@@ -98,7 +98,7 @@ export interface ResponseTelemetryContext {
 
 /** Emit token usage and API response telemetry events. */
 export function emitResponseTelemetry(
-  config: Config,
+  config: ConversationLogWriterConfig,
   tokenCounts: ResponseTokenCounts,
   modelName: string | undefined,
   promptId: string,
@@ -172,7 +172,7 @@ export function emitResponseTelemetry(
 
 /** Write conversation response event to telemetry and disk. */
 export async function writeConversationLog(
-  config: Config,
+  config: ConversationLogWriterConfig,
   redactedContent: string,
   promptId: string,
   duration: number,

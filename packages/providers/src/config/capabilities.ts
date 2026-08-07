@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
+
 /**
  * Narrow capability interfaces over core's `Config`.
  *
@@ -51,4 +53,16 @@ export interface ActiveModelSource {
 /** Reads the active provider and ephemeral settings. */
 export interface ProviderSettingsAccess extends EphemeralSettingsAccess {
   getProvider(): string | undefined;
+}
+
+/**
+ * What the conversation-logging path needs: the telemetry surface these
+ * helpers forward into, plus the log destination.
+ *
+ * Sixteen members rather than the ~349 on Config. TelemetryConfig is telemetry's
+ * own declared contract, so extending it keeps the forwarded calls type-safe
+ * instead of relying on Config happening to satisfy them.
+ */
+export interface ConversationLogWriterConfig extends TelemetryConfig {
+  getConversationLogPath(): string;
 }
