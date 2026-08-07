@@ -11,6 +11,7 @@
  */
 
 import {
+  FatalError,
   type MessageBus,
   type ProviderRuntimeContext,
   resolveRuntimeSettingsService,
@@ -311,7 +312,7 @@ function validateBootstrapArgs(state: BootstrapParseState): void {
     state.bootstrapArgs.profileJson !== null &&
     state.bootstrapArgs.profileJson.length > 10240
   ) {
-    throw new Error('Profile JSON exceeds maximum size of 10KB');
+    throw new FatalError('Profile JSON exceeds maximum size of 10KB', 1);
   }
 }
 

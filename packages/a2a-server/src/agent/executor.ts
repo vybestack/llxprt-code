@@ -472,7 +472,14 @@ export class CoderAgentExecutor implements AgentExecutor {
       logger.info(
         `[CoderAgentExecutor] Task ${task.id}: Processing agent turn (LLM stream).`,
       );
+      // Intentional full-attempt buffering: stream events are accumulated in
+      // `attemptEvents` and published to the task (and thus the event bus)
+      // only after the iteration completes, because the event bus has no
+      // retraction primitive. A transport Retry clears both buffers to drop
+      // the abandoned partial output; an abort throws before publication,
+      // intentionally discarding buffered partial output for the same reason.
       const toolCallRequests: ToolCallRequestInfo[] = [];
+      const attemptEvents: ServerAgentStreamEvent[] = [];
       for await (const event of agentEvents) {
         if (abortSignal.aborted) {
           logger.warn(
@@ -482,12 +489,19 @@ export class CoderAgentExecutor implements AgentExecutor {
         }
         if (event.type === AgentEventType.ToolCallRequest) {
           toolCallRequests.push(event.value);
-          continue;
+        } else if (event.type === AgentEventType.Retry) {
+          toolCallRequests.length = 0;
+          attemptEvents.length = 0;
+          await task.acceptAgentMessage(event);
+        } else {
+          attemptEvents.push(event);
         }
-        await task.acceptAgentMessage(event);
       }
 
-      if (abortSignal.aborted) throw new Error('Execution aborted');
+      for (const event of attemptEvents) {
+        throwIfAborted(abortSignal);
+        await task.acceptAgentMessage(event);
+      }
 
       if (toolCallRequests.length > 0) {
         logger.info(

@@ -75,14 +75,15 @@ export function discoverTestFiles(root: string): string[] {
   return results;
 }
 
-interface TestResult {
+export interface TestResult {
   file: string;
   passed: boolean;
   exitCode: number | null;
   timedOut: boolean;
+  signal: NodeJS.Signals | null;
 }
 
-function runTestFile(file: string): Promise<TestResult> {
+export function runTestFile(file: string): Promise<TestResult> {
   return new Promise((resolve) => {
     let resolved = false;
     const child = spawn(
@@ -99,14 +100,26 @@ function runTestFile(file: string): Promise<TestResult> {
       if (resolved) return;
       resolved = true;
       child.kill('SIGKILL');
-      resolve({ file, passed: false, exitCode: null, timedOut: true });
+      resolve({
+        file,
+        passed: false,
+        exitCode: null,
+        timedOut: true,
+        signal: null,
+      });
     }, PER_FILE_TIMEOUT_MS);
 
-    child.on('exit', (code) => {
+    child.on('exit', (code, signal) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timer);
-      resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
+      resolve({
+        file,
+        passed: code === 0,
+        exitCode: code,
+        timedOut: false,
+        signal: signal ?? null,
+      });
     });
 
     child.on('error', (err: Error) => {
@@ -114,7 +127,13 @@ function runTestFile(file: string): Promise<TestResult> {
       resolved = true;
       clearTimeout(timer);
       console.error(`Error spawning test for ${file}: ${err.message}`);
-      resolve({ file, passed: false, exitCode: -1, timedOut: false });
+      resolve({
+        file,
+        passed: false,
+        exitCode: -1,
+        timedOut: false,
+        signal: null,
+      });
     });
   });
 }
@@ -127,7 +146,17 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function generateJUnit(
+export function formatFailureReason(result: TestResult): string {
+  if (result.timedOut) {
+    return `Timed out after ${PER_FILE_TIMEOUT_MS / 1000}s`;
+  }
+  if (result.signal !== null) {
+    return `Killed by signal ${result.signal}`;
+  }
+  return `Exit code ${result.exitCode ?? -1}`;
+}
+
+export function generateJUnit(
   results: TestResult[],
   totalFiles: number,
   failedCount: number,
@@ -138,10 +167,9 @@ function generateJUnit(
       const className = escapeXml(
         r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
       );
-      const exitCode = r.exitCode ?? -1;
       const failureXml = r.passed
         ? ''
-        : `<failure message="Exit code ${exitCode}">FAILED</failure>`;
+        : `<failure message="${formatFailureReason(r)}">FAILED</failure>`;
       const timeAttr = r.passed ? '' : ' time="0"';
       return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
     })
@@ -182,10 +210,7 @@ async function main(): Promise<void> {
   const failed = results.filter((r) => !r.passed);
 
   for (const result of failed) {
-    const reason = result.timedOut
-      ? `TIMEOUT after ${PER_FILE_TIMEOUT_MS}ms`
-      : `exit code ${result.exitCode ?? -1}`;
-    console.error(`FAILED: ${result.file} (${reason})`);
+    console.error(`FAILED: ${result.file} (${formatFailureReason(result)})`);
   }
 
   console.log(

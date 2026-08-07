@@ -52,6 +52,7 @@ function ensureAiPendingItem(
   liveProfileName: string | null,
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
   userMessageTimestamp: number,
+  pendingResponse: PendingResponseBuffer,
 ): void {
   if (
     pendingHistoryItemRef.current?.type !== 'gemini' &&
@@ -59,6 +60,7 @@ function ensureAiPendingItem(
   ) {
     if (pendingHistoryItemRef.current)
       flushPendingHistoryItem(userMessageTimestamp);
+    pendingResponse.beginCommittedSegments();
     setPendingHistoryItem({
       type: 'gemini',
       text: '',
@@ -94,9 +96,10 @@ function applySplitResult(
   addItem: UseHistoryManagerReturn['addItem'],
   afterItem: HistoryItemAiContent,
   userMessageTimestamp: number,
+  pendingResponse: PendingResponseBuffer,
 ): string {
   if (beforeText) {
-    addItem(
+    const committedId = addItem(
       {
         type: pendingType,
         text: beforeText,
@@ -107,6 +110,7 @@ function applySplitResult(
       },
       userMessageTimestamp,
     );
+    pendingResponse.recordCommittedSegment(committedId);
     thinkingBlocksRef.current = [];
   }
   setPendingHistoryItem(afterItem);
@@ -200,6 +204,7 @@ export function processContentEvent(
     liveProfileIdentity,
     deps.thinkingBlocksRef,
     userMessageTimestamp,
+    deps.pendingResponse,
   );
 
   const existingProfileName = (
@@ -241,5 +246,6 @@ export function processContentEvent(
     deps.addItem,
     afterItem,
     userMessageTimestamp,
+    deps.pendingResponse,
   );
 }

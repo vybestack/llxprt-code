@@ -33,6 +33,15 @@ export interface CliArgs {
   sandboxImage: string | undefined;
   sandboxEngine: string | undefined;
   sandboxProfileLoad: string | undefined;
+  // Optional: only the parser sets it, so existing CliArgs literals may omit it.
+  jspBootstrap?: string;
+  /**
+   * Hidden internal transport option. A memory or sandbox direct-replacement
+   * relaunch carries an env-origin bootstrap path here so the child resolves it
+   * without restoring LLXPRT_JSP_BOOTSTRAP_FILE to the environment. Never
+   * user-facing.
+   */
+  jspBootstrapInternalEnvPath?: string;
   debug: boolean | string | undefined;
   prompt: string | undefined;
   promptInteractive: string | undefined;
@@ -59,6 +68,7 @@ export interface CliArgs {
   proxy: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
+  profile?: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
   screenReader: boolean | undefined;
@@ -156,6 +166,10 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     sandboxImage: result['sandboxImage'] as string | undefined,
     sandboxEngine: result['sandboxEngine'] as string | undefined,
     sandboxProfileLoad: result['sandboxProfileLoad'] as string | undefined,
+    jspBootstrap: result['jspBootstrap'] as string | undefined,
+    jspBootstrapInternalEnvPath: result['jspBootstrapInternalEnvPath'] as
+      | string
+      | undefined,
     debug: result['debug'] as boolean | string | undefined,
     prompt: firstNonEmptyString(
       result['prompt'] as string | undefined,
@@ -179,13 +193,14 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     experimentalUi: result['experimentalUi'] as boolean | undefined,
     extensions: result['extensions'] as string[] | undefined,
     listExtensions: result['listExtensions'] as boolean | undefined,
-    provider: result['provider'] as string | undefined,
+    provider: pickLastRepeatedStringOption(result['provider']),
     key: result['key'] as string | undefined,
     keyfile: result['keyfile'] as string | undefined,
     baseurl: result['baseurl'] as string | undefined,
     proxy: result['proxy'] as string | undefined,
     includeDirectories: result['includeDirectories'] as string[] | undefined,
-    profileLoad: result['profileLoad'] as string | undefined,
+    profileLoad: pickLastRepeatedStringOption(result['profileLoad']),
+    profile: pickLastRepeatedStringOption(result['profile']),
     loadMemoryFromIncludeDirectories: result[
       'loadMemoryFromIncludeDirectories'
     ] as boolean | undefined,
@@ -204,6 +219,14 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     imageOutput: result['imageOutput'] as string | undefined,
     imagePrompt: result['imagePrompt'] as string | undefined,
   };
+}
+
+function pickLastRepeatedStringOption(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    const last = value[value.length - 1];
+    return typeof last === 'string' ? last : undefined;
+  }
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** Checks for subcommand dispatch (mcp, hooks, extensions) and exits if handled. */
@@ -269,6 +292,27 @@ function rejectRepeatedStringOption(
   }
 }
 
+/**
+ * Validates a required-value string option: it must not be bare/empty and must
+ * not be repeated. yargs turns a bare `--flag` (no following value) into an
+ * empty string for `type: 'string'`, and repeated occurrences into an array.
+ * Both are surfaced as clear parse errors rather than silently falling through
+ * to a different source (issue #3083 — the public flag must not silently fall
+ * back to env when malformed).
+ */
+function rejectBareOrRepeatedStringOption(
+  argv: Record<string, unknown>,
+  key: string,
+  label: string,
+): void {
+  if (Array.isArray(argv[key])) {
+    throw new Error(`${label} can only be specified once`);
+  }
+  if (argv[key] === '') {
+    throw new Error(`${label} requires a non-empty value`);
+  }
+}
+
 function validateLaunchArgs(argv: Record<string, unknown>): true {
   const pw = argv['promptWords'];
   if (hasNonEmptyString(argv['prompt']) && Array.isArray(pw) && pw.length > 0) {
@@ -277,6 +321,7 @@ function validateLaunchArgs(argv: Record<string, unknown>): true {
     );
   }
   validatePromptModeArgs(argv);
+  rejectBareOrRepeatedStringOption(argv, 'jspBootstrap', '--jsp-bootstrap');
   if (argv['yolo'] === true && argv['approvalMode'] != null) {
     throw new Error(
       'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
@@ -304,10 +349,14 @@ function validatePromptModeArgs(argv: Record<string, unknown>): void {
 
 function validateRootArgs(argv: Record<string, unknown>): true {
   validatePromptModeArgs(argv);
-  if (
-    hasNonEmptyString(argv['profile']) &&
-    hasNonEmptyString(argv['profileLoad'])
-  ) {
+  rejectBareOrRepeatedStringOption(
+    argv,
+    'jspBootstrapInternalEnvPath',
+    '--jsp-bootstrap-internal-env-path',
+  );
+  const profile = pickLastRepeatedStringOption(argv['profile']);
+  const profileLoad = pickLastRepeatedStringOption(argv['profileLoad']);
+  if (hasNonEmptyString(profile) && hasNonEmptyString(profileLoad)) {
     throw new Error(
       'Cannot use both --profile and --profile-load. Use one at a time.',
     );

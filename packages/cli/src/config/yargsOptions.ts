@@ -167,6 +167,15 @@ export const rootOptions: Record<string, Options> = {
     description:
       'Run in debug mode? (Optional: specify comma-separated namespaces, e.g., llxprt:core:*,llxprt:openai:*)',
   },
+  // Hidden internal-only ROOT option. A memory or sandbox direct-replacement
+  // relaunch transports an env-origin bootstrap path here (without restoring
+  // LLXPRT_JSP_BOOTSTRAP_FILE to the environment). Root scope so it is accepted
+  // for both the launch command and subcommands (mcp, hooks, etc.). Never
+  // user-facing; absent from help.
+  'jsp-bootstrap-internal-env-path': {
+    type: 'string',
+    hidden: true,
+  },
 };
 
 /**
@@ -221,6 +230,11 @@ export const innerCommandOptions: Record<string, Options> = {
     type: 'string',
     description:
       'Load a sandbox profile from the sandboxes directory in your LLxprt config directory (<config>/sandboxes/<name>.json)',
+  },
+  'jsp-bootstrap': {
+    type: 'string',
+    description:
+      'Path to a JSP observation bootstrap file (preferred over the deprecated LLXPRT_JSP_BOOTSTRAP_FILE environment variable).',
   },
   debug: {
     alias: 'd',

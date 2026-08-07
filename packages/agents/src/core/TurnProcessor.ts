@@ -39,7 +39,10 @@ import {
   filterAfcByHookRestrictions,
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
-import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
+import {
+  shouldRetryStreamAttempt,
+  applyRetryTemperature,
+} from './turnAbortHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -260,7 +263,7 @@ export class TurnProcessor {
 
     let hasYieldedChunk = false;
     try {
-      const currentParams = this._applyRetryTemperature(params, attempt);
+      const currentParams = applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
@@ -304,29 +307,14 @@ export class TurnProcessor {
         return { error: null, action: 'stop' };
       }
       if (
-        !hasYieldedChunk &&
-        shouldRetryStreamAttempt(error, params, attempt)
+        shouldRetryStreamAttempt(error, params, attempt, {
+          hasYieldedOutput: hasYieldedChunk,
+        })
       ) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
     }
-  }
-
-  private _applyRetryTemperature(
-    params: SendMessageParams,
-    attempt: number,
-  ): SendMessageParams {
-    if (attempt === 0) return params;
-    const baselineTemperature = Math.max(params.config?.temperature ?? 1, 1);
-    const newTemperature = Math.min(
-      Math.max(baselineTemperature + attempt * 0.1, 0),
-      2,
-    );
-    return {
-      ...params,
-      config: { ...params.config, temperature: newTemperature },
-    };
   }
 
   private _normalizeUserContent(params: SendMessageParams): IContent[] {

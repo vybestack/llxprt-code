@@ -20,6 +20,12 @@
  * StreamProcessor) with a fake provider, using the real network-error
  * classifier (retry.ts is intentionally NOT mocked) so the behavior is
  * end-to-end and faithful to production.
+ *
+ * Issue #3048 replaced the post-output no-retry contract with
+ * discard-and-restart: a transient transport failure that follows visible
+ * output now restarts the turn once under the existing bounded budget. The
+ * abort, non-transient, InvalidStreamError and EmptyStreamError cases below are
+ * unchanged and are the regression fence for that boundary.
  */
 
 import { describe, it, expect, beforeEach, vi } from '../testApi.js';
@@ -164,7 +170,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     return events;
   }
 
-  it('does not retry a connection error after visible content was emitted', async () => {
+  it('restarts the turn after a connection error that followed visible content', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -180,7 +186,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
         };
         throw createConnectionError();
       }
-      // Second attempt: the turn is retried from scratch and completes.
+      // Second attempt: the turn is restarted from scratch and completes.
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'recovered response' }],
@@ -195,29 +201,48 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-midstream',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
-    expect(attempt).toBe(1);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+    const events = await collectEvents(stream);
+    expect(attempt).toBe(2);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
+    const retryIndex = events.findIndex((event) => event.type === 'retry');
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const replacementTexts = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === 'chunk'
+          ? event.value.content.blocks.flatMap((block) =>
+              block.type === 'text' ? [block.text] : [],
+            )
+          : [],
+      );
+    expect(replacementTexts).toContain('recovered response');
+    expect(replacementTexts).not.toContain('partial');
   });
 
-  it('does not retry a connection error after a tool call was emitted', async () => {
+  it('restarts the turn after a connection error that followed a tool call', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
     ) {
       attempt++;
+      if (attempt === 1) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call-1',
+              name: 'read_file',
+              parameters: { file_path: 'README.md' },
+            },
+          ],
+        };
+        throw createConnectionError();
+      }
       yield {
         speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-1',
-            name: 'read_file',
-            parameters: { file_path: 'README.md' },
-          },
-        ],
+        blocks: [{ type: 'text', text: 'recovered response' }],
       };
-      throw createConnectionError();
     });
     registerProvider(generateChatCompletionMock);
 
@@ -227,32 +252,52 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-tool-call',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
-    expect(attempt).toBe(1);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+    const events = await collectEvents(stream);
+    expect(attempt).toBe(2);
+    const retryIndex = events.findIndex((event) => event.type === 'retry');
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const replacementBlocks = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === 'chunk' ? event.value.content.blocks : [],
+      );
+    expect(
+      replacementBlocks.some(
+        (block) => block.type === 'text' && block.text === 'recovered response',
+      ),
+    ).toBe(true);
+    expect(replacementBlocks.some((block) => block.type === 'tool_call')).toBe(
+      false,
+    );
   });
 
-  it('does not retry after hidden thinking metadata was emitted', async () => {
+  it('restarts the turn after a connection error that followed hidden thinking metadata', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
     ) {
       attempt++;
+      if (attempt === 1) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: '',
+              sourceField: 'thinking',
+              signature: 'state-token',
+              streamId: 'reasoning-1',
+              streamStatus: 'complete',
+              isHidden: true,
+            },
+          ],
+        };
+        throw createConnectionError();
+      }
       yield {
         speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: '',
-            sourceField: 'thinking',
-            signature: 'state-token',
-            streamId: 'reasoning-1',
-            streamStatus: 'complete',
-            isHidden: true,
-          },
-        ],
+        blocks: [{ type: 'text', text: 'recovered response' }],
       };
-      throw createConnectionError();
     });
     registerProvider(generateChatCompletionMock);
 
@@ -262,9 +307,23 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-thinking-metadata',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
-    expect(attempt).toBe(1);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+    const events = await collectEvents(stream);
+    expect(attempt).toBe(2);
+    const retryIndex = events.findIndex((event) => event.type === 'retry');
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const replacementBlocks = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === 'chunk' ? event.value.content.blocks : [],
+      );
+    expect(
+      replacementBlocks.some(
+        (block) => block.type === 'text' && block.text === 'recovered response',
+      ),
+    ).toBe(true);
+    expect(replacementBlocks.some((block) => block.type === 'thinking')).toBe(
+      false,
+    );
   });
 
   it('does NOT retry a non-transient error thrown mid-stream and stops the loop', async () => {
@@ -290,7 +349,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     // A non-transient error must still propagate (loop breaks) and must NOT be
     // retried, so the provider is invoked exactly once.
-    await expect(collectEvents(stream)).rejects.toThrow('Bad request');
+    expect(collectEvents(stream)).rejects.toThrow('Bad request');
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -323,13 +382,13 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Request aborted');
+    expect(collectEvents(stream)).rejects.toThrow('Request aborted');
     // The abort must terminate immediately without a retry.
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
-  it('stops retrying a persistently failing connection error after exhausting the retry budget', async () => {
+  it('stops retrying a persistently failing connection error after exhausting the restart budget', async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -351,9 +410,10 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-persistent',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
-    expect(attempt).toBe(1);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+    // One restart is permitted (maxAttempts: 2); a second failure propagates.
+    expect(collectEvents(stream)).rejects.toThrow('Connection error.');
+    expect(attempt).toBe(2);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
   });
 
   it('does NOT retry when the request was aborted via the abort signal (no AbortError name)', async () => {
@@ -392,7 +452,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     );
 
     // The error propagates; the aborted signal must suppress the retry.
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    expect(collectEvents(stream)).rejects.toThrow('terminated');
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -426,13 +486,13 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort-code',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    expect(collectEvents(stream)).rejects.toThrow('terminated');
     // The ABORT_ERR code must classify this as an abort and suppress retry.
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does not commit a failed response after visible content was emitted', async () => {
+  it('records only the successful attempt in history after a discard-and-restart', async () => {
     const history = new HistoryService();
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
@@ -460,13 +520,20 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-history-safety',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('Connection error.');
-    expect(attempt).toBe(1);
+    const events = await collectEvents(stream);
+    expect(attempt).toBe(2);
+    expect(events.some((event) => event.type === 'retry')).toBe(true);
 
     await chat.waitForIdle();
 
     const ai = history.getAll().filter((content) => content.speaker === 'ai');
-    expect(ai).toHaveLength(0);
+    expect(ai).toHaveLength(1);
+    const aiText = ai[0].blocks
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as { text: string }).text)
+      .join('');
+    expect(aiText).toBe('recovered response');
+    expect(aiText).not.toContain('partial');
   });
 
   it('does not retry InvalidStreamError after a chunk was already emitted', async () => {
@@ -499,7 +566,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-invalid-stream',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
+    expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
     expect(attempt).toBe(1);
   });
 
@@ -530,7 +597,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-empty-stream',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
+    expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
     expect(attempt).toBe(1);
   });
 
@@ -562,7 +629,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-shared-transport-budget',
     );
 
-    await expect(collectEvents(stream)).rejects.toMatchObject({
+    expect(collectEvents(stream)).rejects.toMatchObject({
       name: 'RetriesExhaustedError',
       category: 'server_error',
       isRetryable: false,

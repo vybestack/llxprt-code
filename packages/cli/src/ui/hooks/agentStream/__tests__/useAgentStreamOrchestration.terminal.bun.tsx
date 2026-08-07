@@ -161,6 +161,7 @@ function useOrchestration(
     [],
   );
   const addItem = React.useMemo(() => vi.fn().mockReturnValue(1), []);
+  const removeItems = React.useMemo(() => vi.fn(), []);
   const commandEffect = React.useMemo<string[]>(() => [], []);
   const handleSlashCommand = React.useMemo(
     () =>
@@ -175,6 +176,7 @@ function useOrchestration(
     runtime,
     agent,
     addItem,
+    removeItems,
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
