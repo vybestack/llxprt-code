@@ -64,6 +64,13 @@ export interface GeminiPartExtension {
   llxprtThoughtBlockId?: string;
   llxprtThoughtBlockStatus?: 'delta' | 'complete';
   llxprtThoughtIsHidden?: boolean;
+  /**
+   * Part-level discriminant stamped alongside a failed-tool `functionResponse`
+   * so the inbound decoder only fires on parts we encoded (issue #3076).
+   * Without it a SUCCESSFUL tool whose result happens to be shaped like
+   * `{ status: 'error', error: ... }` would be misdecoded into a failure.
+   */
+  llxprtToolFailure?: boolean;
 }
 
 /**

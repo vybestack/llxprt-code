@@ -39,6 +39,17 @@ class MockStdin extends EventEmitter {
 }
 
 describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
+  /**
+   * Kitty mode debounces, so its tests must advance past that timeout.
+   * Non-kitty must not advance at all: Bun's advanceTimersByTime(0) still moves
+   * the clock a millisecond, which is enough to fire a pending paste timeout
+   * and split a sequence the assertions expect to stay intact. Resolved here
+   * rather than inside a test so the test body stays branch-free.
+   */
+  const advancePastKittyDebounce = useKitty
+    ? () => vi.advanceTimersByTime(60)
+    : () => {};
+
   let stdin: MockStdin;
   const mockSetRawMode = vi.fn();
   const onKeypress = vi.fn();
@@ -194,12 +205,15 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
         stdin.write('do');
       });
 
-      // Kitty mode debounces; advance past its timeout (no-op for non-kitty).
-      vi.advanceTimersByTime(useKitty ? 60 : 0);
+      advancePastKittyDebounce();
 
       const sequences = onKeypress.mock.calls.map(([arg]) => arg.sequence);
 
-      const expectedSequences = useKitty ? ['\x1B[200do'] : ['\x1B[200d', 'o'];
+      // The same split is produced with and without the kitty debounce:
+      // KeypressProvider has no kitty protocol support (it takes only
+      // `children`), so there is no debounce to coalesce the incomplete
+      // escape prefix with the characters that follow it.
+      const expectedSequences = ['\x1B[200d', 'o'];
       expect(sequences).toStrictEqual(expectedSequences);
     });
 

@@ -167,6 +167,26 @@ export function streamFinished(
   };
 }
 
+/**
+ * A Finished carrying neutral UsageStats, as a provider reports on the
+ * iterations whose terminal chunk includes token counts. Providers do NOT
+ * report it on every iteration, so `streamFinished` (which omits it) is the
+ * companion builder for the usage-less case.
+ */
+export function streamFinishedWithUsage(
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  },
+  reason: CanonicalFinishReason = 'stop',
+): ServerAgentStreamEvent {
+  return {
+    type: AgentEventType.Finished,
+    value: { reason, usageMetadata: usage },
+  };
+}
+
 export function streamUserCancelled(): ServerAgentStreamEvent {
   return { type: AgentEventType.UserCancelled };
 }

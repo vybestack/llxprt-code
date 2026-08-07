@@ -40,7 +40,7 @@ const DEFAULT_REPO_ROOT = resolve(__dirname, '..');
 const DEFAULT_DATA_PATH = join(__dirname, 'affected-test-shards.data.json');
 
 const PACKAGE_PREFIX = '@vybestack/llxprt-code-';
-// `test-bun/` holds Bun-native suites registered in scripts/bun-test-manifest.ts.
+// `test-bun/` holds Bun-native suites discovered by scripts/bun-test-roots.ts.
 // They are tests by construction but live outside `src/`, so without this they
 // would be read as production code and their imports misclassified.
 const TEST_PATH_RE =

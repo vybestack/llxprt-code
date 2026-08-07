@@ -35,6 +35,28 @@ interface SandboxCliArgs {
   sandboxProfileLoad?: string;
 }
 
+/**
+ * Labels the channel that supplied a sandbox value, so diagnostics name the
+ * real source instead of always blaming `LLXPRT_SANDBOX` (issue #3083).
+ */
+type SandboxSource = '--sandbox' | 'LLXPRT_SANDBOX' | 'settings.sandbox';
+
+/**
+ * The resolved sandbox selection: the interpreted value plus the channel that
+ * supplied it. Carrying the source alongside the value lets the resolver keep
+ * precedence (flag > env > settings) without collapsing "flag absent" into
+ * "flag explicitly false" before the source is known.
+ */
+type ResolvedSandbox =
+  | {
+      readonly value: boolean | string;
+      readonly source: SandboxSource;
+    }
+  | {
+      readonly value: undefined;
+      readonly source: undefined;
+    };
+
 type RuntimeSandboxProfileResources = Omit<
   NonNullable<SandboxProfile['resources']>,
   'cpus' | 'pids'
@@ -281,26 +303,63 @@ function pickAvailableSandboxCommand(): SandboxConfig['command'] | '' {
   return '';
 }
 
-function resolveSandboxOption(
-  sandbox?: boolean | string,
-): boolean | string | undefined {
-  const environmentConfiguredSandbox =
-    process.env.LLXPRT_SANDBOX?.toLowerCase().trim() ?? '';
-  const resolvedSandbox =
-    environmentConfiguredSandbox.length > 0
-      ? environmentConfiguredSandbox
-      : sandbox;
-  if (resolvedSandbox === '1' || resolvedSandbox === 'true') {
+/**
+ * Interprets a single raw sandbox value into the normalized form the command
+ * resolver consumes: `true` (auto-detect), `false` (disabled), or the raw
+ * string (an explicit engine command). Mirrors the pre-existing interpretation
+ * (`'1'`/`'true'` → enabled, falsey → disabled, any other non-empty string →
+ * explicit command) so only the precedence between sources changes.
+ */
+function interpretSandboxValue(raw: boolean | string): boolean | string {
+  if (raw === '1' || raw === 'true') {
     return true;
   }
-  if (isFalseySandboxValue(resolvedSandbox)) {
+  if (isFalseySandboxValue(raw)) {
     return false;
   }
-  return resolvedSandbox;
+  return raw;
+}
+
+/**
+ * Resolves the effective sandbox selection across the three sources in order
+ * of precedence (issue #3083): CLI flag > `LLXPRT_SANDBOX` env > settings >
+ * default (no sandbox).
+ *
+ * "Flag absent" (`undefined`) is distinct from "flag explicitly false"
+ * (`false`): an explicit flag — including `--no-sandbox` — beats a set
+ * `LLXPRT_SANDBOX`, which previously won unconditionally whenever non-empty.
+ *
+ * Per-source normalization is unchanged: the env value is lower-cased and
+ * trimmed (empty/whitespace counts as absent); flag and settings values are
+ * used as-is.
+ */
+function resolveSandboxOption(
+  flagValue: boolean | string | undefined,
+  settingsValue: boolean | string | undefined,
+): ResolvedSandbox {
+  if (flagValue !== undefined) {
+    return { value: interpretSandboxValue(flagValue), source: '--sandbox' };
+  }
+  const environmentConfiguredSandbox =
+    process.env.LLXPRT_SANDBOX?.toLowerCase().trim() ?? '';
+  if (environmentConfiguredSandbox.length > 0) {
+    return {
+      value: interpretSandboxValue(environmentConfiguredSandbox),
+      source: 'LLXPRT_SANDBOX',
+    };
+  }
+  if (settingsValue !== undefined) {
+    return {
+      value: interpretSandboxValue(settingsValue),
+      source: 'settings.sandbox',
+    };
+  }
+  return { value: undefined, source: undefined };
 }
 
 function validateExplicitSandboxCommand(
   sandbox: string,
+  source: SandboxSource,
 ): SandboxConfig['command'] | '' {
   if (!isSandboxCommand(sandbox)) {
     throw new FatalSandboxError(
@@ -313,11 +372,28 @@ function validateExplicitSandboxCommand(
     return sandbox;
   }
   throw new FatalSandboxError(
-    `Missing sandbox command '${sandbox}' (from LLXPRT_SANDBOX)`,
+    `Missing sandbox command '${sandbox}' (from ${source})`,
   );
 }
 
-function pickRequestedSandboxCommand(): SandboxConfig['command'] | '' {
+function sandboxEngineGuidance(source: SandboxSource): string {
+  switch (source) {
+    case '--sandbox':
+      return 'specify the engine with --sandbox-engine';
+    case 'LLXPRT_SANDBOX':
+      return 'set LLXPRT_SANDBOX to docker, podman, or sandbox-exec';
+    case 'settings.sandbox':
+      return 'set settings.sandbox to docker, podman, or sandbox-exec';
+    default: {
+      const exhaustiveSource: never = source;
+      throw new Error(`Unsupported sandbox source: ${exhaustiveSource}`);
+    }
+  }
+}
+
+function pickRequestedSandboxCommand(
+  source: SandboxSource,
+): SandboxConfig['command'] | '' {
   if (os.platform() === 'darwin' && commandExists.sync('sandbox-exec')) {
     return 'sandbox-exec';
   }
@@ -328,28 +404,28 @@ function pickRequestedSandboxCommand(): SandboxConfig['command'] | '' {
     return 'podman';
   }
   throw new FatalSandboxError(
-    'LLXPRT_SANDBOX is true but failed to determine command for sandbox; ' +
-      'install docker or podman or specify command in LLXPRT_SANDBOX',
+    `${source} is true but failed to determine command for sandbox; ` +
+      `install docker or podman, or ${sandboxEngineGuidance(source)}`,
   );
 }
 
 function getSandboxCommand(
-  sandbox?: boolean | string,
+  resolved: ResolvedSandbox,
 ): SandboxConfig['command'] | '' {
   // If the SANDBOX env var is set, we're already inside the sandbox.
   if (process.env.SANDBOX) {
     return '';
   }
 
-  const resolvedSandbox = resolveSandboxOption(sandbox);
-  if (resolvedSandbox === false) {
+  const { value, source } = resolved;
+  if (value === false) {
     return '';
   }
-  if (typeof resolvedSandbox === 'string' && resolvedSandbox.length > 0) {
-    return validateExplicitSandboxCommand(resolvedSandbox);
+  if (typeof value === 'string' && value.length > 0) {
+    return validateExplicitSandboxCommand(value, source);
   }
-  if (resolvedSandbox === true) {
-    return pickRequestedSandboxCommand();
+  if (value === true) {
+    return pickRequestedSandboxCommand(source);
   }
   return '';
 }
@@ -506,7 +582,7 @@ async function loadRequestedSandboxProfile(
 }
 
 function commandFromSandboxOption(
-  sandboxOption: boolean | string | undefined,
+  sandboxOption: ResolvedSandbox,
   cliEngine: SandboxProfileEngine | undefined,
   sandboxProfile: SandboxProfile | undefined,
 ): SandboxConfig['command'] | '' {
@@ -523,7 +599,7 @@ function commandFromSandboxOption(
 }
 
 function resolveBaseSandboxCommand(
-  sandboxOption: boolean | string | undefined,
+  sandboxOption: ResolvedSandbox,
   cliEngine: SandboxProfileEngine | undefined,
   sandboxProfile: SandboxProfile | undefined,
 ): SandboxConfig['command'] | '' {
@@ -555,8 +631,13 @@ export async function loadSandboxConfig(
     packageImage,
   );
 
+  // Resolve the sandbox selection from flag + settings here (not via
+  // `argv.sandbox ?? settings.sandbox`) so "flag absent" stays distinguishable
+  // from "flag explicitly false" and precedence is flag > env > settings.
+  const resolvedSandbox = resolveSandboxOption(argv.sandbox, settings.sandbox);
+
   const baseCommand = resolveBaseSandboxCommand(
-    argv.sandbox ?? settings.sandbox,
+    resolvedSandbox,
     cliEngine,
     sandboxProfile,
   );

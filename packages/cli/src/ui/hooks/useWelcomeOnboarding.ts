@@ -56,6 +56,7 @@ export interface UseWelcomeOnboardingOptions {
   settings: LoadedSettings;
   isFolderTrustComplete: boolean;
   agent: Agent;
+  suppressStartup?: boolean;
 }
 
 export interface ModelInfo {
@@ -406,9 +407,10 @@ export const useWelcomeOnboarding = (
   options: UseWelcomeOnboardingOptions,
 ): UseWelcomeOnboardingReturn => {
   const { settings: _settings, isFolderTrustComplete, agent } = options;
+  const suppressStartup = options.suppressStartup === true;
   const runtime = useRuntimeApi();
   const [welcomeCompleted, setWelcomeCompleted] = useState(() =>
-    isWelcomeCompleted(),
+    suppressStartup ? true : isWelcomeCompleted(),
   );
 
   // Only show welcome after folder trust is complete

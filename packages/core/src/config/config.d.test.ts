@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
@@ -59,7 +59,7 @@ const mcpInstances: Array<{
 }> = [];
 
 vi.mock('@vybestack/llxprt-code-mcp', (importOriginal) => {
-  const actual = importOriginal() as Record<string, unknown>;
+  const actual = importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
   return {
     ...actual,
     McpClientManager: vi.fn().mockImplementation(() => {

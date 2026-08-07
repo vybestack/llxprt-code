@@ -28,8 +28,14 @@ import {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSession } from './chatSession.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
-import type { TodoContinuationService } from './TodoContinuationService.js';
+import type {
+  LoopDetectionService,
+  LoopDetectionSnapshot,
+} from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
+import type {
+  TodoContinuationService,
+  TodoContinuationSnapshot,
+} from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
 import type { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
@@ -37,6 +43,7 @@ import { extractPromptText } from './clientHelpers.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
+import { applyRetryAwareLoopDetection } from './retryAwareLoopDetection.js';
 
 export interface MessageStreamDeps {
   config: Config;
@@ -99,6 +106,103 @@ interface PostTurnResult {
   done: boolean;
   retryCount: number;
   newBaseRequest: AgentMessageInput | undefined;
+}
+
+/**
+ * Mutable per-attempt accumulators owned by `_processStreamIteration`. Held in
+ * a single record so {@link discardAbandonedAttempt} can reset them by
+ * reference on a transport Retry.
+ */
+interface AttemptState {
+  hadThinking: boolean;
+  hadContent: boolean;
+  hadToolCallsThisTurn: boolean;
+}
+
+/**
+ * Snapshot of every attempt-mutable accumulator captured at stream-iteration
+ * entry and restored as one coherent operation on a transport Retry
+ * (issue #3048 review findings 2, 3, 4). Prompt-scoped state (prompt identity,
+ * turn counts) is deliberately excluded.
+ */
+interface AttemptCheckpoint {
+  /**
+   * Length of `ctx.responseChunks` at iteration entry. A Retry truncates back
+   * to this baseline so text contributed by earlier successful internal-loop
+   * iterations survives (finding 3).
+   */
+  readonly responseChunksBaseline: number;
+  readonly loopDetection: LoopDetectionSnapshot;
+  readonly todoContinuation: TodoContinuationSnapshot;
+}
+
+interface AttemptRollbackContext {
+  readonly ctx: StreamContext;
+  readonly state: AttemptState;
+  readonly hadToolCallsPrior: boolean;
+  readonly deferredEvents: ServerAgentStreamEvent[];
+  readonly checkpoint: AttemptCheckpoint;
+  readonly loopDetector: LoopDetectionService;
+  readonly todoContinuationService: TodoContinuationService;
+}
+
+function createAttemptRollbackContext(
+  ctx: StreamContext,
+  hadToolCallsPrior: boolean,
+  loopDetector: LoopDetectionService,
+  todoContinuationService: TodoContinuationService,
+): AttemptRollbackContext {
+  const state: AttemptState = {
+    hadThinking: false,
+    hadContent: false,
+    hadToolCallsThisTurn: hadToolCallsPrior,
+  };
+  const deferredEvents: ServerAgentStreamEvent[] = [];
+  return {
+    ctx,
+    state,
+    hadToolCallsPrior,
+    deferredEvents,
+    checkpoint: {
+      responseChunksBaseline: ctx.responseChunks.length,
+      loopDetection: loopDetector.checkpoint(),
+      todoContinuation: todoContinuationService.checkpoint(),
+    },
+    loopDetector,
+    todoContinuationService,
+  };
+}
+
+/**
+ * Discards every per-attempt accumulator when a transport retry restarts the
+ * turn mid-stream, so AfterAgent, post-turn flags, deferred events, loop
+ * detection and task-list continuation reflect only the successful attempt.
+ *
+ * `ctx.responseChunks` is truncated in place to the entry baseline (not zero)
+ * because the array is shared across internal-loop iterations with the
+ * AfterAgent hook; text from earlier successful iterations must survive
+ * (finding 3). `hadToolCallsThisTurn` resets to the value carried in (not
+ * `false`) so tool calls from an earlier loop iteration survive. The loop
+ * detector and task-list continuation service are restored to their entry
+ * snapshots so abandoned Content/ToolCallRequest cannot contaminate them
+ * (findings 2, 4). `finishedOutcome` is deliberately untouched — an abandoned
+ * attempt never reaches Finished.
+ *
+ * @plan PLAN-20260806-ISSUE3048.P08
+ * @requirement REQ-3048-007
+ * @pseudocode 004 lines 400-409
+ */
+function discardAbandonedAttempt(rollback: AttemptRollbackContext): void {
+  rollback.ctx.responseChunks.length =
+    rollback.checkpoint.responseChunksBaseline;
+  rollback.state.hadThinking = false;
+  rollback.state.hadContent = false;
+  rollback.state.hadToolCallsThisTurn = rollback.hadToolCallsPrior;
+  rollback.deferredEvents.length = 0;
+  rollback.loopDetector.restore(rollback.checkpoint.loopDetection);
+  rollback.todoContinuationService.restore(
+    rollback.checkpoint.todoContinuation,
+  );
 }
 
 function normalizeTodoSnapshotEntry(todo: Todo): Todo {
@@ -399,43 +503,49 @@ export class MessageStreamOrchestrator {
     hadToolCallsPrior: boolean,
     initialRequest: AgentMessageInput,
   ): AsyncGenerator<ServerAgentStreamEvent, IterationResult> {
-    const { loopDetector, todoContinuationService, updateTelemetryTokenCount } =
-      this.deps;
-
-    const loopDetected = await loopDetector.turnStarted(signal);
-    if (loopDetected) {
+    const { loopDetector, todoContinuationService } = this.deps;
+    if (await loopDetector.turnStarted(signal)) {
       yield { type: AgentEventType.LoopDetected };
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(hadToolCallsPrior);
     }
-
-    let hadThinking = false;
-    let hadContent = false;
-    let hadToolCallsThisTurn = hadToolCallsPrior;
-    const deferredEvents: ServerAgentStreamEvent[] = [];
+    const rollback = createAttemptRollbackContext(
+      ctx,
+      hadToolCallsPrior,
+      loopDetector,
+      todoContinuationService,
+    );
+    const { state, deferredEvents } = rollback;
     let finishedOutcome: ServerFinishedOutcome | undefined;
-
-    for await (const event of turn.run(iterRequest, signal)) {
-      if (loopDetector.addAndCheck(event)) {
+    const events = applyRetryAwareLoopDetection(
+      turn.run(iterRequest, signal),
+      loopDetector,
+    );
+    for await (const { event, loopDetected: eventLoopDetected } of events) {
+      if (eventLoopDetected) {
         yield { type: AgentEventType.LoopDetected };
         yield* this._fireAfterHookAndEmitClearContext(ctx);
-        return this._earlyIterResult(hadToolCallsThisTurn, {
-          hadThinking,
-          hadContent,
+        return this._earlyIterResult(state.hadToolCallsThisTurn, {
+          hadThinking: state.hadThinking,
+          hadContent: state.hadContent,
           deferredEvents,
           outcome: finishedOutcome,
         });
       }
 
       todoContinuationService.recordModelActivity(event);
+
+      if (event.type === AgentEventType.Retry) {
+        discardAbandonedAttempt(rollback);
+        yield event;
+        this.deps.updateTelemetryTokenCount();
+        continue;
+      }
+
       if (event.type === AgentEventType.ToolCallRequest)
-        hadToolCallsThisTurn = true;
-      // Pause detection happens in AgenticLoop.buildNextMessage(), which sees
-      // real scheduler tool responses. Turn.run() only emits ToolCallRequest
-      // events, so checking for ToolCallResponse here would be dead code — the
-      // real responses arrive later via the scheduler (issue #2657).
-      if (event.type === AgentEventType.Thought) hadThinking = true;
-      if (event.type === AgentEventType.Content) hadContent = true;
+        state.hadToolCallsThisTurn = true;
+      if (event.type === AgentEventType.Thought) state.hadThinking = true;
+      if (event.type === AgentEventType.Content) state.hadContent = true;
       if (event.type === AgentEventType.Finished && event.value.outcome)
         finishedOutcome = event.value.outcome;
       this._handleTodoToolCall(event, todoContinuationService);
@@ -447,7 +557,7 @@ export class MessageStreamOrchestrator {
       } else {
         yield event;
       }
-      updateTelemetryTokenCount();
+      this.deps.updateTelemetryTokenCount();
 
       const terminalResult = yield* handleTerminalEvent(
         this.deps,
@@ -455,20 +565,20 @@ export class MessageStreamOrchestrator {
         signal,
         ctx,
         deferredEvents,
-        { hadToolCallsThisTurn, hadThinking, hadContent },
+        {
+          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+          hadThinking: state.hadThinking,
+          hadContent: state.hadContent,
+        },
         initialRequest,
       );
       if (terminalResult) return terminalResult;
     }
 
-    return {
-      earlyReturn: false,
-      hadToolCallsThisTurn,
-      hadThinking,
-      hadContent,
-      deferredEvents,
-      outcome: finishedOutcome,
-    };
+    return Object.assign(
+      { earlyReturn: false, deferredEvents, outcome: finishedOutcome },
+      state,
+    );
   }
 
   private _earlyIterResult(

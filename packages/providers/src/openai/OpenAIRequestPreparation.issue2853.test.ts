@@ -24,9 +24,12 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
 }));
 
-vi.mock('../../prompt-config/subagent-delegation.js', () => ({
-  shouldIncludeSubagentDelegation: vi.fn().mockResolvedValue(false),
-}));
+vi.mock(
+  '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js',
+  () => ({
+    shouldIncludeSubagentDelegation: vi.fn().mockResolvedValue(false),
+  }),
+);
 
 vi.mock('../utils/userMemory.js', () => ({
   resolveUserMemory: vi.fn().mockResolvedValue(''),

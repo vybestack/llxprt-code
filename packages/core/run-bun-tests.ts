@@ -13,7 +13,7 @@
  * file as a separate `bun test <file>` invocation avoids the multi-file
  * process management that triggers the hang.
  *
- * Each child process has a per-file timeout (120s on POSIX, 180s on Windows).
+ * Each child process has a per-file timeout (60s on POSIX, 180s on Windows).
  * If a file takes longer, the process is killed to prevent a single
  * slow/hanging file from blocking the entire suite.
  *
@@ -22,16 +22,26 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
-const PRELOAD = './bun-preload.ts';
+/**
+ * Every path this runner touches — discovery, the child's working directory,
+ * the preload and the JUnit report — is anchored here rather than at
+ * `process.cwd()`, so the runner behaves identically no matter where it is
+ * invoked from.
+ */
+const WORKSPACE_ROOT = import.meta.dir;
+const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');
+const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 // PowerShell/taskkill-heavy suites leave Windows log handles pending when Bun
 // children overlap, so Windows runs files serially; POSIX has no such constraint.
 const MAX_CONCURRENCY = process.platform === 'win32' ? 1 : 8;
 const CONCURRENCY = Math.min(MAX_CONCURRENCY, availableParallelism());
 const PER_TEST_TIMEOUT_MS = 30_000;
-const PER_FILE_TIMEOUT_MS = process.platform === 'win32' ? 180_000 : 120_000;
+const PER_FILE_TIMEOUT_MS = process.platform === 'win32' ? 180_000 : 60_000;
+
+const TEST_ROOTS = ['src', 'test'] as const;
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
@@ -49,13 +59,33 @@ function findTestFiles(dir: string): string[] {
     if (stat.isDirectory()) {
       results.push(...findTestFiles(fullPath));
     } else if (
-      (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) &&
+      (entry.endsWith('.test.ts') ||
+        entry.endsWith('.test.tsx') ||
+        entry.endsWith('.spec.ts') ||
+        entry.endsWith('.spec.tsx')) &&
       !entry.endsWith('.d.ts')
     ) {
       results.push(fullPath);
     }
   }
   return results.sort();
+}
+
+/**
+ * Returns the absolute paths of every test file this runner would execute for
+ * the given absolute workspace `root`. The script entry point calls this same
+ * function (see `main`), so the two can never diverge.
+ *
+ * Roots scanned: `src` and `test`. Files match `*.test.ts` / `*.test.tsx` /
+ * `*.spec.ts` / `*.spec.tsx` (`.d.ts` excluded); `dist`, `node_modules`,
+ * `coverage` and dot-prefixed entries are skipped.
+ */
+export function discoverTestFiles(root: string): string[] {
+  const results: string[] = [];
+  for (const testRoot of TEST_ROOTS) {
+    results.push(...findTestFiles(join(root, testRoot)));
+  }
+  return results;
 }
 
 interface TestResult {
@@ -79,7 +109,7 @@ function runTestFile(file: string): Promise<TestResult> {
         file,
       ],
       {
-        cwd: process.cwd(),
+        cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
         env: process.env,
       },
@@ -126,7 +156,7 @@ function generateJUnit(
   const testCases = results
     .map((r) => {
       const className = escapeXml(
-        r.file.replace(/^src\//, '').replace(/\.test\.tsx?$/, ''),
+        r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
       );
       const exitCode = r.exitCode ?? -1;
       const failureXml = r.passed
@@ -150,7 +180,9 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const testFiles = [...findTestFiles('src'), ...findTestFiles('test')];
+  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
+    relative(WORKSPACE_ROOT, file),
+  );
   if (testFiles.length === 0) {
     console.error('No test files found');
     process.exit(1);
@@ -189,11 +221,13 @@ async function main(): Promise<void> {
   );
 
   writeFileSync(
-    'junit.xml',
+    JUNIT_PATH,
     generateJUnit(results, testFiles.length, failed.length),
   );
 
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
-main();
+if (import.meta.main) {
+  await main();
+}

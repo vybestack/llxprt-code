@@ -13,7 +13,10 @@ import {
 } from './inputPromptRender.js';
 import type { InputPromptProps } from './inputPromptTypes.js';
 import type { TextBuffer } from './shared/text-buffer.js';
+import type { DOMElement } from 'ink';
 import type React from 'react';
+import { useRef } from 'react';
+import { useMouseClick } from '../hooks/useMouseClick.js';
 
 export { calculatePromptWidths } from './inputPromptText.js';
 export type { InputPromptProps } from './inputPromptTypes.js';
@@ -27,6 +30,7 @@ type InputPromptViewProps = {
   shellModeActive: boolean;
   state: InputPromptStateResult;
   suggestionsNode: React.ReactNode;
+  innerBoxRef: React.RefObject<DOMElement | null>;
   ghostText: { inlineGhost: string; additionalLines: string[] };
 };
 
@@ -40,6 +44,7 @@ const InputPromptView: React.FC<InputPromptViewProps> = ({
   state,
   suggestionsNode,
   ghostText,
+  innerBoxRef,
 }) => (
   <>
     {suggestionsPosition === 'above' && suggestionsNode}
@@ -52,6 +57,7 @@ const InputPromptView: React.FC<InputPromptViewProps> = ({
       inputWidth={inputWidth}
       inlineGhost={ghostText.inlineGhost}
       additionalLines={ghostText.additionalLines}
+      innerBoxRef={innerBoxRef}
     />
     {suggestionsPosition === 'below' && suggestionsNode}
   </>
@@ -67,6 +73,19 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 }) => {
   const state = useRuntimeState({ ...runtimeProps, focus });
   useMousePaste(focus, runtimeProps.isEmbeddedShellFocused, state);
+  const innerBoxRef = useRef<DOMElement | null>(null);
+  // Clicking the prompt moves the caret to the clicked cell. This was lost when
+  // InputPrompt was split into hooks; the buffer still exposes the operation.
+  useMouseClick(
+    innerBoxRef,
+    (_event, relativeX, relativeY) => {
+      const visualRow = runtimeProps.buffer.visualScrollRow + relativeY;
+      runtimeProps.buffer.moveToVisualPosition(visualRow, relativeX);
+    },
+    {
+      isActive: focus === true && runtimeProps.isEmbeddedShellFocused !== true,
+    },
+  );
   const ghostText = useGhostTextLines(
     state.completion,
     runtimeProps.buffer,
@@ -93,6 +112,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       state={state}
       suggestionsNode={suggestionsNode}
       ghostText={ghostText}
+      innerBoxRef={innerBoxRef}
     />
   );
 };

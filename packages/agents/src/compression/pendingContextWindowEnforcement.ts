@@ -70,6 +70,7 @@ export interface PendingContextWindowEnforcerDeps {
     applyResult: (
       newHistory: IContent[],
       summary: IContent | undefined,
+      topPreserved: number,
     ) => void,
   ): void;
   setSuppressDensityDirty(value: boolean): void;
@@ -451,13 +452,18 @@ export class PendingContextWindowEnforcer {
       );
       return;
     }
-    this.deps.applyFallbackCompressionResult(result, (newHistory, _summary) => {
-      this.deps.historyService.clear();
-      for (const content of newHistory) {
-        this.deps.historyService.add(content, this.deps.getRuntimeModel());
-      }
-      this.deps.resetLastPromptTokenCount();
-    });
+    this.deps.applyFallbackCompressionResult(
+      result,
+      (newHistory, _summary, _topPreserved) => {
+        this.deps.historyService.clear();
+        // Post-truncation rebuild: the prefix is already destroyed (#3070).
+        this.deps.historyService.resetCacheAnchorSeq();
+        for (const content of newHistory) {
+          this.deps.historyService.add(content, this.deps.getRuntimeModel());
+        }
+        this.deps.resetLastPromptTokenCount();
+      },
+    );
   }
 
   private async truncateToolResponsesIfStillOverLimit(input: {

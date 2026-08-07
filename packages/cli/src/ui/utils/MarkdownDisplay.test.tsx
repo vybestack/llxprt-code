@@ -208,10 +208,22 @@ Another paragraph.
       expect(lastFrame()).not.toContain(' 1 ');
     });
 
-    it('shows line numbers in code blocks by default', () => {
+    it('shows line numbers in code blocks when showLineNumbers is true', () => {
       const text = '```javascript\nconst x = 1;\n```'.replace(/\n/g, eol);
+      const settings = new LoadedSettings(
+        { path: '', settings: {} },
+        { path: '', settings: {} },
+        {
+          path: '',
+          settings: { ui: { showLineNumbers: true } },
+        },
+        { path: '', settings: {} },
+        true,
+      );
+
       const { lastFrame } = renderWithProviders(
         <MarkdownDisplay {...baseProps} text={text} />,
+        { settings },
       );
       expect(lastFrame()).toMatchSnapshot();
       expect(lastFrame()).toContain(' 1 ');

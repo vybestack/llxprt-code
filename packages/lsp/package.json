@@ -14,8 +14,8 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "test:ci": "bun test",
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace lsp --junit junit.xml",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace lsp --junit junit.xml",
     "test:vitest": "vitest run --config ./vitest.config.ts"
   },
   "files": [

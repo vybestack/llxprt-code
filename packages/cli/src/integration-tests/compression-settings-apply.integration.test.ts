@@ -149,13 +149,13 @@ describe('Compression Settings Apply Integration Tests', () => {
       config.setEphemeralSetting('context-limit', 200000);
       expect(config.getEphemeralSetting('context-limit')).toBe(200000);
 
-      // Config itself doesn't validate - validation happens in setCommand
-      // So these values would be stored but rejected when used
+      // Config validates the value now rather than deferring to setCommand: a
+      // non-positive context limit is rejected and leaves the setting unset.
       config.setEphemeralSetting('context-limit', -1000);
-      expect(config.getEphemeralSetting('context-limit')).toBe(-1000);
+      expect(config.getEphemeralSetting('context-limit')).toBeUndefined();
 
       config.setEphemeralSetting('context-limit', 0);
-      expect(config.getEphemeralSetting('context-limit')).toBe(0);
+      expect(config.getEphemeralSetting('context-limit')).toBeUndefined();
     });
   });
 

@@ -35,7 +35,6 @@ import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
-const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
   return {
@@ -43,6 +42,7 @@ vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
     useReactToolScheduler: vi.fn(),
   };
 });
+const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 
 vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
@@ -273,7 +273,7 @@ describe('useAgentStream', () => {
           };
           yield {
             type: ServerEventType.Finished,
-            value: { reason: 'MAX_TOKENS', usageMetadata: undefined },
+            value: { reason: 'max_tokens', usageMetadata: undefined },
           };
         })(),
       );
@@ -291,7 +291,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -445,8 +444,12 @@ describe('useAgentStream', () => {
       // Setup mock to return a stream with ContextWindowWillOverflow event
       mockSendMessageStream.mockReturnValue(
         (async function* () {
+          // The fake agent feeds this stream through the real event adapter,
+          // so it must carry the RAW server event. The adapter maps
+          // ContextWindowWillOverflow to the 'context-warning' agent event
+          // that the dispatcher consumes.
           yield {
-            type: ServerEventType.ContextWindowWillOverflow,
+            type: 'context_window_will_overflow',
             value: {
               estimatedRequestTokenCount: 100,
               remainingTokenCount: 50,
@@ -468,7 +471,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           onCancelSubmitSpy,
           () => {},
@@ -489,67 +491,75 @@ describe('useAgentStream', () => {
     });
 
     it.each([
+      { reason: 'stop', stopReason: 'STOP', shouldAddMessage: false },
       {
-        reason: 'STOP',
+        reason: 'stop',
+        stopReason: 'FINISH_REASON_UNSPECIFIED',
         shouldAddMessage: false,
       },
       {
-        reason: 'FINISH_REASON_UNSPECIFIED',
-        shouldAddMessage: false,
-      },
-      {
-        reason: 'SAFETY',
+        reason: 'safety',
+        stopReason: 'SAFETY',
         message: 'WARNING:  Response stopped due to safety reasons.',
       },
       {
-        reason: 'RECITATION',
+        reason: 'safety',
+        stopReason: 'RECITATION',
         message: 'WARNING:  Response stopped due to recitation policy.',
       },
       {
-        reason: 'LANGUAGE',
+        reason: 'other',
+        stopReason: 'LANGUAGE',
         message: 'WARNING:  Response stopped due to unsupported language.',
       },
       {
-        reason: 'BLOCKLIST',
+        reason: 'safety',
+        stopReason: 'BLOCKLIST',
         message: 'WARNING:  Response stopped due to forbidden terms.',
       },
       {
-        reason: 'PROHIBITED_CONTENT',
+        reason: 'safety',
+        stopReason: 'PROHIBITED_CONTENT',
         message: 'WARNING:  Response stopped due to prohibited content.',
       },
       {
-        reason: 'SPII',
+        reason: 'safety',
+        stopReason: 'SPII',
         message:
           'WARNING:  Response stopped due to sensitive personally identifiable information.',
       },
       {
-        reason: 'OTHER',
+        reason: 'other',
+        stopReason: 'OTHER',
         message: 'WARNING:  Response stopped for other reasons.',
       },
       {
-        reason: 'MALFORMED_FUNCTION_CALL',
+        reason: 'error',
+        stopReason: 'MALFORMED_FUNCTION_CALL',
         message: 'WARNING:  Response stopped due to malformed function call.',
       },
       {
-        reason: 'IMAGE_SAFETY',
+        reason: 'safety',
+        stopReason: 'IMAGE_SAFETY',
         message: 'WARNING:  Response stopped due to image safety violations.',
       },
       {
-        reason: 'UNEXPECTED_TOOL_CALL',
+        reason: 'error',
+        stopReason: 'UNEXPECTED_TOOL_CALL',
         message: 'WARNING:  Response stopped due to unexpected tool call.',
       },
     ])(
-      'should handle $reason finish reason correctly',
-      async ({ reason, shouldAddMessage = true, message }) => {
+      'should handle $stopReason finish reason correctly',
+      async ({ reason, stopReason, shouldAddMessage = true, message }) => {
         mockSendMessageStream.mockReturnValue(
           (async function* () {
             yield {
               type: ServerEventType.Content,
-              value: `Response for ${reason}`,
+              value: `Response for ${stopReason}`,
             };
             yield {
               type: ServerEventType.Finished,
-              value: { reason, usageMetadata: undefined },
+              value: { reason, stopReason, usageMetadata: undefined },
             };
           })(),
         );
@@ -557,7 +567,7 @@ describe('useAgentStream', () => {
         const { result } = renderHookWithDefaults();
 
         await act(async () => {
-          await result.current.submitQuery(`Test ${reason}`);
+          await result.current.submitQuery(`Test ${stopReason}`);
         });
 
         // Wait for the stream to complete and state to settle
@@ -671,17 +681,39 @@ describe('useAgentStream', () => {
       await result.current.submitQuery('test input');
     });
 
-    // Expectation: addItem:gemini (rationale) MUST happen before scheduleToolCalls_START
+    // A ToolCallRequest in the stream no longer makes the CLI call
+    // scheduleToolCalls: the dispatcher treats tool-call as display-only and
+    // the agent executes tools itself, so the React scheduler is now reached
+    // only for client-initiated calls. Drive the completion callback directly
+    // to exercise the ordering guarantee that does still exist —
+    // useAgentEventStream flushes pending AI content before adding the
+    // tool_group item.
+    const completedTools = [
+      {
+        request: { callId: '1', name: 'test_tool', args: {} },
+        status: 'success',
+        tool: { displayName: 'test_tool', name: 'test_tool' },
+        invocation: { getDescription: () => 'desc' },
+        response: { responseParts: [], resultDisplay: 'done' },
+        startTime: Date.now(),
+        endTime: Date.now(),
+      },
+    ];
+
+    expect(capturedOnComplete).toBeDefined();
+    await act(async () => {
+      await capturedOnComplete!(Symbol('test-scheduler'), completedTools, {
+        isPrimary: true,
+      });
+    });
+
     const rationaleIndex = addItemOrder.indexOf('addItem:gemini');
-    const scheduleIndex = addItemOrder.indexOf('scheduleToolCalls_START');
     const toolGroupIndex = addItemOrder.indexOf('addItem:tool_group');
 
     expect(rationaleIndex).toBeGreaterThan(-1);
-    expect(scheduleIndex).toBeGreaterThan(-1);
     expect(toolGroupIndex).toBeGreaterThan(-1);
 
-    // This is the core fix validation: Rationale comes before tools are even scheduled (awaited)
-    expect(rationaleIndex).toBeLessThan(scheduleIndex);
+    // Core guarantee: the rationale is committed to history before the tools.
     expect(rationaleIndex).toBeLessThan(toolGroupIndex);
   });
 });

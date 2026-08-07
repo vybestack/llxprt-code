@@ -10,8 +10,7 @@
  * Auth Command Logout TDD Tests
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'vitest';
 import * as fc from 'fast-check';
 import { AuthCommandExecutor } from '../../../src/ui/commands/authCommand.js';
 import {
@@ -649,85 +648,94 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * @requirement REQ-002
    * Property Test 1: Command parsing with random whitespace
    */
-  it.prop([
-    fc.constantFrom('codex', 'claudecode'),
-    fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5), // Only whitespace, shorter
-    fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5),
-  ])(
-    'should parse commands correctly with random whitespace',
-    async (provider, leadingSpace, trailingSpace) => {
-      // Ensure we always have the word 'logout' with proper spacing
-      const middleSpace = leadingSpace || ' '; // At least one space between provider and logout
-      const args = `${leadingSpace}${provider}${middleSpace}logout${trailingSpace}`;
+  it('should parse commands correctly with random whitespace', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom('codex', 'claudecode'),
+        fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5), // Only whitespace, shorter
+        fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5),
+        async (provider, leadingSpace, trailingSpace) => {
+          // Ensure we always have the word 'logout' with proper spacing
+          const middleSpace = leadingSpace || ' '; // At least one space between provider and logout
+          const args = `${leadingSpace}${provider}${middleSpace}logout${trailingSpace}`;
 
-      const result = await authCommand.execute(context, args);
+          const result = await authCommand.execute(context, args);
 
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-      expect(messageResult.messageType).toBe('info');
-      expect(messageResult.content).toContain('Successfully logged out');
-      expect(messageResult.content).toContain(provider);
-    },
-  );
+          expect(result.type).toBe('message');
+          const messageResult = result as MessageActionReturn;
+          expect(messageResult.messageType).toBe('info');
+          expect(messageResult.content).toContain('Successfully logged out');
+          expect(messageResult.content).toContain(provider);
+        },
+      ),
+    );
+  });
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P13
    * @requirement REQ-002
    * Property Test 3: Command argument normalization
    */
-  it.prop([
-    fc.constantFrom('codex', 'claudecode'),
-    fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
-  ])(
-    'should normalize command argument case variations',
-    async (provider, logoutAction) => {
-      const args = `${provider} ${logoutAction}`;
+  it('should normalize command argument case variations', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom('codex', 'claudecode'),
+        fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
+        async (provider, logoutAction) => {
+          const args = `${provider} ${logoutAction}`;
 
-      const result = await authCommand.execute(context, args);
+          const result = await authCommand.execute(context, args);
 
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-      expect(messageResult.messageType).toBe('info');
-      expect(messageResult.content).toContain('Successfully logged out');
-    },
-  );
+          expect(result.type).toBe('message');
+          const messageResult = result as MessageActionReturn;
+          expect(messageResult.messageType).toBe('info');
+          expect(messageResult.content).toContain('Successfully logged out');
+        },
+      ),
+    );
+  });
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P13
    * @requirement REQ-002
    * Property Test 4: Concurrent command execution
    */
-  it.prop([
-    fc.array(fc.constantFrom('codex', 'claudecode'), {
-      minLength: 2,
-      maxLength: 10,
-    }),
-  ])('should handle concurrent logout commands safely', async (providers) => {
-    // Set up tokens for each provider
-    const uniqueProviders = new Set(providers);
-    for (const provider of uniqueProviders) {
-      const token: OAuthToken = {
-        access_token: `concurrent-${provider}-token`,
-        expiry: Date.now() / 1000 + 3600,
-        token_type: 'Bearer',
-      };
-      await tokenStore.saveToken(provider, token);
-    }
+  it('should handle concurrent logout commands safely', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(fc.constantFrom('codex', 'claudecode'), {
+          minLength: 2,
+          maxLength: 10,
+        }),
+        async (providers) => {
+          // Set up tokens for each provider
+          const uniqueProviders = new Set(providers);
+          for (const provider of uniqueProviders) {
+            const token: OAuthToken = {
+              access_token: `concurrent-${provider}-token`,
+              expiry: Date.now() / 1000 + 3600,
+              token_type: 'Bearer',
+            };
+            await tokenStore.saveToken(provider, token);
+          }
 
-    // Execute concurrent logout commands
-    const commandPromises = providers.map((provider) =>
-      authCommand.execute(context, `${provider} logout`),
+          // Execute concurrent logout commands
+          const commandPromises = providers.map((provider) =>
+            authCommand.execute(context, `${provider} logout`),
+          );
+
+          const results = await Promise.all(commandPromises);
+
+          // All commands should complete successfully
+          for (const result of results) {
+            expect(result.type).toBe('message');
+            const messageResult = result as MessageActionReturn;
+            expect(messageResult.messageType).toBe('info');
+            expect(messageResult.content).toContain('Successfully logged out');
+          }
+        },
+      ),
     );
-
-    const results = await Promise.all(commandPromises);
-
-    // All commands should complete successfully
-    for (const result of results) {
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-      expect(messageResult.messageType).toBe('info');
-      expect(messageResult.content).toContain('Successfully logged out');
-    }
   });
 
   /**
@@ -735,20 +743,27 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * @requirement REQ-002
    * Property Test 5: Message content validation
    */
-  it.prop([fc.constantFrom('codex', 'claudecode')])(
-    'should always include provider name in response messages',
-    async (provider) => {
-      const result = await authCommand.execute(context, `${provider} logout`);
+  it('should always include provider name in response messages', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom('codex', 'claudecode'),
+        async (provider) => {
+          const result = await authCommand.execute(
+            context,
+            `${provider} logout`,
+          );
 
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-      expect(messageResult.content).toContain(provider);
+          expect(result.type).toBe('message');
+          const messageResult = result as MessageActionReturn;
+          expect(messageResult.content).toContain(provider);
 
-      // Content should be meaningful (not empty or too short)
-      expect(messageResult.content.length).toBeGreaterThan(10);
+          // Content should be meaningful (not empty or too short)
+          expect(messageResult.content.length).toBeGreaterThan(10);
 
-      // Should not contain placeholder text
-      expect(messageResult.content).not.toMatch(/TODO|FIXME|placeholder/i);
-    },
-  );
+          // Should not contain placeholder text
+          expect(messageResult.content).not.toMatch(/TODO|FIXME|placeholder/i);
+        },
+      ),
+    );
+  });
 });

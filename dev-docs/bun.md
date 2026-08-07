@@ -503,7 +503,7 @@ This script is a Bun-backed orchestrator that mirrors `npm run test
 
 4. **Runs the script harness tests** (`scripts/tests/`) after workspace
    tests, matching the root `test:scripts` script. These run natively under
-   Bun via the `scripts-tests` and `scripts-tests-slow` manifest roots.
+   Bun via the `scripts-tests` root.
 
 ### CLI flags
 
@@ -656,36 +656,38 @@ still executed by both `npm run test` and the `bun scripts/test.ts` orchestrator
 # All workspaces
 bun scripts/run_bun_tests.ts
 
-# Single workspace (exact manifest workspace name)
+# Single workspace (exact root name)
 bun scripts/run_bun_tests.ts --workspace a2a-server
 
 # Or through a migrated workspace's package script
 npm run test:bun --workspace @vybestack/llxprt-code-a2a-server
 ```
 
-### Test roots (`scripts/bun-test-manifest.ts`)
+### Test roots (`scripts/bun-test-roots.ts`)
 
-Every file the native runner executes belongs to a **root** declared in
-`scripts/bun-test-manifest.ts`. A root selects its files in one of two ways:
+Every file the native runner executes is **discovered** from a **root** declared
+in `scripts/bun-test-roots.ts`. A root declares the directories to scan and the
+execution settings; there is no allowlist, file list, or exclude pattern. A newly
+added test file is picked up automatically and can never be silently dropped.
 
-- **`include` / `exclude` globs** — used by fully migrated roots. This is the
-  Bun-native equivalent of a Vitest config's `include`, and it is what makes
-  "no test file can be silently dropped" mechanically true: a newly added
-  test file runs without any manifest edit.
-- **`files`** — an explicit list, used while a workspace is only partly
-  migrated and naming alone cannot tell a Bun-ready file from one still owned
-  by Vitest.
+The default test-file pattern is `/\.(test|spec|bun)\.(ts|tsx|js)$/` (excluding
+`.d.ts`). Directories named `node_modules`, `dist`, `coverage`, `tmp`, `bundle`,
+`__snapshots__`, and any directory starting with `.` are skipped during the walk.
 
 A root may also declare:
 
-| Field          | Purpose                                                                        |
-| -------------- | ------------------------------------------------------------------------------ |
-| `preload`      | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)    |
-| `tsconfig`     | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`   |
-| `timeout`      | Per-test timeout, mirroring Vitest `testTimeout`                               |
-| `retries`      | Per-file retry budget, mirroring Vitest `retry`                                |
-| `globalSetup`  | `setup()` / `teardown()` run once in the runner process around the whole root  |
-| `credentialed` | Marks a root that calls a real provider; excluded unless requested by `--root` |
+| Field              | Purpose                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| `cwd`              | Working directory override; defaults to `packages/<root>`                                         |
+| `directories`      | Subdirectories of `cwd` to scan; defaults to `cwd` itself                                         |
+| `pattern`          | Custom test-file pattern, e.g. `\.eval\.ts$`                                                      |
+| `preload`          | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)                       |
+| `tsconfig`         | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`                      |
+| `timeout`          | Per-test timeout, mirroring Vitest `testTimeout`                                                  |
+| `retries`          | Per-file retry budget, mirroring Vitest `retry`                                                   |
+| `globalSetup`      | `setup()` / `teardown()` run once in the runner process around the whole root                     |
+| `credentialed`     | Marks a root that calls a real provider; excluded unless requested by `--root`                    |
+| `timeoutOverrides` | Per-file timeout budgets keyed by an absolute-path pattern; changes budget only, never membership |
 
 `--root <name>` is an alias of `--workspace <name>`.
 
@@ -703,10 +705,21 @@ Every root therefore runs **exactly once**. `test_shard` covers each workspace
 root; the scripts shard covers the roots that belong to no workspace, listed in
 `SCRIPTS_SHARD_ROOTS` in `scripts/test.ts`. A root with a second executor, or
 none at all, fails
-`scripts/tests/bun-manifest-root-ownership.bun.test.ts`.
+`scripts/tests/bun-test-root-ownership.bun.test.ts`.
 
-The `bun_native_test_parity` job does **not** execute tests. It resolves the
-manifest (`--dry-run`): globs expand and every selected file, preload, tsconfig
-override and global-setup module must exist. That is what proves no test file
-was dropped — re-running the whole suite a second time would double the CI bill
-for no extra signal.
+The `bun_native_test_parity` job (which only ran `--dry-run` against the
+manifest) has been removed: the manifest is gone, and its completeness check is
+subsumed by the coverage guard. `scripts/check-test-file-coverage.ts` derives
+the covered set from each executor's own discovery code — the shared runner
+and the bespoke `run-bun-tests.ts` runners — and fails if any repository test
+file is uncovered or claimed by more than one executor.
+
+The guard runs as a step in the always-run `bun_test_orchestrator_smoke` CI job
+(gated only on docs-only / skip), so it executes on every PR that could change
+test inventory, not just PRs that touch the `scripts` shard. What the guard
+proves: every test file on disk is claimed by at least one executor, and no
+file is claimed by more than one. What it does not prove: that those executors
+pass (that is the test suite's job) or that the executor table itself is
+complete (that is proven by the ownership test's bespoke-runner wiring
+assertions). Without re-running the suite, it catches the silent-omission and
+duplicate-execution classes of regression.

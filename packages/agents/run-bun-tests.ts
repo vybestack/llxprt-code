@@ -38,8 +38,16 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { availableParallelism, tmpdir } from 'node:os';
+
+/**
+ * Every path this runner touches — discovery, the child's working directory
+ * and the JUnit report — is anchored here rather than at `process.cwd()`, so
+ * the runner behaves identically no matter where it is invoked from.
+ */
+const WORKSPACE_ROOT = import.meta.dir;
+const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 
 const TEST_ROOTS = ['src'] as const;
 
@@ -152,6 +160,21 @@ function findTestFiles(dir: string): string[] {
   return results;
 }
 
+/**
+ * Returns the absolute paths of every test file this runner would execute for
+ * the given absolute workspace `root`. The script entry point calls this same
+ * function (see `main`), so the two can never diverge.
+ *
+ * Root scanned: `src`. Files match the `TEST_FILE_SUFFIXES` conventions and
+ * the `PRUNED_DIRECTORIES` entries (build/dependency output) plus dot-prefixed
+ * directories are skipped.
+ */
+export function discoverTestFiles(root: string): string[] {
+  return TEST_ROOTS.flatMap((testRoot) =>
+    findTestFiles(join(root, testRoot)),
+  ).sort();
+}
+
 interface TestResult {
   readonly file: string;
   readonly passed: boolean;
@@ -183,7 +206,7 @@ function runTestFile(file: string, reportPath: string): Promise<TestResult> {
         file,
       ],
       {
-        cwd: process.cwd(),
+        cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
         env: process.env,
       },
@@ -350,7 +373,9 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const testFiles = TEST_ROOTS.flatMap((root) => findTestFiles(root)).sort();
+  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
+    relative(WORKSPACE_ROOT, file),
+  );
   if (testFiles.length === 0) {
     console.error('No test files found under: ' + TEST_ROOTS.join(', '));
     process.exit(1);
@@ -412,9 +437,11 @@ async function main(): Promise<void> {
       (failed.length > 0 ? ` (${failed.length} failed)` : ''),
   );
 
-  writeFileSync('junit.xml', generateJUnit(results, reportPathFor));
+  writeFileSync(JUNIT_PATH, generateJUnit(results, reportPathFor));
   rmSync(reportDir, { recursive: true, force: true });
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
-await main();
+if (import.meta.main) {
+  await main();
+}

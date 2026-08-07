@@ -38,9 +38,16 @@ import type {
   ChatCompressionInfo as CompressionInfo,
 } from './event-types.js';
 
-// @pseudocode event-adapter.md steps 10-12: mutable per-stream adapter state.
+/**
+ * Mutable per-stream adapter state.
+ *
+ * No field records "a done was already emitted" because no per-event branch
+ * emits one. Every terminal signal is accumulated here and the single public
+ * `done` is synthesized once, at loop end. See {@link mapLoopStream}.
+ *
+ * @pseudocode event-adapter.md steps 10-12: mutable per-stream adapter state.
+ */
 interface AdapterState {
-  emittedDone: boolean;
   lastFinished: FinishedValue | null;
   lastStop: AgentStopInfo | null;
   pendingDoneReason: DoneReason | null;
@@ -258,7 +265,8 @@ function mapFinishReason(stopReason: string | undefined): DoneReason {
 }
 
 /**
- * Builds the terminal done event from the current adapter state.
+ * Builds the single terminal done event from the accumulated adapter state.
+ * Called exactly once, from {@link mapLoopStream}'s loop-end synthesis.
  * @pseudocode event-adapter.md steps 250-252: makeDone
  */
 function makeDone(state: AdapterState, reason: DoneReason): AgentEvent {
@@ -365,21 +373,35 @@ function* mapValueEventComplex(
       state.pendingDoneReason = 'context-overflow';
       return;
     }
+    // Finished means "this MODEL ITERATION ended", not "the agentic turn
+    // ended": turn.ts emits it for every provider chunk carrying a
+    // finishReason, tool-call turns included, and
+    // MessageStreamOrchestrator flushes it BEFORE AgenticLoop schedules the
+    // turn's tools. Projecting it straight to a public `done` therefore
+    // published a terminal event mid-turn and once per iteration (@issue:3087).
+    // It only records the finished payload now; the terminal done is
+    // synthesized at loop end.
     case AgentEventType.Finished: {
       const v = value as {
         reason: string;
         stopReason?: string;
         usageMetadata?: UsageStats;
       };
-      const publicUsage = usageStatsToPublicUsageMetadata(v.usageMetadata);
-      const finishedValue: FinishedValue = {
+      // A tool turn spans several model iterations and a provider only reports
+      // usage on the iterations whose terminal chunk carries it. The single
+      // terminal done must still surface the turn's most recent usage: while
+      // one done per iteration was emitted, consumers kept the last DEFINED
+      // usageMetadata (see drainToResult in agentBootstrap.ts), so letting a
+      // usage-less final iteration blank it would silently drop token
+      // accounting.
+      const publicUsage =
+        usageStatsToPublicUsageMetadata(v.usageMetadata) ??
+        state.lastFinished?.usageMetadata;
+      state.lastFinished = {
         reason: v.reason,
         ...(publicUsage !== undefined ? { usageMetadata: publicUsage } : {}),
         ...(v.stopReason !== undefined ? { stopReason: v.stopReason } : {}),
       };
-      state.lastFinished = finishedValue;
-      yield makeDone(state, mapFinishReason(v.stopReason));
-      state.emittedDone = true;
       return;
     }
     default:
@@ -390,8 +412,9 @@ function* mapValueEventComplex(
 /**
  * The 21-variant stream-event mapping table. Returns the public events
  * emitted for a single inner ServerAgentStreamEvent and mutates `state`
- * for terminal tracking (emittedDone / pendingDoneReason / lastFinished /
- * lastStop).
+ * for terminal tracking (pendingDoneReason / lastFinished / lastStop).
+ * It NEVER yields a `done`: terminal variants only record their reason so
+ * {@link mapLoopStream} can emit the single terminal event at loop end.
  * @pseudocode event-adapter.md steps 210-246: mapStreamEvent
  */
 function* mapStreamEvent(
@@ -421,8 +444,7 @@ function* mapStreamEvent(
   }
   // @pseudocode event-adapter.md steps 238-239: UserCancelled
   if (e.type === AgentEventType.UserCancelled) {
-    yield makeDone(state, 'aborted');
-    state.emittedDone = true;
+    state.pendingDoneReason = 'aborted';
     return;
   }
   // @pseudocode event-adapter.md step 240: AgentExecutionBlocked (NON-terminal)
@@ -431,10 +453,13 @@ function* mapStreamEvent(
     return;
   }
   // @pseudocode event-adapter.md steps 241-242: AgentExecutionStopped
+  // The AfterAgent hook can raise this from the same end-of-iteration flush
+  // that carries Finished, i.e. still before AgenticLoop schedules the
+  // turn's tools, so it records the stop and defers the done to loop end
+  // exactly like Finished does (@issue:3087).
   if (e.type === AgentEventType.AgentExecutionStopped) {
     state.lastStop = toStopInfo(e);
-    yield makeDone(state, 'hook-stopped');
-    state.emittedDone = true;
+    state.pendingDoneReason = 'hook-stopped';
     return;
   }
   // All value-bearing variants share the value discriminator.
@@ -442,9 +467,29 @@ function* mapStreamEvent(
 }
 
 /**
- * Drives an AgenticLoopEvent stream, projecting each to public AgentEvent(s)
- * and guaranteeing exactly one terminal `done` at loop end (unless the stream
- * consisted solely of a non-terminal AgentExecutionBlocked).
+ * Drives an AgenticLoopEvent stream, projecting each to public AgentEvent(s).
+ *
+ * Contract: AT MOST ONE `done` is emitted, and when it is emitted it is the
+ * FINAL public event of the stream. No terminal reason is projected where it
+ * arrives — the inner stream's terminal variants (Finished, UserCancelled,
+ * AgentExecutionStopped, Error, LoopDetected, MaxSessionTurns,
+ * ContextWindowWillOverflow, StreamIdleTimeout) only record their reason and
+ * payload in the adapter state. The loop stream ending is the sole honest
+ * signal that the agentic turn is over, because a model iteration that
+ * requested tools finishes — and flushes its Finished event — before those
+ * tools are scheduled (@issue:3087).
+ *
+ * No `done` is emitted when the stream carried no activity at all, i.e. an
+ * empty stream or one consisting solely of a non-terminal
+ * AgentExecutionBlocked.
+ *
+ * NOTE ON THE `@pseudocode` ANCHORS in this file: they point at
+ * project-plans/issue1594/analysis/pseudocode/event-adapter.md, which predates
+ * @issue:3087 and still describes an `emittedDone` flag plus immediate `done`
+ * projection from Finished / UserCancelled / AgentExecutionStopped. Those
+ * emission steps are SUPERSEDED by the single loop-end synthesis below; the
+ * anchors are retained only as a map of the projection table.
+ *
  * @pseudocode event-adapter.md steps 10-205: mapLoopStream
  */
 export async function* mapLoopStream(
@@ -452,7 +497,6 @@ export async function* mapLoopStream(
 ): AsyncIterable<AgentEvent> {
   // @pseudocode event-adapter.md steps 11-12: initialize state
   const state: AdapterState = {
-    emittedDone: false,
     lastFinished: null,
     lastStop: null,
     pendingDoneReason: null,
@@ -471,14 +515,19 @@ export async function* mapLoopStream(
     yield* mapLoopEvent(ev, state);
   }
 
-  // @pseudocode event-adapter.md steps 200-205: loop-end done synthesis
-  if (
-    !state.emittedDone &&
-    (state.sawActivity || state.pendingDoneReason !== null)
-  ) {
-    // A stronger pending terminal reason wins; otherwise derive the reason
-    // from any stored Finished value so a preserved refusal stopReason is
-    // honored even on the synthesized-completion path (@issue:2329).
+  // @pseudocode event-adapter.md steps 200-205: loop-end done synthesis —
+  // the single emission point for the public terminal event.
+  if (state.sawActivity || state.pendingDoneReason !== null) {
+    // An explicit terminal reason takes precedence over the Finished-derived
+    // one, because Finished only reports how a MODEL ITERATION ended while
+    // error / overflow / max-turns / loop-detected / aborted / hook-stopped
+    // report how the TURN ended. There is no priority ordering AMONG those
+    // explicit reasons: each branch assigns pendingDoneReason outright, so the
+    // last one recorded is the one reported.
+    //
+    // With no explicit reason the reason is derived from the stored Finished
+    // value, so a preserved refusal stopReason is honored on the
+    // synthesized-completion path (@issue:2329).
     const reason: DoneReason =
       state.pendingDoneReason ??
       mapFinishReason(state.lastFinished?.stopReason);
@@ -493,15 +542,9 @@ function* mapLoopEvent(
 ): Iterable<AgentEvent> {
   switch (ev.kind) {
     // @pseudocode event-adapter.md steps 32-36: stream
-    case 'stream': {
-      for (const pub of mapStreamEvent(ev.event, state)) {
-        if (pub.type === 'done') {
-          state.emittedDone = true;
-        }
-        yield pub;
-      }
+    case 'stream':
+      yield* mapStreamEvent(ev.event, state);
       return;
-    }
     // @pseudocode event-adapter.md steps 37-39: tool_update
     case 'tool_update': {
       for (const tc of ev.toolCalls) {

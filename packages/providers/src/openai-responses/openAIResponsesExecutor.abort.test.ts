@@ -155,6 +155,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       ok: true,
       body: encodeSse([
         'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
+        'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
         'data: [DONE]\n\n',
       ]),
     });
@@ -176,6 +177,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       ok: true,
       body: encodeSse([
         'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
+        'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
         'data: [DONE]\n\n',
       ]),
     });
@@ -198,6 +200,7 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       ok: true,
       body: encodeSse([
         'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
+        'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
         'data: [DONE]\n\n',
       ]),
     });

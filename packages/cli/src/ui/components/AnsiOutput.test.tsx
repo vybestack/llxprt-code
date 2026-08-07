@@ -70,7 +70,7 @@ describe('<AnsiOutputText />', () => {
     expect(output).toBeDefined();
     const lines = output!.split('\n');
     expect(lines[0]).toBe('First line');
-    expect(lines[1]).toBe('Third line');
+    expect(lines[2]).toBe('Third line');
   });
 
   it('respects the availableTerminalHeight prop and slices the lines correctly', () => {

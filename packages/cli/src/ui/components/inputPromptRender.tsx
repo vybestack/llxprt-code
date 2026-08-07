@@ -17,6 +17,7 @@ import type { Suggestion } from './SuggestionsDisplay.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { computeGhostText } from './inputPromptText.js';
 import type { TextBuffer } from './shared/text-buffer.js';
+import type { DOMElement } from 'ink';
 import { Box, Text } from 'ink';
 import chalk from 'chalk';
 import type React from 'react';
@@ -275,6 +276,12 @@ type PromptInputBoxProps = {
   inputWidth: number;
   inlineGhost: string;
   additionalLines: string[];
+  /**
+   * Ref to the text area itself, used to translate a terminal mouse click into
+   * a buffer position. Attached to the inner box so the coordinates exclude the
+   * border and prompt prefix.
+   */
+  innerBoxRef?: React.RefObject<DOMElement | null>;
 };
 
 export const useGhostTextLines = (
@@ -379,6 +386,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
   inputWidth,
   inlineGhost,
   additionalLines,
+  innerBoxRef,
 }) => (
   <Box
     borderStyle={getBorderStyle('round')}
@@ -386,7 +394,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
     paddingX={1}
   >
     {renderPromptPrefix(shellModeActive, reverseSearchActive)}
-    <Box flexGrow={1} flexDirection="column">
+    <Box ref={innerBoxRef} flexGrow={1} flexDirection="column">
       {buffer.text.length === 0 && placeholder
         ? renderPlaceholder(placeholder, focus)
         : renderInputLines(

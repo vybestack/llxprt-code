@@ -66,6 +66,27 @@ const errorResultEvent: AgentEvent = {
   type: 'tool-result',
   result: { id: 'tool-1', name: 'read_file', output: 'boom', isError: true },
 };
+const pauseToolCallEvent: AgentEvent = {
+  type: 'tool-call',
+  call: { id: 'pause-1', name: 'todo_pause', args: { reason: 'blocked' } },
+};
+const pauseOkResultEvent: AgentEvent = {
+  type: 'tool-result',
+  result: {
+    id: 'pause-1',
+    name: 'todo_pause',
+    output: 'paused',
+    isError: false,
+  },
+};
+const pauseSuccessStatusEvent: AgentEvent = {
+  type: 'tool-status',
+  update: { id: 'pause-1', name: 'todo_pause', status: 'success' },
+};
+const pauseCancelledStatusEvent: AgentEvent = {
+  type: 'tool-status',
+  update: { id: 'pause-1', name: 'todo_pause', status: 'cancelled' },
+};
 
 /**
  * A target whose callbacks are inert except where a test overrides them, so
@@ -377,5 +398,359 @@ describe('createObservationTap', () => {
     // suppressed tool-result emits no further phase at all.
     expect(resolved).toStrictEqual(['resolved']);
     expect(phases).toStrictEqual(['awaiting_approval', 'cancelled']);
+  });
+
+  // ─── pause tool opens a user_input wait (#3071, ordering per #3087) ─────
+  //
+  // Production event ordering for a pause turn (recorded against the real
+  // AgenticLoop + CoreToolScheduler + the pause MockTool through mapLoopStream,
+  // see agenticLoop.todoPause.test.ts):
+  //
+  //   tool-call (pause tool)
+  //   tool-status (pause):validating/scheduled/executing/success
+  //   tool-result name="pause tool" isError=false
+  //   done reason=stop            <- the single terminal event, LAST
+  //
+  // Because `done` is genuinely terminal, endTurn sees the pause result
+  // already recorded and opens the user_input wait itself. Every pause test
+  // below drives this ordering.
+
+  it('opens a user_input wait when a successful todo_pause ends a completed turn', () => {
+    const calls: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget(calls),
+      onWaitOpened: (reason) => calls.push(`wait.opened:${reason}`),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+    tap.processEvent(doneEvent);
+
+    // turn.ended is published first; the wait opens immediately after, so a
+    // consumer never sees the agent claimed blocked before control returned.
+    expect(calls[calls.length - 2]).toBe('turn.ended:completed');
+    expect(calls[calls.length - 1]).toBe('wait.opened:user_input');
+  });
+
+  it('does not open a wait for a turn that ends without any pause', () => {
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual([]);
+  });
+
+  it('does not open a wait when the todo_pause result is an error', () => {
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent({
+      type: 'tool-result',
+      result: {
+        id: 'pause-1',
+        name: 'todo_pause',
+        output: 'boom',
+        isError: true,
+      },
+    } as AgentEvent);
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual([]);
+  });
+
+  it('does not open a wait when the todo_pause result carries an errorType', () => {
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent({
+      type: 'tool-result',
+      result: {
+        id: 'pause-1',
+        name: 'todo_pause',
+        output: 'schema error',
+        errorType: 'validation',
+      },
+    } as AgentEvent);
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual([]);
+  });
+
+  it('does not open a wait for a todo_pause cancelled by abort (#3071)', () => {
+    // A pause cancelled by abort projects to isError:false and
+    // errorType:undefined (buildCancelledTransition leaves them unset on the
+    // abort path), so the result fields alone cannot reject it. The terminal
+    // phase recorded from tool-status:cancelled is what prevents this from
+    // counting as a successful pause.
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseCancelledStatusEvent);
+    tap.processEvent({
+      type: 'tool-result',
+      result: {
+        id: 'pause-1',
+        name: 'todo_pause',
+        output: '',
+        isError: false,
+      },
+    } as AgentEvent);
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual([]);
+  });
+
+  it('matches the todo_pause tool name case-insensitively', () => {
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent({
+      type: 'tool-call',
+      call: { id: 'pause-1', name: 'TODO_PAUSE', args: {} },
+    } as AgentEvent);
+    tap.processEvent({
+      type: 'tool-status',
+      update: { id: 'pause-1', name: 'TODO_PAUSE', status: 'success' },
+    } as AgentEvent);
+    tap.processEvent({
+      type: 'tool-result',
+      result: {
+        id: 'pause-1',
+        name: 'TODO_PAUSE',
+        output: 'paused',
+        isError: false,
+      },
+    } as AgentEvent);
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual(['user_input']);
+  });
+
+  it('opens the wait via toolLabels correlation when the result name is empty', () => {
+    // The raw a2a ToolCallResponse projection carries name: '' because only
+    // the loop-native tools_complete path knows the originating request. The
+    // label therefore has to come from the tool-call / tool-status
+    // correlation keyed by call id.
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent({
+      type: 'tool-result',
+      result: { id: 'pause-1', name: '', output: 'paused', isError: false },
+    } as AgentEvent);
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual(['user_input']);
+  });
+
+  it('does not open a pause wait on a cancelled or failed turn even with a successful pause', () => {
+    for (const reason of ['aborted', 'error'] as const) {
+      const opened: string[] = [];
+      const tap = createObservationTap({
+        ...noopTarget([]),
+        onWaitOpened: (r) => opened.push(r),
+      });
+
+      tap.onTurnStarted();
+      tap.processEvent(pauseToolCallEvent);
+      tap.processEvent(pauseSuccessStatusEvent);
+      tap.processEvent(pauseOkResultEvent);
+      tap.processEvent({ type: 'done', reason } as AgentEvent);
+
+      expect(opened).toStrictEqual([]);
+    }
+  });
+
+  it('does not carry a pause across turns when the turn never receives a terminal done', () => {
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    // Turn 1 observes a pause result but never receives its own terminal done,
+    // so no wait opens and the pause must not leak into the next turn.
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+
+    // Turn 2 completes normally with no pause of its own.
+    tap.onTurnStarted();
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual([]);
+  });
+
+  it('resolves the pause wait exactly once on the next turn start, before turn.started', () => {
+    const calls: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget(calls),
+      onWaitOpened: (reason) => calls.push(`wait.opened:${reason}`),
+      onWaitResolved: () => calls.push('wait.resolved'),
+    });
+
+    // Turn 1: a pause opens a wait.
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+    tap.processEvent(doneEvent);
+    expect(calls).toContain('wait.opened:user_input');
+
+    // Turn 2: the lingering pause wait resolves once, before turn.started.
+    calls.length = 0;
+    tap.onTurnStarted();
+    expect(calls).toStrictEqual(['wait.resolved', 'turn.started']);
+
+    // Turn 3: a normal turn with no pause emits no further wait.resolved.
+    calls.length = 0;
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(okResultEvent);
+    tap.processEvent(doneEvent);
+    expect(calls.filter((c) => c === 'wait.resolved')).toStrictEqual([]);
+  });
+
+  it('opens at most one pause wait per turn when the turn contains two pauses', () => {
+    const opened: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+    tap.processEvent({
+      type: 'tool-call',
+      call: { id: 'pause-2', name: 'todo_pause', args: {} },
+    } as AgentEvent);
+    tap.processEvent({
+      type: 'tool-status',
+      update: { id: 'pause-2', name: 'todo_pause', status: 'success' },
+    } as AgentEvent);
+    tap.processEvent({
+      type: 'tool-result',
+      result: {
+        id: 'pause-2',
+        name: 'todo_pause',
+        output: 'paused',
+        isError: false,
+      },
+    } as AgentEvent);
+    tap.processEvent(doneEvent);
+
+    expect(opened).toStrictEqual(['user_input']);
+  });
+
+  it('resolves a stranded permission wait before opening the pause wait', () => {
+    const calls: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget(calls),
+      onWaitOpened: (reason) => calls.push(`wait.opened:${reason}`),
+      onWaitResolved: () => calls.push('wait.resolved'),
+    });
+
+    tap.onTurnStarted();
+    tap.processEvent(toolCallEvent);
+    tap.processEvent(confirmationEvent);
+    // The permission is never cleared (no executing/success status), so it is
+    // stranded when the turn ends. Meanwhile, a pause also lands.
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+    tap.processEvent(doneEvent);
+
+    // The stranded permission resolves (from resetTurnScopedState in endTurn),
+    // then the turn ends, then the pause wait opens -- in that order.
+    expect(calls.slice(-3)).toStrictEqual([
+      'wait.resolved',
+      'turn.ended:completed',
+      'wait.opened:user_input',
+    ]);
+  });
+
+  it('resolves and re-opens the pause wait once each across two consecutive pause turns', () => {
+    const calls: string[] = [];
+    const tap = createObservationTap({
+      ...noopTarget(calls),
+      onWaitOpened: () => calls.push('wait.opened'),
+      onWaitResolved: () => calls.push('wait.resolved'),
+    });
+
+    // Turn 1: pause opens a wait.
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+    tap.processEvent(doneEvent);
+
+    // Turn 2: another pause resolves the prior wait, then re-opens it.
+    calls.length = 0;
+    tap.onTurnStarted();
+    tap.processEvent(pauseToolCallEvent);
+    tap.processEvent(pauseSuccessStatusEvent);
+    tap.processEvent(pauseOkResultEvent);
+    tap.processEvent(doneEvent);
+
+    expect(calls.filter((c) => c === 'wait.resolved')).toStrictEqual([
+      'wait.resolved',
+    ]);
+    expect(calls.filter((c) => c === 'wait.opened')).toStrictEqual([
+      'wait.opened',
+    ]);
+    // The wait resolves (on turn start) before turn.started, then re-opens
+    // once the second turn ends.
+    expect(calls[calls.length - 1]).toBe('wait.opened');
+  });
+
+  it('stays inert with observation disabled through the pause sequence', () => {
+    const tap = createObservationTap(null);
+
+    expect(() => {
+      tap.onTurnStarted();
+      tap.processEvent(pauseToolCallEvent);
+      tap.processEvent(pauseSuccessStatusEvent);
+      tap.processEvent(pauseOkResultEvent);
+      tap.processEvent(doneEvent);
+      tap.onTurnStarted();
+      tap.onTurnEnded('completed');
+    }).not.toThrow();
   });
 });

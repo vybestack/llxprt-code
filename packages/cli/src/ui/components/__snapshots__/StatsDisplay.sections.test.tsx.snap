@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<StatsDisplay /> sections > Model Usage Table Updates > should apply color to cache efficiency percentage 1`] = `
+exports[`<StatsDisplay /> sections Model Usage Table Updates should apply color to cache efficiency percentage 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -26,7 +26,7 @@ exports[`<StatsDisplay /> sections > Model Usage Table Updates > should apply co
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > Model Usage Table Updates > should display separate Input Tokens and Cache Reads columns 1`] = `
+exports[`<StatsDisplay /> sections Model Usage Table Updates should display separate Input Tokens and Cache Reads columns 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -52,7 +52,7 @@ exports[`<StatsDisplay /> sections > Model Usage Table Updates > should display 
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > Quota Display > does not render quota section when quotaLines are not provided 1`] = `
+exports[`<StatsDisplay /> sections Quota Display does not render quota section when quotaLines are not provided 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -66,7 +66,7 @@ exports[`<StatsDisplay /> sections > Quota Display > does not render quota secti
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > Quota Display > handles empty quotaLines gracefully 1`] = `
+exports[`<StatsDisplay /> sections Quota Display handles empty quotaLines gracefully 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -80,7 +80,7 @@ exports[`<StatsDisplay /> sections > Quota Display > handles empty quotaLines gr
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > Quota Display > renders quota information when quotaLines are provided 1`] = `
+exports[`<StatsDisplay /> sections Quota Display renders quota information when quotaLines are provided 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -114,7 +114,7 @@ exports[`<StatsDisplay /> sections > Quota Display > renders quota information w
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > Title Rendering > renders the custom title when a title prop is provided 1`] = `
+exports[`<StatsDisplay /> sections Title Rendering renders the custom title when a title prop is provided 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Agent powering down. Goodbye!                                                                   │
@@ -128,7 +128,7 @@ exports[`<StatsDisplay /> sections > Title Rendering > renders the custom title 
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > Title Rendering > renders the default title when no title prop is provided 1`] = `
+exports[`<StatsDisplay /> sections Title Rendering renders the default title when no title prop is provided 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -142,7 +142,7 @@ exports[`<StatsDisplay /> sections > Title Rendering > renders the default title
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > performance metrics display > hides throughput, TTFT, and output rate when values are non-finite 1`] = `
+exports[`<StatsDisplay /> sections performance metrics display hides throughput, TTFT, and output rate when values are non-finite 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -156,7 +156,7 @@ exports[`<StatsDisplay /> sections > performance metrics display > hides through
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > performance metrics display > hides throughput, TTFT, and output rate when values are unavailable 1`] = `
+exports[`<StatsDisplay /> sections performance metrics display hides throughput, TTFT, and output rate when values are unavailable 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -170,7 +170,7 @@ exports[`<StatsDisplay /> sections > performance metrics display > hides through
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > performance metrics display > shows throughput when TPM is present even if TTFT/output rate are unavailable 1`] = `
+exports[`<StatsDisplay /> sections performance metrics display shows throughput when TPM is present even if TTFT/output rate are unavailable 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -185,7 +185,7 @@ exports[`<StatsDisplay /> sections > performance metrics display > shows through
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> sections > performance metrics display > shows throughput, TTFT, and output rate in performance section when available 1`] = `
+exports[`<StatsDisplay /> sections performance metrics display shows throughput, TTFT, and output rate in performance section when available 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │

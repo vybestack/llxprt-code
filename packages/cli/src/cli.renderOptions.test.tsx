@@ -17,6 +17,7 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
+import { __setRenderForTesting } from './session/interactiveUI.js';
 
 import { LoadedSettings } from './config/settings.js';
 
@@ -65,15 +66,17 @@ vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
-vi.mock('ink', () => ({
-  Box: () => null,
-  Text: () => null,
-  render: vi.fn().mockReturnValue({
-    waitUntilExit: vi.fn(async () => undefined),
-    clear: vi.fn(),
-    unmount: vi.fn(),
-  }),
-}));
+// Ink is an async ESM module that cannot be loaded via require() once the
+// OpenTelemetry require-in-the-middle hook (installed transitively by core)
+// is active. vi.mock('ink') triggers that require path under Bun, so we use
+// the __setRenderForTesting seam exported by interactiveUI.tsx instead. The
+// Bun preload plugin already redirects all `import ... from 'ink'` to the
+// ink-stub, so transitive imports resolve normally.
+const renderSpy = vi.fn().mockReturnValue({
+  waitUntilExit: vi.fn(async () => undefined),
+  clear: vi.fn(),
+  unmount: vi.fn(),
+});
 
 const createLoadedSettings = () =>
   new LoadedSettings(
@@ -94,6 +97,12 @@ describe('startInteractiveUI ink render options', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    renderSpy.mockReturnValue({
+      waitUntilExit: vi.fn(async () => undefined),
+      clear: vi.fn(),
+      unmount: vi.fn(),
+    });
+    __setRenderForTesting(renderSpy);
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-render-test-'));
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({
@@ -105,6 +114,7 @@ describe('startInteractiveUI ink render options', () => {
   });
 
   afterEach(() => {
+    __setRenderForTesting(null);
     clearActiveProviderRuntimeContext();
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -115,9 +125,6 @@ describe('startInteractiveUI ink render options', () => {
     'passes computed Ink render options to ink.render()',
     { timeout: 120_000 },
     async () => {
-      const { render } = await import('ink');
-      const renderSpy = vi.mocked(render);
-
       const { startInteractiveUI } = await import('./cli.js');
       const config = new Config({
         sessionId: 'test-session',
@@ -157,9 +164,6 @@ describe('startInteractiveUI ink render options', () => {
     'forces alternate buffer off when screen reader mode is enabled',
     { timeout: 120_000 },
     async () => {
-      const { render } = await import('ink');
-      const renderSpy = vi.mocked(render);
-
       const { startInteractiveUI } = await import('./cli.js');
       const config = new Config({
         sessionId: 'test-session',

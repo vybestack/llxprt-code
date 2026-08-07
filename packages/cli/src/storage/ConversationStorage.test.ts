@@ -349,9 +349,7 @@ describe('Conversation Log Storage Management', () => {
     const entry = createTypicalConversationEntry();
 
     // Should not throw error even if directory doesn't exist
-    await expect(
-      storageWithNewPath.writeConversationEntry(entry),
-    ).resolves.not.toThrow();
+    await storageWithNewPath.writeConversationEntry(entry);
 
     expect(await storageWithNewPath.getCurrentLogSize()).toBeGreaterThan(0);
   });
@@ -423,7 +421,8 @@ describe('Conversation Log Storage Management', () => {
 
     // In real implementation, this would test actual filesystem errors
     // For now, we verify the storage instance handles the invalid path gracefully
-    await expect(errorProneStorage.ensureLogDirectory()).resolves.not.toThrow();
+    await errorProneStorage.ensureLogDirectory();
+    expect.assertions(0);
   });
 
   /**
@@ -470,12 +469,8 @@ describe('Conversation Log Storage Management', () => {
       messages: [{ speaker: 'human', blocks: [{ type: 'text', text: '' }] }],
     };
 
-    await expect(
-      storage.writeConversationEntry(emptyEntry),
-    ).resolves.not.toThrow();
-    await expect(
-      storage.writeConversationEntry(minimalEntry),
-    ).resolves.not.toThrow();
+    await storage.writeConversationEntry(emptyEntry);
+    await storage.writeConversationEntry(minimalEntry);
 
     expect(await storage.getCurrentLogSize()).toBeGreaterThan(0);
   });

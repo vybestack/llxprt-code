@@ -5,8 +5,9 @@
  */
 
 import type { Mock } from 'vitest';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
 import clipboardy from 'clipboardy';
 import {
   isAtCommand,
@@ -27,8 +28,15 @@ vi.mock('clipboardy', () => ({
   },
 }));
 
-// Mock child_process
-vi.mock('child_process');
+// Mock child_process — provide an explicit factory so spawn is a vi.fn()
+// under Bun (automocking of builtins differs from Vitest).
+const mockSpawnHoisted = vi.hoisted(() => vi.fn());
+vi.mock('node:child_process', () => ({
+  spawn: mockSpawnHoisted,
+  exec: vi.fn(),
+  execSync: vi.fn(),
+  fork: vi.fn(),
+}));
 
 // fs (for /dev/tty)
 const mockFs = vi.hoisted(() => ({
@@ -41,19 +49,36 @@ vi.mock('node:fs', () => ({
 }));
 
 // Mock process.platform for platform-specific tests
-const mockProcess = vi.hoisted(() => ({
-  platform: 'darwin',
-}));
+// Use Object.defineProperty directly on process (not vi.stubGlobal) so the
+// getter persists across nested describe beforeEach hooks. vi.stubGlobal
+// restores the original process in afterEach, causing the stub to be lost
+// before nested describe beforeEach runs.
+const mockProcess = vi.hoisted(() => ({ platform: 'darwin' }));
 
-vi.stubGlobal(
-  'process',
-  Object.create(process, {
-    platform: {
-      get: () => mockProcess.platform,
-      configurable: true, // Allows the property to be changed later if needed
-    },
-  }),
-);
+// The per-test hooks below replace process.stdout / process.stderr with mock
+// writables. Under Bun the test file IS the process, so the real streams must
+// be put back afterwards or the runner's own reporter writes into the mocks and
+// the process never exits.
+const realStdoutDescriptor = Object.getOwnPropertyDescriptor(
+  process,
+  'stdout',
+) as PropertyDescriptor;
+const realStderrDescriptor = Object.getOwnPropertyDescriptor(
+  process,
+  'stderr',
+) as PropertyDescriptor;
+
+function restoreRealStdio(): void {
+  Object.defineProperty(process, 'stdout', realStdoutDescriptor);
+  Object.defineProperty(process, 'stderr', realStderrDescriptor);
+}
+
+Object.defineProperty(process, 'platform', {
+  get() {
+    return mockProcess.platform;
+  },
+  configurable: true,
+});
 
 const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
   const { isTTY = false, writeReturn = true } = opts ?? {};
@@ -98,6 +123,8 @@ interface MockChildProcess extends EventEmitter {
 }
 
 describe('commandUtils', () => {
+  afterAll(restoreRealStdio);
+
   let mockSpawn: Mock;
   let mockChild: MockChildProcess;
   let mockClipboardyWrite: Mock;
@@ -107,9 +134,8 @@ describe('commandUtils', () => {
     // Reset platform to default for test isolation
     mockProcess.platform = 'darwin';
 
-    // Dynamically import and set up spawn mock
-    const { spawn } = await import('node:child_process');
-    mockSpawn = spawn as Mock;
+    // Use the hoisted spawn mock directly (Bun automock differs from Vitest)
+    mockSpawn = mockSpawnHoisted;
 
     // Create mock child process with stdout/stderr emitters
     mockChild = Object.assign(new EventEmitter(), {
@@ -126,7 +152,7 @@ describe('commandUtils', () => {
       }),
     }) as MockChildProcess;
 
-    mockSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
+    mockSpawn.mockReturnValue(mockChild as unknown as ChildProcess);
 
     // Setup clipboardy mock
     mockClipboardyWrite = clipboardy.write as Mock;
@@ -408,33 +434,39 @@ describe('commandUtils', () => {
 
     it('resolves on drain when backpressure occurs', async () => {
       const tty = makeWritable({ isTTY: true, writeReturn: false });
+      // A real stream emits 'drain' as a consequence of the write that
+      // returned false. Emitting it from the write call guarantees the
+      // listener is already attached, rather than relying on timer ordering
+      // between the awaited 'open' handler and a separately scheduled timer,
+      // which differs between the two test runners.
+      tty.write.mockImplementation(() => {
+        setTimeout(() => tty.emit('drain'), 0);
+        return false;
+      });
       mockFs.createWriteStream.mockImplementation(() => {
         setTimeout(() => tty.emit('open'), 0);
         return tty;
       });
       process.env['SSH_CONNECTION'] = '1';
 
-      const p = copyToClipboard('drain-test');
-      setTimeout(() => {
-        tty.emit('drain');
-      }, 0);
-      await expect(p).resolves.toBeUndefined();
+      await expect(copyToClipboard('drain-test')).resolves.toBeUndefined();
     });
 
     it('propagates errors from OSC-52 write path', async () => {
       const tty = makeWritable({ isTTY: true, writeReturn: false });
+      // Same reasoning as the drain case: raise the error from the write that
+      // triggered it so the rejection cannot race the listener registration.
+      tty.write.mockImplementation(() => {
+        setTimeout(() => tty.emit('error', new Error('tty error')), 0);
+        return false;
+      });
       mockFs.createWriteStream.mockImplementation(() => {
         setTimeout(() => tty.emit('open'), 0);
         return tty;
       });
       process.env['SSH_CONNECTION'] = '1';
 
-      const p = copyToClipboard('err-test');
-      setTimeout(() => {
-        tty.emit('error', new Error('tty error'));
-      }, 0);
-
-      await expect(p).rejects.toThrow('tty error');
+      await expect(copyToClipboard('err-test')).rejects.toThrow('tty error');
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
 

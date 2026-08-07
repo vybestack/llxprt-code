@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<ChatList /> > handles invalid date formats gracefully 1`] = `
+exports[`<ChatList /> handles invalid date formats gracefully 1`] = `
 "List of saved conversations:
 
   - bad-date-chat (Invalid Date)
@@ -8,7 +8,7 @@ exports[`<ChatList /> > handles invalid date formats gracefully 1`] = `
 Note: Newest last, oldest first"
 `;
 
-exports[`<ChatList /> > renders correctly with a list of chats 1`] = `
+exports[`<ChatList /> renders correctly with a list of chats 1`] = `
 "List of saved conversations:
 
   - chat-1 (2025-10-02 10:00:00)
@@ -17,4 +17,4 @@ exports[`<ChatList /> > renders correctly with a list of chats 1`] = `
 Note: Newest last, oldest first"
 `;
 
-exports[`<ChatList /> > renders correctly with no chats 1`] = `"No saved conversation checkpoints found."`;
+exports[`<ChatList /> renders correctly with no chats 1`] = `"No saved conversation checkpoints found."`;

@@ -16,7 +16,7 @@ import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../../../../constants/historyLimits.js';
-import { useHistory } from '../../../hooks/useHistoryManager.js';
+import { useRetractableHistory } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import {
   type IContent,
@@ -87,6 +87,7 @@ export interface AppBootstrapResult {
     baseTimestamp?: number,
     isResuming?: boolean,
   ) => number;
+  removeItems: (ids: readonly number[]) => void;
   clearItems: () => void;
   loadHistory: (newHistory: HistoryItem[]) => void;
   llxprtMdFileCount: number;
@@ -148,8 +149,8 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     }),
     [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
-  const { history, addItem, clearItems, loadHistory } =
-    useHistory(historyLimits);
+  const { history, addItem, removeItems, clearItems, loadHistory } =
+    useRetractableHistory(historyLimits);
   const {
     llxprtMdFileCount,
     setLlxprtMdFileCount,
@@ -175,6 +176,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     nightly,
     history,
     addItem,
+    removeItems,
     clearItems,
     loadHistory,
     llxprtMdFileCount,
@@ -286,6 +288,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     isNarrow: h.isNarrow,
     history: h.history,
     addItem: h.addItem,
+    removeItems: h.removeItems,
     clearItems: h.clearItems,
     loadHistory: h.loadHistory,
     llxprtMdFileCount: h.llxprtMdFileCount,

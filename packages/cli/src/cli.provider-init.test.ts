@@ -222,7 +222,6 @@ describe('cli main provider initialization', () => {
     } finally {
       process.stdin.isTTY = originalIsTTY;
       dynamicSettingsRegistry.reset();
-      vi.resetModules();
     }
   });
 
@@ -415,7 +414,7 @@ describe('cli main provider initialization', () => {
     // Issue #1873: main() must NOT throw — it should fall back to a fresh
     // session. If the try/catch didn't handle the restore error, main()
     // would throw 'restore failed on purpose'.
-    await expect(cli.main()).resolves.toBeUndefined();
+    expect(await cli.main()).toBeUndefined();
 
     // resumeSession was called to load the session
     expect(resumeSessionMock).toHaveBeenCalledTimes(1);
@@ -540,7 +539,7 @@ describe('cli main provider initialization', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    await expect(cli.main()).resolves.toBeUndefined();
+    expect(await cli.main()).toBeUndefined();
 
     expect(resumeSessionMock).toHaveBeenCalledTimes(1);
     expect(restoreHistory).toHaveBeenCalledTimes(1);

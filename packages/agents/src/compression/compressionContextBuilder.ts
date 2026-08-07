@@ -1,0 +1,69 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
+import path from 'node:path';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
+/**
+ * Build CompressionContext for compression strategies.
+ *
+ * @plan PLAN-20260211-HIGHDENSITY.P14
+ * @requirement REQ-CS-001.6
+ */
+export async function buildCompressionContext(
+  promptId: string,
+  runtimeContext: AgentRuntimeContext,
+  historyService: HistoryService,
+  providerResolver: (
+    profileName?: string,
+  ) => Promise<CompressionProviderResult>,
+  activeTodosProvider: (() => Promise<string | undefined>) | undefined,
+  logger: DebugLogger,
+): Promise<CompressionContext> {
+  const promptResolver = new PromptResolver();
+  const promptBaseDir = path.join(Storage.getGlobalConfigDir(), 'prompts');
+
+  let activeTodos: string | undefined;
+  if (activeTodosProvider) {
+    try {
+      activeTodos = await activeTodosProvider();
+    } catch (error) {
+      logger.debug('Failed to fetch active todos for compression', error);
+    }
+  }
+
+  const config = runtimeContext.providerRuntime.config;
+
+  return {
+    history: historyService.getCurated(),
+    runtimeContext,
+    runtimeState: runtimeContext.state,
+    estimateTokens: (contents) =>
+      historyService.estimateTokensForContents(contents as IContent[]),
+    currentTokenCount: historyService.getTotalTokens(),
+    logger,
+    resolveProvider: providerResolver,
+    promptResolver,
+    promptBaseDir,
+    promptContext: {
+      provider: runtimeContext.state.provider,
+      model: runtimeContext.state.model,
+    },
+    promptId,
+    ...(activeTodos ? { activeTodos } : {}),
+    compressionVerification:
+      runtimeContext.ephemerals.compressionVerification(),
+    ...(config ? { config } : {}),
+    cacheAnchorSeq: historyService.getCacheAnchorSeq(),
+  };
+}

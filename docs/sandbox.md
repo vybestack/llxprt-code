@@ -242,13 +242,36 @@ In container mode, these paths are always mounted into the container:
 
 - Your project working directory (read-write)
 - The system temp directory (read-write)
-- The LLxprt Code settings directory (read-write). This directory holds your
-  profiles (`profiles/*.json`) and a global `.env`; a profile containing an
-  inline `auth-key`, or that `.env`, is therefore readable from inside the
-  container. Prefer `/key save` over inline profile keys — see issue
+- The LLxprt Code global **configuration** directory (read-write). This is your
+  platform-standard config directory (the same one resolved by
+  `Storage.getGlobalConfigDir()`, e.g. `~/.config/llxprt-code` on Linux or
+  `~/Library/Preferences/llxprt-code` on macOS). It is mounted at the equivalent
+  path inside the container (on Windows hosts the mount destination is the
+  translated POSIX form, e.g. `C:\Users\me\...` becomes `/c/Users/me/...`), and
+  `LLXPRT_CONFIG_HOME` is pinned to that destination so the in-container CLI
+  reads your `settings.json`, profiles, subagents, prompts, commands, policies,
+  hooks, global `LLXPRT.md`, `welcomeConfig.json`, `trustedFolders.json` and
+  user `skills/`. This directory holds a global `.env` and profiles
+  (`profiles/*.json`); a profile containing an inline `auth-key`, or that
+  `.env`, is therefore readable from inside the container. Prefer `/key save`
+  over inline profile keys — see issue
   [#2957](https://github.com/vybestack/llxprt-code/issues/2957).
 - Git configuration files, mounted read-only (see
   [Git config passthrough](#git-config-passthrough))
+
+> **What is _not_ mounted:** only the configuration directory crosses the
+> boundary. The **data** directory (OAuth credentials, provider accounts,
+> installation id, conversations, history, todos), the **cache** directory, and
+> the **log/state** directory are _container-local and ephemeral_: they exist
+> only for the lifetime of a sandboxed session and are discarded when the
+> container exits. Anything written to them during a sandboxed session — including
+> freshly minted credentials — is lost on exit. Their container paths are pinned
+> with `LLXPRT_DATA_HOME`, `LLXPRT_CACHE_HOME` and `LLXPRT_LOG_HOME` from the
+> container's _real_ HOME inside the sandbox entrypoint (so they follow the
+> sandbox image's default user home, including custom images), keeping them
+> separate from the mounted config directory. This is why you may need to
+> re-authenticate inside a sandbox: the credential proxy (`LLXPRT_CREDENTIAL_SOCKET`)
+> is the supported way to reach host secrets without bind-mounting credential files.
 
 Additional paths are conditionally mounted based on your host environment and
 profile configuration:
@@ -735,6 +758,26 @@ auto-detects an available engine.
 
 `--sandbox-engine none` always wins, even when `LLXPRT_SANDBOX` is set.
 
+### Precedence
+
+When more than one source configures sandboxing, they are applied in this order
+(highest to lowest):
+
+1. **CLI flag** — `--sandbox` / `--no-sandbox`
+2. **Environment variable** — `LLXPRT_SANDBOX`
+3. **Settings file** — `settings.sandbox`
+4. **Default** — no sandbox
+
+An explicit flag wins over a set `LLXPRT_SANDBOX`. In particular, `--no-sandbox`
+(or `--sandbox false`) disables the sandbox even when `LLXPRT_SANDBOX=true` (or
+`docker`, `1`) is set, so you can always opt out of an inherited environment
+variable. When the flag is absent, `LLXPRT_SANDBOX` is honoured; when both the
+flag and the variable are absent, `settings.sandbox` is used. An empty or
+whitespace-only `LLXPRT_SANDBOX` is treated as absent.
+
+`--sandbox-engine none` still short-circuits to no sandbox regardless of the
+flag, variable, or settings.
+
 ### Sandbox profiles
 
 Profiles are JSON files in your config directory under `sandboxes/` (see
@@ -872,11 +915,12 @@ the container, removing a mandatory-access-control boundary. Use it only to
 diagnose a SELinux denial, then remove it so label enforcement is restored.
 
 **SSH not working in Podman on macOS** — use a stable socket path. The default
-launchd socket paths are unreliable. Set up a dedicated socket:
+launchd socket paths are unreliable. Set up a dedicated socket under a
+non-legacy location (such as `~/.ssh/` or `$XDG_RUNTIME_DIR`):
 
 ```bash
-ssh-agent -a ~/.llxprt/ssh-agent.sock
-export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
+ssh-agent -a ~/.ssh/ssh-agent.sock
+export SSH_AUTH_SOCK=~/.ssh/ssh-agent.sock
 ssh-add ~/.ssh/id_ed25519
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 ```
