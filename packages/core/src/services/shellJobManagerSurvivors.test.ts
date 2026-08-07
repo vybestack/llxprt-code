@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +13,11 @@ import { spawnSync } from 'node:child_process';
 import { ShellJobManager, ShellJobDisposalError } from './shellJobManager.js';
 import type { ShellJob } from './shellJobManager.js';
 import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
-import { debugLogger } from '../utils/debugLogger.js';
+import {
+  buildInnerPidMarkerCommand,
+  reapAndRemoveWindowsTestDir,
+  readInnerPidFromMarker,
+} from '../../test/utils/shellJobTestCleanup.js';
 
 function isPidAliveWindows(pid: number): boolean {
   const result = spawnSync(
@@ -67,47 +71,6 @@ function waitForTerminal(
     };
     tick();
   });
-}
-
-/**
- * Force-kill a survivor process tree during test teardown and surface failures
- * via debugLogger instead of silently swallowing them. Never throws: this is
- * cleanup code, and throwing would mask real test failures / leak processes.
- */
-async function reapSurvivor(pid: number): Promise<void> {
-  const result = await boundedTaskkill(pid);
-  if (!result.ok) {
-    debugLogger.warn(
-      `[shellJobManagerSurvivors.test] taskkill cleanup for pid ${pid} failed: ${result.error?.message ?? 'unknown failure'}`,
-    );
-  }
-  await waitForPidGoneWindows(pid).catch((error: unknown) => {
-    debugLogger.warn(
-      `[shellJobManagerSurvivors.test] pid ${pid} survived cleanup: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  });
-}
-
-async function removeWindowsTestDir(dir: string): Promise<void> {
-  const deadline = Date.now() + 15000;
-  for (;;) {
-    try {
-      fs.rmSync(dir, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      const code =
-        error !== null && typeof error === 'object' && 'code' in error
-          ? error.code
-          : undefined;
-      if (
-        Date.now() >= deadline ||
-        (code !== 'EBUSY' && code !== 'EPERM' && code !== 'ENOTEMPTY')
-      ) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
 }
 
 // These tests are Windows-only: they depend on tasklist/taskkill for process
@@ -171,11 +134,7 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(isPidAliveWindows(survivorPid)).toBe(false);
         survivorPid = 0;
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          await reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(h2Dir);
+        await reapAndRemoveWindowsTestDir(h2Dir, h2Manager, [survivorPid]);
       }
     }, 45000);
 
@@ -183,6 +142,9 @@ describe.skipIf(os.platform() !== 'win32')(
 
     it('cancel and dispose complete cleanup when taskkillImpl throws synchronously (H3)', async () => {
       const h3Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h3-sync-throw-'));
+      // A throwing taskkill means the manager never reaps the tree, so the
+      // INNER PowerShell (which owns the redirected log handles) survives.
+      const innerMarker = path.join(h3Dir, 'inner.pid');
       const h3Manager = new ShellJobManager({
         baseDir: h3Dir,
         taskkillImpl: (): Promise<TaskkillResult> => {
@@ -190,6 +152,7 @@ describe.skipIf(os.platform() !== 'win32')(
         },
       });
       let survivorPid = 0;
+      let innerPid = 0;
       let rejectionSeen = false;
       const onRejection = (): void => {
         rejectionSeen = true;
@@ -197,10 +160,11 @@ describe.skipIf(os.platform() !== 'win32')(
       process.on('unhandledRejection', onRejection);
       try {
         const job = h3Manager.launch({
-          command: 'Start-Sleep -Seconds 300',
+          command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
         survivorPid = job.pid;
+        innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         const result = await h3Manager.cancel(job.id);
@@ -217,22 +181,25 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(rejectionSeen).toBe(false);
       } finally {
         process.off('unhandledRejection', onRejection);
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          await reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(h3Dir);
+        await reapAndRemoveWindowsTestDir(h3Dir, h3Manager, [
+          survivorPid,
+          innerPid,
+        ]);
       }
     }, 30000);
 
     it('cancel and dispose complete cleanup when taskkillImpl returns a rejected promise (H3)', async () => {
       const h3Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h3-reject-'));
+      // A rejecting taskkill means the manager never reaps the tree, so the
+      // INNER PowerShell (which owns the redirected log handles) survives.
+      const innerMarker = path.join(h3Dir, 'inner.pid');
       const h3Manager = new ShellJobManager({
         baseDir: h3Dir,
         taskkillImpl: (): Promise<TaskkillResult> =>
           Promise.reject(new Error('rejected promise')),
       });
       let survivorPid = 0;
+      let innerPid = 0;
       let rejectionSeen = false;
       const onRejection = (): void => {
         rejectionSeen = true;
@@ -240,10 +207,11 @@ describe.skipIf(os.platform() !== 'win32')(
       process.on('unhandledRejection', onRejection);
       try {
         const job = h3Manager.launch({
-          command: 'Start-Sleep -Seconds 300',
+          command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
         survivorPid = job.pid;
+        innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         const result = await h3Manager.cancel(job.id);
@@ -260,11 +228,10 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(rejectionSeen).toBe(false);
       } finally {
         process.off('unhandledRejection', onRejection);
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          await reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(h3Dir);
+        await reapAndRemoveWindowsTestDir(h3Dir, h3Manager, [
+          survivorPid,
+          innerPid,
+        ]);
       }
     }, 30000);
 
@@ -272,19 +239,30 @@ describe.skipIf(os.platform() !== 'win32')(
 
     it('reaps multiple survivors concurrently (bounded by one kill timeout, not N) (H5)', async () => {
       const h5Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h5-concurrent-'));
+      // A never-settling taskkill means the manager never reaps the trees, so
+      // each job's INNER PowerShell (which owns the redirected log handles)
+      // survives. Capture each via a unique marker so teardown reaps all
+      // outer + inner pids.
       const h5Manager = new ShellJobManager({
         baseDir: h5Dir,
         maxBackgroundJobs: 5,
         taskkillImpl: (): Promise<TaskkillResult> => new Promise(() => {}),
       });
       const survivorPids: number[] = [];
+      const innerPids: number[] = [];
+      const innerMarkers: string[] = [];
       try {
         for (let i = 0; i < 3; i++) {
+          const marker = path.join(h5Dir, `inner-${i}.pid`);
+          innerMarkers.push(marker);
           const job = h5Manager.launch({
-            command: 'Start-Sleep -Seconds 300',
+            command: buildInnerPidMarkerCommand(marker),
             cwd: os.tmpdir(),
           });
           survivorPids.push(job.pid);
+        }
+        for (const marker of innerMarkers) {
+          innerPids.push(await readInnerPidFromMarker(marker, 10000));
         }
         await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -304,13 +282,10 @@ describe.skipIf(os.platform() !== 'win32')(
         // CI machine cannot flake it while still failing a sequential reap.
         expect(elapsed).toBeLessThan(16000);
       } finally {
-        for (const pid of survivorPids) {
-          if (pid > 0 && isPidAliveWindows(pid)) {
-            await reapSurvivor(pid);
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(h5Dir);
+        await reapAndRemoveWindowsTestDir(h5Dir, h5Manager, [
+          ...survivorPids,
+          ...innerPids,
+        ]);
       }
     }, 45000);
 
@@ -318,6 +293,9 @@ describe.skipIf(os.platform() !== 'win32')(
 
     it('dispose rejects with ShellJobDisposalError when kill always fails (I2)', async () => {
       const i2Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'i2-fail-survivor-'));
+      // An always-fail taskkill means the manager never reaps the tree, so the
+      // INNER PowerShell (which owns the redirected log handles) survives.
+      const innerMarker = path.join(i2Dir, 'inner.pid');
       const i2Manager = new ShellJobManager({
         baseDir: i2Dir,
         maxBackgroundJobs: 1,
@@ -328,14 +306,16 @@ describe.skipIf(os.platform() !== 'win32')(
           }),
       });
       let survivorPid = 0;
+      let innerPid = 0;
       let survivorLogPath = '';
       try {
         const job = i2Manager.launch({
-          command: 'Start-Sleep -Seconds 300',
+          command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
         survivorPid = job.pid;
         survivorLogPath = path.join(i2Dir, `${job.id}.log`);
+        innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Cancel times out (kill fails) → survivor added.
@@ -367,11 +347,10 @@ describe.skipIf(os.platform() !== 'win32')(
         // Survivor's log file is NOT deleted during the failed dispose.
         expect(fs.existsSync(survivorLogPath)).toBe(true);
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          await reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(i2Dir);
+        await reapAndRemoveWindowsTestDir(i2Dir, i2Manager, [
+          survivorPid,
+          innerPid,
+        ]);
       }
     }, 30000);
 
@@ -411,11 +390,7 @@ describe.skipIf(os.platform() !== 'win32')(
         });
         survivorPid = 0;
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          await reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(gateDir);
+        await reapAndRemoveWindowsTestDir(gateDir, gateManager, [survivorPid]);
       }
     }, 30000);
 
@@ -434,7 +409,7 @@ describe.skipIf(os.platform() !== 'win32')(
         await first;
         await second;
       } finally {
-        fs.rmSync(idemDir, { recursive: true, force: true });
+        await reapAndRemoveWindowsTestDir(idemDir, idemManager, []);
       }
     });
 
@@ -477,11 +452,9 @@ describe.skipIf(os.platform() !== 'win32')(
         });
         survivorPid = 0;
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          await reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await removeWindowsTestDir(microDir);
+        await reapAndRemoveWindowsTestDir(microDir, microManager, [
+          survivorPid,
+        ]);
       }
     }, 30000);
   },

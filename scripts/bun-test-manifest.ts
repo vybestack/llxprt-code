@@ -191,6 +191,9 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/observation/jspWiring.test.ts',
       'src/observation/observationTap.test.ts',
       'src/utils/sandbox-containers.test.ts',
+      // Sandbox containers mount-parsing is Bun-native (issue #3061) and
+      // likewise excluded from the Vitest selection below.
+      'src/utils/sandbox-containers-mounts.bun.test.ts',
       // Sandbox SSH agent preflight (issue #1699). Bun-native from the start
       // and likewise excluded from the Vitest selection.
       'src/utils/sandbox-ssh-agent-preflight.test.ts',

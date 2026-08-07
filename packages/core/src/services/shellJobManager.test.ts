@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +19,11 @@ import {
 import type { ShellJob } from './shellJobManager.js';
 import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import {
+  buildInnerPidMarkerCommand,
+  reapAndRemoveWindowsTestDir,
+  readInnerPidFromMarker,
+} from '../../test/utils/shellJobTestCleanup.js';
 
 /**
  * Real-process behavioral tests for ShellJobManager. Every test uses actual
@@ -540,41 +545,6 @@ async function waitForPidGoneWindows(
 ): Promise<void> {
   await waitForPidStateWindows(pid, false, timeoutMs);
 }
-async function forceReapWindows(pid: number): Promise<void> {
-  const result = await boundedTaskkill(pid);
-  if (!result.ok) {
-    debugLogger.warn(
-      `[shellJobManager.test] taskkill cleanup for pid ${pid} failed: ${result.error?.message ?? 'unknown failure'}`,
-    );
-  }
-  await waitForPidGoneWindows(pid).catch((error: unknown) => {
-    debugLogger.warn(
-      `[shellJobManager.test] pid ${pid} survived cleanup: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  });
-}
-
-async function removeWindowsTestDir(dir: string): Promise<void> {
-  const deadline = Date.now() + 5000;
-  for (;;) {
-    try {
-      fs.rmSync(dir, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      const code =
-        error !== null && typeof error === 'object' && 'code' in error
-          ? error.code
-          : undefined;
-      if (
-        Date.now() >= deadline ||
-        (code !== 'EBUSY' && code !== 'EPERM' && code !== 'ENOTEMPTY')
-      ) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-}
 
 async function waitForPidFile(
   filePath: string,
@@ -768,7 +738,12 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
 
   it('cancel does not hang when taskkill fails (bounded cancel)', async () => {
     const failDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-bounded-'));
+    // The injected always-fail taskkill means the manager never reaps the
+    // tree, so the INNER PowerShell (which owns the redirected log handles)
+    // survives. Capture it via a marker so teardown reaps both outer + inner.
+    const innerMarker = path.join(failDir, 'inner.pid');
     let survivorPid = 0;
+    let innerPid = 0;
     const failManager = new ShellJobManager({
       baseDir: failDir,
       taskkillImpl: async () => ({
@@ -778,11 +753,13 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
     });
     try {
       const job = failManager.launch({
-        command: 'Start-Sleep -Seconds 300',
+        command: buildInnerPidMarkerCommand(innerMarker),
         cwd: os.tmpdir(),
       });
       survivorPid = job.pid;
       expect(survivorPid).toBeGreaterThan(0);
+      innerPid = await readInnerPidFromMarker(innerMarker, 10000);
+      expect(innerPid).toBeGreaterThan(0);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const start = Date.now();
@@ -795,12 +772,12 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       const terminal = failManager.get(job.id);
       expect(terminal?.state).toBe('cancelled');
     } finally {
-      if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-        await forceReapWindows(survivorPid);
-      }
-      // dispose() rejects with ShellJobDisposalError by design when live
-      // survivors remain. Guarantee the temp dir is removed regardless, and
-      // surface the rejection via debugLogger instead of swallowing it.
+      // dispose() rejects with ShellJobDisposalError by design when the
+      // injected always-fail taskkill leaves survivors. The shared helper
+      // then directly reaps BOTH the outer pid and the inner PowerShell pid
+      // (which owns the redirected log handles), confirms each gone via
+      // tasklist, drains the outer-survivor count (supplemental), and removes
+      // the temp dir — fail-fast if anything never settles.
       try {
         await failManager.dispose();
       } catch (err) {
@@ -808,9 +785,11 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
           '[shellJobManager.test] failManager.dispose() rejected during teardown:',
           err instanceof Error ? err.message : String(err),
         );
-      } finally {
-        await removeWindowsTestDir(failDir);
       }
+      await reapAndRemoveWindowsTestDir(failDir, failManager, [
+        survivorPid,
+        innerPid,
+      ]);
     }
   });
 
@@ -857,17 +836,23 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
 
   it('dispose does not hang when taskkill never settles (G2)', async () => {
     const hangDir = fs.mkdtempSync(path.join(os.tmpdir(), 'g2-hang-'));
+    // A never-settling taskkill means the manager never reaps the tree, so the
+    // INNER PowerShell (which owns the redirected log handles) survives.
+    // Capture it via a marker so teardown reaps both outer + inner.
+    const innerMarker = path.join(hangDir, 'inner.pid');
     const hangManager = new ShellJobManager({
       baseDir: hangDir,
       taskkillImpl: (): Promise<TaskkillResult> => new Promise(() => {}),
     });
     let pid = 0;
+    let innerPid = 0;
     try {
       const job = hangManager.launch({
-        command: 'Start-Sleep -Seconds 300',
+        command: buildInnerPidMarkerCommand(innerMarker),
         cwd: os.tmpdir(),
       });
       pid = job.pid;
+      innerPid = await readInnerPidFromMarker(innerMarker, 10000);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const start = Date.now();
@@ -882,17 +867,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       // Must complete in bounded time, not hang forever.
       expect(elapsed).toBeLessThan(20000);
     } finally {
-      if (pid > 0 && isPidAliveWindows(pid)) {
-        await forceReapWindows(pid);
-      }
-      // Brief delay so the OS releases file handles held by the killed tree.
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      fs.rmSync(hangDir, {
-        recursive: true,
-        force: true,
-        maxRetries: 5,
-        retryDelay: 200,
-      });
+      await reapAndRemoveWindowsTestDir(hangDir, hangManager, [pid, innerPid]);
     }
   }, 30000);
 
@@ -925,17 +900,8 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       // taskkill must be called exactly once — serialized polls prevent overlap.
       expect(killCallCount).toBe(1);
     } finally {
-      if (pid > 0 && isPidAliveWindows(pid)) {
-        await forceReapWindows(pid);
-      }
       await slowManager.dispose();
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      fs.rmSync(slowDir, {
-        recursive: true,
-        force: true,
-        maxRetries: 5,
-        retryDelay: 200,
-      });
+      await reapAndRemoveWindowsTestDir(slowDir, slowManager, [pid]);
     }
   }, 45000);
 
@@ -974,7 +940,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
       expect(terminal?.exitCode).toBe(0);
     } finally {
       await reclaimManager.dispose();
-      fs.rmSync(reclaimDir, { recursive: true, force: true });
+      await reapAndRemoveWindowsTestDir(reclaimDir, reclaimManager, []);
     }
   });
 });
