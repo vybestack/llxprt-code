@@ -9,7 +9,7 @@
  * @requirement:REQ-INT-001.2
  *
  * Characterization tests for the client-surface contract. These pin the
- * OBSERVABLE behavior (history round-trip incl. clone + idle-wait,
+ * OBSERVABLE behavior (history round-trip incl. array isolation + idle-wait,
  * direct-message observable output, sendMessageStream event SEQUENCE) as
  * it exists TODAY so the P21 atomic cross-package flip provably preserves it.
  *
@@ -49,7 +49,7 @@ const contentArb = fc.array(
 );
 
 describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P20 @requirement:REQ-INT-001.2', () => {
-  describe('history round-trip with defensive clone', () => {
+  describe('history round-trip with array isolation', () => {
     it('returns equivalent content after addHistory → getHistory', () => {
       const harness = createFullLoopHarness(
         vi.fn(async function* () {
@@ -76,7 +76,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
       });
     });
 
-    it('returns a clone, not a live reference (mutating result does not mutate source)', () => {
+    it('returns array isolation with shared entry references (no deep clone)', () => {
       const harness = createFullLoopHarness(
         vi.fn(async function* () {
           yield {
@@ -88,19 +88,33 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
       const { chat } = harness;
       chat.clearHistory();
       chat.addHistory(makeUserContent('original'));
-      const raw = chat.getHistory();
-      const result = historyContent(raw);
-      expect(result.length).toBeGreaterThan(0);
-      const firstBlock = result[0].blocks[0];
-      const originalText = firstBlock.type === 'text' ? firstBlock.text : '';
-      // Mutate the result
-      (result[0].blocks as Array<{ text: string }>)[0].text = 'mutated';
-      // Re-read — the live history should be unchanged
+
+      // Two successive calls return distinct arrays
+      const raw1 = chat.getHistory();
       const raw2 = chat.getHistory();
-      const result2 = historyContent(raw2);
-      const firstBlock2 = result2[0].blocks[0];
-      const finalText = firstBlock2.type === 'text' ? firstBlock2.text : '';
-      expect(finalText).toBe(originalText);
+      expect(raw1).not.toBe(raw2);
+
+      // But the entries are shared by reference (no deep clone)
+      expect(raw1.length).toBe(raw2.length);
+      for (let i = 0; i < raw1.length; i++) {
+        expect(raw1[i]).toBe(raw2[i]);
+      }
+
+      // Array-level isolation only: getAll()/getCurated() each build a fresh
+      // array, so pushing or splicing the result cannot reach live history.
+      // This says nothing about entry contents — those are SHARED by reference
+      // (asserted above), so it does NOT show that entry.blocks is protected.
+      // See the contract comment on ConversationManager.getHistory.
+      (raw1 as IContent[]).push(makeModelContent('injected'));
+      const raw3 = chat.getHistory();
+      expect(raw3.length).toBe(raw2.length);
+
+      // The live history's content is unchanged
+      const result = historyContent(raw3);
+      expect(result[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'original',
+      });
     });
 
     it('property: history round-trip preserves block count for ANY history', () => {

@@ -14,7 +14,7 @@ import type { ToolCallRequestInfo } from '../core/turn.js';
 
 export interface ToolCallData<HistoryType = unknown, ArgsType = unknown> {
   history?: HistoryType;
-  clientHistory?: IContent[];
+  clientHistory?: readonly IContent[];
   commitHash?: string;
   toolCall: {
     name: string;

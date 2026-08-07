@@ -878,8 +878,7 @@ export class AgentImpl implements Agent {
   }
 
   async getHistory(): Promise<readonly AgentMessage[]> {
-    const client = this.deps.resolveClient();
-    return (await client.getHistory()) as readonly AgentMessage[];
+    return this.deps.resolveClient().getHistory();
   }
 
   async setHistory(

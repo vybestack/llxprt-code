@@ -87,7 +87,7 @@ export class AgentClient implements AgentClientContract {
   private sessionTurnCount = 0;
   private readonly MAX_TURNS = 100;
   private _pendingConfig?: ContentGeneratorConfig;
-  private _previousHistory?: IContent[];
+  private _previousHistory?: readonly IContent[];
   private _storedHistoryService?: HistoryService;
   private currentSequenceModel: string | null = null;
   private activeStreamCount = 0;
@@ -216,7 +216,8 @@ export class AgentClient implements AgentClientContract {
         this.sessionTurnCount++;
       },
       lazyInitialize: () => this.lazyInitialize(),
-      startChat: (extraHistory?) => this.startChat(extraHistory),
+      startChat: (extraHistory?: readonly IContent[]) =>
+        this.startChat(extraHistory),
       getPreviousHistory: () => this._previousHistory,
       setChat: (chat) => {
         this.chat = chat;
@@ -288,7 +289,8 @@ export class AgentClient implements AgentClientContract {
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
-    const previousHistory = this.chat?.getHistory() ?? this._previousHistory;
+    const previousHistory: readonly IContent[] | undefined =
+      this.chat?.getHistory() ?? this._previousHistory;
 
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
@@ -413,12 +415,12 @@ export class AgentClient implements AgentClientContract {
     return this.chat !== undefined && this.contentGenerator !== undefined;
   }
 
-  async getHistory(): Promise<IContent[]> {
+  async getHistory(): Promise<readonly IContent[]> {
     // If chat is initialized, get its current history (already neutral IContent[])
     if (this.hasChatInitialized()) {
       const chat = this.getChat() as unknown as {
         waitForIdle?: () => Promise<void>;
-        getHistory: () => IContent[];
+        getHistory: () => readonly IContent[];
       };
       if (typeof chat.waitForIdle === 'function') {
         await chat.waitForIdle();
@@ -427,7 +429,11 @@ export class AgentClient implements AgentClientContract {
     }
 
     if (this._previousHistory) {
-      return this._previousHistory;
+      // Fresh array so every branch of this accessor gives the caller the same
+      // membership-isolation guarantee the chat-backed branch does. `_previousHistory`
+      // is the live field, not a per-call snapshot, so returning it directly would
+      // let a caller splice the pending history.
+      return [...this._previousHistory];
     }
 
     if (this._storedHistoryService) {
@@ -441,10 +447,10 @@ export class AgentClient implements AgentClientContract {
   }
 
   async setHistory(
-    history: IContent[],
+    history: readonly IContent[],
     { stripThoughts = false }: { stripThoughts?: boolean } = {},
   ): Promise<void> {
-    const historyToSet = stripThoughts
+    const historyToSet: readonly IContent[] = stripThoughts
       ? history.map((content) => {
           const newContent = { ...content };
           newContent.blocks = newContent.blocks.map((block) => {
@@ -477,7 +483,7 @@ export class AgentClient implements AgentClientContract {
    * This is used when resuming a chat before authentication.
    * The history will be restored when lazyInitialize() is called.
    */
-  storeHistoryForLaterUse(history: IContent[]): void {
+  storeHistoryForLaterUse(history: readonly IContent[]): void {
     this.logger.debug('Storing history for later use', {
       historyLength: history.length,
     });
@@ -593,7 +599,7 @@ export class AgentClient implements AgentClientContract {
     this._previousHistory = [];
   }
 
-  async resumeChat(history: IContent[]): Promise<void> {
+  async resumeChat(history: readonly IContent[]): Promise<void> {
     this.chat = await this.startChat(history);
   }
 
@@ -608,7 +614,7 @@ export class AgentClient implements AgentClientContract {
    * @returns Promise that resolves when history is fully restored and chat is ready
    * @throws Error if initialization fails (e.g., auth not ready, config missing)
    */
-  async restoreHistory(historyItems: IContent[]): Promise<void> {
+  async restoreHistory(historyItems: readonly IContent[]): Promise<void> {
     this.logger.debug('restoreHistory called', {
       itemCount: historyItems.length,
       hasContentGenerator: !!this.contentGenerator,
@@ -703,7 +709,7 @@ export class AgentClient implements AgentClientContract {
     return this.getChat().generateDirectMessage(params, promptId);
   }
 
-  async startChat(extraHistory?: IContent[]): Promise<ChatSession> {
+  async startChat(extraHistory?: readonly IContent[]): Promise<ChatSession> {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
 

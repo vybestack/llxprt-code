@@ -25,7 +25,9 @@ import type { Config } from './config.js';
  * History IContent[] is external data that was serialized/deserialized,
  * so blocks are validated at this boundary.
  */
-export function stripThoughtSignatures(history: IContent[]): IContent[] {
+export function stripThoughtSignatures(
+  history: readonly IContent[],
+): IContent[] {
   return history.map((content) => ({
     ...content,
     blocks: content.blocks.map((block) => {
@@ -89,7 +91,7 @@ export async function extractExistingState(
   logger: DebugLogger,
   agentClient: AgentClientContract | null | undefined,
 ): Promise<{
-  history: IContent[];
+  history: readonly IContent[];
   historyService: ReturnType<AgentClientContract['getHistoryService']>;
 }> {
   if (agentClient === null || agentClient === undefined) {
@@ -179,7 +181,7 @@ export function buildNewContentGeneratorConfig(
 export function transferHistoryToNewClient(
   logger: DebugLogger,
   newAgentClient: AgentClientContract,
-  existingHistory: IContent[],
+  existingHistory: readonly IContent[],
   existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
   newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   previousVertexai: boolean | undefined,

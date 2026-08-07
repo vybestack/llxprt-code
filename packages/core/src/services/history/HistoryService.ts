@@ -590,7 +590,7 @@ export class HistoryService
   /**
    * Add multiple contents to the history
    */
-  addAll(contents: IContent[], modelName?: string): void {
+  addAll(contents: readonly IContent[], modelName?: string): void {
     for (const content of contents) {
       this.add(content, modelName);
     }
