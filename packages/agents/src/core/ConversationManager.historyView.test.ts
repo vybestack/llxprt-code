@@ -21,7 +21,7 @@
  */
 
 import * as fc from 'fast-check';
-import { describe, it, expect, beforeEach, vi } from '../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
