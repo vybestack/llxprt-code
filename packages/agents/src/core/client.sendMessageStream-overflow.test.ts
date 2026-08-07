@@ -256,6 +256,37 @@ describe('AgentClient (client.ts)', () => {
       getContextLimit: vi.fn(() => tokenLimit()),
     });
 
+    /** Builds a mock chat, installs it on the client, and returns it for assertion. */
+    const installMockChat = (
+      tokenCount: number,
+      extras: Partial<ChatSession> = {},
+    ): Partial<ChatSession> => {
+      const chat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        ...baselineFns(tokenCount),
+        ...extras,
+      };
+      client['chat'] = chat as ChatSession;
+      return chat;
+    };
+
+    /** Installs a generator whose countTokens always resolves to 0 tokens. */
+    const installCountTokensGenerator = (): void => {
+      client['contentGenerator'] = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      } as ContentGenerator;
+    };
+
+    /** Makes the mocked Turn yield a single Content "ok" event. */
+    const yieldOkStream = (): void => {
+      mockTurnRunFn.mockReturnValue(
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
+    };
+
     beforeEach(() => {
       (
         client as unknown as {
@@ -285,20 +316,13 @@ describe('AgentClient (client.ts)', () => {
       ).mockReturnValue(lastPromptTokenCount);
 
       // Mock the chat to return the lastPromptTokenCount
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      const mockChat = installMockChat(lastPromptTokenCount, {
         performCompression: vi
           .fn()
           .mockResolvedValue(PerformCompressionResult.FAILED),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // Remaining = 100. Threshold (95%) = 95.
       // We need a request > 95 tokens.
@@ -347,29 +371,19 @@ describe('AgentClient (client.ts)', () => {
         >
       ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: vi
           .fn()
           .mockReturnValue({ speaker: 'human', blocks: [] }),
         estimatePendingTokens: vi.fn().mockResolvedValue(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // A small "continue" request — remaining is -49,442.
       const request: ContentBlock[] = [{ type: 'text', text: 'continue' }];
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Act
       const stream = client.sendMessageStream(
@@ -404,22 +418,15 @@ describe('AgentClient (client.ts)', () => {
         >
       ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: vi.fn().mockReturnValue({
           speaker: 'tool',
           blocks: [],
         }),
         estimatePendingTokens: vi.fn().mockResolvedValue(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // Pure tool_response continuation — 0 tokens by text estimate.
       const request: ContentBlock[] = [
@@ -431,10 +438,7 @@ describe('AgentClient (client.ts)', () => {
         },
       ];
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Act
       const stream = client.sendMessageStream(
@@ -467,18 +471,11 @@ describe('AgentClient (client.ts)', () => {
       ).mockReturnValue(lastPromptTokenCount);
 
       const estimateSpy = vi.fn();
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         estimatePendingTokens: estimateSpy,
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       const request = [{ type: 'text' as const, text: 'continue' }];
 
@@ -512,19 +509,12 @@ describe('AgentClient (client.ts)', () => {
 
       const convertSpy = vi.fn();
       const estimateSpy = vi.fn();
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: convertSpy,
         estimatePendingTokens: estimateSpy,
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Act
       const stream = client.sendMessageStream(
@@ -559,17 +549,9 @@ describe('AgentClient (client.ts)', () => {
         >
       ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(lastPromptTokenCount);
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       // Build a tool_response payload large enough that its JSON/4 exceeds
       // the 95% threshold of the full limit (1000 * 0.95 = 950 tokens).
@@ -613,15 +595,11 @@ describe('AgentClient (client.ts)', () => {
         >
       ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
+      installMockChat(lastPromptTokenCount, {
         estimatePendingTokens: vi
           .fn()
           .mockRejectedValue(new Error('tokenizer unavailable')),
-      };
-      client['chat'] = mockChat as ChatSession;
+      });
 
       const request = [
         {
@@ -661,17 +639,9 @@ describe('AgentClient (client.ts)', () => {
         >
       ).mockReturnValue(lastPromptTokenCount);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(lastPromptTokenCount);
 
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })();
-      mockTurnRunFn.mockReturnValue(mockStream);
+      yieldOkStream();
 
       const request: ContentBlock[] = [
         { type: 'text', text: 'short' }, // 5 chars → 1 token
@@ -712,17 +682,9 @@ describe('AgentClient (client.ts)', () => {
           typeof uiTelemetryService.getLastPromptTokenCount
         >
       ).mockReturnValue(lastPromptTokenCount);
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(lastPromptTokenCount),
-      };
-      client['chat'] = mockChat as ChatSession;
+      const mockChat = installMockChat(lastPromptTokenCount);
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       // Remaining (sticky) = 100. Threshold (95%) = 95.
       // We need a request > 95 tokens.
@@ -758,11 +720,7 @@ describe('AgentClient (client.ts)', () => {
       );
 
       const lastPromptTokenCount = 10000;
-      const mockChat: Partial<ChatSession> = {
-        ...baselineFns(lastPromptTokenCount),
-        getHistory: vi.fn().mockReturnValue([]),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(lastPromptTokenCount);
 
       // Simulate a PDF file with large base64 data (11MB when encoded).
       // The client forwards binary-bearing requests without estimating them;
@@ -819,11 +777,7 @@ describe('AgentClient (client.ts)', () => {
         .mockReturnValueOnce(mockStream1)
         .mockReturnValueOnce(mockStream2);
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
@@ -887,11 +841,7 @@ describe('AgentClient (client.ts)', () => {
 
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-invalid-stream';
@@ -941,16 +891,9 @@ describe('AgentClient (client.ts)', () => {
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      installCountTokensGenerator();
 
       todoStoreReadMock.mockResolvedValue([]);
 
@@ -1007,11 +950,7 @@ describe('AgentClient (client.ts)', () => {
         })(),
       );
 
-      const mockChat: Partial<ChatSession> = {
-        getHistory: vi.fn().mockReturnValue([]),
-        ...baselineFns(0),
-      };
-      client['chat'] = mockChat as ChatSession;
+      installMockChat(0);
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-infinite-invalid-stream';

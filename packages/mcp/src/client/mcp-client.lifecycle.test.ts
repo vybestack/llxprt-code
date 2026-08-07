@@ -103,6 +103,35 @@ describe('mcp-client', () => {
     vi.restoreAllMocks();
   });
 
+  /** Wires a fake SDK client and an empty stdio transport onto the mocks. */
+  const stubSdkClient = (sdkClient: unknown): void => {
+    (
+      ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
+    ).mockReturnValue(sdkClient);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      {} as SdkClientStdioLib.StdioClientTransport,
+    );
+  };
+
+  /** Builds an McpClient with the suite's fixed server, command, and version. */
+  const buildClient = (
+    toolRegistry: ToolRegistry,
+    promptRegistry: PromptRegistry,
+    resourceRegistry: ResourceRegistry,
+    config: Config,
+  ): McpClient =>
+    new McpClient(
+      'test-server',
+      { command: 'test-command' },
+      toolRegistry,
+      promptRegistry,
+      resourceRegistry,
+      workspaceContext,
+      config,
+      false,
+      '0.0.1',
+    );
+
   describe('McpClient', () => {
     it('promptly cancels a never-settling CONNECTING handshake', async () => {
       const transport = { close: vi.fn().mockResolvedValue(undefined) };
@@ -122,18 +151,13 @@ describe('mcp-client', () => {
       ).mockReturnValue(
         transport as unknown as SdkClientStdioLib.StdioClientTransport,
       );
-      const client = new McpClient(
-        'test-server',
-        { command: 'test-command' },
+      const client = buildClient(
         {
           removeMcpToolsByServer: vi.fn(),
         } as unknown as ToolRegistry,
         { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
         createMockResourceRegistry(),
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
 
       const connectPromise = client.connect();
@@ -172,12 +196,7 @@ describe('mcp-client', () => {
           return Promise.resolve({ prompts: [] });
         }),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
+      stubSdkClient(mockedClient);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
         sortTools: vi.fn(),
@@ -187,18 +206,11 @@ describe('mcp-client', () => {
         setResourcesForServer: vi.fn(),
         removeResourcesByServer: vi.fn(),
       } as unknown as ResourceRegistry;
-      const client = new McpClient(
-        'test-server',
-        {
-          command: 'test-command',
-        },
+      const client = buildClient(
         mockedToolRegistry,
         {} as PromptRegistry,
         mockedResourceRegistry,
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -264,12 +276,7 @@ describe('mcp-client', () => {
           return Promise.resolve({ prompts: [] });
         }),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
+      stubSdkClient(mockedClient);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
         sortTools: vi.fn(),
@@ -279,18 +286,11 @@ describe('mcp-client', () => {
         setResourcesForServer: vi.fn(),
         removeResourcesByServer: vi.fn(),
       } as unknown as ResourceRegistry;
-      const client = new McpClient(
-        'test-server',
-        {
-          command: 'test-command',
-        },
+      const client = buildClient(
         mockedToolRegistry,
         {} as PromptRegistry,
         mockedResourceRegistry,
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -342,29 +342,17 @@ describe('mcp-client', () => {
           return Promise.resolve({ prompts: [] });
         }),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
+      stubSdkClient(mockedClient);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
         sortTools: vi.fn(),
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
-      const client = new McpClient(
-        'test-server',
-        {
-          command: 'test-command',
-        },
+      const client = buildClient(
         mockedToolRegistry,
         {} as PromptRegistry,
         createMockResourceRegistry(),
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
 
       await client.connect();
@@ -394,22 +382,12 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn(),
         getServerCapabilities: vi.fn().mockReturnValue({}),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      const client = new McpClient(
-        'test-server',
-        { command: 'test-command' },
+      stubSdkClient(mockedClient);
+      const client = buildClient(
         {} as ToolRegistry,
         {} as PromptRegistry,
         createMockResourceRegistry(),
-        workspaceContext,
         createConfig(() => trusted),
-        false,
-        '0.0.1',
       );
       await client.connect();
 
@@ -428,24 +406,12 @@ describe('mcp-client', () => {
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      const client = new McpClient(
-        'test-server',
-        {
-          command: 'test-command',
-        },
+      stubSdkClient(mockedClient);
+      const client = buildClient(
         {} as ToolRegistry,
         {} as PromptRegistry,
         createMockResourceRegistry(),
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
 
       await expect(
@@ -500,12 +466,7 @@ describe('mcp-client', () => {
           return Promise.resolve({});
         }),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
+      stubSdkClient(mockedClient);
       const toolRegistry = {
         registerTool: vi.fn(),
         sortTools: vi.fn(),
@@ -513,16 +474,11 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const resourceRegistry = createMockResourceRegistry();
-      const client = new McpClient(
-        'test-server',
-        { command: 'test-command' },
+      const client = buildClient(
         toolRegistry,
         {} as PromptRegistry,
         resourceRegistry,
-        workspaceContext,
         createConfig(() => trusted),
-        false,
-        '0.0.1',
       );
       await client.connect();
 
@@ -597,15 +553,8 @@ describe('mcp-client', () => {
           return Promise.resolve({});
         }),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      const client = new McpClient(
-        'test-server',
-        { command: 'test-command' },
+      stubSdkClient(mockedClient);
+      const client = buildClient(
         {
           registerTool: (tool: (typeof registeredTools)[number]) => {
             registeredTools.push(tool);
@@ -621,10 +570,7 @@ describe('mcp-client', () => {
           removePromptsByServer: vi.fn(),
         } as unknown as PromptRegistry,
         createMockResourceRegistry(),
-        workspaceContext,
         createConfig(() => trusted),
-        false,
-        '0.0.1',
       );
       await client.connect();
       await client.discover(createConfig(() => trusted));
@@ -694,12 +640,7 @@ describe('mcp-client', () => {
           ],
         }),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
+      stubSdkClient(mockedClient);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
         unregisterTool: vi.fn(),
@@ -716,18 +657,11 @@ describe('mcp-client', () => {
         setResourcesForServer: vi.fn(),
         removeResourcesByServer: vi.fn(),
       } as unknown as ResourceRegistry;
-      const client = new McpClient(
-        'test-server',
-        {
-          command: 'test-command',
-        },
+      const client = buildClient(
         mockedToolRegistry,
         mockedPromptRegistry,
         mockedResourceRegistry,
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -775,12 +709,7 @@ describe('mcp-client', () => {
           throw new Error('original handler failed');
         }) as ((error: Error) => void) | undefined,
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
+      stubSdkClient(mockedClient);
       const mockedToolRegistry = {
         registerTool: vi.fn(),
         sortTools: vi.fn(),
@@ -795,18 +724,11 @@ describe('mcp-client', () => {
         setResourcesForServer: vi.fn(),
         removeResourcesByServer: vi.fn(),
       } as unknown as ResourceRegistry;
-      const client = new McpClient(
-        'test-server',
-        {
-          command: 'test-command',
-        },
+      const client = buildClient(
         mockedToolRegistry,
         mockedPromptRegistry,
         mockedResourceRegistry,
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -847,22 +769,12 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn(),
         setNotificationHandler: vi.fn(),
       };
-      (
-        ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedClient as unknown as ClientLib.Client);
-      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-        {} as SdkClientStdioLib.StdioClientTransport,
-      );
-      const client = new McpClient(
-        'test-server',
-        { command: 'test-command' },
+      stubSdkClient(mockedClient);
+      const client = buildClient(
         { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
         { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
         createMockResourceRegistry(),
-        workspaceContext,
         createTrustedConfig(),
-        false,
-        '0.0.1',
       );
 
       const connectPromise = client.connect();

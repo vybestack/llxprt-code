@@ -156,6 +156,42 @@ describe('HookRunner', () => {
     vi.restoreAllMocks();
   });
 
+  /** Configures mockProcessOn to fire the `close` event with the given exit code. */
+  const onClose = (
+    exitCode: number,
+    schedule: (cb: () => void) => void = (cb) => setTimeout(cb, 20),
+  ): void => {
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          schedule(() => callback(exitCode));
+        }
+      },
+    );
+  };
+
+  /** Configures mockStdoutOn to emit `data` with the given payload. */
+  const onStdoutData = (data: string, delay = 10): void => {
+    mockSpawn.mockStdoutOn.mockImplementation(
+      (event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data') {
+          setTimeout(() => callback(Buffer.from(data)), delay);
+        }
+      },
+    );
+  };
+
+  /** Configures mockStderrOn to emit `data` with the given payload. */
+  const onStderrData = (data: string, delay = 10): void => {
+    mockSpawn.mockStderrOn.mockImplementation(
+      (event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data') {
+          setTimeout(() => callback(Buffer.from(data)), delay);
+        }
+      },
+    );
+  };
+
   describe('executeHook', () => {
     describe('command hooks', () => {
       const commandConfig: HookConfig = {
@@ -220,13 +256,7 @@ describe('HookRunner', () => {
           },
         );
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setTimeout(() => callback(0), 20);
-            }
-          },
-        );
+        onClose(0);
 
         const result = await hookRunner.executeHook(
           commandConfig,
@@ -253,13 +283,7 @@ describe('HookRunner', () => {
           },
         );
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setTimeout(() => callback(1), 20);
-            }
-          },
-        );
+        onClose(1);
 
         const result = await hookRunner.executeHook(
           commandConfig,
@@ -412,13 +436,7 @@ describe('HookRunner', () => {
           command: '$LLXPRT_PROJECT_DIR/hooks/test.sh',
         };
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setImmediate(() => callback(0));
-            }
-          },
-        );
+        onClose(0, (cb) => setImmediate(cb));
 
         await hookRunner.executeHook(
           configWithEnvVar,
@@ -464,13 +482,7 @@ describe('HookRunner', () => {
           command: 'ls $LLXPRT_PROJECT_DIR',
         };
 
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              setImmediate(() => callback(0));
-            }
-          },
-        );
+        onClose(0, (cb) => setImmediate(cb));
 
         await hookRunner.executeHook(
           config,
@@ -505,13 +517,7 @@ describe('HookRunner', () => {
       ];
 
       // Mock both commands to succeed
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 10);
-          }
-        },
-      );
+      onClose(0, (cb) => setTimeout(cb, 10));
 
       const results = await hookRunner.executeHooksParallel(
         configs,
@@ -753,13 +759,7 @@ describe('HookRunner', () => {
         { type: HookType.Command, command: './hook2.sh' },
       ];
 
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from('Hook failed')), 10);
-          }
-        },
-      );
+      onStderrData('Hook failed');
 
       mockSpawn.mockProcessOn.mockImplementation(
         (event: string, callback: (code: number) => void) => {
@@ -800,21 +800,9 @@ describe('HookRunner', () => {
     it('should handle invalid JSON output gracefully', async () => {
       const invalidJson = '{ "decision": "allow", incomplete';
 
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(invalidJson)), 10);
-          }
-        },
-      );
+      onStdoutData(invalidJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -834,21 +822,9 @@ describe('HookRunner', () => {
     it('should handle malformed JSON with exit code 0', async () => {
       const malformedJson = 'not json at all';
 
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(malformedJson)), 10);
-          }
-        },
-      );
+      onStdoutData(malformedJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -866,21 +842,9 @@ describe('HookRunner', () => {
     it('should handle invalid JSON with exit code 1 (non-blocking error)', async () => {
       const invalidJson = '{ broken json';
 
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(invalidJson)), 10);
-          }
-        },
-      );
+      onStderrData(invalidJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(1), 20);
-          }
-        },
-      );
+      onClose(1);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -899,21 +863,9 @@ describe('HookRunner', () => {
     it('should handle invalid JSON with exit code 2 (blocking error)', async () => {
       const invalidJson = '{ "error": incomplete';
 
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(invalidJson)), 10);
-          }
-        },
-      );
+      onStderrData(invalidJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(2), 20);
-          }
-        },
-      );
+      onClose(2);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -930,21 +882,9 @@ describe('HookRunner', () => {
     });
 
     it('should handle empty JSON output', async () => {
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from('')), 10);
-          }
-        },
-      );
+      onStdoutData('');
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,
@@ -961,21 +901,9 @@ describe('HookRunner', () => {
       const mockOutput = { decision: 'allow', reason: 'All good' };
       const doubleEncodedJson = JSON.stringify(JSON.stringify(mockOutput));
 
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback(Buffer.from(doubleEncodedJson)), 10);
-          }
-        },
-      );
+      onStdoutData(doubleEncodedJson);
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      onClose(0);
 
       const result = await hookRunner.executeHook(
         commandConfig,

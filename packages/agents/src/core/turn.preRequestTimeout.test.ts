@@ -122,6 +122,20 @@ function createStreamWithStalledFirstNext(): AsyncGenerator<{
   })();
 }
 
+/** Starts a Turn run in the background, returning the collected events and the pending promise. */
+function startRun(
+  turn: Turn,
+  signal: AbortSignal = new AbortController().signal,
+): { events: ServerAgentStreamEvent[]; runPromise: Promise<void> } {
+  const events: ServerAgentStreamEvent[] = [];
+  const runPromise = (async () => {
+    for await (const event of turn.run([{ text: 'Hi' }], signal)) {
+      events.push(event);
+    }
+  })();
+  return { events, runPromise };
+}
+
 describe('Turn - first-response timeout (issue #2379)', () => {
   const originalEnv = process.env;
 
@@ -145,16 +159,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     // Before the default timeout: no events, generator still pending.
     await advanceTimersByTimeAsync(
@@ -213,16 +218,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
     mockSendMessageStream.mockReturnValue(new Promise(() => {}));
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
@@ -240,16 +236,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const iterator = turn.run(reqParts, signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
@@ -286,15 +273,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
         }),
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
@@ -457,15 +436,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
     await advanceTimersByTimeAsync(0);
     await secondTransport;
     await advanceTimersByTimeAsync(25);
@@ -508,15 +479,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
@@ -579,15 +542,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       [Symbol.asyncIterator]: () => leakyIterator,
     });
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
-    const signal = new AbortController().signal;
-
-    const runPromise = (async () => {
-      for await (const event of turn.run(reqParts, signal)) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     // Let the timeout win the race first.
     await advanceTimersByTimeAsync(25);
@@ -628,15 +583,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       [Symbol.asyncIterator]: () => iterator,
     });
 
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }],
-        new AbortController().signal,
-      )) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
 
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
@@ -668,13 +615,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockImplementation(() =>
       acquisitionGate.then(() => ({ [Symbol.asyncIterator]: () => iterator })),
     );
-    const events: ServerAgentStreamEvent[] = [];
-    const signal = new AbortController().signal;
-    const runPromise = (async () => {
-      for await (const event of turn.run([{ text: 'Hi' }], signal)) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
     await runPromise;
@@ -707,13 +648,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockResolvedValue({
       [Symbol.asyncIterator]: () => iterator,
     });
-    const events: ServerAgentStreamEvent[] = [];
-    const signal = new AbortController().signal;
-    const runPromise = (async () => {
-      for await (const event of turn.run([{ text: 'Hi' }], signal)) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn);
     await advanceTimersByTimeAsync(25);
     await runAllTimersAsync();
     await runPromise;
@@ -895,16 +830,8 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
     );
 
-    const events: ServerAgentStreamEvent[] = [];
-    const reqParts = [{ text: 'Hi' }];
     const abortController = new AbortController();
-
-    const iterator = turn.run(reqParts, abortController.signal);
-    const runPromise = (async () => {
-      for await (const event of iterator) {
-        events.push(event);
-      }
-    })();
+    const { events, runPromise } = startRun(turn, abortController.signal);
 
     // Let the generator body start and reach the first-response wait (past the
     // pre-flight signal.aborted check) BEFORE aborting, so the abort is

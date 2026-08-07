@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  createMockAuthProvider,
+  createMockTokenStorage,
+  createMockedClient,
+  silenceConsole,
+} from './mcp-client.oauth.fixtures.js';
 import { automock } from '../../../test-utils/src/automock.js';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
@@ -84,15 +90,22 @@ describe('connectToMcpServer with OAuth', () => {
   let mockAuthProvider: MCPOAuthProvider;
   let mockTokenStorage: MCPOAuthTokenStorage;
 
+  /** Connects the suite's standard server, varying only config and signal. */
+  const connectTestServer = (
+    config: Parameters<typeof connectToMcpServer>[2],
+    signal?: AbortSignal,
+  ): ReturnType<typeof connectToMcpServer> =>
+    connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      config,
+      false,
+      workspaceContext,
+      signal,
+    );
+
   beforeEach(() => {
-    mockedClient = {
-      connect: vi.fn(),
-      close: vi.fn(),
-      registerCapabilities: vi.fn(),
-      setRequestHandler: vi.fn(),
-      onclose: vi.fn(),
-      notification: vi.fn(),
-    } as unknown as ClientLib.Client;
+    mockedClient = createMockedClient();
     (
       ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation(() => mockedClient);
@@ -101,22 +114,13 @@ describe('connectToMcpServer with OAuth', () => {
       path.join(os.tmpdir(), 'gemini-agent-test-'),
     );
     workspaceContext = new WorkspaceContext(testWorkspace);
+    silenceConsole();
 
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    mockTokenStorage = {
-      getCredentials: vi.fn().mockResolvedValue({ clientId: 'test-client' }),
-    } as unknown as MCPOAuthTokenStorage;
+    mockTokenStorage = createMockTokenStorage();
     (
       MCPOAuthTokenStorage as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(mockTokenStorage);
-    mockAuthProvider = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      getValidToken: vi.fn().mockResolvedValue('test-access-token'),
-      tokenStorage: mockTokenStorage,
-    } as unknown as MCPOAuthProvider;
+    mockAuthProvider = createMockAuthProvider(mockTokenStorage);
     (
       MCPOAuthProvider as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(mockAuthProvider);
@@ -147,12 +151,8 @@ describe('connectToMcpServer with OAuth', () => {
     const controller = new AbortController();
     controller.abort();
 
-    const connection = connectToMcpServer(
-      '0.0.1',
-      'test-server',
+    const connection = connectTestServer(
       { command: 'test-command' },
-      false,
-      workspaceContext,
       controller.signal,
     );
     const outcome = connection.then(
@@ -180,13 +180,7 @@ describe('connectToMcpServer with OAuth', () => {
     ).mockRejectedValue(new Error('primary connection failure'));
 
     await expect(
-      connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { command: 'test-command' },
-        false,
-        workspaceContext,
-      ),
+      connectTestServer({ command: 'test-command' }),
     ).rejects.toThrow('primary connection failure');
     expect(transport.close).toHaveBeenCalledOnce();
   });
@@ -221,12 +215,8 @@ describe('connectToMcpServer with OAuth', () => {
     });
     const controller = new AbortController();
 
-    const connection = connectToMcpServer(
-      '0.0.1',
-      'test-server',
+    const connection = connectTestServer(
       { command: 'test-command' },
-      false,
-      workspaceContext,
       controller.signal,
     );
     const outcome = connection.then(
@@ -279,12 +269,8 @@ describe('connectToMcpServer with OAuth', () => {
     });
     const controller = new AbortController();
 
-    const outcome = connectToMcpServer(
-      '0.0.1',
-      'test-server',
+    const outcome = connectTestServer(
       { command: 'test-command' },
-      false,
-      workspaceContext,
       controller.signal,
     ).then(
       () => 'resolved',
@@ -323,14 +309,7 @@ describe('connectToMcpServer with OAuth', () => {
 
     let failure: unknown;
     try {
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { command: 'test-command' },
-        false,
-        workspaceContext,
-        controller.signal,
-      );
+      await connectTestServer({ command: 'test-command' }, controller.signal);
     } catch (error) {
       failure = error;
     }
@@ -358,13 +337,7 @@ describe('connectToMcpServer with OAuth', () => {
       return Promise.resolve();
     });
 
-    const client = await connectToMcpServer(
-      '0.0.1',
-      'test-server',
-      { httpUrl: serverUrl },
-      false,
-      workspaceContext,
-    );
+    const client = await connectTestServer({ httpUrl: serverUrl });
 
     expect(client).toBe(mockedClient);
     // First connect rejects with 401, second connect succeeds with stored token
@@ -387,15 +360,9 @@ describe('connectToMcpServer with OAuth', () => {
       mockedClient.connect as Mock<typeof mockedClient.connect>
     ).mockRejectedValueOnce(new Error('401 Unauthorized'));
 
-    await expect(
-      connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { httpUrl: serverUrl },
-        false,
-        workspaceContext,
-      ),
-    ).rejects.toThrow(/requires OAuth authentication/);
+    await expect(connectTestServer({ httpUrl: serverUrl })).rejects.toThrow(
+      /requires OAuth authentication/,
+    );
 
     // Only initial connect is attempted
     expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -421,13 +388,7 @@ describe('connectToMcpServer with OAuth', () => {
         return Promise.resolve();
       });
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { httpUrl: serverUrl },
-        false,
-        workspaceContext,
-      );
+      await connectTestServer({ httpUrl: serverUrl });
 
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
@@ -447,13 +408,7 @@ describe('connectToMcpServer with OAuth', () => {
         return Promise.resolve();
       });
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: serverUrl },
-        false,
-        workspaceContext,
-      );
+      await connectTestServer({ url: serverUrl });
 
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
@@ -475,13 +430,7 @@ describe('connectToMcpServer with OAuth', () => {
           return Promise.resolve();
         });
 
-        await connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: serverUrl, type },
-          false,
-          workspaceContext,
-        );
+        await connectTestServer({ url: serverUrl, type });
 
         expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
       },
@@ -502,13 +451,7 @@ describe('connectToMcpServer with OAuth', () => {
         return Promise.resolve();
       });
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: serverUrl, type: 'sse' },
-        false,
-        workspaceContext,
-      );
+      await connectTestServer({ url: serverUrl, type: 'sse' });
 
       expect(capturedTransport).toBeInstanceOf(SSEClientTransport);
     });
@@ -588,15 +531,9 @@ describe('connectToMcpServer with OAuth', () => {
         mockedClient.connect as Mock<typeof mockedClient.connect>
       ).mockRejectedValueOnce(new Error('404 Not Found'));
 
-      await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: serverUrl },
-          false,
-          workspaceContext,
-        ),
-      ).rejects.toThrow(/404/);
+      await expect(connectTestServer({ url: serverUrl })).rejects.toThrow(
+        /404/,
+      );
 
       // Should only try once (no SSE fallback on 404)
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -611,13 +548,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('Connection refused'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: serverUrl, type: 'http' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: serverUrl, type: 'http' }),
       ).rejects.toThrow(/Connection refused/);
 
       // Should only try once (no fallback with explicit type)
@@ -638,13 +569,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('Connection failed'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { httpUrl: 'http://test-server.com' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ httpUrl: 'http://test-server.com' }),
       ).rejects.toThrow(/Connection failed/);
 
       expect(mockTransport.close).toHaveBeenCalled();
@@ -657,13 +582,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('Network timeout'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { httpUrl: 'http://test-server.com' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ httpUrl: 'http://test-server.com' }),
       ).rejects.toThrow(/Network timeout/);
 
       // Check that the OAuth flag wasn't set
@@ -679,13 +598,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('HTTP 404'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: 'http://test-server.com/mcp' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: 'http://test-server.com/mcp' }),
       ).rejects.toThrow(/404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -697,13 +610,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('Not Found'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: 'http://test-server.com/mcp' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: 'http://test-server.com/mcp' }),
       ).rejects.toThrow(/Not Found/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -776,13 +683,7 @@ describe('connectToMcpServer with OAuth', () => {
         .mockRejectedValueOnce(new Error('Server returned error code 4040'))
         .mockResolvedValueOnce(undefined); // SSE fallback succeeds
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: 'http://test-server.com/mcp' },
-        false,
-        workspaceContext,
-      );
+      await connectTestServer({ url: 'http://test-server.com/mcp' });
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(2);
     });
@@ -803,13 +704,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(error404);
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: 'http://test-server.com/mcp' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: 'http://test-server.com/mcp' }),
       ).rejects.toThrow(/Request failed/);
 
       // Should NOT attempt SSE fallback because it's a real 404
@@ -823,13 +718,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('HTTP 404 Not Found'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: 'http://test-server.com/mcp' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: 'http://test-server.com/mcp' }),
       ).rejects.toThrow(/404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -841,13 +730,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockRejectedValueOnce(new Error('Request failed with status 404'));
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: 'http://test-server.com/mcp' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: 'http://test-server.com/mcp' }),
       ).rejects.toThrow(/status 404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -866,13 +749,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: SSE_DEPRECATED_URL, type: 'sse' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: SSE_DEPRECATED_URL, type: 'sse' }),
       ).rejects.toThrow(/no longer supported/);
     });
 
@@ -884,13 +761,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: SSE_DEPRECATED_URL, type: 'sse' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: SSE_DEPRECATED_URL, type: 'sse' }),
       ).rejects.toThrow(/https:\/\/mcp\.test-server\.com\/mcp/);
     });
 
@@ -902,13 +773,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { url: 'http://example.com/sse', type: 'sse' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ url: 'http://example.com/sse', type: 'sse' }),
       ).rejects.toThrow(/streamable-http/);
     });
 
@@ -920,13 +785,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await expect(
-        connectToMcpServer(
-          '0.0.1',
-          'test-server',
-          { command: 'test-command' },
-          false,
-          workspaceContext,
-        ),
+        connectTestServer({ command: 'test-command' }),
       ).rejects.toThrow(
         /Connection failed for 'test-server': SSE is no longer supported/,
       );

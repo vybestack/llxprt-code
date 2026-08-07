@@ -87,6 +87,10 @@ function createDeferred<T>(): Deferred<T> {
 
 const CLIENT_VERSION = '0.0.1';
 
+/** Builds a manager wired to a fresh tool registry derived from config. */
+const createManager = (config: Config): McpClientManager =>
+  new McpClientManager(CLIENT_VERSION, createToolRegistry(config), config);
+
 describe('McpClientManager trust transitions', () => {
   beforeEach(() => {
     mockedMcpClient().mockReset();
@@ -102,11 +106,7 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient().mockReturnValue(client);
 
       const config = createMockConfig();
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       await manager.onFolderTrustGained();
 
@@ -120,11 +120,7 @@ describe('McpClientManager trust transitions', () => {
 
       const refreshMcpContext = vi.fn();
       const config = createMockConfig({ refreshMcpContext });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
       await manager.stop();
 
       await manager.onFolderTrustGained();
@@ -141,11 +137,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({}),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       await manager.onFolderTrustGained();
 
@@ -201,11 +193,7 @@ describe('McpClientManager trust transitions', () => {
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
       const config = createMockConfig();
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
       await manager.startConfiguredMcpServers();
 
       manager.quarantineForTrustRevocation();
@@ -301,11 +289,7 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient().mockReturnValue(clientA);
 
       const config = createMockConfig();
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       await manager.startConfiguredMcpServers();
       expect(manager.getMcpServerCount()).toBeGreaterThan(0);
@@ -320,11 +304,7 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient().mockReturnValue(client);
 
       const config = createMockConfig();
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       await manager.onFolderTrustRevoked();
 
@@ -358,11 +338,7 @@ describe('McpClientManager trust transitions', () => {
           }
         },
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
       await manager.startConfiguredMcpServers();
       failRefresh = true;
       events.length = 0;
@@ -388,11 +364,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
       await manager.startConfiguredMcpServers();
 
       manager.quarantineForTrustRevocation();
@@ -456,11 +428,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
       await manager.startConfiguredMcpServers();
 
       await expect(manager.stop()).rejects.toMatchObject({
@@ -506,11 +474,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       void manager.startConfiguredMcpServers();
       await waitFor(() => expect(client.connect).toHaveBeenCalledOnce());
@@ -634,11 +598,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       await manager.startConfiguredMcpServers();
       await manager.stop();
@@ -661,11 +621,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       // Start discovery (in-flight, stuck at connect)
       void manager.startConfiguredMcpServers();
@@ -703,11 +659,7 @@ describe('McpClientManager trust transitions', () => {
         getMcpServers: () => ({ 'server-a': {} }),
         isTrustedFolder: () => trusted,
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       // Start discovery (in-flight, stuck at connect)
       void manager.startConfiguredMcpServers();
@@ -794,11 +746,7 @@ describe('McpClientManager trust transitions', () => {
           },
         ],
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       await manager.startConfiguredMcpServers();
       expect(client.connect).not.toHaveBeenCalled();
@@ -835,11 +783,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       // Start discovery — stuck at connect
       void manager.startConfiguredMcpServers();
@@ -926,11 +870,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        createToolRegistry(config),
-        config,
-      );
+      const manager = createManager(config);
 
       void manager.startConfiguredMcpServers();
       await discoveryStarted.promise;
