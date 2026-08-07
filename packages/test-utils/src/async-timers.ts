@@ -30,16 +30,23 @@ const MAX_DRAIN_PASSES = 10_000;
 const MICROTASK_DRAIN_ROUNDS = 20;
 
 /**
- * Drains microtasks queued by timer callbacks, then yields one real macrotask.
+ * Drains microtasks queued by timer callbacks.
  *
- * The chained `Promise.resolve()` rounds are what actually settle recursively
- * queued continuations; the trailing `setImmediate` is a final settling
- * boundary. Doing the microtask rounds first matters on Linux, where
- * `setImmediate` may not fire at all while fake timers are installed.
+ * The chained `Promise.resolve()` rounds are what settle recursively queued
+ * continuations, and they are sufficient while fake timers are installed.
+ *
+ * The macrotask yield is deliberately skipped in that case. Bun fakes
+ * `setImmediate` along with the rest of the timer queue, and on Linux it then
+ * never fires, so awaiting it hangs until the per-test timeout rather than
+ * settling anything. Capturing the callback before the fakes are installed
+ * does not help: the interception is at the queue, not the binding.
  */
 async function flushPendingTasks(): Promise<void> {
   for (let round = 0; round < MICROTASK_DRAIN_ROUNDS; round++) {
     await Promise.resolve();
+  }
+  if (vi.isFakeTimers()) {
+    return;
   }
   await new Promise<void>((resolve) => {
     realSetImmediate(resolve);
