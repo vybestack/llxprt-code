@@ -219,8 +219,13 @@ describe('core Bun test runner process lifecycle', () => {
     expect(generateJUnit(results)).toContain('Timed out after 3s');
   });
 
+  // taskkill reports a nonzero code for a pid it cannot find, which is the
+  // normal outcome when the tree exits between the timeout firing and the
+  // reap running. That is the Windows analogue of POSIX ESRCH: the invariant
+  // the reap exists to establish — nothing left alive holding the pipes — is
+  // already satisfied, so it must succeed rather than abort the whole run.
   it.skipIf(process.platform !== 'win32')(
-    'reports a Windows reaping failure when the root process has already exited',
+    'treats an already-exited Windows root process as successfully reaped',
     async () => {
       const child = spawn(process.execPath, ['-e', 'process.exit(0)'], {
         stdio: 'ignore',
@@ -233,7 +238,7 @@ describe('core Bun test runner process lifecycle', () => {
           reapTimeoutMs: 5000,
           taskkillTimeoutMs: 5000,
         }),
-      ).rejects.toThrow(/taskkill \/T \/F \/PID \d+ exited with code 128/);
+      ).resolves.toBeUndefined();
     },
     15_000,
   );

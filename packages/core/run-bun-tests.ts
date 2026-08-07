@@ -199,10 +199,31 @@ export async function killChildTreeAndWait(
     if (taskkillError !== null) {
       throw taskkillError;
     }
+    // A nonzero taskkill code is not by itself a reap failure: the usual cause
+    // is that the tree already exited between the timeout firing and taskkill
+    // running, which is the POSIX ESRCH case handled below. What matters is
+    // the invariant — that nothing is left alive holding the child's pipes —
+    // so verify that directly by waiting for close, and report the code only
+    // if the tree genuinely outlives the reap.
     if (taskkillCode !== 0) {
-      throw new Error(
-        `taskkill /T /F /PID ${pid} exited with code ${taskkillCode}`,
-      );
+      try {
+        await withTimeout(
+          childClosed,
+          options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+          `Timed-out child (pid ${pid}) close lifecycle`,
+        );
+      } catch (closeError) {
+        throw new AggregateError(
+          [
+            new Error(
+              `taskkill /T /F /PID ${pid} exited with code ${taskkillCode}`,
+            ),
+            closeError,
+          ],
+          `taskkill for test process ${pid} reported failure and its tree did not close`,
+        );
+      }
+      return;
     }
   } else {
     // POSIX: kill the entire per-test process group by negative PID. The
