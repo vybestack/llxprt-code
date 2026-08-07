@@ -537,9 +537,9 @@ export class AgenticLoop {
       yield { kind: 'stream', event };
       if (event.type === AgentEventType.ToolCallRequest) {
         toolCallRequests.push(event.value);
-        continue;
-      }
-      if (isTerminalStreamOutcome(event.type)) {
+      } else if (event.type === AgentEventType.Retry) {
+        toolCallRequests.length = 0;
+      } else if (isTerminalStreamOutcome(event.type)) {
         toolCallRequests.length = 0;
         shouldScheduleTools = false;
       }
