@@ -11,7 +11,7 @@
  */
 
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 export interface TokenCounts {
   input_token_count: number;

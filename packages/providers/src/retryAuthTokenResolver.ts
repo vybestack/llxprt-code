@@ -5,7 +5,7 @@
  */
 
 import type { GenerateChatOptions } from './IProvider.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 /**
  * Resolves the auth token from options (handles string, object with

@@ -19,7 +19,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import { buildEphemeralsSnapshot } from '../runtimeNormalizer.js';

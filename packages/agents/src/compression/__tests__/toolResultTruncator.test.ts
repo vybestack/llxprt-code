@@ -12,7 +12,7 @@ import type {
   ContentBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   rankToolResponses,
   createTruncationStub,

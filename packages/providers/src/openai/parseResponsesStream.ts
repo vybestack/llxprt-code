@@ -11,7 +11,7 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { isAcceptedTerminalEventType } from './responsesTerminalEvents.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';

@@ -20,7 +20,7 @@ import type {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 async function buildLightweightSystemPrompt(
   config: Config,

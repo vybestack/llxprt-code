@@ -12,7 +12,7 @@
  */
 
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { createHash } from 'node:crypto';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
 import { raceWithAbort } from '../utils/abortSignal.js';

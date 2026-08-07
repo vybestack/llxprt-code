@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const logger = new DebugLogger('llxprt:openai:codex:usage');

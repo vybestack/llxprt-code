@@ -9,7 +9,7 @@ import {
   type IdeContext,
   type File,
 } from '@vybestack/llxprt-code-ide-integration';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { DebugModeSource } from '../config/capabilities.js';
 
 /**

@@ -38,7 +38,7 @@ import {
   type StreamEvent,
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import {
   parseThought,

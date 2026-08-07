@@ -9,7 +9,7 @@
  * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
  * @pseudocode agent-runtime-context.md lines 92-101
  */
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';

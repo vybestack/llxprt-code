@@ -6,7 +6,7 @@
 
 import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 export type TokenEstimatorType =
   | 'openai-tiktoken'

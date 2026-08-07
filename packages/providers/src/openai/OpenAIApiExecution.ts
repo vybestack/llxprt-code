@@ -15,7 +15,7 @@
  */
 
 import type OpenAI from 'openai';
-import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { type DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,

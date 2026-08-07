@@ -5,7 +5,7 @@
  */
 
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /**
  * Neutral token-usage input for actual-usage recording. Uses UsageStats-style

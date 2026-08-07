@@ -231,7 +231,6 @@
     "dist"
   ],
   "dependencies": {
-    "@vybestack/llxprt-code-storage": "file:../storage",
     "@ai-sdk/openai": "^2.0.74",
     "@ai-sdk/provider-utils": "^2.0.6",
     "@anthropic-ai/sdk": "^0.55.1",
@@ -240,6 +239,8 @@
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-settings": "file:../settings",
+    "@vybestack/llxprt-code-storage": "file:../storage",
+    "@vybestack/llxprt-code-telemetry": "0.11.0",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^5.0.104",
     "comment-json": "^4.5.0",

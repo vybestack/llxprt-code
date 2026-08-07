@@ -12,7 +12,7 @@ import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core
 import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import path from 'node:path';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /**
  * Build CompressionContext for compression strategies.

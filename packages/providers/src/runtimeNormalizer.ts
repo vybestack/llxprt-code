@@ -15,7 +15,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { isContainerSandbox } from './utils/containerSandbox.js';
 import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 import { ProviderRuntimeNormalizationError } from './errors.js';

@@ -10,7 +10,7 @@ import type { ProviderToolset } from '../IProvider.js';
 import { writeConversationLog } from './telemetryEmitter.js';
 import { logConversationRequestEntry } from './conversationLogger.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 export interface ConversationLogContext {
   readonly providerName: string;

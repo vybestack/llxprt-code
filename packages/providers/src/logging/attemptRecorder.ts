@@ -12,7 +12,7 @@ import type {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { logApiError } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ApiErrorEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   type ResponseTokenCounts,

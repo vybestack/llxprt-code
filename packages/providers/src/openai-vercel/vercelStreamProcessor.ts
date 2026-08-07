@@ -21,7 +21,7 @@ import {
   type TextBlock,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { cleanKimiTokensFromThinking } from '../reasoning/reasoningUtils.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';

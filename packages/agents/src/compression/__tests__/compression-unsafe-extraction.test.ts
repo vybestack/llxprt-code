@@ -27,7 +27,7 @@ import {
 } from '../providerContentEnforcement.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 function makeLogger(): DebugLogger {

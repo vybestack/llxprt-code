@@ -27,7 +27,7 @@ import {
   iContentFromAgentMessageInput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSession } from './chatSession.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';

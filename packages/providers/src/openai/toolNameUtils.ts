@@ -19,7 +19,7 @@
  * Particularly important for qwen models that may send tool names in separate chunks
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolNameUtils');
 

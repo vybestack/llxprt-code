@@ -41,7 +41,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import { type ModifyContext } from '@vybestack/llxprt-code-tools';
 import { doesToolInvocationMatch } from '@vybestack/llxprt-code-core/utils/tool-utils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type {
   WaitingToolCall,
   ToolCall,

@@ -19,7 +19,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type OpenAI from 'openai';
 
 const mockLogger: DebugLogger = {

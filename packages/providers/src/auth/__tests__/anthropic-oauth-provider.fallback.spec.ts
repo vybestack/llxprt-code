@@ -17,7 +17,7 @@ import type {
   TokenStore,
 } from '@vybestack/llxprt-code-auth';
 import * as secureBrowserModule from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 

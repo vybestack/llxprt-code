@@ -21,7 +21,7 @@
  * but adapted for OpenAI provider context with enhanced error handling.
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   normalizeToolName,

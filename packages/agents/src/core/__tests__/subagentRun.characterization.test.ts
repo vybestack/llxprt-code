@@ -28,7 +28,7 @@ import {
 } from '../subagentExecution.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { CompletedToolCall } from '../coreToolScheduler.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { ToolResultDisplay } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 

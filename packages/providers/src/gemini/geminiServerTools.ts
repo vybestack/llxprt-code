@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type Part, type GoogleGenAI } from '@google/genai';
 import type { GeminiAuthMode } from './geminiAuth.js';

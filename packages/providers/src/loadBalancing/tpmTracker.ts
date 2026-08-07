@@ -10,7 +10,7 @@
  * 5-minute rolling window. Extracted from LoadBalancingProvider.
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 /** Number of minutes in the rolling TPM window. */
 export const TPM_ROLLING_WINDOW_MINUTES = 5;

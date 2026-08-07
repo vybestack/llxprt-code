@@ -14,7 +14,7 @@ import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscape
 import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 const logger = new DebugLogger('llxprt:provider:reasoning');
 

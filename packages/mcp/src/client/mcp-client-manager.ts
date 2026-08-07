@@ -30,7 +30,7 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   appendFailures,

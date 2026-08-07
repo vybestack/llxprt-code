@@ -19,7 +19,7 @@ import type { JSONSchema7, LanguageModel, Tool } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';

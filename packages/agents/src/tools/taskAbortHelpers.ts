@@ -6,7 +6,7 @@
 
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import type { SubagentLaunchRequest } from '../core/subagentOrchestrator.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
   resolveTimeout as resolveSharedTimeout,
   describeTimeoutTermination,

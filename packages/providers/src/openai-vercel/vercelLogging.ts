@@ -16,7 +16,7 @@
 
 import type { ModelMessage } from 'ai';
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { getContentPreview } from '../utils/contentPreview.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 

@@ -41,7 +41,7 @@ import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { convertToolsToOpenAIVercel } from './schemaConverter.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';

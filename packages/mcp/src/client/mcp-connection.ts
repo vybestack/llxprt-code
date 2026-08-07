@@ -16,7 +16,7 @@ import {
   is404Error,
   isAuthenticationError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {

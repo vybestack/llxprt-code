@@ -19,7 +19,7 @@ import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configT
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { McpCallableTool } from './mcp-callable-tool.js';
 import { isEnabled } from './mcp-discovery-helpers.js';

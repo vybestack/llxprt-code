@@ -20,7 +20,7 @@ import {
   isMistralModel,
   isDeepSeekReasonerModel,
 } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /**
  * All valid ToolFormat literal values from the IToolFormatter type, plus 'auto'

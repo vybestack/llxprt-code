@@ -24,7 +24,7 @@ import {
   prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
 import { resolveGeneratingModel } from './generatingModelResolver.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { StreamProcessor } from './StreamProcessor.js';

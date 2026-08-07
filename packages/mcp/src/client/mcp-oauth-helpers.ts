@@ -15,7 +15,7 @@ import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
 import { OAuthUtils } from '../auth/oauth-utils.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   createSSETransportWithAuth,
   createTransportWithOAuth,

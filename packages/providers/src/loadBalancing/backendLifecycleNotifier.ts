@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AttemptLifecycleObserver } from '../logging/attemptLifecycle.js';
 import type {

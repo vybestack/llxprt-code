@@ -25,7 +25,7 @@ import type {
   CompressionContext,
   StrategyCompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { buildContextOverflowError } from './contextOverflowError.js';
 import {

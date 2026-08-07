@@ -20,7 +20,7 @@ import {
   type TextBlock,
   type ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { type DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
 import {
   type GemmaToolCallParser,

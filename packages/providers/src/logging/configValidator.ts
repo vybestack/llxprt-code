@@ -11,7 +11,7 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 /** Resolve config from options/runtime and validate it has required methods. */
 export function resolveAndValidateConfig(

@@ -11,7 +11,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 export interface AccumulableTokenCounts {
   input_token_count: number;

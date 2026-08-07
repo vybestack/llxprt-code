@@ -11,7 +11,7 @@
  * Extracted from subagent.ts as part of Issue #1581 (Phase 3).
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ContentBlock,

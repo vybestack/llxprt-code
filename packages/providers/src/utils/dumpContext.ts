@@ -7,7 +7,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { ChronologyTraceEntry } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');

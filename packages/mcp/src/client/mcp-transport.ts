@@ -17,7 +17,7 @@ import { ServiceAccountImpersonationProvider } from '../auth/sa-impersonation-pr
 import type { McpAuthProvider } from '../auth/auth-provider.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 

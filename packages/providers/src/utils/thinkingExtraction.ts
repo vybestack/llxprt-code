@@ -15,7 +15,7 @@
  */
 
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /**
  * Extract thinking content from <think>, <thinking>, or <analysis> tags

@@ -8,7 +8,7 @@ import type { IProvider } from '../IProvider.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { logToolCallEntry } from './conversationLogger.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { resolveLoggingConfig } from './tokenAccumulator.js';
 
 export interface ServerToolLogContext {

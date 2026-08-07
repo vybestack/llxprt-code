@@ -8,7 +8,7 @@ import {
   formatToolResponseText,
 } from '../utils/toolResponsePayload.js';
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type ITool } from '../ITool.js';
 import { type ResponsesTool } from '@vybestack/llxprt-code-tools/IToolFormatter.js';

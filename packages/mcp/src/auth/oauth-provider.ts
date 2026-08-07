@@ -16,7 +16,7 @@ import {
 } from './oauth-token-storage.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
   type OAuthTokenResponse,
   parseTokenResponse,

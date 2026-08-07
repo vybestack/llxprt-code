@@ -10,7 +10,7 @@
  * Extracted from LoadBalancingProvider to keep each unit under the lint budget.
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import type { FailoverSettings } from '../LoadBalancingProvider.js';
 

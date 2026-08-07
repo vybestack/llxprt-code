@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, beforeEach } from '../testApi.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';

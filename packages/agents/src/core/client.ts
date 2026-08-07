@@ -24,7 +24,7 @@ import {
   getEnabledToolNamesForPrompt,
 } from './clientToolGovernance.js';
 import { ChatSession, type SendMessageParams } from './chatSession.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

@@ -9,7 +9,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { ConfigBasedRedactor } from './ConfigBasedRedactor.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
 import { logRequestEntry } from './conversationResponseLogger.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 export interface RequestSetupContext {
   readonly providerName: string;

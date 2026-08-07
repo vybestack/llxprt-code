@@ -30,7 +30,7 @@ import {
   DEFAULT_MAX_TOKENS,
   type ToolOutputSettingsProvider,
 } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 
 const logger = new DebugLogger('llxprt:scheduler:result-aggregator');

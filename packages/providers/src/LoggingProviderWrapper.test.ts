@@ -32,7 +32,7 @@ import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storag
 // P06: intentional core deep import — verifies shim re-exports storage symbols correctly
 import { getConversationFileWriter as getFromCore } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 class FakeProvider implements IProvider {
   name = 'fake-test-provider';

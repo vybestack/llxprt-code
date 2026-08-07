@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';

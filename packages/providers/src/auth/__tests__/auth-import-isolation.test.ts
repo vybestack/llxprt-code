@@ -13,7 +13,7 @@
  *   -> config.ts -> ActivateSkillTool -> ast-grep native addons
  *
  * After the fix, provider-registry.ts imports DebugLogger from a deep path
- * (@vybestack/llxprt-code-core/debug/DebugLogger.js), and config.ts no longer
+ * (@vybestack/llxprt-code-telemetry/debug/DebugLogger.js), and config.ts no longer
  * imports ActivateSkillTool (the registration is inverted via a hook).
  *
  * This test verifies the isolation by mocking the specific tool implementation

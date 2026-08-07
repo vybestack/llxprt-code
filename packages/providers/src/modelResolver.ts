@@ -20,7 +20,7 @@ import {
   initializeModelRegistry,
   getModelRegistry,
 } from '@vybestack/llxprt-code-core/models/registry.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
 

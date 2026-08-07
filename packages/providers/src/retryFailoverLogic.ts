@@ -11,7 +11,7 @@ import type {
 import { raceWithAbort } from './utils/abortSignal.js';
 import { resetRetryErrorCounters } from './retryErrorClassification.js';
 import { resolveFailoverReason } from './retryDelayPolicy.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 export type RetryAction =
   | { type: 'throw'; error: unknown }

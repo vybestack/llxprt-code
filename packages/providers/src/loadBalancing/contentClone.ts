@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const logger = new DebugLogger('llxprt:providers:load-balancer:content-clone');

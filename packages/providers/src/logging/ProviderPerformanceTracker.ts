@@ -7,7 +7,7 @@
  */
 
 import type { ProviderPerformanceMetrics } from '../types.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /** Clamp to non-negative finite; NaN/Infinity/-negative become 0. */
 function sanitizeNonNegative(value: number): number {

@@ -6,7 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';

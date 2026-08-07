@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { resolveReasoningField } from '../utils/reasoningField.js';
 
 /**

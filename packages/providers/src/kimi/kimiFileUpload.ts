@@ -9,7 +9,7 @@ import { toFile } from 'openai';
 import { createHash, createHmac } from 'node:crypto';
 import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const logger = new DebugLogger('llxprt:kimi:fileUpload');
 

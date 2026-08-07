@@ -15,7 +15,7 @@
  * - required: must always be present as an array (even if empty)
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 const logger = new DebugLogger('llxprt:provider:anthropic:schema');
 

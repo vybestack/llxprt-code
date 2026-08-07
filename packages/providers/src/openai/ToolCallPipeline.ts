@@ -21,7 +21,7 @@
  * Tool execution is handled by the Core layer, not Provider layer.
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
 import {
   ToolCallNormalizer,

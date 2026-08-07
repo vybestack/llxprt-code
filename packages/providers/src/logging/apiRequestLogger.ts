@@ -8,7 +8,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { logApiRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ApiRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /**
  * Log API request telemetry event. The entire telemetry block is wrapped

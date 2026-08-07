@@ -19,7 +19,7 @@ import type { LanguageModel, LanguageModelUsage, ModelMessage, Tool } from 'ai';
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { wrapError } from './errors.js';
 

@@ -39,7 +39,7 @@ import {
   type ProviderContentEnforcementDeps,
 } from '../providerContentEnforcement.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 const ISSUE_CONTEXT_LIMIT = 262_144;

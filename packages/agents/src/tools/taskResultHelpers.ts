@@ -8,7 +8,7 @@ import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js'
 import { type ToolResult } from '@vybestack/llxprt-code-tools';
 import { type OutputObject } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
   TASK_TIMEOUT_DEFAULT_SETTING,
   TASK_TIMEOUT_MAX_SETTING,

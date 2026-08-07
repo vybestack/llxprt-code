@@ -14,7 +14,7 @@ import type { MCPOAuthConfig } from './oauth-provider.js';
 import type { OAuthTokenResponse } from './oauth-provider-utils.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import type { MCPOAuthToken } from './oauth-token-storage.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import * as crypto from 'node:crypto';
 
 export const mockFetch = vi.fn();

@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 import type { RuntimeTokenizer as ITokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
 const logger = new DebugLogger('llxprt:providers:load-balancer:estimator');

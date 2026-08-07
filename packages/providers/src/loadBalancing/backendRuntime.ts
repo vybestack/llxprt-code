@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import {

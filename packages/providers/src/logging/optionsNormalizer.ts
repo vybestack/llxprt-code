@@ -18,7 +18,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import { MissingProviderRuntimeError } from '../errors.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 export interface NormalizerContext {
   runtimeContextResolver?: () => ProviderRuntimeContext;

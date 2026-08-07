@@ -48,7 +48,7 @@ import {
   extractThinkingBlocks,
   estimateThinkingTokens,
 } from './reasoningUtils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';

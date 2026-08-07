@@ -10,7 +10,7 @@ import {
   type ToolCallBlock,
   type ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 

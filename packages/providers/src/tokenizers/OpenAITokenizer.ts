@@ -15,7 +15,7 @@
  */
 
 import { encoding_for_model, type TiktokenModel } from '@dqbd/tiktoken';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { type ITokenizer } from './ITokenizer.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 

@@ -40,7 +40,7 @@ import { resolveUserMemory } from '../utils/userMemory.js';
 import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   toOpenAIResponsesWireEffort,
   OPENAI_TRANSPORT_SELECTOR_KEYS,

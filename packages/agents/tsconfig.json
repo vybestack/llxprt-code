@@ -19,6 +19,7 @@
       "@vybestack/llxprt-code-policy": ["../policy/index.ts"],
       "@vybestack/llxprt-code-policy/*": ["../policy/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
+      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
       "@vybestack/llxprt-code-providers/auth.js": [
         "../providers/src/auth/index.ts"
       ],
@@ -28,15 +29,16 @@
       "@vybestack/llxprt-code-providers/runtime.js": [
         "../providers/src/runtime/index.ts"
       ],
-      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
       "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
       "@vybestack/llxprt-code-storage": ["../storage/index.ts"],
       "@vybestack/llxprt-code-storage/*": ["../storage/src/*"],
-      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
-      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"],
+      "@vybestack/llxprt-code-telemetry": ["../telemetry/index.ts"],
+      "@vybestack/llxprt-code-telemetry/*": ["../telemetry/src/*"],
       "@vybestack/llxprt-code-test-utils": ["../test-utils/index.ts"],
-      "@vybestack/llxprt-code-test-utils/*": ["../test-utils/src/*"]
+      "@vybestack/llxprt-code-test-utils/*": ["../test-utils/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"]
     }
   },
   "include": [

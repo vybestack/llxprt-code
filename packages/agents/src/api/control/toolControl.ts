@@ -52,7 +52,7 @@ import {
   readOptionalStringProp,
 } from '../agentBootstrap.js';
 import type { StableDisplayCallbacksHolder } from '../agentBootstrap.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
 

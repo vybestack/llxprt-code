@@ -24,7 +24,7 @@ import {
   accumulateTokenUsage,
 } from './tokenAccumulator.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 export interface StreamAccumulatorState {
   streamedText: string;

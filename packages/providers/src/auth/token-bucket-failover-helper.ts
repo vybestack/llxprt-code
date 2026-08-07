@@ -12,7 +12,7 @@
  */
 
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { hasRequestMetadata } from './auth-utils.js';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';

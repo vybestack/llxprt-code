@@ -18,7 +18,7 @@ import type {
   ToolResponseBlock,
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   truncateLargestToolResponses,
   truncateOversizedToolResponsesUnified,

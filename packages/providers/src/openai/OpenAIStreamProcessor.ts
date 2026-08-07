@@ -31,7 +31,7 @@ type MessageToolCallWithOptionalFunction = Omit<
   };
 };
 
-import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { type DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import { type GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';

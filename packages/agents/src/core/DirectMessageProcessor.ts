@@ -55,7 +55,7 @@ interface ToolSelectionHookResult {
 }
 
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   filterHookRestrictedBlocks,

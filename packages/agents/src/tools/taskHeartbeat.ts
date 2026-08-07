@@ -5,7 +5,7 @@
  */
 
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 const heartbeatLogger = new DebugLogger('llxprt:task');
 

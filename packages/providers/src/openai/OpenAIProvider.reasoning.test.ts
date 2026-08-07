@@ -14,7 +14,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type OpenAI from 'openai';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', () => {
   let _provider: OpenAIProvider;

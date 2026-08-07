@@ -21,7 +21,7 @@
  * preparing them for Core layer execution.
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolCallNormalizer');

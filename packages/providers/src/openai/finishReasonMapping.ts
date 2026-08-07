@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:finish-reason');
 

@@ -16,7 +16,7 @@
 
 import type OpenAI from 'openai';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { type DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';

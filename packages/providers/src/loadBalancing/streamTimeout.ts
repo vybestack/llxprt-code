@@ -10,7 +10,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { raceWithAbort } from '../utils/abortSignal.js';
 import { closeIteratorBeforeContinuing } from '../utils/streamCleanup.js';

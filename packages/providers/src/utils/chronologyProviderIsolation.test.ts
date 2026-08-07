@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
 import { buildResponsesInputFromContent } from '../openai-responses/buildResponsesInputFromContent.js';
 import { buildResponsesRequest } from '../openai/buildResponsesRequest.js';

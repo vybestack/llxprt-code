@@ -23,7 +23,7 @@
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08
 // @requirement:REQ-SP4-002/REQ-SP4-003
 // Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { type IModel } from '../IModel.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
