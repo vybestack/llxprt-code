@@ -16,7 +16,7 @@
  * produce 0, not 1.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   TOKEN_SAFETY_MARGIN,
   CONTEXT_LIMIT_FUDGE_FACTOR,

@@ -18,7 +18,7 @@
  * pure data asserted out.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { AgentConfig } from '@vybestack/llxprt-code-agents';
 import {

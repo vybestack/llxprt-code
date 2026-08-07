@@ -16,7 +16,7 @@ import type {
   ContentBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Mock } from '../testApi.js';
+import type { Mock } from 'bun:test';
 
 export type MockedChatInstance = {
   sendMessageStream: Mock<(...args: never[]) => AsyncIterable<unknown>>;

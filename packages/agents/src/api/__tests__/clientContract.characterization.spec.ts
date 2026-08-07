@@ -17,7 +17,7 @@
  * direct .candidates/.parts/.usageMetadata indexing.
  */
 
-import { describe, it, expect, vi } from '../../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 import fc from 'fast-check';
 
 import {

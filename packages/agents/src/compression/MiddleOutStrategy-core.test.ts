@@ -13,7 +13,7 @@
  * model, result assembly shape, and metadata completeness.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import {

@@ -5,7 +5,7 @@
  */
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, describe, expect, it, vi } from '../testApi.js';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { closeIteratorBounded } from './iteratorCleanup.js';
 
 const CLEANUP_TIMEOUT_MS = 1_000;

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from '../../testApi.js';
+import { describe, expect, it } from 'bun:test';
 import { McpServerConfigSchema } from '../config-schema.js';
 import type { AgentMcpServerConfig } from '../config-types.js';
 

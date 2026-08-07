@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { AgentEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';

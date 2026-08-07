@@ -28,7 +28,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 
 interface ParsedTsConfig {
   compilerOptions?: {

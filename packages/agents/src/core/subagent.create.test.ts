@@ -9,8 +9,8 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from '../testApi.js';
-import { vi, describe, it, expect, beforeEach, type Mock } from '../testApi.js';
+import type { Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,

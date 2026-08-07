@@ -9,7 +9,7 @@
  * subagentOrchestrator.test.ts so no file-level max-lines disable is needed.
  */
 
-import { describe, expect, it, vi } from '../../testApi.js';
+import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';

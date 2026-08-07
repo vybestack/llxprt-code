@@ -13,7 +13,7 @@
  * disable is needed.
  */
 
-import { vi } from '../../testApi.js';
+import { vi } from 'bun:test';
 import {
   EmptySummaryError,
   type CompressionContext,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from '../testApi.js';
+import { describe, expect, it, vi } from 'bun:test';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import {

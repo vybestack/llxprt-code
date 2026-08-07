@@ -5,7 +5,7 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi } from '../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 import type {
   ToolCall,
   WaitingToolCall,

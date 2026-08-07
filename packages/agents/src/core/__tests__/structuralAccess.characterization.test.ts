@@ -21,7 +21,7 @@
  * or Google-shaped internals. Asserts ONLY on observable outcomes.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ConversationManager } from '../ConversationManager.js';
 import {

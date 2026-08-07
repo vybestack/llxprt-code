@@ -21,7 +21,7 @@
  * assertions pass with no rewrite.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   fromConfig,

@@ -14,7 +14,7 @@
  * pruning sub-phase.
  */
 
-import { describe, it, expect, beforeEach } from '../../testApi.js';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import type {
   IContent,
   ToolCallBlock,

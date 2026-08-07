@@ -14,7 +14,7 @@
  * inferred from the shape of result.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {

@@ -13,7 +13,7 @@
  * safety). Sibling to chatSession-density.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {

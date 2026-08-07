@@ -20,7 +20,7 @@
  * contamination.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   normalizeToolInteractionInput,
   createUserContentWithFunctionResponseFix,

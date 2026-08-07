@@ -29,12 +29,7 @@ describe('automock', () => {
     const mocked = automock({ a: () => 1, b: () => 2, c: 3 });
 
     // `default` is synthesised for CommonJS interop, covered separately.
-    expect(Object.keys(mocked as object).sort()).toEqual([
-      'a',
-      'b',
-      'c',
-      'default',
-    ]);
+    expect(Object.keys(mocked).sort()).toEqual(['a', 'b', 'c', 'default']);
   });
 
   it('mocks a class so instances expose mocked prototype methods', () => {

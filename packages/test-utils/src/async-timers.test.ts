@@ -53,10 +53,11 @@ describe('async fake timers', () => {
   it('runs a timer scheduled after an await inside a callback', async () => {
     vi.useFakeTimers();
     const order: string[] = [];
-    setTimeout(async () => {
+    setTimeout(() => {
       order.push('first');
-      await Promise.resolve();
-      setTimeout(() => order.push('after-await'), 5);
+      void Promise.resolve().then(() => {
+        setTimeout(() => order.push('after-await'), 5);
+      });
     }, 10);
 
     await advanceTimersByTimeAsync(20);

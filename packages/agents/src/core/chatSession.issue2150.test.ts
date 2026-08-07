@@ -22,7 +22,7 @@
  * end-to-end and faithful to production.
  */
 
-import { describe, it, expect, beforeEach, vi } from '../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

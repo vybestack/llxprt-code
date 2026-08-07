@@ -9,7 +9,7 @@
  * Migrated in P13 from the deleted convertIContentToResponse to the neutral
  * toModelStreamChunk path (@plan:PLAN-20260707-AGENTNEUTRAL.P13).
  */
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 

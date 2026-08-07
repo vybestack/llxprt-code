@@ -20,7 +20,7 @@
  *   6. The metadata-only stub does not leak original payload content.
  */
 
-import { describe, it, expect, beforeEach, vi } from '../../testApi.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,

@@ -16,7 +16,7 @@
  * the real MockTool infra (the actual tool the scheduler invokes).
  */
 
-import { vi } from '../../../testApi.js';
+import { vi } from 'bun:test';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
 import type { ApprovalHandler, AgenticLoopEvent } from '../types.js';

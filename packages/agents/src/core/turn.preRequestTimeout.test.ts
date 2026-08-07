@@ -8,7 +8,7 @@ import {
   advanceTimersByTimeAsync,
   runAllTimersAsync,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent, StructuredError } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession, StreamEvent } from './chatSession.js';

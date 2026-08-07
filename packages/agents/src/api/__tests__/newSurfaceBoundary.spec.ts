@@ -16,7 +16,7 @@
  * agents through public createAgent and keeps internal assertions test-only.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type {
   Agent,
   AgentConfig,

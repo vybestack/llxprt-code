@@ -18,7 +18,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';

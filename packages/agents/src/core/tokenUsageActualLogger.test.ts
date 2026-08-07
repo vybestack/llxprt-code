@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from '../testApi.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 
 describe('recordActualTokenUsage', () => {

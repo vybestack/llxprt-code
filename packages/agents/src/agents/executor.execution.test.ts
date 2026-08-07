@@ -14,7 +14,7 @@ import {
   afterEach,
   vi,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import { AgentExecutor } from './executor.js';
 import type { AgentInputs } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';

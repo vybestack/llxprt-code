@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from '../testApi.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 const actual = { ...(await import('@vybestack/llxprt-code-auth')) };

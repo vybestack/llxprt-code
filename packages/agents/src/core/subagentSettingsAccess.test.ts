@@ -6,7 +6,7 @@
 
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from '../testApi.js';
+import { describe, expect, it } from 'bun:test';
 import {
   expandTilde,
   getNumberSetting,

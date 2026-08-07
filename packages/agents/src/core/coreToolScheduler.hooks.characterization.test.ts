@@ -5,7 +5,7 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, describe, expect, it, vi } from '../testApi.js';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,

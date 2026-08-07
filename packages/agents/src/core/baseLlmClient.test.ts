@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BaseLLMClient } from './baseLlmClient.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';

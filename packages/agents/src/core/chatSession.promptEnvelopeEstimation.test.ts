@@ -31,7 +31,7 @@ import {
   beforeEach,
   afterEach,
   onTestFinished,
-} from '../testApi.js';
+} from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {

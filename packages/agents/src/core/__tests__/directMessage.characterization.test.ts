@@ -20,7 +20,7 @@
  * @requirement:REQ-INT-001.3
  */
 
-import { describe, it, expect, vi, type Mock } from '../../testApi.js';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import * as fc from 'fast-check';
 

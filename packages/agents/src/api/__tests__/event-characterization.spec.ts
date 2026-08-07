@@ -14,7 +14,7 @@
  * fixtures. Tests FAIL NATURALLY because mapLoopStream is unimplemented (P14):
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';

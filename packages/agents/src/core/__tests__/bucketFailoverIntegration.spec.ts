@@ -7,14 +7,7 @@
  * Phase 7: Bucket Failover Integration Tests
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type Mock,
-} from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   executeProviderWithBucketFailover,
   shouldEnableBucketFailover,

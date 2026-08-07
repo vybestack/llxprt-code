@@ -20,7 +20,7 @@
  * @requirement:REQ-004.1
  */
 
-import { describe, it, expect, vi, type Mock } from '../../testApi.js';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { ChatSession } from '../chatSession.js';

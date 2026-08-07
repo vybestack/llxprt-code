@@ -12,7 +12,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import {
   executeToolCall,
   type ToolExecutionConfig,

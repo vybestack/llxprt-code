@@ -13,7 +13,7 @@ import {
   afterEach,
   vi,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
   setupExecutorFixture,

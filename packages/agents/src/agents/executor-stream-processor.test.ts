@@ -16,7 +16,7 @@
  * with a fake ChatSession that yields ModelStreamChunk values.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type { StreamEvent } from '../core/chatSession.js';
 import { StreamEventType } from '../core/chatSession.js';
 import { callModelAndConsumeStream } from './executor-stream-processor.js';

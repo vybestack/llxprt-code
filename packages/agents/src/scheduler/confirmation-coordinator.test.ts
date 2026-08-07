@@ -5,7 +5,7 @@
  */
 
 import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 // Module-scope mock for modifiable-tool — hoisted by the test runner before imports.

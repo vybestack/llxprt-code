@@ -18,7 +18,7 @@
  * probes, no mock sequences.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   buildCliStyleConfig,

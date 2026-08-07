@@ -16,7 +16,7 @@
  * so every positive case exercises the bound Config memory surface.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 
 describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {

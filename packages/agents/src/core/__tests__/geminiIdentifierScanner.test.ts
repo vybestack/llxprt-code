@@ -15,7 +15,7 @@
  * files are scanned here — that is the job of providerAgnosticNaming.test.ts.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import ts from 'typescript';
 import {
   extractDeclaredIdentifiers,

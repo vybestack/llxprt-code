@@ -24,7 +24,7 @@
  * flag, config auth surface) — never mock call counts.
  */
 
-import { describe, it, expect } from '../../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   preflightAgentActivation,
   type ProviderActivationIntent,

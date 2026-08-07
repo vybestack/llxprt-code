@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import type {
   IContent,
   ContentBlock,

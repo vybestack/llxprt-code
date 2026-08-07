@@ -15,7 +15,7 @@
  * the API boundary (R-NO-RAW-SECRETS).
  */
 
-import { describe, it, expect, afterEach } from '../../testApi.js';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

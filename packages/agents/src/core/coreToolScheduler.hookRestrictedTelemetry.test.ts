@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from '../testApi.js';
+import { describe, it, expect, vi } from 'bun:test';
 
 const __actual = {
   ...(await import('@vybestack/llxprt-code-core/telemetry/loggers.js')),

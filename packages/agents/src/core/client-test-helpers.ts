@@ -15,7 +15,7 @@
  * it can wire them into the shared Config/GoogleGenAI mock.
  */
 
-import { vi, type Mock } from '../testApi.js';
+import { vi, type Mock } from 'bun:test';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ChatSession } from './chatSession.js';

@@ -19,7 +19,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';

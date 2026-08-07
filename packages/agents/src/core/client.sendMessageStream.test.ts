@@ -18,7 +18,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import type {
   ContentBlock,
   AgentMessageInput,

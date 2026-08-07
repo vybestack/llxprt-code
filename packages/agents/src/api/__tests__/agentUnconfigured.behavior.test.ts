@@ -13,14 +13,7 @@
  * BEFORE any model/client/MCP interaction.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-} from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';

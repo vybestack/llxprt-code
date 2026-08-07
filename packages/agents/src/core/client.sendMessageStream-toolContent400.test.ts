@@ -11,7 +11,7 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from '../testApi.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';

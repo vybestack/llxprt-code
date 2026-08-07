@@ -13,7 +13,7 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, type Mock } from '../testApi.js';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { expectSuccessful } from './coreToolScheduler-test-helpers.js';

@@ -21,7 +21,7 @@ import {
   beforeEach,
   afterEach,
   type Mock,
-} from '../testApi.js';
+} from 'bun:test';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,

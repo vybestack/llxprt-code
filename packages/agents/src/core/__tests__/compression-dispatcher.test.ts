@@ -16,14 +16,7 @@
  * performCompression() to use the strategy pattern via the factory.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type Mock,
-} from '../../testApi.js';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

@@ -13,7 +13,7 @@
  * unknown names are rejected with actionable errors.
  */
 
-import { describe, it, expect } from '../testApi.js';
+import { describe, it, expect } from 'bun:test';
 import {
   getCompressionStrategy,
   parseCompressionStrategyName,
