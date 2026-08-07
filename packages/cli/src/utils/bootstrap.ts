@@ -24,6 +24,16 @@ export const RELAUNCH_EXIT_CODE = 75;
 export const MAX_HEAP_CAP_MB = 8192;
 
 /**
+ * Bun does not honor --max-old-space-size, so the established non-empty
+ * `process.versions.bun` convention is the same check the launcher uses.
+ */
+function isBunRuntime(): boolean {
+  return (
+    typeof process.versions.bun === 'string' && process.versions.bun.length > 0
+  );
+}
+
+/**
  * Check if debug mode is enabled via environment variables.
  * This is a lightweight check that doesn't require loading any configuration.
  */
@@ -45,6 +55,10 @@ export function shouldRelaunchForMemory(
   debugMode: boolean,
   maxHeapCapMB: number = MAX_HEAP_CAP_MB,
 ): string[] {
+  if (isBunRuntime()) {
+    return [];
+  }
+
   const cap = Math.floor(maxHeapCapMB);
   const totalMemoryMB = os.totalmem() / (1024 * 1024);
   const heapStats = v8.getHeapStatistics();
@@ -126,19 +140,22 @@ export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
 }
 
 /**
- * Compute --max-old-space-size for a NEW sandbox process.
- * Unlike shouldRelaunchForMemory(), this ALWAYS returns memory args
- * because the sandbox process starts fresh with Node.js defaults (~950MB).
+ * Compute --max-old-space-size for a new Node sandbox process.
+ * Bun ignores this flag, so Bun-fronted sandbox launches receive no memory args.
  *
  * @param debugMode - Whether to log debug information
  * @param containerMemoryMB - Container memory limit in MB, or undefined to use host memory
- * @returns Array containing a single --max-old-space-size argument
+ * @returns A Node heap argument, or an empty array when running under Bun
  */
 export function computeSandboxMemoryArgs(
   debugMode: boolean,
   containerMemoryMB?: number,
   maxHeapCapMB: number = MAX_HEAP_CAP_MB,
 ): string[] {
+  if (isBunRuntime()) {
+    return [];
+  }
+
   const cap = Math.floor(maxHeapCapMB);
   const totalMemoryMB = containerMemoryMB ?? os.totalmem() / (1024 * 1024);
   const targetMaxOldSpaceSizeInMB = Math.max(
