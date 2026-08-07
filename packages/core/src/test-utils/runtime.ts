@@ -8,7 +8,7 @@ import type { Config } from '../config/config.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
-// Type-only import of vitest: erased at compile time, creates no runtime edge.
+// Type-only import of bun:test: erased at compile time, creates no runtime edge.
 // Required to obtain the precise `vi.fn()` Mock<T> return type.
 import type { vi as ViNamespace } from 'bun:test';
 import {
@@ -209,21 +209,21 @@ export function initializeTestProviderRuntime(
   return { settingsService, config, runtime };
 }
 
-// Vitest is a devDependency and must NOT be statically imported from a file
-// that lives under src/. The type-only import above is erased at compile time
-// and creates no runtime edge; it merely provides the precise Mock<T> type for
-// `vi.fn()` return values.
-type VitestApi = typeof ViNamespace;
+// `bun:test` is only available inside the test runner, so it must NOT be
+// statically imported from a file under src/. The type-only import above is
+// erased at compile time and creates no runtime edge; it merely provides the
+// precise Mock<T> type for `vi.fn()` return values.
+type BunTestVi = typeof ViNamespace;
 
-function requireVi(): VitestApi {
-  const viGlobal = (globalThis as { vi?: VitestApi }).vi;
+function requireVi(): BunTestVi {
+  const viGlobal = (globalThis as { vi?: BunTestVi }).vi;
   if (viGlobal) {
     return viGlobal;
   }
 
   return {
     fn: (impl?: (...args: unknown[]) => unknown) => createSpy(impl),
-  } as unknown as VitestApi;
+  } as unknown as BunTestVi;
 }
 
 interface ChatSessionConfigShape {

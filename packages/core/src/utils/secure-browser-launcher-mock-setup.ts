@@ -9,8 +9,8 @@
  *
  * Bun's mock.module does not apply mocks to source module imports when the
  * value is captured at module scope (e.g. `const x = promisify(execFile)`).
- * Vi.mock factories run at module evaluation time, AFTER all imports (including
- * the source module) are resolved. To work around this, this module is imported
+ * Bun registers a mock.module at the moment the call runs, so this module is
+ * imported
  * FIRST in the test file, before the source module. This ensures the mock is
  * registered during the import phase, before the source module loads.
  *

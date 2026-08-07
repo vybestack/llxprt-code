@@ -25,13 +25,13 @@ beforeEach(async () => {
 /**
  * Vitest intercepts `process.exit()` and turns it into a thrown error so tests
  * can assert on exit behaviour. Bun does not: calling it terminates the test
- * runner mid-file. Install a matching interception under Bun, reusing Vitest's
- * exact message so assertions are runner-independent.
+ * runner mid-file. This installs an equivalent interception. The message is
+ * this harness's own and is asserted verbatim by ci-quota-check.test.ts, so it
+ * must not be reworded without updating those assertions.
  */
 function interceptedExit(code?: number): never {
-  // The value is interpolated raw, exactly as Vitest does: a no-argument
-  // process.exit() must produce "undefined" under both runners so assertions
-  // on the message stay runner-independent.
+  // The value is interpolated raw, so a no-argument process.exit() produces
+  // "undefined" in the message, which is what the assertions expect.
   throw new Error(`process.exit unexpectedly called with "${code}"`);
 }
 

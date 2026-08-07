@@ -195,7 +195,7 @@ export function runDocPlacementGuardRealRepo(
  *
  * The trick: each call gets its own closure variable, and the hooks are
  * registered within the describe scope where useTempDir() is called. Since
- * vitest hooks are scoped to the describe block they're registered in,
+ * bun:test hooks are scoped to the describe block they're registered in,
  * each describe block gets its own independent setup/teardown.
  *
  * Both docs/ and dev-docs/ directories are pre-created so the fail-fast

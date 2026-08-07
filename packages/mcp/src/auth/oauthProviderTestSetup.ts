@@ -108,11 +108,13 @@ export const mockTokenResponse: OAuthTokenResponse = {
   scope: 'read write',
 };
 
+// Derived from the spied methods, so a mockResolvedValue or a calls[] read is
+// checked against the real signature instead of collapsing to never[]/unknown.
 export type OAuthSpies = {
-  saveTokenSpy: Mock<(...args: never[]) => unknown>;
-  getCredentialsSpy: Mock<(...args: never[]) => unknown>;
-  deleteCredentialsSpy: Mock<(...args: never[]) => unknown>;
-  isTokenExpiredSpy: Mock<(...args: never[]) => unknown>;
+  saveTokenSpy: Mock<MCPOAuthTokenStorage['saveToken']>;
+  getCredentialsSpy: Mock<MCPOAuthTokenStorage['getCredentials']>;
+  deleteCredentialsSpy: Mock<MCPOAuthTokenStorage['deleteCredentials']>;
+  isTokenExpiredSpy: Mock<typeof MCPOAuthTokenStorage.isTokenExpired>;
 };
 
 export function setupOAuthTestSpies(

@@ -21,7 +21,7 @@
 
 import { vi } from 'bun:test';
 
-// Hoisted mocks used by module factories
+// Real module snapshots captured before the mock registrations below
 const realLlxprtCodeProvidersModule = {
   ...(await import('@vybestack/llxprt-code-providers')),
 };

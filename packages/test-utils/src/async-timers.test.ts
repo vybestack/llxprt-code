@@ -87,6 +87,24 @@ describe('async fake timers', () => {
     expect(Date.now() - start).toBe(25);
   });
 
+  it('stops at the requested time without overshooting to a later timer', async () => {
+    // The sentinel exists for this: advanceTimersToNextTimer would jump the
+    // clock to the next scheduled timer, which may sit well beyond the caller's
+    // budget. Scheduling the sentinel on the fake clock is what lets the
+    // advance stop exactly on target.
+    vi.useFakeTimers();
+    let fired = false;
+    setTimeout(() => {
+      fired = true;
+    }, 50);
+    const start = Date.now();
+
+    await advanceTimersByTimeAsync(20);
+
+    expect(fired).toBe(false);
+    expect(Date.now() - start).toBe(20);
+  });
+
   it('drains timers that keep scheduling more work', async () => {
     vi.useFakeTimers();
     const order: number[] = [];
