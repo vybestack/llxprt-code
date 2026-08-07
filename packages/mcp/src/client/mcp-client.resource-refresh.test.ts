@@ -23,7 +23,6 @@ const realStdioModule = {
 const realIndexModule = {
   ...(await import('@modelcontextprotocol/sdk/client/index.js')),
 };
-const realGenaiModule = { ...(await import('@google/genai')) };
 const realOauthProviderModule = {
   ...(await import('../auth/oauth-provider.js')),
 };
@@ -38,7 +37,6 @@ void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
-void vi.mock('@google/genai', () => automock(realGenaiModule));
 void vi.mock('../auth/oauth-provider.js', () =>
   automock(realOauthProviderModule),
 );
