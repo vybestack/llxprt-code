@@ -78,8 +78,8 @@ void vi.mock('@vybestack/llxprt-code-auth', () => {
 
 describe('AnthropicOAuthProvider', () => {
   let provider: AnthropicOAuthProvider;
-  let mockTokenStore: import('vitest').MockedObject<TokenStore>;
-  let mockAddItem: ReturnType<typeof import('vitest').vi.fn>;
+  let mockTokenStore: { [K in keyof TokenStore]: Mock<TokenStore[K]> };
+  let mockAddItem: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -5,7 +5,6 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
 import {
   vi,
   describe,

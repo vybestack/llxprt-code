@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -48,7 +48,7 @@ const TEST_SEQUENCES = {
 
 describe('useVim hook', () => {
   let mockBuffer: Partial<TextBuffer>;
-  let mockHandleFinalSubmit: vi.Mock;
+  let mockHandleFinalSubmit: Mock<(...args: never[]) => unknown>;
 
   const createMockBuffer = (
     text = 'hello world',

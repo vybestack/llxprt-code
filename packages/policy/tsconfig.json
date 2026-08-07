@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/policy.tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
     "composite": false,
-    "types": ["node", "vitest/globals", "bun-types/test"],
+    "types": ["node", "bun-types/test"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-policy": ["./index.ts"],

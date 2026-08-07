@@ -4,16 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Mock,
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { getInstallationInfo, PackageManager } from './installationInfo.js';
 import { updateEventEmitter } from './updateEventEmitter.js';
 import type { UpdateObject } from '../ui/utils/updateCheck.js';

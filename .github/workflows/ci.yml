@@ -864,7 +864,7 @@ jobs:
 
       - name: 'Run script harness tests for the orchestrator'
         run: |-
-          bun test --preload ./test-setup/augment-bun-vi.ts --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
+          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/test-orchestrator.test.ts
 
   #
   # Bun-native manifest discovery gate (issues #2475, #2847)

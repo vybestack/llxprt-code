@@ -5,16 +5,8 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type {
-  Mock,
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
 import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';

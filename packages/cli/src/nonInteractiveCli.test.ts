@@ -17,7 +17,7 @@ import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach, type Mock } from 'bun:test';
 
 type ParsedStreamEvent = {
   type: string;
@@ -69,9 +69,9 @@ function createMockConfig(overrides?: {
 }
 
 describe('processAgentStream', () => {
-  let consoleErrorSpy: vi.SpyInstance;
-  let processStdoutSpy: vi.SpyInstance;
-  let processStderrSpy: vi.SpyInstance;
+  let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
+  let processStdoutSpy: Mock<(...args: never[]) => unknown>;
+  let processStderrSpy: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
     consoleErrorSpy = vi

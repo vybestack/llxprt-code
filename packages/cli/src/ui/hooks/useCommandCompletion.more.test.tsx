@@ -7,7 +7,7 @@
 /** @vitest-environment jsdom */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'bun:test';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
@@ -121,7 +121,7 @@ const setupMocks = ({
   isPerfectMatch?: boolean;
 }) => {
   // Mock for @-completions
-  (useAtCompletion as vi.Mock).mockImplementation(
+  (useAtCompletion as Mock<(...args: never[]) => unknown>).mockImplementation(
     ({
       enabled,
       setSuggestions,
@@ -137,7 +137,7 @@ const setupMocks = ({
   );
 
   // Mock for /-completions with proper state management
-  (useSlashCompletion as vi.Mock).mockImplementation((buffer) => {
+  (useSlashCompletion as Mock<(...args: never[]) => unknown>).mockImplementation((buffer) => {
     const [suggestions, setSuggestions] =
       useState<Suggestion[]>(slashSuggestions);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(

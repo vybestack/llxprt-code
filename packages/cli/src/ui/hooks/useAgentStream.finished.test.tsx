@@ -7,15 +7,8 @@
 /** @vitest-environment jsdom */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type {
-  Mock,
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import {
   MockedAgentClientClass,
   mockSendMessageStream,

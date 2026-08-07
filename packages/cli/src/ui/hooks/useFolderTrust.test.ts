@@ -13,7 +13,7 @@ import {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { type FolderTrustRuntime, useFolderTrust } from './useFolderTrust.js';
@@ -52,11 +52,11 @@ void vi.mock('node:process', () => {
 describe('useFolderTrust', () => {
   let mockSettings: LoadedSettings;
   let mockTrustedFolders: LoadedTrustedFolders;
-  let loadTrustedFoldersSpy: vi.SpyInstance;
-  let isWorkspaceTrustedSpy: vi.SpyInstance;
-  let addItem: vi.Mock;
+  let loadTrustedFoldersSpy: Mock<(...args: never[]) => unknown>;
+  let isWorkspaceTrustedSpy: Mock<(...args: never[]) => unknown>;
+  let addItem: Mock<(...args: never[]) => unknown>;
   let mockConfig: FolderTrustRuntime & {
-    setTrustedFolderLive: vi.Mock;
+    setTrustedFolderLive: Mock<(...args: never[]) => unknown>;
   };
 
   beforeEach(() => {

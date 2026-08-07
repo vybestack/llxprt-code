@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { toolsCommand } from './toolsCommand.ts';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
@@ -86,7 +86,7 @@ describe('toolsCommand', () => {
 
     await toolsCommand.action!(mockContext, 'list');
 
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0].text;
     expect(output).toContain('File Reader [disabled]');
     expect(output).toContain('Code Editor [enabled]');
     expect(output).toContain('Disabled tools: 1');
@@ -107,7 +107,7 @@ describe('toolsCommand', () => {
 
     await toolsCommand.action!(mockContext, 'list');
 
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0].text;
     expect(output).toContain('File Reader');
     expect(output).not.toContain('MCP Search');
   });
@@ -127,7 +127,7 @@ describe('toolsCommand', () => {
 
     await toolsCommand.action!(mockContext, 'disable mcp-search');
 
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0];
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "mcp-search" not found');
   });
@@ -148,7 +148,7 @@ describe('toolsCommand', () => {
     await toolsCommand.action!(mockContext, 'disable "File Reader"');
 
     expect(settings.get('tools.disabled')).toStrictEqual(['file-reader']);
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0].text;
     expect(output).toContain("Disabled tool 'File Reader'");
   });
 
@@ -191,7 +191,7 @@ describe('toolsCommand', () => {
     await toolsCommand.action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0].text;
     expect(output).toContain("Enabled tool 'Code Editor'");
   });
 
@@ -210,7 +210,7 @@ describe('toolsCommand', () => {
 
     await toolsCommand.action!(mockContext, 'disable missing');
 
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0];
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "missing" not found');
   });
@@ -280,10 +280,10 @@ describe('toolsCommand', () => {
 
     await toolsCommand.action!(mockContext, 'enable file-reader');
 
-    (mockContext.ui.addItem as vi.Mock).mockClear();
+    (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mockClear();
     await toolsCommand.action!(mockContext, 'list');
 
-    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    const output = (mockContext.ui.addItem as Mock<(...args: never[]) => unknown>).mock.calls[0][0].text;
     expect(output).toContain('File Reader [enabled]');
     expect(output).toContain('Code Editor [enabled]');
   });

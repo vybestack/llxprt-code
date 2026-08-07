@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'bun:test';
 import {
   ProfileManager,
   type SettingsService,
@@ -24,7 +24,7 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
   };
 });
 
-const mockGetSettingsService = getSettingsService as vi.MockedFunction<
+const mockGetSettingsService = getSettingsService as Mock<
   typeof getSettingsService
 >;
 
