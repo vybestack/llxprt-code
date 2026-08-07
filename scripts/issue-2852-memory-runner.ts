@@ -14,10 +14,12 @@ import {
   evaluateMultiMetricPlateau,
   evaluatePostGcPlateau,
   parseFootprintBytes,
+  parsePostGcRecords,
   parsePsRssBytes,
   parseVmmapSummary,
   validateCheckpointOrder,
   validateExactPid,
+  type CheckpointRecord,
   type PostGcMetrics,
 } from './issue-2852-memory-benchmark.js';
 
@@ -193,36 +195,9 @@ if ('overallWithinTolerance' in plateau) {
   );
 }
 
-interface CheckpointRecord {
-  readonly name?: string;
-  readonly jsc?: { readonly heapSize?: number };
-  readonly processMemory?: { readonly external?: number };
-}
-
-/**
- * Post-GC checkpoint records from the target's JSONL, oldest first.
- *
- * A parse failure names the offending line, because the alternative is a bare
- * SyntaxError that says nothing about which of several hundred checkpoint
- * records is malformed. The error is re-thrown, not swallowed: a corrupt
- * artifact must still fail the run.
- */
+/** Post-GC checkpoint records from the target's JSONL, oldest first. */
 function readPostGcRecords(path: string): CheckpointRecord[] {
-  return readFileSync(path, 'utf8')
-    .split('\n')
-    .filter((line) => line.length > 0)
-    .map((line, index) => {
-      try {
-        return JSON.parse(line) as CheckpointRecord;
-      } catch (error) {
-        throw new Error(
-          `${path} line ${index + 1} is not valid JSON: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    })
-    .filter((record) => record.name?.endsWith('-post-gc') === true);
+  return parsePostGcRecords(path, readFileSync(path, 'utf8'));
 }
 
 /** Post-GC JSC heap size for each turn, oldest first. */

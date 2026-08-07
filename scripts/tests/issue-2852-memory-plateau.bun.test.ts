@@ -21,6 +21,7 @@
 import { describe, it, expect } from 'bun:test';
 import {
   evaluateMultiMetricPlateau,
+  parsePostGcRecords,
   type PostGcMetrics,
 } from '../issue-2852-memory-benchmark.js';
 import { StreamOutputAccumulator } from '../../packages/agents/src/core/streamOutputAccumulator.js';
@@ -125,6 +126,47 @@ describe('multi-metric post-GC plateau verdict (issue #3114)', () => {
       expect(heap?.maxBytes).toBe(55_000_000);
       expect(heap?.growthRatio).toBeCloseTo(0.1, 10);
       expect(heap?.withinTolerance).toBe(false);
+    });
+  });
+
+  describe('parsePostGcRecords', () => {
+    it('keeps only post-GC records and drops blank lines', () => {
+      const contents = [
+        JSON.stringify({ name: 'turn-1-pre-gc', jsc: { heapSize: 1 } }),
+        '',
+        JSON.stringify({ name: 'turn-1-post-gc', jsc: { heapSize: 2 } }),
+        '',
+      ].join('\n');
+
+      const records = parsePostGcRecords('/tmp/target.jsonl', contents);
+
+      expect(records).toHaveLength(1);
+      expect(records[0].name).toBe('turn-1-post-gc');
+      expect(records[0].jsc?.heapSize).toBe(2);
+    });
+
+    it('names the malformed line as it appears in the file, counting blank lines', () => {
+      // The bad record sits on physical line 4. Counting only non-blank lines
+      // would misreport it as line 2 and send a reader to the wrong place.
+      const contents = [
+        JSON.stringify({ name: 'turn-1-post-gc', jsc: { heapSize: 1 } }),
+        '',
+        '',
+        '{ not valid json',
+      ].join('\n');
+
+      expect(() => parsePostGcRecords('/tmp/target.jsonl', contents)).toThrow(
+        /\/tmp\/target\.jsonl line 4 is not valid JSON/,
+      );
+    });
+
+    it('fails rather than skipping a corrupt record', () => {
+      const contents = [
+        JSON.stringify({ name: 'turn-1-post-gc', jsc: { heapSize: 1 } }),
+        'truncated',
+      ].join('\n');
+
+      expect(() => parsePostGcRecords('/tmp/target.jsonl', contents)).toThrow();
     });
   });
 });

@@ -94,6 +94,43 @@ export interface PlateauResult {
   readonly withinTolerance: boolean;
 }
 
+export interface CheckpointRecord {
+  readonly name?: string;
+  readonly jsc?: { readonly heapSize?: number };
+  readonly processMemory?: { readonly external?: number };
+}
+
+/**
+ * Parses the target's checkpoint JSONL and keeps the post-GC records.
+ *
+ * A parse failure names the 1-based line as it appears in the file, because a
+ * bare SyntaxError identifies neither the file nor which of several hundred
+ * records is malformed. Line numbers are captured before blank lines are
+ * dropped, so the reported number survives blank lines anywhere in the file.
+ * The error is re-thrown, never swallowed: a corrupt artifact must fail the run.
+ */
+export function parsePostGcRecords(
+  path: string,
+  contents: string,
+): CheckpointRecord[] {
+  return contents
+    .split('\n')
+    .map((line, index) => ({ line, lineNumber: index + 1 }))
+    .filter(({ line }) => line.length > 0)
+    .map(({ line, lineNumber }) => {
+      try {
+        return JSON.parse(line) as CheckpointRecord;
+      } catch (error) {
+        throw new Error(
+          `${path} line ${lineNumber} is not valid JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    })
+    .filter((record) => record.name?.endsWith('-post-gc') === true);
+}
+
 export function evaluatePostGcPlateau(
   postGcHeapBytes: readonly number[],
   tolerance: number,
