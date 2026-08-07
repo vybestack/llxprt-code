@@ -15,9 +15,12 @@
  * Current state (post-P21):
  *  - `generateDirectMessage` returns `ModelOutput` (neutral, post-P13).
  *    `visibleText`/`usageCounts` read `content.blocks` / `usage`.
- *  - `getHistory()` returns `IContent[]` (neutral, post-P21).
+ *  - `getHistory()` returns `readonly IContent[]` (neutral, post-P21, issue #3109).
  *    `historyContent` returns a deep clone of the neutral history so the
- *    spec asserts content-equivalence and clone-independence.
+ *    spec can freely inspect/mutate without touching the live contract value.
+ *    The live contract value shares entries by reference (no deep clone);
+ *    `historyContent` clones defensively so spec assertions never observe
+ *    aliasing artifacts.
  *  - `sendMessageStream` yields `ServerAgentStreamEvent`.
  *
  * @plan:PLAN-20260707-AGENTNEUTRAL.P20
@@ -96,15 +99,17 @@ export function visibleText(directResult: unknown): string {
 /**
  * Returns a DEEP CLONE of the neutral `IContent[]` history from
  * `getHistory()` so callers can freely inspect/mutate without touching
- * the live contract value. Post-P21, `getHistory()` returns `IContent[]`
- * directly, so this is a pass-through clone (no provider conversion).
+ * the live contract value. Post-P21, `getHistory()` returns `readonly IContent[]`
+ * directly (entries shared by reference, issue #3109), so this is a
+ * pass-through clone (no provider conversion).
  */
 export function historyContent(historyResult: unknown): IContent[] {
   if (!Array.isArray(historyResult)) {
     return [];
   }
-  // Post-P21: getHistory() returns neutral IContent[] directly — no
-  // conversion needed, just a defensive deep clone.
+  // Post-P21 / #3109: getHistory() returns neutral readonly IContent[]
+  // directly (entries by reference, no deep clone) — no conversion needed,
+  // just a defensive deep clone for spec safety.
   const neutral = historyResult as IContent[];
   return neutral.map((entry) => structuredClone(entry));
 }

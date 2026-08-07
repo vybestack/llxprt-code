@@ -54,12 +54,12 @@ export interface MessageStreamDeps {
   ideContextTracker: IdeContextTracker;
   agentHookManager: AgentHookManager;
   getEffectiveModelIdentity: () => EffectiveModelIdentity;
-  getHistory: () => Promise<IContent[]>;
+  getHistory: () => Promise<readonly IContent[]>;
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
-  startChat: (extraHistory?: IContent[]) => Promise<ChatSession>;
-  getPreviousHistory: () => IContent[] | undefined;
+  startChat: (extraHistory?: readonly IContent[]) => Promise<ChatSession>;
+  getPreviousHistory: () => readonly IContent[] | undefined;
   setChat: (chat: ChatSession) => void;
   hasChat: () => boolean;
   complexityAnalyzer: ComplexityAnalyzer;
