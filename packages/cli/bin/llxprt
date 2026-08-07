@@ -393,7 +393,9 @@ if [ "$_llxprt_kernel" = "Darwin" ] && [ -n "$_llxprt_bun_pin" ]; then
     # identity-based macOS Keychain ACL, so every credential read degrades to a
     # login-password prompt that "Always Allow" cannot persist (#3020 sealed
     # change_acl with an empty application list). Inspect the designated
-    # requirement of the exact binary selected and warn once unless it carries
+    # requirement of the exact binary selected and warn once per launch (not
+    # once per credential read, which is the failure mode being described)
+    # unless it carries
     # Oven's exact team-identity clause (certificate leaf[subject.OU] =
     # "7FRXF46ZSN"), which is the OU stored in the existing Keychain ACL. The
     # warning is advisory: a Bun that is ad-hoc signed or has no team identity
