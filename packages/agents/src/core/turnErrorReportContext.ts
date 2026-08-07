@@ -14,7 +14,9 @@ const TURN_REPORT_HISTORY_TAIL = 8;
  * @pseudocode lines 300-322
  */
 export function buildErrorReportContext(
-  history: IContent[],
+  // Accepts the read-only view getHistory() now returns (#3109). Only
+  // `.slice()` and `.length` are used, both of which are readonly-safe.
+  history: readonly IContent[],
   request: string | object | readonly unknown[],
 ): Record<string, unknown> {
   return {
