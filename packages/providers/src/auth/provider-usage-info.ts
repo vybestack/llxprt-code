@@ -17,7 +17,7 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { EphemeralSettingReader } from '../config/capabilities.js';
 import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   CodexOAuthTokenSchema,
@@ -159,11 +159,11 @@ export async function getAllAnthropicUsageInfo(
  * valid, non-expired OAuth tokens with an account_id field.
  *
  * @param tokenStore - Token store to read from
- * @param config - Optional Config for base-url resolution
+ * @param config - Optional EphemeralSettingReader for base-url resolution
  */
 export async function getAllCodexUsageInfo(
   tokenStore: TokenStore,
-  config?: Config,
+  config?: EphemeralSettingReader,
 ): Promise<Map<string, Record<string, unknown>>> {
   const result = new Map<string, Record<string, unknown>>();
 
@@ -238,11 +238,11 @@ async function fetchAndStoreCodexResetCredits(
  * have valid, non-expired OAuth tokens with an account_id field.
  *
  * @param tokenStore - Token store to read from
- * @param config - Optional Config for base-url resolution
+ * @param config - Optional EphemeralSettingReader for base-url resolution
  */
 export async function getAllCodexRateLimitResetCredits(
   tokenStore: TokenStore,
-  config?: Config,
+  config?: EphemeralSettingReader,
 ): Promise<Map<string, CodexRateLimitResetCreditsResponse>> {
   const result = new Map<string, CodexRateLimitResetCreditsResponse>();
 

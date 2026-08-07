@@ -22,7 +22,7 @@ import {
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { BucketFailoverRegistrar } from '../config/capabilities.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   AuthenticatorInterface,
@@ -101,7 +101,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     private readonly tokenStore: TokenStore,
     private readonly providerRegistry: ProviderRegistry,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
-    private readonly config?: Config,
+    private readonly config?: BucketFailoverRegistrar,
     private runtimeMessageBus?: MessageBus,
   ) {}
 
@@ -714,7 +714,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         });
       } else {
         logger.debug(
-          'Config not available, bucket failover handler not configured',
+          'BucketFailoverRegistrar not available, bucket failover handler not configured',
         );
       }
     }

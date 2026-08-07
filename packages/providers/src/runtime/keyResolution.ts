@@ -12,7 +12,7 @@
 
 import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { EphemeralSettingWriter } from '../config/capabilities.js';
 import { updateActiveProviderApiKey } from './providerMutations.js';
 import { createProviderKeyStorage } from '../auth/index.js';
 
@@ -22,7 +22,7 @@ import { createProviderKeyStorage } from '../auth/index.js';
  */
 export async function resolveFromKeyArg(
   keyToUse: string | undefined,
-  config: Config,
+  config: EphemeralSettingWriter,
 ): Promise<boolean> {
   if (!keyToUse) {
     return false;
@@ -39,7 +39,7 @@ export async function resolveFromKeyArg(
  */
 export async function resolveFromKeyName(
   keyNameToUse: string | null,
-  config: Config,
+  config: EphemeralSettingWriter,
 ): Promise<boolean> {
   if (!keyNameToUse) {
     return false;
@@ -57,7 +57,7 @@ export async function resolveFromKeyName(
  */
 export async function resolveFromProfileKeyName(
   profileKeyName: string | undefined,
-  config: Config,
+  config: EphemeralSettingWriter,
 ): Promise<boolean> {
   if (!profileKeyName) {
     return false;
@@ -75,7 +75,7 @@ export async function resolveFromProfileKeyName(
  */
 export async function resolveFromKeyfile(
   keyfileToUse: string | undefined,
-  config: Config,
+  config: EphemeralSettingWriter,
 ): Promise<void> {
   if (!keyfileToUse) {
     return;

@@ -11,7 +11,7 @@
  */
 
 import type { IProvider } from './IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ActiveModelSource } from './config/capabilities.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   ProviderCapabilities,
@@ -65,7 +65,7 @@ export class ProviderCapabilitiesService {
   captureProviderCapabilities(
     provider: IProvider,
     settingsService: SettingsService,
-    config?: Config,
+    config?: ActiveModelSource,
   ): ProviderCapabilities {
     const hints = PROVIDER_CAPABILITY_HINTS[provider.name] ?? {};
 
@@ -130,7 +130,7 @@ export class ProviderCapabilitiesService {
     provider: IProvider,
     capabilities: ProviderCapabilities,
     settingsService: SettingsService,
-    config?: Config,
+    config?: ActiveModelSource,
   ): ProviderContext {
     const providerSettings = settingsService.getProviderSettings(provider.name);
     const toolFormatSetting =
@@ -149,7 +149,7 @@ export class ProviderCapabilitiesService {
   getStoredModelName(
     provider: IProvider,
     settingsService: SettingsService,
-    config?: Config,
+    config?: ActiveModelSource,
   ): string {
     const providerSettings = settingsService.getProviderSettings(provider.name);
     const storedModel = providerSettings.model as string | undefined;
@@ -174,7 +174,7 @@ export class ProviderCapabilitiesService {
   private detectVisionSupport(
     provider: IProvider,
     settingsService: SettingsService,
-    config?: Config,
+    config?: ActiveModelSource,
   ): boolean {
     const model = this.getStoredModelName(
       provider,
@@ -199,7 +199,7 @@ export class ProviderCapabilitiesService {
   private getProviderMaxTokens(
     provider: IProvider,
     settingsService: SettingsService,
-    config?: Config,
+    config?: ActiveModelSource,
   ): number {
     const model = this.getStoredModelName(
       provider,

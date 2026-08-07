@@ -10,7 +10,7 @@
  * Handles CLI argument resolution into runtime overrides.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { ProviderSettingsAccess } from '../config/capabilities.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 import { getCliRuntimeServices } from './runtimeAccessors.js';
@@ -84,7 +84,7 @@ async function resolveAndApplyApiKey(
         keyfileOverride?: string | null;
       }
     | undefined,
-  config: Config,
+  config: ProviderSettingsAccess,
   settingsService: SettingsService,
 ): Promise<void> {
   const providerName =
@@ -124,7 +124,7 @@ async function resolveAndApplyApiKey(
  */
 async function applyBaseUrlOverride(
   baseurl: string,
-  config: Config,
+  config: ProviderSettingsAccess,
 ): Promise<void> {
   const trimmed = baseurl.trim();
   if (!trimmed) {
