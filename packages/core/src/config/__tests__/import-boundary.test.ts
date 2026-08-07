@@ -85,9 +85,13 @@ describe('import boundary guards @issue:2417', () => {
     const source = readFileSync(providerRegistryPath, 'utf-8');
 
     it('imports DebugLogger from a deep path, not the core barrel', () => {
-      // Must import from @vybestack/llxprt-code-core/debug/...
+      // The guard's purpose (issue #2417) is that this module must not pull in
+      // a whole barrel. It originally asserted the core deep path, but core's
+      // ./debug/* entries were only a compatibility shim re-exporting the
+      // telemetry package. DebugLogger is now imported from its owning package
+      // directly, which satisfies the same constraint more strongly.
       const deepImportRegex =
-        /from\s+['"]@vybestack\/llxprt-code-core\/debug\/DebugLogger\.js['"]/;
+        /from\s+['"]@vybestack\/llxprt-code-(?:core|telemetry)\/debug\/DebugLogger\.js['"]/;
 
       expect(deepImportRegex.test(source)).toBe(true);
     });
