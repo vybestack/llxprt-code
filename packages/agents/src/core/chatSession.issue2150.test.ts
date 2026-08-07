@@ -204,14 +204,19 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     const events = await collectEvents(stream);
     expect(attempt).toBe(2);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
-    const texts = events.flatMap((event) =>
-      event.type === 'chunk'
-        ? event.value.content.blocks
-            .filter((block) => block.type === 'text')
-            .map((block) => (block as { text: string }).text)
-        : [],
-    );
-    expect(texts).toContain('recovered response');
+    const retryIndex = events.findIndex((event) => event.type === 'retry');
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const replacementTexts = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === 'chunk'
+          ? event.value.content.blocks.flatMap((block) =>
+              block.type === 'text' ? [block.text] : [],
+            )
+          : [],
+      );
+    expect(replacementTexts).toContain('recovered response');
+    expect(replacementTexts).not.toContain('partial');
   });
 
   it('restarts the turn after a connection error that followed a tool call', async () => {

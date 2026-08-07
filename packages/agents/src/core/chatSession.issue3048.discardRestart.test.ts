@@ -240,9 +240,15 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
           blocks: [
             {
               type: 'tool_call',
-              id: 'abandoned-call',
+              id: 'abandoned-call-1',
               name: 'read_file',
               parameters: { file_path: 'README.md' },
+            },
+            {
+              type: 'tool_call',
+              id: 'abandoned-call-2',
+              name: 'read_file',
+              parameters: { file_path: 'CHANGELOG.md' },
             },
           ],
         };
@@ -264,8 +270,35 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     const events = await collectEvents(stream);
 
     expect(attempt).toBe(2);
-    expect(events.some((event) => event.type === StreamEventType.RETRY)).toBe(
-      true,
+    const retryIndex = events.findIndex(
+      (event) => event.type === StreamEventType.RETRY,
+    );
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const abandonedToolCallIds = events
+      .slice(0, retryIndex)
+      .flatMap((event) =>
+        event.type === StreamEventType.CHUNK
+          ? event.value.content.blocks.flatMap((block) =>
+              block.type === 'tool_call' ? [block.id] : [],
+            )
+          : [],
+      );
+    expect(abandonedToolCallIds).toEqual([
+      'abandoned-call-1',
+      'abandoned-call-2',
+    ]);
+    const replacementBlocks = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === StreamEventType.CHUNK ? event.value.content.blocks : [],
+      );
+    expect(
+      replacementBlocks.some(
+        (block) => block.type === 'text' && block.text === 'recovered response',
+      ),
+    ).toBe(true);
+    expect(replacementBlocks.some((block) => block.type === 'tool_call')).toBe(
+      false,
     );
   });
 
