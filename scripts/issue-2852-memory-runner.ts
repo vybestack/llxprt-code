@@ -11,20 +11,22 @@ import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
+  evaluateMultiMetricPlateau,
   evaluatePostGcPlateau,
   parseFootprintBytes,
   parsePsRssBytes,
   parseVmmapSummary,
   validateCheckpointOrder,
   validateExactPid,
+  type PostGcMetrics,
 } from './issue-2852-memory-benchmark.js';
 
 const artifactDir = resolve(
   process.argv[2] ?? `/tmp/llxprt-issue-2852-${Date.now()}`,
 );
 const mode = process.argv[3] ?? 'text';
-if (mode !== 'text' && mode !== 'media') {
-  throw new Error('Mode must be text or media');
+if (mode !== 'text' && mode !== 'media' && mode !== 'reasoning') {
+  throw new Error('Mode must be text, media, or reasoning');
 }
 const turns = Number.parseInt(process.argv[4] ?? '4', 10);
 if (!Number.isInteger(turns) || turns < 3) {
@@ -151,18 +153,41 @@ if (exitCode !== 0) {
 }
 
 validateCheckpointOrder(checkpoints.map((checkpoint) => checkpoint.name));
-const plateau = evaluatePostGcPlateau(
-  readPostGcHeapBytes(targetOutput),
-  PLATEAU_TOLERANCE,
-);
+const osByCheckpointName = new Map(checkpoints.map((cp) => [cp.name, cp]));
 writeFileSync(resolve(artifactDir, 'target.stdout'), Buffer.concat(stdout));
 writeFileSync(resolve(artifactDir, 'target.stderr'), Buffer.concat(stderr));
+
+// `reasoning` gates every retention metric because bounding reasoning blocks
+// must show up in external and dirty WebKit Malloc, not just the JSC heap.
+const plateau =
+  mode === 'reasoning'
+    ? evaluateMultiMetricPlateau(
+        readPostGcMetrics(targetOutput, osByCheckpointName),
+        PLATEAU_TOLERANCE,
+      )
+    : evaluatePostGcPlateau(
+        readPostGcHeapBytes(targetOutput),
+        PLATEAU_TOLERANCE,
+      );
+
 writeFileSync(
   resolve(artifactDir, 'os-checkpoints.json'),
   `${JSON.stringify({ targetPid: target.pid, mode, turns, plateau, checkpoints }, null, 2)}\n`,
 );
 process.stdout.write(`${artifactDir}\n`);
-if (!plateau.withinTolerance) {
+
+if ('overallWithinTolerance' in plateau) {
+  if (!plateau.overallWithinTolerance) {
+    const failed = plateau.metrics
+      .filter((metric) => !metric.withinTolerance)
+      .map(
+        (metric) =>
+          `${metric.name} grew ${(metric.growthRatio * 100).toFixed(1)}%`,
+      )
+      .join(', ');
+    throw new Error(`Post-GC plateau failed: ${failed}`);
+  }
+} else if (!plateau.withinTolerance) {
   throw new Error(
     `Post-GC JSC heap grew ${(plateau.growthRatio * 100).toFixed(1)}% across equivalent turns`,
   );
@@ -171,6 +196,7 @@ if (!plateau.withinTolerance) {
 interface CheckpointRecord {
   readonly name?: string;
   readonly jsc?: { readonly heapSize?: number };
+  readonly processMemory?: { readonly external?: number };
 }
 
 /** Post-GC JSC heap size for each turn, oldest first. */
@@ -189,6 +215,59 @@ function readPostGcHeapBytes(path: string): number[] {
       }
       return heapSize;
     });
+}
+
+/**
+ * Post-GC combined metrics for the multi-metric plateau verdict: JSC heap and
+ * process.memoryUsage().external from the target checkpoint, plus dirty WebKit
+ * Malloc from the matching OS (vmmap) checkpoint.
+ */
+function readPostGcMetrics(
+  path: string,
+  osCheckpoints: ReadonlyMap<string, OsCheckpoint>,
+): PostGcMetrics[] {
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as CheckpointRecord)
+    .filter((record) => record.name?.endsWith('-post-gc') === true)
+    .map((record) => {
+      const osCheckpoint = osCheckpoints.get(record.name ?? '');
+      return {
+        jscHeapBytes: requireMetric(
+          record.jsc?.heapSize,
+          'jscHeap',
+          record.name,
+        ),
+        externalBytes: requireMetric(
+          record.processMemory?.external,
+          'external',
+          record.name,
+        ),
+        webkitMallocDirtyBytes: requireMetric(
+          osCheckpoint?.vmmap.webkitMallocDirtyBytes,
+          'webkitMallocDirty',
+          record.name,
+        ),
+      };
+    });
+}
+
+/**
+ * Fails fast, naming the metric and checkpoint, so a missing OS checkpoint or a
+ * malformed target record is diagnosable without inspecting the raw artifacts.
+ */
+function requireMetric(
+  value: unknown,
+  metric: string,
+  checkpointName: string | undefined,
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(
+      `Checkpoint ${checkpointName ?? '<unnamed>'} is missing required metric ${metric}`,
+    );
+  }
+  return value;
 }
 
 function captureOsCheckpoint(

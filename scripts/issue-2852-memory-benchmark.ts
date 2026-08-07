@@ -125,6 +125,62 @@ export function evaluatePostGcPlateau(
   };
 }
 
+/**
+ * Post-GC memory readings for one turn, combining the three required metrics:
+ * JSC heap size, process.memoryUsage().external, and dirty WebKit Malloc.
+ */
+export interface PostGcMetrics {
+  readonly jscHeapBytes: number;
+  readonly externalBytes: number;
+  readonly webkitMallocDirtyBytes: number;
+}
+
+export interface MetricPlateauResult extends PlateauResult {
+  readonly name: string;
+}
+
+export interface MultiMetricPlateauResult {
+  readonly overallWithinTolerance: boolean;
+  readonly metrics: readonly MetricPlateauResult[];
+}
+
+/**
+ * Evaluates post-GC plateau for every required metric independently. The
+ * overall verdict passes only when every metric plateaus within the tolerance;
+ * the first post-GC sample is warm-up for each metric.
+ */
+export function evaluateMultiMetricPlateau(
+  samples: readonly PostGcMetrics[],
+  tolerance: number,
+): MultiMetricPlateauResult {
+  if (samples.length < 3) {
+    throw new Error('Plateau needs at least three post-GC turns');
+  }
+  if (!(tolerance > 0)) {
+    throw new Error('Tolerance must be positive');
+  }
+
+  const extractors: ReadonlyArray<{
+    name: string;
+    read: (s: PostGcMetrics) => number;
+  }> = [
+    { name: 'jscHeap', read: (s) => s.jscHeapBytes },
+    { name: 'external', read: (s) => s.externalBytes },
+    { name: 'webkitMallocDirty', read: (s) => s.webkitMallocDirtyBytes },
+  ];
+
+  const metricResults = extractors.map(({ name, read }) => {
+    const series = samples.map(read);
+    const result = evaluatePostGcPlateau(series, tolerance);
+    return { name, ...result };
+  });
+
+  return {
+    overallWithinTolerance: metricResults.every((m) => m.withinTolerance),
+    metrics: metricResults,
+  };
+}
+
 function requireMetric(output: string, pattern: RegExp, name: string): number {
   const match = output.match(pattern);
   if (match === null) {
