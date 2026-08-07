@@ -25,10 +25,12 @@
 
 const { spawnSync } = require('node:child_process');
 const {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   mkdtempSync,
 } = require('node:fs');
@@ -37,23 +39,59 @@ const { tmpdir } = require('node:os');
 const { npmInvocation } = require('../lib/npm-command.cjs');
 const { spawnTarExtract } = require('../lib/tar-command.cjs');
 
+let nodeOnlyDirCache;
+
 /**
- * Platform-aware PATH that proves the launcher needs NO global Bun or Node.
+ * A directory containing ONLY the running Node executable.
+ *
+ * Since issue #2978 the published bin is a `#!/usr/bin/env node` shim, because
+ * a node shebang is the only kind npm's Windows cmd-shim can wrap correctly (a
+ * POSIX `#!/bin/sh` bin yields a .cmd that invokes /bin/sh, which does not
+ * exist on Windows). So `node` must be resolvable for the launcher to start at
+ * all. That is not a real weakening: npm cannot run without Node, so anything
+ * installed by npm already has it.
+ *
+ * Exposing a directory holding just this one binary keeps the guarantee that
+ * actually matters intact and strict — no globally installed *Bun* is
+ * reachable, so the launcher must still resolve its own package-local Bun.
+ */
+function nodeOnlyDir() {
+  if (nodeOnlyDirCache) {
+    return nodeOnlyDirCache;
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'llxprt-2603-node-'));
+  const target = join(dir, process.platform === 'win32' ? 'node.exe' : 'node');
+  try {
+    symlinkSync(process.execPath, target);
+  } catch {
+    // Windows without developer mode (and some filesystems) disallow symlinks.
+    copyFileSync(process.execPath, target);
+  }
+  nodeOnlyDirCache = dir;
+  return dir;
+}
+
+/**
+ * Platform-aware PATH that proves the launcher needs NO global Bun.
  * On POSIX, only /usr/bin and /bin are present (intentionally excludes
  * /usr/local/bin so a globally installed bun cannot be accidentally resolved).
  * On Windows, SystemRoot-derived paths are used (via process.env.SystemRoot,
  * NOT a hardcoded C:\Windows, so non-English/non-default Windows installations
- * work correctly) so cmd.exe remains reachable for the .cmd wrapper; no global
- * Bun/Node paths are included.
+ * work correctly) so cmd.exe remains reachable for the .cmd wrapper. In both
+ * cases the only other entry is {@link nodeOnlyDir}, which exposes Node and
+ * nothing else.
  */
 function constrainedPath() {
   if (process.platform === 'win32') {
     const root = process.env.SystemRoot || 'C:\\Windows';
-    return [join(root, 'System32'), root, join(root, 'System32', 'Wbem')].join(
-      ';',
-    );
+    return [
+      nodeOnlyDir(),
+      join(root, 'System32'),
+      root,
+      join(root, 'System32', 'Wbem'),
+    ].join(';');
   }
-  return '/usr/bin:/bin';
+  return `${nodeOnlyDir()}:/usr/bin:/bin`;
 }
 
 /**
@@ -290,10 +328,10 @@ function main() {
           encoding: 'utf8',
           timeout: 30_000,
           // The launcher resolves its own package-local Bun, so it must NOT
-          // need a global Bun or Node on PATH. The constrained PATH proves
-          // this invariant: if the launcher accidentally relied on a global
-          // Bun/Node, it would fail here. On Windows, cmd.exe (in System32)
-          // must remain reachable for the .cmd wrapper.
+          // need a global Bun on PATH. The constrained PATH proves this
+          // invariant: if the launcher accidentally relied on a global Bun, it
+          // would fail here. Only Node (which npm itself requires) and, on
+          // Windows, cmd.exe in System32 for the .cmd wrapper are reachable.
           env: { ...process.env, PATH: constrainedPath() },
         },
       );
@@ -357,7 +395,7 @@ function main() {
           encoding: 'utf8',
           timeout: 30_000,
           cwd: consumerDir,
-          // Constrained PATH proves the launcher needs no global Bun/Node.
+          // Constrained PATH proves the launcher needs no global Bun.
           env: { ...process.env, PATH: constrainedPath() },
         },
       );
