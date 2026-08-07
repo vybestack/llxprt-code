@@ -38,6 +38,7 @@
       "policy",
       "providers",
       "settings",
+      "telemetry",
       "tools"
     ],
     "auth": [],
@@ -65,7 +66,7 @@
     ],
     "ide-integration": ["telemetry"],
     "lsp": [],
-    "mcp": ["core", "settings", "storage", "tools"],
+    "mcp": ["core", "settings", "storage", "telemetry", "tools"],
     "policy": [],
     "providers": [
       "auth",
