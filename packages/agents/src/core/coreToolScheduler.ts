@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { CoreToolSchedulerConfig } from '../config/capabilities.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type {
   ToolCallRequestInfo,
@@ -91,7 +91,7 @@ export type {
  * @pseudocode lines 56-72
  */
 export interface CoreToolSchedulerOptions {
-  config: Config;
+  config: CoreToolSchedulerConfig;
   messageBus: MessageBus;
   toolRegistry: ToolRegistry;
   outputUpdateHandler?: OutputUpdateHandler;
@@ -109,7 +109,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
   private getPreferredEditor: () => EditorType | undefined = () => undefined;
-  private config: Config;
+  private config: CoreToolSchedulerConfig;
   private readonly toolExecutor: ToolExecutor;
   private readonly toolDispatcher: ToolDispatcher;
   private readonly confirmationCoordinator: ConfirmationCoordinator;

@@ -21,6 +21,13 @@
  */
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
+import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
+import type { PolicyEngine } from '@vybestack/llxprt-code-policy';
+import type { ToolGovernanceConfig } from '@vybestack/llxprt-code-tools/formatters/toolGovernanceUtils.js';
+import type { ToolExecutionConfig } from '../core/nonInteractiveToolExecutor.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 
 /** Reads the identifier of the active session. */
@@ -63,4 +70,30 @@ export interface EphemeralSettingsAccess {
 export interface SessionLimitsSource {
   getIdeMode(): boolean;
   getMaxSessionTurns(): number;
+}
+
+/**
+ * What the tool scheduler needs, composed from the contracts its callees
+ * already declare rather than invented fresh.
+ *
+ * The scheduler forwards its config into ToolExecutor (HookConfigBoundary),
+ * the non-interactive executor, the output limiter, the governance builder and
+ * telemetry's logToolCall. Each already declares what it requires, so the
+ * scheduler's contract is their intersection.
+ */
+export type CoreToolSchedulerConfig = ToolExecutionConfig &
+  ToolOutputSettingsProvider &
+  ToolGovernanceConfig &
+  ToolConfirmationConfig &
+  TelemetryConfig;
+
+/**
+ * What the confirmation coordinator reads: the four members that decide
+ * whether a tool call needs confirming, plus the hook surface it forwards on.
+ */
+export interface ToolConfirmationConfig extends HookConfigBoundary {
+  getAllowedTools(): string[] | undefined;
+  getApprovalMode(): ApprovalMode;
+  getPolicyEngine(): PolicyEngine;
+  isInteractive(): boolean;
 }

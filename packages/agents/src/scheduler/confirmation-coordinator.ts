@@ -16,7 +16,7 @@
 
 import { randomUUID } from 'node:crypto';
 import * as Diff from 'diff';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolConfirmationConfig } from '../config/capabilities.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
@@ -166,12 +166,12 @@ export class ConfirmationCoordinator {
 
   constructor(
     private readonly messageBus: MessageBus,
-    private readonly config: Config,
+    private readonly config: ToolConfirmationConfig,
     private readonly statusMutator: StatusMutator,
     private readonly schedulerAccessor: SchedulerAccessor,
     private readonly editorCallbacks: EditorCallbacks,
     private readonly onToolNotification: (
-      config: Config,
+      config: ToolConfirmationConfig,
       details: ToolCallConfirmationDetails,
     ) => Promise<unknown>,
   ) {}
