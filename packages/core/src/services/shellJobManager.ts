@@ -390,6 +390,9 @@ export class ShellJobManager {
     signal: string | null,
   ): void {
     this.survivors.delete(ctx.record.id);
+    if (ctx.record.phase === 'capping') {
+      return;
+    }
     const isCancelling = ctx.record.phase === 'cancelling';
     const { state, details } = classifyExit(code, signal, isCancelling);
     this.finalizeJob(ctx, state, details);
@@ -397,6 +400,9 @@ export class ShellJobManager {
 
   private handleError(ctx: ShellJobContext, err: Error): void {
     this.survivors.delete(ctx.record.id);
+    if (ctx.record.phase === 'capping') {
+      return;
+    }
     this.finalizeJob(ctx, 'failed', { failureReason: err.message });
   }
 
@@ -424,7 +430,6 @@ export class ShellJobManager {
           error: new Error('Windows kill timed out'),
         });
       }, this.windowsKillTimeoutMs);
-      timer.unref();
 
       // Normalise via an async trampoline so a SYNCHRONOUS throw from the
       // injected implementation (or a synchronously-rejected promise) can
@@ -459,6 +464,10 @@ export class ShellJobManager {
    * Cancel a running job. Sends SIGTERM to the process group, escalates to
    * SIGKILL after SIGKILL_TIMEOUT_MS. Resolves true if cancel won the
    * terminal transition; false if the job was already terminal.
+   *
+   * First-claimer precedence: if log-cap enforcement already claimed the
+   * terminal (phase === 'capping'), cancel cannot overwrite it or start a
+   * competing kill. It waits for the cap-owned terminal result and returns false.
    */
   async cancel(id: string): Promise<boolean> {
     const ctx = this.jobs.get(id);
@@ -466,6 +475,12 @@ export class ShellJobManager {
       return false;
     }
     if (ctx.record.state !== 'running') {
+      return false;
+    }
+
+    // The first terminal claimant owns termination and the terminal transition.
+    if (ctx.record.phase === 'capping' || ctx.record.phase === 'cancelling') {
+      await ctx.record.terminalPromise;
       return false;
     }
 
@@ -490,7 +505,6 @@ export class ShellJobManager {
         ctx.record.terminalPromise.then((): 'done' => 'done'),
         new Promise<'timeout'>((resolve) => {
           timer = setTimeout(() => resolve('timeout'), CANCEL_TIMEOUT_MS);
-          timer.unref();
         }),
       ]);
       if (result === 'timeout' && ctx.record.state === 'running') {
@@ -764,8 +778,7 @@ export class ShellJobManager {
       if (!stillLive) return [];
 
       await new Promise<void>((resolve) => {
-        const verifyTimer = setTimeout(resolve, VERIFY_DELAY_MS);
-        verifyTimer.unref();
+        setTimeout(resolve, VERIFY_DELAY_MS);
       });
 
       for (const [id, entry] of Array.from(this.survivors.entries())) {
@@ -847,6 +860,11 @@ export class ShellJobManager {
   private failJobIfOverCapSync(ctx: ShellJobContext): void {
     const totalSize = this.getTotalLogSize(ctx.record);
     if (totalSize > this.logMaxBytes) {
+      // First-claimer precedence: if cancel already claimed the terminal,
+      // cap defers so cancel owns the terminal reason.
+      if (ctx.record.phase === 'cancelling') {
+        return;
+      }
       killProcessGroupSafe(ctx.record.pid, 'SIGTERM');
       this.finalizeJob(ctx, 'failed', {
         failureReason: `Log output exceeded cap (${this.logMaxBytes} bytes)`,
@@ -874,6 +892,16 @@ export class ShellJobManager {
   private async failJobIfOverCapAsync(ctx: ShellJobContext): Promise<void> {
     const totalSize = this.getTotalLogSize(ctx.record);
     if (totalSize > this.logMaxBytes) {
+      // First-claimer precedence: if cancel already claimed the terminal
+      // (phase === 'cancelling'), cap defers entirely. The cancel kill is
+      // already in flight and will finalize the job with the cancel reason.
+      // This makes the outcome deterministic regardless of async scheduling.
+      if (ctx.record.phase === 'cancelling') {
+        return;
+      }
+      // Claim the terminal transition before taskkill: killing the child emits
+      // its exit event, which must not finalize the job without the cap reason.
+      ctx.record.phase = 'capping';
       // Guard the kill by ORIGINAL child identity (PID-reuse safe) and
       // record the survivor so dispose can reap if this kill does not
       // observe the exit.
@@ -884,6 +912,7 @@ export class ShellJobManager {
         });
         await this.safeWindowsKill(ctx.record.pid);
       }
+      ctx.record.phase = null;
       this.finalizeJob(ctx, 'failed', {
         failureReason: `Log output exceeded cap (${this.logMaxBytes} bytes)`,
       });

@@ -349,7 +349,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     for (const call of warnCalls) {
       const messageFn = call[0];
       if (typeof messageFn === 'function') {
-        const message = messageFn();
+        const message = String(messageFn());
         if (
           message.includes('Attempt 2 failed') &&
           message.includes('Max attempts reached')
@@ -411,7 +411,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     for (const call of warnCalls) {
       const messageFn = call[0];
       if (typeof messageFn === 'function') {
-        const message = messageFn();
+        const message = String(messageFn());
         // Look for the message with attempt number and retry delay
         if (
           message.includes('failed') &&

@@ -366,21 +366,28 @@ describe('FileCommandLoader', () => {
     expect(command.description).toBe('My test command');
   });
 
-  it('should sanitize colons in filenames to prevent namespace conflicts', async () => {
-    fsMock.mock({
-      'legacy:command.toml': 'prompt = "This is a legacy command"',
-    });
+  // Windows cannot represent this fixture: NTFS reserves ':' in a filename for
+  // alternate data streams, so `legacy:command.toml` cannot be created and the
+  // loader can never encounter such a name on that platform. The sanitization
+  // it verifies is therefore only reachable on POSIX.
+  it.skipIf(process.platform === 'win32')(
+    'should sanitize colons in filenames to prevent namespace conflicts',
+    async () => {
+      fsMock.mock({
+        'legacy:command.toml': 'prompt = "This is a legacy command"',
+      });
 
-    const loader = new FileCommandLoader(null);
-    const commands = await loader.loadCommands(signal);
+      const loader = new FileCommandLoader(null);
+      const commands = await loader.loadCommands(signal);
 
-    expect(commands).toHaveLength(1);
-    const command = commands[0];
-    expect(command).toBeDefined();
+      expect(commands).toHaveLength(1);
+      const command = commands[0];
+      expect(command).toBeDefined();
 
-    // Verify that the ':' in the filename was replaced with an '_'
-    expect(command.name).toBe('legacy_command');
-  });
+      // Verify that the ':' in the filename was replaced with an '_'
+      expect(command.name).toBe('legacy_command');
+    },
+  );
 
   describe('Processor Instantiation Logic', () => {
     it('instantiates only DefaultArgumentProcessor if no {{args}} or !{} are present', async () => {

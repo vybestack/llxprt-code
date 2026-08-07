@@ -425,25 +425,33 @@ describe('Config LSP Integration (P33)', () => {
 
   describe('REQ-CFG-070: navigationTools independently disableable', () => {
     it('should not register MCP navigation when navigationTools is false', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-          navigationTools: false,
-        },
-      });
-      const config = new Config(params);
-      await initializeTestConfig(config);
+      const startSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+        .mockResolvedValue(undefined);
+      const isAliveSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+        .mockReturnValue(true);
+      try {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+            navigationTools: false,
+          },
+        });
+        const config = new Config(params);
+        await initializeTestConfig(config);
 
-      const lspConfig = config.getLspConfig();
-      expect(lspConfig?.navigationTools).toBe(false);
+        const lspConfig = config.getLspConfig();
+        expect(lspConfig?.navigationTools).toBe(false);
 
-      // Verify service still starts but navigation disabled
-      const lspClient = config.getLspServiceClient();
-      expect(lspClient).toBeDefined();
-      expect(
-        lspClient?.isAlive() === true ||
-          lspClient?.getUnavailableReason() !== undefined,
-      ).toBe(true);
+        const lspClient = config.getLspServiceClient();
+        expect(lspClient).toBeDefined();
+        expect(startSpy).toHaveBeenCalledOnce();
+        expect(lspClient?.isAlive()).toBe(true);
+      } finally {
+        startSpy.mockRestore();
+        isAliveSpy.mockRestore();
+      }
     });
 
     // Live MCP navigation registration depends on the Bun-backed LSP transport,

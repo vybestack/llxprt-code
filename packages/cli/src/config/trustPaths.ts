@@ -86,10 +86,27 @@ export function getTrustPathProblemMessage(problem: TrustPathProblem): string {
   return TRUST_PATH_PROBLEM_MESSAGES[problem];
 }
 
-function describeAccessFailure(error: unknown): TrustPathProblem {
+function describeAccessFailure(
+  error: unknown,
+  normalizedPath: string,
+): TrustPathProblem {
   switch ((error as NodeJS.ErrnoException).code) {
-    case 'ENOENT':
+    case 'ENOENT': {
+      // Windows reports ENOENT, rather than ENOTDIR, when an existing parent
+      // component is a file. Walk upward to distinguish that invalid shape
+      // from a genuinely missing path.
+      let parent = path.dirname(normalizedPath);
+      while (parent !== path.dirname(parent)) {
+        try {
+          return fs.statSync(parent).isDirectory()
+            ? 'not-found'
+            : 'not-a-directory';
+        } catch {
+          parent = path.dirname(parent);
+        }
+      }
       return 'not-found';
+    }
     // A component of the path exists but is a file, so the path shape is wrong
     // rather than the folder missing.
     case 'ENOTDIR':
@@ -127,7 +144,10 @@ export function resolveTrustDirectory(
     // Each failure reports its own problem: telling the user a folder does not
     // exist would send them looking for the wrong thing when the real issue is
     // that it is unreadable, or that a component of the path is a file.
-    return { ok: false, problem: describeAccessFailure(error) };
+    return {
+      ok: false,
+      problem: describeAccessFailure(error, normalized.normalizedPath),
+    };
   }
   if (!stats.isDirectory()) {
     return { ok: false, problem: 'not-a-directory' };

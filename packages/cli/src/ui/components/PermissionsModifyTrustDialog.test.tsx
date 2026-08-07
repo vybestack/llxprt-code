@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as path from 'node:path';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -540,8 +541,12 @@ describe('PermissionsModifyTrustDialog', () => {
     );
     stdin.write('\r');
     await waitFor(() => {
+      // The hook keys trust rules by the RESOLVED working directory, so the
+      // expectation has to resolve too: on Windows path.resolve('/test/dir')
+      // is drive-qualified (D:\test\dir), and a POSIX literal would only ever
+      // match on POSIX. This is a no-op on POSIX, where the two are equal.
       expect(mockedSetValue).toHaveBeenCalledWith(
-        '/test/dir',
+        path.resolve('/test/dir'),
         TrustLevel.DO_NOT_TRUST,
       );
     });

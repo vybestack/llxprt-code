@@ -49,7 +49,11 @@ function writeFatalError(error: FatalError): void {
 function writeUnexpectedCriticalError(error: unknown): void {
   writeToStderr('An unexpected critical error occurred:\n');
   if (error instanceof Error) {
-    writeToStderr(`${error.stack}\n`);
+    const stack = error.stack ?? '';
+    const detail = stack.includes(error.message)
+      ? stack
+      : `${error.message}\n${stack}`;
+    writeToStderr(`${detail}\n`);
   } else {
     writeToStderr(`${String(error)}\n`);
   }

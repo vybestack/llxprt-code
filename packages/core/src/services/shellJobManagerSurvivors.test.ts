@@ -8,32 +8,23 @@ import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 import { ShellJobManager, ShellJobDisposalError } from './shellJobManager.js';
 import type { ShellJob } from './shellJobManager.js';
 import { boundedTaskkill, type TaskkillResult } from './shellProcessKill.js';
-import { debugLogger } from '../utils/debugLogger.js';
-
-function isPidAliveWindows(pid: number): boolean {
-  const result = spawnSync(
-    'tasklist',
-    ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
-    { encoding: 'utf8', timeout: 5000 },
-  );
-  return result.stdout.includes(String(pid));
-}
+import {
+  buildInnerPidMarkerCommand,
+  isPidAliveWindows,
+  reapAndRemoveWindowsTestDir,
+  readInnerPidFromMarker,
+  waitForPidStateWindows,
+} from '../../test/utils/shellJobTestCleanup.js';
 
 async function waitForPidGoneWindows(
   pid: number,
   timeoutMs = 10000,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (!isPidAliveWindows(pid)) return;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`PID ${pid} did not exit within ${timeoutMs}ms`);
+  await waitForPidStateWindows(pid, false, timeoutMs);
 }
 
 function waitForTerminal(
@@ -57,28 +48,6 @@ function waitForTerminal(
     };
     tick();
   });
-}
-
-/**
- * Force-kill a survivor process tree during test teardown and surface failures
- * via debugLogger instead of silently swallowing them. Never throws: this is
- * cleanup code, and throwing would mask real test failures / leak processes.
- */
-function reapSurvivor(pid: number): void {
-  const result = spawnSync('taskkill', ['/pid', pid.toString(), '/f', '/t'], {
-    timeout: 5000,
-    encoding: 'utf8',
-  });
-  if (result.error !== undefined || result.status !== 0) {
-    const output = result.stderr || result.stdout || '(no output)';
-    const detail =
-      result.error !== undefined
-        ? result.error.message
-        : `status ${result.status}: ${output}`;
-    debugLogger.warn(
-      `[shellJobManagerSurvivors.test] taskkill cleanup for pid ${pid} failed: ${detail}`,
-    );
-  }
 }
 
 // These tests are Windows-only: they depend on tasklist/taskkill for process
@@ -117,7 +86,7 @@ describe.skipIf(os.platform() !== 'win32')(
 
         await h2Manager.cancel(jobA.id);
         expect(h2Manager.get(jobA.id)?.state).toBe('cancelled');
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         // Fill retention (historyLimit = 1*2 = 2) so the survivor's context is
         // evicted from `jobs` while its survivor entry persists.
@@ -134,7 +103,7 @@ describe.skipIf(os.platform() !== 'win32')(
         h2Manager.markNotified([jobA.id, jobB.id, jobC.id]);
 
         expect(h2Manager.get(jobA.id)).toBeUndefined();
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         await h2Manager.dispose();
 
@@ -142,16 +111,7 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(isPidAliveWindows(survivorPid)).toBe(false);
         survivorPid = 0;
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h2Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(h2Dir, h2Manager, [survivorPid]);
       }
     }, 45000);
 
@@ -159,6 +119,9 @@ describe.skipIf(os.platform() !== 'win32')(
 
     it('cancel and dispose complete cleanup when taskkillImpl throws synchronously (H3)', async () => {
       const h3Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h3-sync-throw-'));
+      // A throwing taskkill means the manager never reaps the tree, so the
+      // INNER PowerShell (which owns the redirected log handles) survives.
+      const innerMarker = path.join(h3Dir, 'inner.pid');
       const h3Manager = new ShellJobManager({
         baseDir: h3Dir,
         taskkillImpl: (): Promise<TaskkillResult> => {
@@ -166,6 +129,7 @@ describe.skipIf(os.platform() !== 'win32')(
         },
       });
       let survivorPid = 0;
+      let innerPid = 0;
       let rejectionSeen = false;
       const onRejection = (): void => {
         rejectionSeen = true;
@@ -173,10 +137,11 @@ describe.skipIf(os.platform() !== 'win32')(
       process.on('unhandledRejection', onRejection);
       try {
         const job = h3Manager.launch({
-          command: 'Start-Sleep -Seconds 300',
+          command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
         survivorPid = job.pid;
+        innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         const result = await h3Manager.cancel(job.id);
@@ -193,27 +158,25 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(rejectionSeen).toBe(false);
       } finally {
         process.off('unhandledRejection', onRejection);
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h3Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(h3Dir, h3Manager, [
+          survivorPid,
+          innerPid,
+        ]);
       }
     }, 30000);
 
     it('cancel and dispose complete cleanup when taskkillImpl returns a rejected promise (H3)', async () => {
       const h3Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h3-reject-'));
+      // A rejecting taskkill means the manager never reaps the tree, so the
+      // INNER PowerShell (which owns the redirected log handles) survives.
+      const innerMarker = path.join(h3Dir, 'inner.pid');
       const h3Manager = new ShellJobManager({
         baseDir: h3Dir,
         taskkillImpl: (): Promise<TaskkillResult> =>
           Promise.reject(new Error('rejected promise')),
       });
       let survivorPid = 0;
+      let innerPid = 0;
       let rejectionSeen = false;
       const onRejection = (): void => {
         rejectionSeen = true;
@@ -221,10 +184,11 @@ describe.skipIf(os.platform() !== 'win32')(
       process.on('unhandledRejection', onRejection);
       try {
         const job = h3Manager.launch({
-          command: 'Start-Sleep -Seconds 300',
+          command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
         survivorPid = job.pid;
+        innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         const result = await h3Manager.cancel(job.id);
@@ -241,16 +205,10 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(rejectionSeen).toBe(false);
       } finally {
         process.off('unhandledRejection', onRejection);
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h3Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(h3Dir, h3Manager, [
+          survivorPid,
+          innerPid,
+        ]);
       }
     }, 30000);
 
@@ -258,19 +216,30 @@ describe.skipIf(os.platform() !== 'win32')(
 
     it('reaps multiple survivors concurrently (bounded by one kill timeout, not N) (H5)', async () => {
       const h5Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h5-concurrent-'));
+      // A never-settling taskkill means the manager never reaps the trees, so
+      // each job's INNER PowerShell (which owns the redirected log handles)
+      // survives. Capture each via a unique marker so teardown reaps all
+      // outer + inner pids.
       const h5Manager = new ShellJobManager({
         baseDir: h5Dir,
         maxBackgroundJobs: 5,
         taskkillImpl: (): Promise<TaskkillResult> => new Promise(() => {}),
       });
       const survivorPids: number[] = [];
+      const innerPids: number[] = [];
+      const innerMarkers: string[] = [];
       try {
         for (let i = 0; i < 3; i++) {
+          const marker = path.join(h5Dir, `inner-${i}.pid`);
+          innerMarkers.push(marker);
           const job = h5Manager.launch({
-            command: 'Start-Sleep -Seconds 300',
+            command: buildInnerPidMarkerCommand(marker),
             cwd: os.tmpdir(),
           });
           survivorPids.push(job.pid);
+        }
+        for (const marker of innerMarkers) {
+          innerPids.push(await readInnerPidFromMarker(marker, 10000));
         }
         await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -290,18 +259,10 @@ describe.skipIf(os.platform() !== 'win32')(
         // CI machine cannot flake it while still failing a sequential reap.
         expect(elapsed).toBeLessThan(16000);
       } finally {
-        for (const pid of survivorPids) {
-          if (pid > 0 && isPidAliveWindows(pid)) {
-            reapSurvivor(pid);
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(h5Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(h5Dir, h5Manager, [
+          ...survivorPids,
+          ...innerPids,
+        ]);
       }
     }, 45000);
 
@@ -309,6 +270,9 @@ describe.skipIf(os.platform() !== 'win32')(
 
     it('dispose rejects with ShellJobDisposalError when kill always fails (I2)', async () => {
       const i2Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'i2-fail-survivor-'));
+      // An always-fail taskkill means the manager never reaps the tree, so the
+      // INNER PowerShell (which owns the redirected log handles) survives.
+      const innerMarker = path.join(i2Dir, 'inner.pid');
       const i2Manager = new ShellJobManager({
         baseDir: i2Dir,
         maxBackgroundJobs: 1,
@@ -319,19 +283,21 @@ describe.skipIf(os.platform() !== 'win32')(
           }),
       });
       let survivorPid = 0;
+      let innerPid = 0;
       let survivorLogPath = '';
       try {
         const job = i2Manager.launch({
-          command: 'Start-Sleep -Seconds 300',
+          command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
         survivorPid = job.pid;
         survivorLogPath = path.join(i2Dir, `${job.id}.log`);
+        innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Cancel times out (kill fails) → survivor added.
         await i2Manager.cancel(job.id);
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         // Dispose tries to reap but the kill always fails. dispose() must
         // REJECT with ShellJobDisposalError naming the surviving job id, its
@@ -353,21 +319,15 @@ describe.skipIf(os.platform() !== 'win32')(
 
         // Survivor tracking retained so the live process tree is not orphaned.
         expect(i2Manager.getLiveSurvivorCount()).toBe(1);
-        expect(isPidAliveWindows(survivorPid)).toBe(true);
+        await waitForPidStateWindows(survivorPid, true, 5000);
 
         // Survivor's log file is NOT deleted during the failed dispose.
         expect(fs.existsSync(survivorLogPath)).toBe(true);
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(i2Dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(i2Dir, i2Manager, [
+          survivorPid,
+          innerPid,
+        ]);
       }
     }, 30000);
 
@@ -405,18 +365,11 @@ describe.skipIf(os.platform() !== 'win32')(
         await disposalPromise.catch(() => {
           // Survivor disposal may reject — acceptable here.
         });
-        survivorPid = 0;
+        // Do NOT zero survivorPid: dispose may have failed to reap the
+        // survivor, and zeroing would discard the only known PID. Only
+        // discard ownership after cleanup proves exit (in finally).
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(gateDir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(gateDir, gateManager, [survivorPid]);
       }
     }, 30000);
 
@@ -435,7 +388,7 @@ describe.skipIf(os.platform() !== 'win32')(
         await first;
         await second;
       } finally {
-        fs.rmSync(idemDir, { recursive: true, force: true });
+        await reapAndRemoveWindowsTestDir(idemDir, idemManager, []);
       }
     });
 
@@ -476,18 +429,12 @@ describe.skipIf(os.platform() !== 'win32')(
         await disposalPromise.catch(() => {
           // Survivor disposal may reject — acceptable here.
         });
-        survivorPid = 0;
+        // Do NOT zero survivorPid: dispose may have failed to reap.
+        // Only discard ownership after cleanup proves exit (in finally).
       } finally {
-        if (survivorPid > 0 && isPidAliveWindows(survivorPid)) {
-          reapSurvivor(survivorPid);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        fs.rmSync(microDir, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
+        await reapAndRemoveWindowsTestDir(microDir, microManager, [
+          survivorPid,
+        ]);
       }
     }, 30000);
   },

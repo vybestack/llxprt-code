@@ -204,8 +204,9 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
 
     await oauthManagerNoConfig.getOAuthToken('anthropic');
 
-    const warningMessages = warnSpy.mock.calls.map(([message]) =>
-      String(message),
+    const warningMessages: string[] = Array.from(
+      warnSpy.mock.calls,
+      ([message]) => String(message),
     );
     expect(
       warningMessages.some(

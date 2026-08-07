@@ -13,6 +13,11 @@ import { spawnSync } from 'node:child_process';
 
 import { debugLogger } from '../utils/debugLogger.js';
 import {
+  buildInnerPidMarkerCommand,
+  reapAndRemoveWindowsTestDir,
+  readInnerPidFromMarker,
+} from '../../test/utils/shellJobTestCleanup.js';
+import {
   buildWindowsBackgroundBootstrap,
   encodePowerShellCommand,
   escapePowerShellSingleQuoted,
@@ -26,61 +31,37 @@ import {
 const POWERSHELL_PROBE_TIMEOUT_MS = 5000;
 
 /**
- * The inner command in the unref test sleeps this many seconds. If unref()
- * works the spawner exits well before this. If unref() is removed the spawner
- * hangs for the full duration — which the outer timeout then kills.
+ * The inner command in the unref test sleeps this many seconds. The subprocess
+ * relies on spawnWindowsBackground to unref its child and must exit well before
+ * the managed command completes.
  */
 const UNREF_SLEEP_SECONDS = 30;
 
 /**
- * Outer spawnSync timeout for the unref test. Acts as a backstop: if unref()
- * is broken the spawner hangs for UNREF_SLEEP_SECONDS and this kills it.
+ * Outer spawnSync timeout for the unref test. This is the backstop if the
+ * production unref does not let the subprocess exit. When it fires,
+ * spawnSync's status becomes non-zero/null, distinguishing successful unref
+ * (status 0) from a hang.
  */
-const UNREF_SPAWN_TIMEOUT_MS = 15000;
+const UNREF_SPAWN_TIMEOUT_MS = 25000;
 
 /**
- * The spawner must exit before this elapsed time when unref() is present.
- * Typical measured elapsed on this machine is ~2–5s (PowerShell cold start
- * + import). The old bound (10000ms) was too tight on CI where cold starts
- * can approach it. 12000ms still catches a genuine unref regression: with
- * unref removed the spawner hangs for UNREF_SLEEP_SECONDS (30s) and is only
- * killed by UNREF_SPAWN_TIMEOUT_MS (15000ms), so elapsed would be ~15000ms
- * which exceeds 12000ms and fails the assertion.
+ * Check whether a PID is alive using signal 0 (works on both Windows and
+ * POSIX). Used to verify the unref contract: the background process survives
+ * the spawner's exit.
  */
-const UNREF_ELAPSED_BOUND_MS = 12000;
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Pure helper tests — run on every platform
 // ---------------------------------------------------------------------------
-
-/**
- * Force-kill the process tree recorded in a pid file, if any, and surface
- * cleanup failures instead of letting orphaned processes fail silently.
- */
-function reapPidFile(pidFilePath: string): void {
-  if (!fs.existsSync(pidFilePath)) {
-    return;
-  }
-  const pid = parseInt(fs.readFileSync(pidFilePath, 'utf8').trim(), 10);
-  if (Number.isNaN(pid) || pid <= 0) {
-    return;
-  }
-  const killResult = spawnSync(
-    'taskkill',
-    ['/pid', pid.toString(), '/f', '/t'],
-    {
-      timeout: POWERSHELL_PROBE_TIMEOUT_MS,
-      encoding: 'utf8',
-    },
-  );
-  if (killResult.status === 0) {
-    return;
-  }
-  const output = killResult.stderr || killResult.stdout || '(no output)';
-  debugLogger.warn(
-    `[shellJobWindowsSpawn.test] taskkill cleanup for pid ${pid} exited with status ${killResult.status}: ${output}`,
-  );
-}
 
 describe('escapePowerShellSingleQuoted', () => {
   it('wraps a plain string in single quotes', () => {
@@ -383,12 +364,15 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
       await spawned.exited;
     });
 
-    it('does not keep the spawner alive (unref)', async () => {
+    it('does not keep the spawner alive (production unref)', async () => {
       const unrefDir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-unref-'));
       const logPath = path.join(unrefDir, 'out.log');
       const errLogPath = path.join(unrefDir, 'err.log');
       const scriptPath = path.join(unrefDir, 'spawn-exit.ts');
-      const pidFilePath = path.join(unrefDir, 'spawned.pid');
+      const outerPidFilePath = path.join(unrefDir, 'outer.pid');
+      const innerPidFilePath = path.join(unrefDir, 'inner.pid');
+      let outerPid = 0;
+      let innerPid = 0;
       try {
         fs.writeFileSync(logPath, '');
         fs.writeFileSync(errLogPath, '');
@@ -397,39 +381,78 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
           .join(__dirname, 'shellJobSpawn.ts')
           .replace(/\\/g, '/');
         const powershellExe = getPowerShellExecutable();
+        const managedCommand = buildInnerPidMarkerCommand(
+          innerPidFilePath,
+          UNREF_SLEEP_SECONDS,
+        );
+        // The script does NOT manually call p.child.unref(): production code
+        // (spawnWindowsBackground) already unrefs immediately at spawn. If that
+        // production contract regresses, the spawner will hang and the
+        // status=0 assertion below will fail.
         const script = [
           `import { spawnWindowsBackground } from '${modulePath}';`,
           `const p = spawnWindowsBackground(`,
           `  ${JSON.stringify(powershellExe)},`,
-          `  'Start-Sleep -Seconds ${UNREF_SLEEP_SECONDS}',`,
+          `  ${JSON.stringify(managedCommand)},`,
           `  ${JSON.stringify(os.tmpdir())},`,
           `  { ...process.env },`,
           `  ${JSON.stringify(logPath)},`,
           `  ${JSON.stringify(errLogPath)},`,
           `);`,
-          `require('fs').writeFileSync(${JSON.stringify(pidFilePath)}, String(p.pid));`,
+          `require('fs').writeFileSync(${JSON.stringify(outerPidFilePath)}, String(p.pid));`,
         ].join('\n');
+
         fs.writeFileSync(scriptPath, script);
 
-        // If unref() is present, the spawner exits as soon as the import + spawn
-        // completes (well under the elapsed bound). If unref() is removed, the
-        // spawned child keeps the event loop alive and the spawner hangs for the
-        // full UNREF_SLEEP_SECONDS, which UNREF_SPAWN_TIMEOUT_MS kills.
         const start = Date.now();
-        const result = spawnSync('npx', ['tsx', scriptPath], {
+        // Execute the fixture with the current Bun executable
+        // (process.execPath), not npx/tsx/Node: spawnWindowsBackground's
+        // production-unref contract is exercised by the runtime that will
+        // actually run it, which is Bun. Using npx/tsx/Node would prove
+        // nothing about production behavior.
+        const result = spawnSync(process.execPath, [scriptPath], {
           timeout: UNREF_SPAWN_TIMEOUT_MS,
           encoding: 'utf8',
-          shell: true,
+          shell: false,
         });
         const elapsed = Date.now() - start;
 
+        // Capture marker PIDs BEFORE assertions so cleanup in finally always
+        // has the known PIDs even if an assertion throws.
+        try {
+          outerPid = await readInnerPidFromMarker(outerPidFilePath, 10000);
+        } catch {
+          // Marker may not exist if spawn failed before writing it.
+        }
+        try {
+          innerPid = await readInnerPidFromMarker(innerPidFilePath, 10000);
+        } catch {
+          // Inner process may not have started yet.
+        }
+
+        // status 0 is the deterministic regression signal: it proves the
+        // spawner exited on its own BEFORE the spawnSync timeout backstop.
+        // Node's spawnSync sets status to null when the timeout kills the
+        // child, so a null/non-zero status would indicate the spawner hung
+        // (the unref regression). This is race-resistant: it does not depend
+        // on wall-clock timing that varies with cold-start cost.
         expect(result.status).toBe(0);
-        expect(elapsed).toBeLessThan(UNREF_ELAPSED_BOUND_MS);
+
+        // Verify the unref contract directly. Both PowerShell processes must
+        // still be alive: the outer waits for the inner 30s sleep, while the
+        // inner owns the redirected logs. This proves unref detached the tree
+        // without killing it and gives teardown both PIDs for direct reaping.
+        expect(outerPid).toBeGreaterThan(0);
+        expect(isPidAlive(outerPid)).toBe(true);
+        expect(innerPid).toBeGreaterThan(0);
+        expect(isPidAlive(innerPid)).toBe(true);
+
+        debugLogger.debug(
+          `[shellJobWindowsSpawn.test] unref subprocess exited in ${elapsed}ms (status ${result.status})`,
+        );
       } finally {
-        // Reap the spawned 30s process tree so it does not survive the test run.
-        reapPidFile(pidFilePath);
-        fs.rmSync(unrefDir, { recursive: true, force: true });
+        await reapAndRemoveWindowsTestDir(unrefDir, null, [outerPid, innerPid]);
       }
-    });
+    }, 60_000);
   },
 );

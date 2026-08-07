@@ -541,7 +541,14 @@ describe('Settings Loading and Merging', () => {
       const workspaceSettingsContent = {
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
       };
-      const projectEnvPath = pathActual.join(MOCK_WORKSPACE_DIR, '.env');
+      // findEnvFile resolves its start directory before walking, so the mock
+      // has to match the resolved form. On Windows join() alone leaves the
+      // path drive-less (\mock\workspace\.env) while production looks for
+      // D:\mock\workspace\.env, and the strict equality below never matches.
+      const projectEnvPath = pathActual.join(
+        pathActual.resolve(MOCK_WORKSPACE_DIR),
+        '.env',
+      );
 
       vi.spyOn(process, 'cwd').mockReturnValue(MOCK_WORKSPACE_DIR);
       delete process.env.DEBUG;

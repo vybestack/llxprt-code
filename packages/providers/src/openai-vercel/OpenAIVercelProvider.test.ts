@@ -195,6 +195,7 @@ describe('OpenAIVercelProvider', () => {
             headers: {
               Authorization: 'Bearer live-key',
             },
+            signal: expect.any(AbortSignal),
           },
         );
         expect(models).toStrictEqual(

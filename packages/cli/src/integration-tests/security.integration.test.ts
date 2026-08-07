@@ -266,8 +266,14 @@ describe('API Key Security Integration Tests', () => {
         'utf8',
       );
 
-      // Should contain paths but not key contents
-      expect(fileContent).toContain(keyfilePath);
+      // Should contain paths but not key contents. Assert against the parsed
+      // settings rather than the raw text: a Windows path embeds backslashes,
+      // which JSON escapes, so a raw substring check would compare the
+      // unescaped path against escaped content and fail on that platform only.
+      const parsedSettings = JSON.parse(fileContent) as {
+        providerKeyfiles?: Record<string, string>;
+      };
+      expect(parsedSettings.providerKeyfiles?.['openai']).toBe(keyfilePath);
       expect(fileContent).not.toContain('sk-test-keyfile-content');
     });
   });

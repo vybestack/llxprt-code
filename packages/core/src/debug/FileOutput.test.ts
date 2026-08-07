@@ -104,7 +104,7 @@ describe('FileOutput', () => {
   });
 
   afterEach(async () => {
-    if (fileOutput) {
+    if (fileOutput !== undefined) {
       await fileOutput.dispose();
     }
   });
