@@ -17,7 +17,7 @@
 
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
 import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
@@ -127,7 +127,7 @@ function applyHookOutputModifications(
 }
 
 export class ToolExecutor {
-  constructor(private readonly config: Config) {}
+  constructor(private readonly config: HookConfigBoundary) {}
 
   /**
    * Execute a single tool call from scheduled to completed state.

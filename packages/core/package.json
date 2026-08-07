@@ -530,6 +530,11 @@
     "./utils/tool-utils.js": {
       "bun": "./src/utils/tool-utils.ts",
       "import": "./dist/src/utils/tool-utils.js"
+    },
+    "./core/hookConfigBoundary.js": {
+      "types": "./dist/src/core/hookConfigBoundary.d.ts",
+      "bun": "./src/core/hookConfigBoundary.ts",
+      "import": "./dist/src/core/hookConfigBoundary.js"
     }
   },
   "scripts": {

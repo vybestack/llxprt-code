@@ -10,7 +10,6 @@
  * @pseudocode:analysis/pseudocode/03-tool-hook-pipeline.md
  */
 
-import type { Config } from '../config/config.js';
 import {
   BeforeToolHookOutput,
   AfterToolHookOutput,
@@ -54,7 +53,7 @@ function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
  * @returns BeforeToolHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerBeforeToolHook(
-  config: Config,
+  config: HookConfigBoundary,
   toolName: string,
   toolInput: Record<string, unknown>,
   mcpContext?: McpContext,
@@ -106,7 +105,7 @@ export async function triggerBeforeToolHook(
  * @returns AfterToolHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerAfterToolHook(
-  config: Config,
+  config: HookConfigBoundary,
   toolName: string,
   toolInput: Record<string, unknown>,
   toolOutput: ToolResult,
@@ -266,7 +265,7 @@ function getNotificationMessage(
  * @returns NotificationHookResult if hooks execute, undefined otherwise
  */
 export async function triggerToolNotificationHook(
-  config: Config,
+  config: HookConfigBoundary,
   confirmationDetails: ToolCallConfirmationDetails,
 ): Promise<NotificationHookResult | undefined> {
   const hookSystem = getEnabledHookSystem(config);
