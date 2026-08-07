@@ -591,10 +591,10 @@ function dispatchAgentEvent(
  * write, JSON accumulation, stream-JSON emission), preserving the user-visible
  * output, exit-code, and stderr behavior of the legacy manual turn loop.
  *
- * The loop emits a per-turn `done` (from `Finished`); when a tool is requested
- * the loop continues past it. This consumer records each `done` and acts only
- * on the final one at stream exhaustion — returning early would abandon the
- * generator mid-loop and prevent tool execution.
+ * The loop emits a single terminal `done` as its LAST event (issue #3087).
+ * This consumer still records it and acts on it only at stream exhaustion:
+ * returning early on `done` would abandon the generator instead of letting it
+ * complete.
  */
 export async function processAgentStream(
   events: AsyncIterable<AgentEvent>,

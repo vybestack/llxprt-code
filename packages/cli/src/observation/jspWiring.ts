@@ -432,17 +432,6 @@ export function observeTurnCancelled(): void {
   isolate(() => tap.onTurnEnded('cancelled'));
 }
 
-/**
- * Signal that the agent stream for the current turn has fully settled and
- * control has returned to the prompt. The terminal `done` event fires before
- * the turn's tool results arrive, so a pause that ends the turn is only
- * observable once the stream has settled. This is the hook that lets the tap
- * open a `user_input` wait at the honest moment (issue #3071).
- */
-export function observeTurnSettled(): void {
-  isolate(() => tap.onStreamSettled());
-}
-
 export function observeAgentEvent(event: AgentEvent): void {
   isolate(() => tap.processEvent(event));
 }

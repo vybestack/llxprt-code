@@ -34,15 +34,6 @@ export interface ObservationTap {
   onTurnEnded(outcome: JspTurnOutcome): void;
   processEvent(event: AgentEvent): void;
   onFlushCommitted(content: string, committedMs: number): void;
-  /**
-   * The agent stream for the current turn has fully settled and control has
-   * returned to the prompt. This is distinct from `done`/`endTurn`: the
-   * terminal `done` event fires before the turn's tool results arrive, so a
-   * turn that ended with the pause tool still has its tool result pending at
-   * `endTurn`. Settled is the honest moment to decide whether a user_input
-   * wait should open, because every event the turn will produce has arrived.
-   */
-  onStreamSettled(): void;
 }
 
 /**
@@ -172,9 +163,10 @@ function routeToolEvent(
   if (event.type === 'tool-status') {
     const label = scope.toolLabels.get(event.update.id) ?? event.update.name;
     // Refresh the call-id → label correlation from the status update's name.
-    // The terminal `done` resets turn-scoped state (clearing toolLabels) before
-    // a turn's tool results arrive, so a result whose projection carries an
-    // empty name must be re-correlated from the intervening status updates.
+    // A `tool-result` projected from the raw a2a `ToolCallResponse` stream
+    // variant carries an EMPTY name (only the loop-native `tools_complete`
+    // path knows the originating request), so the label has to come from the
+    // `tool-call` or an intervening status update.
     if (event.update.name.length > 0) {
       scope.toolLabels.set(event.update.id, event.update.name);
     }
@@ -281,7 +273,6 @@ export function createObservationTap(
       onTurnEnded: () => undefined,
       processEvent: () => undefined,
       onFlushCommitted: () => undefined,
-      onStreamSettled: () => undefined,
     };
   }
   const scope: TurnScope = {
@@ -322,31 +313,34 @@ export function createObservationTap(
   };
 
   /**
-   * A turn can now be closed from three places: a terminal `done` event, the
+   * A turn can be closed from three places: the terminal `done` event, the
    * submit path's failure handler, and the interactive cancel handler. Only the
    * first of those may take effect, or the observer would see several ends for
    * one turn. Ending a turn that was never started is likewise a no-op.
    *
-   * The wait is NOT opened here. The terminal `done` event fires before the
-   * turn's tool results arrive (the scheduler flushes deferred Finished events
-   * before scheduling tools), so at this point a pause result has not
-   * been observed yet. Opening the wait here would be dead code. The wait opens
-   * in `onStreamSettled`, which runs once the stream — including those late
-   * results — has fully arrived.
+   * This is also where a pause-ended turn opens its `user_input` wait. The
+   * public stream emits exactly one `done` and it is the LAST event of the
+   * turn (issue #3087), so by the time a `done` reaches here every tool result
+   * — including a pause's — has already been observed. `turn.ended` is
+   * published FIRST and the wait second: the wait must not claim the agent is
+   * blocked on a human before control has actually returned. The two are
+   * separate revisions, so a consumer sampling between them momentarily sees
+   * the idle state.
    */
   let turnOpen = false;
-  let lastOutcome: JspTurnOutcome | null = null;
   const endTurn = (outcome: JspTurnOutcome): void => {
     if (!turnOpen) {
       return;
     }
     turnOpen = false;
+    // Read the pause flag before the reset clears it.
+    const pauseEndedTurn = scope.successfulPauseObserved;
     resetTurnScopedState();
-    // Record the outcome before publishing turn.ended so onStreamSettled (which
-    // runs after the turn's tool results arrive) can gate the user_input wait
-    // on the turn's actual outcome rather than re-deriving it.
-    lastOutcome = outcome;
     target.onTurnEnded(outcome);
+    if (pauseEndedTurn && outcome === 'completed' && !pauseWaitOpen) {
+      target.onWaitOpened('user_input');
+      pauseWaitOpen = true;
+    }
   };
 
   return {
@@ -360,7 +354,6 @@ export function createObservationTap(
         pauseWaitOpen = false;
       }
       resetTurnScopedState();
-      lastOutcome = null;
       turnOpen = true;
       target.onTurnStarted();
     },
@@ -373,26 +366,6 @@ export function createObservationTap(
     onFlushCommitted(content: string, committedMs: number): void {
       if (content.length > 0) {
         target.onAssistantMessageCommitted(content, committedMs);
-      }
-    },
-    onStreamSettled(): void {
-      // The stream has settled: every event the turn will produce — including
-      // the tool results that arrive after the terminal `done` — has arrived.
-      // Only now can a successful pause be observed truthfully, so this is
-      // the honest moment to open the user_input wait.
-      //
-      // turn.ended (published by endTurn on the early `done`) and wait.opened
-      // are published as two separate revisions, so a consumer sampling between
-      // them momentarily sees the idle state. Ordering (turn.ended first) is
-      // still correct: the wait must not claim the agent is blocked before
-      // control has actually returned.
-      if (
-        scope.successfulPauseObserved &&
-        lastOutcome === 'completed' &&
-        !pauseWaitOpen
-      ) {
-        target.onWaitOpened('user_input');
-        pauseWaitOpen = true;
       }
     },
   };
