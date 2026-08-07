@@ -19,12 +19,16 @@ import { spawn } from 'node:child_process';
  * variable to prevent infinite relaunch loops.
  *
  * @param additionalArgs - Additional Node.js arguments (e.g., --max-old-space-size=4096)
+ * @param argvTail - The argv tail to launch with (defaults to `process.argv.slice(1)`
+ *   for compatibility). Callers that need to augment argv (e.g. transporting a
+ *   bootstrap path across a memory relaunch) pass a custom tail.
  * @returns Promise that resolves to the child process exit code
  */
 export async function relaunchAppInChildProcess(
   additionalArgs: string[],
+  argvTail: string[] = process.argv.slice(1),
 ): Promise<number> {
-  const nodeArgs = [...additionalArgs, ...process.argv.slice(1)];
+  const nodeArgs = [...additionalArgs, ...argvTail];
   const newEnv = { ...process.env, LLXPRT_CODE_NO_RELAUNCH: 'true' };
 
   const child = spawn(process.execPath, nodeArgs, {
