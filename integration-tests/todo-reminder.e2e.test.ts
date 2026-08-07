@@ -8,9 +8,10 @@ import { test, expect } from 'bun:test';
 import { join } from 'node:path';
 import { TestRig, printDebugInfo } from './test-helper.js';
 
-const skipTodoTests =
+const skipTodoTests = Boolean(
   process.env.SKIP_TODO_TESTS !== 'false' &&
-  (process.env.CI || process.env.GITHUB_ACTIONS);
+    (process.env.CI || process.env.GITHUB_ACTIONS),
+);
 
 /**
  * @requirement REQ-005

@@ -65,6 +65,20 @@ void vi.mock('vscode', () => ({
   })),
 }));
 
+/**
+ * Points the mocked `vscode.workspace.workspaceFolders` at a fixture.
+ *
+ * The mock exposes it as a plain data property, so it is assigned rather than
+ * spied: Bun's `spyOn` takes no accessor argument and rejects real accessors.
+ */
+function setWorkspaceFolders(
+  folders: vscode.WorkspaceFolder[] | undefined,
+): void {
+  (
+    vscode.workspace as { workspaceFolders?: vscode.WorkspaceFolder[] }
+  ).workspaceFolders = folders;
+}
+
 describe('activate with multiple folders', () => {
   let context: vscode.ExtensionContext;
   let onDidChangeWorkspaceFoldersCallback: (
@@ -101,12 +115,7 @@ describe('activate with multiple folders', () => {
   });
 
   it('should set a single folder path', async () => {
-    const workspaceFoldersSpy = vi.spyOn(
-      vscode.workspace,
-      'workspaceFolders',
-      'get',
-    );
-    workspaceFoldersSpy.mockReturnValue([
+    setWorkspaceFolders([
       { uri: { fsPath: '/foo/bar' } },
     ] as vscode.WorkspaceFolder[]);
 
@@ -119,12 +128,7 @@ describe('activate with multiple folders', () => {
   });
 
   it('should set multiple folder paths, separated by OS-specific path delimiter', async () => {
-    const workspaceFoldersSpy = vi.spyOn(
-      vscode.workspace,
-      'workspaceFolders',
-      'get',
-    );
-    workspaceFoldersSpy.mockReturnValue([
+    setWorkspaceFolders([
       { uri: { fsPath: '/foo/bar' } },
       { uri: { fsPath: '/baz/qux' } },
     ] as vscode.WorkspaceFolder[]);
@@ -138,12 +142,7 @@ describe('activate with multiple folders', () => {
   });
 
   it('should set an empty string if no folders are open', async () => {
-    const workspaceFoldersSpy = vi.spyOn(
-      vscode.workspace,
-      'workspaceFolders',
-      'get',
-    );
-    workspaceFoldersSpy.mockReturnValue([]);
+    setWorkspaceFolders([]);
 
     await activate(context);
 
@@ -154,12 +153,7 @@ describe('activate with multiple folders', () => {
   });
 
   it('should update the path when workspace folders change', async () => {
-    const workspaceFoldersSpy = vi.spyOn(
-      vscode.workspace,
-      'workspaceFolders',
-      'get',
-    );
-    workspaceFoldersSpy.mockReturnValue([
+    setWorkspaceFolders([
       { uri: { fsPath: '/foo/bar' } },
     ] as vscode.WorkspaceFolder[]);
 
@@ -171,7 +165,7 @@ describe('activate with multiple folders', () => {
     );
 
     // Simulate adding a folder
-    workspaceFoldersSpy.mockReturnValue([
+    setWorkspaceFolders([
       { uri: { fsPath: '/foo/bar' } },
       { uri: { fsPath: '/baz/qux' } },
     ] as vscode.WorkspaceFolder[]);
@@ -186,7 +180,7 @@ describe('activate with multiple folders', () => {
     );
 
     // Simulate removing a folder
-    workspaceFoldersSpy.mockReturnValue([
+    setWorkspaceFolders([
       { uri: { fsPath: '/baz/qux' } },
     ] as vscode.WorkspaceFolder[]);
     onDidChangeWorkspaceFoldersCallback({
@@ -203,12 +197,7 @@ describe('activate with multiple folders', () => {
   it.skipIf(process.platform !== 'win32')(
     'should handle windows paths',
     async () => {
-      const workspaceFoldersSpy = vi.spyOn(
-        vscode.workspace,
-        'workspaceFolders',
-        'get',
-      );
-      workspaceFoldersSpy.mockReturnValue([
+      setWorkspaceFolders([
         { uri: { fsPath: 'c:/foo/bar' } },
         { uri: { fsPath: 'd:/baz/qux' } },
       ] as vscode.WorkspaceFolder[]);

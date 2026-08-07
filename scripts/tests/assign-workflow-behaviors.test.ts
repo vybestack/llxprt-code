@@ -758,47 +758,43 @@ describe('unassign-stale-issues.sh behavioral', () => {
     expect(issue._assignees).toContain('manually-assigned-user');
   });
 
-  it(
-    'paginates candidate discovery beyond one page',
-    { timeout: 60000 },
-    () => {
-      // Create >30 issues (default page size) to force pagination
-      const issues: Record<string, unknown> = {};
-      const timeline: Record<string, unknown> = {};
-      for (let i = 1; i <= 35; i++) {
-        issues[String(i)] = makeIssue({
+  it('paginates candidate discovery beyond one page', () => {
+    // Create >30 issues (default page size) to force pagination
+    const issues: Record<string, unknown> = {};
+    const timeline: Record<string, unknown> = {};
+    for (let i = 1; i <= 35; i++) {
+      issues[String(i)] = makeIssue({
+        number: i,
+        assignees: [`user-${i}`],
+        labels: ['auto-assigned'],
+      });
+      timeline[String(i)] = [
+        makeLabeledEvent({
+          label: 'auto-assigned',
+          actor: 'github-actions[bot]',
+          createdAt: daysAgo(20),
+        }),
+        makeAssignedEvent({
           number: i,
-          assignees: [`user-${i}`],
-          labels: ['auto-assigned'],
-        });
-        timeline[String(i)] = [
-          makeLabeledEvent({
-            label: 'auto-assigned',
-            actor: 'github-actions[bot]',
-            createdAt: daysAgo(20),
-          }),
-          makeAssignedEvent({
-            number: i,
-            assignee: `user-${i}`,
-            actor: 'github-actions[bot]',
-            createdAt: daysAgo(20),
-          }),
-        ];
-      }
+          assignee: `user-${i}`,
+          actor: 'github-actions[bot]',
+          createdAt: daysAgo(20),
+        }),
+      ];
+    }
 
-      const repo = createFakeRepo(defaultStateWith({ issues, timeline }));
+    const repo = createFakeRepo(defaultStateWith({ issues, timeline }));
 
-      const result = repo.runCleanup();
+    const result = repo.runCleanup();
 
-      // All 35 should be discovered and processed (pagination works)
-      expect(result.status).toBe(0);
-      // Verify issues from the second page (31-35) were processed
-      for (let i = 31; i <= 35; i++) {
-        const issue = stateIssue(result.state, i);
-        expect(issue._assignees).not.toContain(`user-${i}`);
-      }
-    },
-  );
+    // All 35 should be discovered and processed (pagination works)
+    expect(result.status).toBe(0);
+    // Verify issues from the second page (31-35) were processed
+    for (let i = 31; i <= 35; i++) {
+      const issue = stateIssue(result.state, i);
+      expect(issue._assignees).not.toContain(`user-${i}`);
+    }
+  }, 60000);
 });
 
 // ---------------------------------------------------------------------------

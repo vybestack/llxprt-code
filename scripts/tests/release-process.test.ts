@@ -73,6 +73,11 @@ function npmReleasePackages() {
     .map(({ packageJson }) => asString(packageJson.name));
 }
 
+/** Bun's `expect` has no `fail`; throw so the expression stays `never`. */
+function raiseMissing(message: string): never {
+  throw new Error(message);
+}
+
 describe('release package derivation', () => {
   it('derives npm-published packages from workspace package metadata', () => {
     expect(npmReleasePackages()).toEqual([
@@ -148,10 +153,10 @@ describe('.github/workflows/release.yml', () => {
   const releaseSteps = jobSteps(workflowJobOptional(releaseParsed, 'release'));
   const stepById = (id: string): WorkflowStep =>
     releaseSteps.find((s) => s.id === id) ??
-    expect.fail(`missing step id: ${id}`);
+    raiseMissing(`missing step id: ${id}`);
   const stepByName = (name: string): WorkflowStep =>
     releaseSteps.find((s) => s.name === name) ??
-    expect.fail(`missing step: ${name}`);
+    raiseMissing(`missing step: ${name}`);
 
   it('selects keys before standard release notes without blocking skipped-test fallback', () => {
     const quota = stepById('quota');

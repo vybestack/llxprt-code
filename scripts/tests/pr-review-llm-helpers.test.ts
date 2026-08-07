@@ -229,11 +229,13 @@ describe('runLlxprtPromptWithParse', () => {
 
   it('passes the raw response to the parse-failure artifact saver on final failure', async () => {
     const llm = async () => 'totally not json';
-    let savedRaw: string | null = null;
-    let savedPhase: string | null = null;
+    const captured: { raw: string | null; phase: string | null } = {
+      raw: null,
+      phase: null,
+    };
     const saveFn = async (phase: string, raw: string) => {
-      savedRaw = raw;
-      savedPhase = phase;
+      captured.raw = raw;
+      captured.phase = phase;
     };
     await expect(
       runLlxprtPromptWithParse(llm, parseMapResponse, {
@@ -243,8 +245,8 @@ describe('runLlxprtPromptWithParse', () => {
         saveParseFailure: saveFn,
       }),
     ).rejects.toThrow();
-    expect(savedRaw).toBe('totally not json');
-    expect(savedPhase).toBe('map');
+    expect(captured.raw).toBe('totally not json');
+    expect(captured.phase).toBe('map');
   });
 
   it('does not call saveParseFailure when the LLM succeeds', async () => {

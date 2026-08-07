@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { advanceTimersByTimeAsync } from '../../test-utils/src/async-timers.js';
 import {
   afterEach,
   beforeEach,
@@ -50,6 +49,94 @@ void vi.mock('vscode', () => ({
     Mouse: 2,
   },
 }));
+
+/**
+ * Inlined from packages/test-utils so this file stays within the package
+ * rootDir for type-checking. Bun's synchronous fake-timer primitives fire
+ * callbacks but do not settle the promise chains those callbacks resume, so
+ * advancing the clock must be paired with a microtask drain.
+ */
+const realSetImmediate: (callback: () => void) => unknown = setImmediate;
+
+const MAX_TIMER_ADVANCE = 4_294_967_295;
+const MAX_TIMER_DELAY = 2_147_483_647;
+const MICROTASK_DRAIN_ROUNDS = 20;
+
+async function flushPendingTasks(): Promise<void> {
+  for (let round = 0; round < MICROTASK_DRAIN_ROUNDS; round++) {
+    await Promise.resolve();
+  }
+  await new Promise<void>((resolve) => {
+    realSetImmediate(resolve);
+  });
+}
+
+function armSentinel(delay: number): {
+  reached: () => boolean;
+  cancel: () => void;
+} {
+  let fired = false;
+  const id = setTimeout(() => {
+    fired = true;
+  }, delay);
+  return {
+    reached: () => fired,
+    cancel: () => {
+      clearTimeout(id);
+    },
+  };
+}
+
+async function advanceChunk(ms: number): Promise<void> {
+  const target = Date.now() + ms;
+
+  while (Date.now() < target) {
+    const remaining = target - Date.now();
+    if (vi.getTimerCount() === 0) {
+      vi.advanceTimersByTime(remaining);
+      await flushPendingTasks();
+      continue;
+    }
+
+    const sentinel = armSentinel(remaining);
+    const before = Date.now();
+
+    vi.advanceTimersToNextTimer();
+    sentinel.cancel();
+    await flushPendingTasks();
+
+    if (sentinel.reached()) {
+      return;
+    }
+    if (Date.now() <= before) {
+      vi.advanceTimersByTime(Math.min(remaining, 1));
+      await flushPendingTasks();
+    }
+  }
+}
+
+async function advanceTimersByTimeAsync(ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms < 0 || ms > MAX_TIMER_ADVANCE) {
+    vi.advanceTimersByTime(ms);
+    await flushPendingTasks();
+    return;
+  }
+
+  let remaining = Math.floor(ms);
+  if (remaining === 0) {
+    if (vi.isFakeTimers()) {
+      vi.advanceTimersByTime(0);
+    }
+    await flushPendingTasks();
+    return;
+  }
+
+  while (remaining > 0) {
+    const chunk = Math.min(remaining, MAX_TIMER_DELAY);
+    await advanceChunk(chunk);
+    remaining -= chunk;
+  }
+}
 
 describe('OpenFilesManager', () => {
   let context: vscode.ExtensionContext;

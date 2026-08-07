@@ -9,9 +9,10 @@ import { it } from 'bun:test';
 import { TestRig, printDebugInfo } from './test-helper.js';
 
 // Skip todo tests in CI by default - Flash model has issues with todo formatting
-const skipTodoTests =
+const skipTodoTests = Boolean(
   process.env.SKIP_TODO_TESTS !== 'false' &&
-  (process.env.CI || process.env.GITHUB_ACTIONS);
+    (process.env.CI || process.env.GITHUB_ACTIONS),
+);
 
 /**
  * @requirement REQ-008

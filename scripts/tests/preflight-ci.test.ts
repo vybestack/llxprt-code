@@ -19,6 +19,19 @@ import { resolve } from 'node:path';
 import * as child_process from 'child_process';
 import { preflightSteps, runPreflight } from '../preflight-ci.ts';
 
+/**
+ * Adapts a `(command) => Buffer` stub to execSync's 4-overload signature so it
+ * can be passed to `mockImplementation`. That overload set includes branches
+ * that return `string`, which a real `Buffer` return cannot structurally
+ * satisfy, so the stub is routed through execSync's declared type. Runtime
+ * behaviour (return value / thrown error per command) is unchanged.
+ */
+function asExecSyncStub(
+  impl: (command: string) => Buffer,
+): typeof child_process.execSync {
+  return impl as unknown as typeof child_process.execSync;
+}
+
 const realChildProcessModule = { ...(await import('child_process')) };
 
 void vi.mock('child_process', () => automock(realChildProcessModule));
@@ -106,7 +119,7 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
   beforeEach(() => {
     (
       child_process.execSync as Mock<typeof child_process.execSync>
-    ).mockImplementation(() => Buffer.from(''));
+    ).mockImplementation(asExecSyncStub(() => Buffer.from('')));
   });
 
   afterEach(() => {
@@ -140,12 +153,14 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
     const rollupCommand = 'npm install @rollup/rollup-linux-x64-gnu --no-save';
     (
       child_process.execSync as Mock<typeof child_process.execSync>
-    ).mockImplementation((command) => {
-      if (command === rollupCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === rollupCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).not.toThrow();
 
@@ -174,7 +189,7 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
   beforeEach(() => {
     (
       child_process.execSync as Mock<typeof child_process.execSync>
-    ).mockImplementation(() => Buffer.from(''));
+    ).mockImplementation(asExecSyncStub(() => Buffer.from('')));
   });
 
   afterEach(() => {
@@ -185,12 +200,14 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
     const failingCommand = 'npm run build';
     (
       child_process.execSync as Mock<typeof child_process.execSync>
-    ).mockImplementation((command) => {
-      if (command === failingCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === failingCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
@@ -227,12 +244,14 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
     const failingCommand = 'npm run clean';
     (
       child_process.execSync as Mock<typeof child_process.execSync>
-    ).mockImplementation((command) => {
-      if (command === failingCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === failingCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 
@@ -252,12 +271,14 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
     const failingCommand = 'npm ci';
     (
       child_process.execSync as Mock<typeof child_process.execSync>
-    ).mockImplementation((command) => {
-      if (command === failingCommand) {
-        throw new Error(`boom: ${command}`);
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(
+      asExecSyncStub((command) => {
+        if (command === failingCommand) {
+          throw new Error(`boom: ${command}`);
+        }
+        return Buffer.from('');
+      }),
+    );
 
     expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
 

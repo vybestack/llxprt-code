@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { restoreEnv, setEnv } from '../../test-utils/src/env-test-helpers.js';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as vscode from 'vscode';
 import {
@@ -23,6 +22,30 @@ import { IdeContextNotificationSchema } from './ide-schemas.js';
 import * as path from 'node:path';
 import * as http from 'node:http';
 import { fileURLToPath } from 'node:url';
+
+const originalEnvValues = new Map<string, string | undefined>();
+
+function setEnv(key: string, value: string | undefined): void {
+  if (!originalEnvValues.has(key)) {
+    originalEnvValues.set(key, process.env[key]);
+  }
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}
+
+function restoreEnv(): void {
+  for (const [key, value] of originalEnvValues) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  originalEnvValues.clear();
+}
 
 const companionFile = fileURLToPath(import.meta.url);
 // companionFile: packages/vscode-ide-companion/src/<this file>

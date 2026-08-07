@@ -11,11 +11,11 @@ import { chmodSync } from 'fs';
 
 const MULTIBYTE = '\u3042\u308a\u304c\u3068\u3046 \u4e16\u754c';
 
-it.skip('qwen calls a local shell script via run_shell_command and preserves UTF-8 multibyte spacing (integration)', async ({
-  task,
-}) => {
+it.skip('qwen calls a local shell script via run_shell_command and preserves UTF-8 multibyte spacing (integration)', async () => {
   const rig = new TestRig();
-  rig.setup(task.name);
+  rig.setup(
+    'qwen calls a local shell script via run_shell_command and preserves UTF-8 multibyte spacing (integration)',
+  );
 
   // Create a script that prints the exact multibyte string without trailing newline
   // Use different script format for Windows vs Unix

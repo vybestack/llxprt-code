@@ -87,6 +87,7 @@ void vi.mock('@vybestack/llxprt-code-ide-integration', () => {
 
 describe('activate', () => {
   let context: vscode.ExtensionContext;
+  let globalStateGet: Mock<(...args: unknown[]) => unknown>;
 
   beforeEach(() => {
     // Reset the mock implementation to default
@@ -110,13 +111,14 @@ describe('activate', () => {
       }),
     } as Response);
 
+    globalStateGet = vi.fn();
     context = {
       subscriptions: [],
       environmentVariableCollection: {
         replace: vi.fn(),
       },
       globalState: {
-        get: vi.fn(),
+        get: globalStateGet,
         update: vi.fn(),
       },
       extensionUri: {
@@ -143,9 +145,7 @@ describe('activate', () => {
         typeof vscode.window.showInformationMessage
       >
     ).mockResolvedValue(undefined);
-    (
-      context.globalState.get as Mock<typeof context.globalState.get>
-    ).mockReturnValue(undefined);
+    globalStateGet.mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalledWith(
       'LLxprt Code Companion extension successfully installed.',
@@ -153,9 +153,7 @@ describe('activate', () => {
   });
 
   it('should not show the info message on subsequent activations', async () => {
-    (
-      context.globalState.get as Mock<typeof context.globalState.get>
-    ).mockReturnValue(true);
+    globalStateGet.mockReturnValue(true);
     await activate(context);
     expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
@@ -171,9 +169,7 @@ describe('activate', () => {
         typeof vscode.window.showInformationMessage
       >
     ).mockResolvedValue('Re-launch LLxprt Code' as never);
-    (
-      context.globalState.get as Mock<typeof context.globalState.get>
-    ).mockReturnValue(undefined);
+    globalStateGet.mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalled();
     await new Promise(process.nextTick); // Wait for the promise to resolve
@@ -189,9 +185,7 @@ describe('activate', () => {
   describe('update notification', () => {
     beforeEach(() => {
       // Prevent the "installed" message from showing
-      (
-        context.globalState.get as Mock<typeof context.globalState.get>
-      ).mockReturnValue(true);
+      globalStateGet.mockReturnValue(true);
     });
 
     it('should show an update notification if a newer version is available', async () => {
@@ -258,9 +252,7 @@ describe('activate', () => {
       'does not show install or update messages for $ide.name',
       async ({ ide }) => {
         mockDetectIdeFromEnv.mockImplementation(() => ide);
-        (
-          context.globalState.get as Mock<typeof context.globalState.get>
-        ).mockReturnValue(undefined);
+        globalStateGet.mockReturnValue(undefined);
         vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,
           json: async () => ({

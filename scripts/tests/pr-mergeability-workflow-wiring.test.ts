@@ -539,6 +539,9 @@ merge_base=${result.baseSha}
     const step = reviewSteps.find(
       ({ name }) => name === 'Run walkthrough pipeline',
     );
+    if (quotaStep === undefined || step === undefined) {
+      throw new Error('expected quota and walkthrough steps to exist');
+    }
 
     expect(hasSecret(gateJob)).toBe(false);
     expect(hasSecret(reviewJob?.env)).toBe(false);

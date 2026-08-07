@@ -39,29 +39,24 @@ function input(
 
 const SANCTIONED = 'packages/core';
 
-const ALL_DEPENDENCY_SECTIONS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-] as const;
-
 describe('validateManifestDependencies — F1: reject unauthorized npm aliases targeting GenAI', () => {
-  it.each(ALL_DEPENDENCY_SECTIONS)(
-    'rejects an npm alias targeting @google/genai in %s',
-    (section) => {
-      const manifest: Record<string, unknown> = {};
-      manifest[section] = {
-        'fake-name': `npm:@google/genai@${SANCTIONED_VERSION}`,
-      };
-      const result = validateManifestDependencies(
-        input('packages/cli', manifest),
-      );
-      expect(
-        result.violations.some((v) => v.message.includes('npm alias')),
-      ).toBe(true);
-    },
-  );
+  it.each([
+    ['dependencies'],
+    ['devDependencies'],
+    ['peerDependencies'],
+    ['optionalDependencies'],
+  ])('rejects an npm alias targeting @google/genai in %s', (section) => {
+    const manifest: Record<string, unknown> = {};
+    manifest[String(section)] = {
+      'fake-name': `npm:@google/genai@${SANCTIONED_VERSION}`,
+    };
+    const result = validateManifestDependencies(
+      input('packages/cli', manifest),
+    );
+    expect(result.violations.some((v) => v.message.includes('npm alias'))).toBe(
+      true,
+    );
+  });
 
   it('rejects an npm alias whose target is @google/genai', () => {
     const result = validateManifestDependencies(

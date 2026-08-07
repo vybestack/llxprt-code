@@ -166,21 +166,17 @@ describe('generate-notices full generator behavior', () => {
     }
   }
 
-  it(
-    'fails fast when root package.json dependencies is not a string record',
-    { timeout: 30_000 },
-    () => {
-      const result = runGeneratorWithFixtures({
-        rootPackageJson: {
-          name: 'test-pkg',
-          dependencies: 'not-a-record',
-        },
-        lockfile: { packages: {} },
-      });
+  it('fails fast when root package.json dependencies is not a string record', () => {
+    const result = runGeneratorWithFixtures({
+      rootPackageJson: {
+        name: 'test-pkg',
+        dependencies: 'not-a-record',
+      },
+      lockfile: { packages: {} },
+    });
 
-      expect(result.status).toBe(1);
-    },
-  );
+    expect(result.status).toBe(1);
+  }, 30_000);
 
   it('fails fast when a concrete lockfile package entry has no string version', () => {
     const result = runGeneratorWithFixtures({

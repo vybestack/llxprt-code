@@ -351,57 +351,53 @@ describe('published package integrity (S1)', () => {
   // --dry-run` over the full TypeScript source tree, which can exceed the
   // default 15s under CI/parallel-suite load. Subsequent callers reuse the
   // memoized result.
-  it(
-    'includes every local module the lifecycle scripts transitively require',
-    { timeout: 60000 },
-    () => {
-      // The bug this guards against: a lifecycle script gains a
-      // `require('./helper.cjs')` but the helper is not added to package.json
-      // `files`, so the published tarball omits it and `npm install` of the
-      // released package dies with MODULE_NOT_FOUND. We compute the transitive
-      // closure of relative requires starting from the lifecycle entry points and
-      // assert each referenced local module actually ships.
-      const packed = getPackedPaths();
-      const lifecycleEntryScripts = deriveLifecycleEntryScripts();
+  it('includes every local module the lifecycle scripts transitively require', () => {
+    // The bug this guards against: a lifecycle script gains a
+    // `require('./helper.cjs')` but the helper is not added to package.json
+    // `files`, so the published tarball omits it and `npm install` of the
+    // released package dies with MODULE_NOT_FOUND. We compute the transitive
+    // closure of relative requires starting from the lifecycle entry points and
+    // assert each referenced local module actually ships.
+    const packed = getPackedPaths();
+    const lifecycleEntryScripts = deriveLifecycleEntryScripts();
 
-      // Sanity: the entry points themselves must ship, or the whole premise is moot.
-      for (const entry of lifecycleEntryScripts) {
-        expect(
-          packed.has(entry),
-          `Lifecycle entry "${entry}" is declared in package.json scripts but is ` +
-            'not in the published tarball (check the package.json "files" allowlist).',
-        ).toBe(true);
-      }
-
-      const visited = new Set<string>();
-      const queue: string[] = [...lifecycleEntryScripts];
-      const missing: string[] = [];
-
-      while (queue.length > 0) {
-        const current = asString(queue.shift());
-        if (visited.has(current)) {
-          continue;
-        }
-        visited.add(current);
-
-        const source = readFileSync(join(repoRoot, current), 'utf-8');
-        const { missing: entryMissing, follow } = checkEntryDependencies(
-          current,
-          source,
-          packed,
-        );
-        missing.push(...entryMissing);
-        for (const resolved of follow) {
-          queue.push(resolved);
-        }
-      }
-
+    // Sanity: the entry points themselves must ship, or the whole premise is moot.
+    for (const entry of lifecycleEntryScripts) {
       expect(
-        missing,
-        `Published-package integrity violations:\n  - ${missing.join('\n  - ')}`,
-      ).toStrictEqual([]);
-    },
-  );
+        packed.has(entry),
+        `Lifecycle entry "${entry}" is declared in package.json scripts but is ` +
+          'not in the published tarball (check the package.json "files" allowlist).',
+      ).toBe(true);
+    }
+
+    const visited = new Set<string>();
+    const queue: string[] = [...lifecycleEntryScripts];
+    const missing: string[] = [];
+
+    while (queue.length > 0) {
+      const current = asString(queue.shift());
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      const source = readFileSync(join(repoRoot, current), 'utf-8');
+      const { missing: entryMissing, follow } = checkEntryDependencies(
+        current,
+        source,
+        packed,
+      );
+      missing.push(...entryMissing);
+      for (const resolved of follow) {
+        queue.push(resolved);
+      }
+    }
+
+    expect(
+      missing,
+      `Published-package integrity violations:\n  - ${missing.join('\n  - ')}`,
+    ).toStrictEqual([]);
+  }, 60000);
 
   it('ships the shared detect-installer helper required by both lifecycle scripts', () => {
     // An explicit, named assertion for the specific shared module introduced in
@@ -598,196 +594,180 @@ describe('published package no-compile runtime contract (S6)', () => {
     ).toBeUndefined();
   });
 
-  it(
-    'ships source for every internal workspace dependency of shipped workspaces',
-    { timeout: 60000 },
-    () => {
-      // #2352: Replaced convention-derived internal package source checks
-      // (which assumed the package name suffix maps to the workspace dir and
-      // that `index.ts` is always the entry) with a manifest-derived approach:
-      // a package-name-to-workspace map built from each workspace's package.json
-      // `name` field, and required source files derived from the dependency's
-      // manifest fields (`main`, `exports`, `module`, `types`).
-      const rootPackage = JSON.parse(
-        readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-      );
-      const packed = getPackedPaths();
+  it('ships source for every internal workspace dependency of shipped workspaces', () => {
+    // #2352: Replaced convention-derived internal package source checks
+    // (which assumed the package name suffix maps to the workspace dir and
+    // that `index.ts` is always the entry) with a manifest-derived approach:
+    // a package-name-to-workspace map built from each workspace's package.json
+    // `name` field, and required source files derived from the dependency's
+    // manifest fields (`main`, `exports`, `module`, `types`).
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    );
+    const packed = getPackedPaths();
 
-      // Build the authoritative package-name-to-workspace map from the root
-      // workspaces list. This replaces the old convention of deriving the
-      // sub-directory from the package name suffix.
-      const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
-        repoRoot,
-        rootPackage.workspaces ?? [],
-      );
+    // Build the authoritative package-name-to-workspace map from the root
+    // workspaces list. This replaces the old convention of deriving the
+    // sub-directory from the package name suffix.
+    const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
+      repoRoot,
+      rootPackage.workspaces ?? [],
+    );
 
-      const shippedWorkspacePackagePaths =
-        collectShippedWorkspacePackagePaths(rootPackage);
+    const shippedWorkspacePackagePaths =
+      collectShippedWorkspacePackagePaths(rootPackage);
 
-      const mismatches = shippedWorkspacePackagePaths.flatMap(
-        ({ workspaceDir, packagePath }) => {
-          const workspacePackage = asRecord(
-            JSON.parse(readFileSync(packagePath, 'utf-8')),
-          );
-          return Array.from(iterateWorkspaceDependencies(workspacePackage))
-            .filter(({ name }) => packageNameToWorkspace.has(name))
-            .map(({ name: dep }) => {
-              const depWorkspaceDir = packageNameToWorkspace.get(dep);
-              if (depWorkspaceDir === undefined) {
-                return {
-                  workspace: workspaceDir,
-                  dependency: dep,
-                  dependencyWorkspaceDir: '(not found)',
-                  missingPackedFiles: [],
-                  message:
-                    `${workspaceDir} → ${dep}: package name not found in ` +
-                    'the package-name-to-workspace map',
-                };
-              }
-              const depManifest = readWorkspaceManifest(
-                depWorkspaceDir,
-                repoRoot,
-              );
-              if (depManifest === null) {
-                return {
-                  workspace: workspaceDir,
-                  dependency: dep,
-                  dependencyWorkspaceDir: depWorkspaceDir,
-                  missingPackedFiles: [],
-                  message:
-                    `${workspaceDir} → ${dep} (${depWorkspaceDir}): ` +
-                    'no package.json found',
-                };
-              }
-              return verifyInternalDependencySource(
-                workspaceDir,
-                dep,
-                depWorkspaceDir,
-                depManifest,
-                packed,
-              );
-            })
-            .filter(
-              (entry): entry is NonNullable<typeof entry> => entry !== null,
+    const mismatches = shippedWorkspacePackagePaths.flatMap(
+      ({ workspaceDir, packagePath }) => {
+        const workspacePackage = asRecord(
+          JSON.parse(readFileSync(packagePath, 'utf-8')),
+        );
+        return Array.from(iterateWorkspaceDependencies(workspacePackage))
+          .filter(({ name }) => packageNameToWorkspace.has(name))
+          .map(({ name: dep }) => {
+            const depWorkspaceDir = packageNameToWorkspace.get(dep);
+            if (depWorkspaceDir === undefined) {
+              return {
+                workspace: workspaceDir,
+                dependency: dep,
+                dependencyWorkspaceDir: '(not found)',
+                missingPackedFiles: [],
+                message:
+                  `${workspaceDir} → ${dep}: package name not found in ` +
+                  'the package-name-to-workspace map',
+              };
+            }
+            const depManifest = readWorkspaceManifest(
+              depWorkspaceDir,
+              repoRoot,
             );
-        },
-      );
-
-      expect(
-        mismatches.map((m) => m.message),
-        'Shipped workspaces depend on internal workspace packages whose ' +
-          'manifest-declared source is NOT in the published tarball:\n  - ' +
-          mismatches.map((m) => m.message).join('\n  - '),
-      ).toEqual([]);
-    },
-  );
-
-  it(
-    '#2352: ships the transitive source closure of every internal workspace dependency',
-    { timeout: 60000 },
-    () => {
-      // For each internal workspace dependency of shipped workspaces, verify
-      // that the transitive closure of static relative runtime imports from
-      // every entry point ships in the packed tarball. A missing transitive
-      // source file means the runtime would fail with MODULE_NOT_FOUND.
-      const rootPackage = JSON.parse(
-        readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-      );
-      const packed = getPackedPaths();
-
-      const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
-        repoRoot,
-        rootPackage.workspaces ?? [],
-      );
-
-      const shippedWorkspacePackagePaths =
-        collectShippedWorkspacePackagePaths(rootPackage);
-
-      const allMissing = shippedWorkspacePackagePaths.flatMap(
-        ({ packagePath }) => {
-          const workspacePackage = asRecord(
-            JSON.parse(readFileSync(packagePath, 'utf-8')),
+            if (depManifest === null) {
+              return {
+                workspace: workspaceDir,
+                dependency: dep,
+                dependencyWorkspaceDir: depWorkspaceDir,
+                missingPackedFiles: [],
+                message:
+                  `${workspaceDir} → ${dep} (${depWorkspaceDir}): ` +
+                  'no package.json found',
+              };
+            }
+            return verifyInternalDependencySource(
+              workspaceDir,
+              dep,
+              depWorkspaceDir,
+              depManifest,
+              packed,
+            );
+          })
+          .filter(
+            (entry): entry is NonNullable<typeof entry> => entry !== null,
           );
-          return Array.from(iterateWorkspaceDependencies(workspacePackage))
-            .filter(({ name }) => packageNameToWorkspace.has(name))
-            .flatMap(({ name: dep }) => {
-              const depWorkspaceDir = packageNameToWorkspace.get(dep);
-              if (depWorkspaceDir === undefined) return [];
-              const depManifest = readWorkspaceManifest(
-                depWorkspaceDir,
-                repoRoot,
-              );
-              if (depManifest === null) return [];
-              return verifyTransitiveSourceClosure(
-                depWorkspaceDir,
-                depManifest,
-                packed,
-                repoRoot,
-              );
-            });
-        },
-      );
+      },
+    );
 
-      expect(
-        allMissing.map((m) => m.message),
-        'Internal workspace dependencies have transitive source files NOT in ' +
-          'the published tarball:\n  - ' +
-          allMissing.map((m) => m.message).join('\n  - '),
-      ).toEqual([]);
-    },
-  );
+    expect(
+      mismatches.map((m) => m.message),
+      'Shipped workspaces depend on internal workspace packages whose ' +
+        'manifest-declared source is NOT in the published tarball:\n  - ' +
+        mismatches.map((m) => m.message).join('\n  - '),
+    ).toEqual([]);
+  }, 60000);
 
-  it(
-    '#2352: ships every exported subpath entry of internal workspace dependencies',
-    { timeout: 60000 },
-    () => {
-      // For each internal workspace dependency of shipped workspaces, verify
-      // that every exported subpath entry file ships in the packed tarball.
-      const rootPackage = JSON.parse(
-        readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-      );
-      const packed = getPackedPaths();
+  it('#2352: ships the transitive source closure of every internal workspace dependency', () => {
+    // For each internal workspace dependency of shipped workspaces, verify
+    // that the transitive closure of static relative runtime imports from
+    // every entry point ships in the packed tarball. A missing transitive
+    // source file means the runtime would fail with MODULE_NOT_FOUND.
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    );
+    const packed = getPackedPaths();
 
-      const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
-        repoRoot,
-        rootPackage.workspaces ?? [],
-      );
+    const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
+      repoRoot,
+      rootPackage.workspaces ?? [],
+    );
 
-      const shippedWorkspacePackagePaths =
-        collectShippedWorkspacePackagePaths(rootPackage);
+    const shippedWorkspacePackagePaths =
+      collectShippedWorkspacePackagePaths(rootPackage);
 
-      const allMissing = shippedWorkspacePackagePaths.flatMap(
-        ({ packagePath }) => {
-          const workspacePackage = asRecord(
-            JSON.parse(readFileSync(packagePath, 'utf-8')),
-          );
-          return Array.from(iterateWorkspaceDependencies(workspacePackage))
-            .filter(({ name }) => packageNameToWorkspace.has(name))
-            .flatMap(({ name: dep }) => {
-              const depWorkspaceDir = packageNameToWorkspace.get(dep);
-              if (depWorkspaceDir === undefined) return [];
-              const depManifest = readWorkspaceManifest(
-                depWorkspaceDir,
-                repoRoot,
-              );
-              if (depManifest === null) return [];
-              return verifyExportedSubpaths(
-                depWorkspaceDir,
-                depManifest,
-                packed,
-              );
-            });
-        },
-      );
+    const allMissing = shippedWorkspacePackagePaths.flatMap(
+      ({ packagePath }) => {
+        const workspacePackage = asRecord(
+          JSON.parse(readFileSync(packagePath, 'utf-8')),
+        );
+        return Array.from(iterateWorkspaceDependencies(workspacePackage))
+          .filter(({ name }) => packageNameToWorkspace.has(name))
+          .flatMap(({ name: dep }) => {
+            const depWorkspaceDir = packageNameToWorkspace.get(dep);
+            if (depWorkspaceDir === undefined) return [];
+            const depManifest = readWorkspaceManifest(
+              depWorkspaceDir,
+              repoRoot,
+            );
+            if (depManifest === null) return [];
+            return verifyTransitiveSourceClosure(
+              depWorkspaceDir,
+              depManifest,
+              packed,
+              repoRoot,
+            );
+          });
+      },
+    );
 
-      expect(
-        allMissing.map((m) => m.message),
-        'Internal workspace dependencies have exported subpath entry files ' +
-          'NOT in the published tarball:\n  - ' +
-          allMissing.map((m) => m.message).join('\n  - '),
-      ).toEqual([]);
-    },
-  );
+    expect(
+      allMissing.map((m) => m.message),
+      'Internal workspace dependencies have transitive source files NOT in ' +
+        'the published tarball:\n  - ' +
+        allMissing.map((m) => m.message).join('\n  - '),
+    ).toEqual([]);
+  }, 60000);
+
+  it('#2352: ships every exported subpath entry of internal workspace dependencies', () => {
+    // For each internal workspace dependency of shipped workspaces, verify
+    // that every exported subpath entry file ships in the packed tarball.
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    );
+    const packed = getPackedPaths();
+
+    const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
+      repoRoot,
+      rootPackage.workspaces ?? [],
+    );
+
+    const shippedWorkspacePackagePaths =
+      collectShippedWorkspacePackagePaths(rootPackage);
+
+    const allMissing = shippedWorkspacePackagePaths.flatMap(
+      ({ packagePath }) => {
+        const workspacePackage = asRecord(
+          JSON.parse(readFileSync(packagePath, 'utf-8')),
+        );
+        return Array.from(iterateWorkspaceDependencies(workspacePackage))
+          .filter(({ name }) => packageNameToWorkspace.has(name))
+          .flatMap(({ name: dep }) => {
+            const depWorkspaceDir = packageNameToWorkspace.get(dep);
+            if (depWorkspaceDir === undefined) return [];
+            const depManifest = readWorkspaceManifest(
+              depWorkspaceDir,
+              repoRoot,
+            );
+            if (depManifest === null) return [];
+            return verifyExportedSubpaths(depWorkspaceDir, depManifest, packed);
+          });
+      },
+    );
+
+    expect(
+      allMissing.map((m) => m.message),
+      'Internal workspace dependencies have exported subpath entry files ' +
+        'NOT in the published tarball:\n  - ' +
+        allMissing.map((m) => m.message).join('\n  - '),
+    ).toEqual([]);
+  }, 60000);
 
   it('runs the checked-in launcher without a compiled CLI entry', () => {
     // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
