@@ -6,6 +6,20 @@
 
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * The CLI's real entry point. Nothing compiles this workspace before tests run
+ * (issue #2983), so spawning `node dist/index.js` had no target; `index.ts` is
+ * what the installed launcher and `npm run start` execute anyway.
+ */
+const CLI_ENTRY = path.resolve(
+  fileURLToPath(import.meta.url),
+  '..',
+  '..',
+  '..',
+  'index.ts',
+);
 
 export type CliRunResult = {
   stdout: string;
@@ -47,10 +61,10 @@ export async function runCli(
     env.LLXPRT_CONFIG_HOME ?? process.env.LLXPRT_CONFIG_HOME ?? '';
 
   return new Promise((resolve) => {
-    // Use the compiled CLI entry point
-    const cliPath = path.join(process.cwd(), 'dist', 'index.js');
-
-    const child = spawn('node', [cliPath, ...args], {
+    // `process.execPath` is the Bun binary running this suite — the CLI
+    // workspace executes Bun-native (issue #2843) — which is exactly the
+    // runtime the shipped launcher execs `index.ts` with.
+    const child = spawn(process.execPath, [CLI_ENTRY, ...args], {
       env: {
         ...process.env,
         // The CI test step injects real provider credentials. These cases
@@ -117,6 +131,19 @@ export async function runCli(
         exitCode: -1,
       });
     }, 60_000);
+
+    // A spawn failure (e.g. a moved or deleted CLI entry) emits 'error' and
+    // then 'close' with a null exit code. Settling here keeps the spawn
+    // message; the later 'close' cannot change an already-settled promise.
+    // Without this the case would report a bare exit code with no cause.
+    child.on('error', (error: Error) => {
+      clearTimeout(timeout);
+      resolve({
+        stdout,
+        stderr: `${stderr}Failed to spawn ${CLI_ENTRY}: ${error.message}`,
+        exitCode: -1,
+      });
+    });
 
     child.on('close', (code) => {
       clearTimeout(timeout);

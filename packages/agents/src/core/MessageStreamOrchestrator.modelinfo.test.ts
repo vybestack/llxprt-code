@@ -183,6 +183,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
       reset: vi.fn(),
       turnStarted: vi.fn().mockResolvedValue(false),
       addAndCheck: vi.fn().mockReturnValue(false),
+      checkpoint: vi.fn().mockReturnValue({}),
+      restore: vi.fn(),
     } as unknown as LoopDetectionService,
     todoContinuationService: {
       clearPausedState: vi.fn().mockResolvedValue(undefined),
@@ -205,6 +207,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
       appendSystemReminderToRequest: vi.fn(),
       updateTodoToolAvailabilityFromDeclarations: vi.fn(),
       setLastTodoToolTurn: vi.fn(),
+      checkpoint: vi.fn().mockReturnValue({}),
+      restore: vi.fn(),
       shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
     } as unknown as MessageStreamDeps['todoContinuationService'],
     ideContextTracker: {

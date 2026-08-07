@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { AgentEventType } from '@vybestack/llxprt-code-core';
 
 import { vi } from 'bun:test';
 import type {
@@ -92,7 +93,6 @@ function mapRawStream(
     // Mirror the real mapLoopStream adapter state (eventAdapter.ts) so the
     // test helper's done-synthesis matches production behavior.
     const state: Parameters<typeof mapStreamEvent>[1] = {
-      emittedDone: false,
       lastFinished: null,
       lastStop: null,
       pendingDoneReason: null,
@@ -100,28 +100,24 @@ function mapRawStream(
     };
     for await (const rawEvent of rawStream) {
       // sawActivity gate: set true for any event that is not a standalone
-      // AgentExecutionBlocked (mirrors eventAdapter.ts:405-410).
+      // AgentExecutionBlocked (mirrors eventAdapter.ts). Compared against the
+      // enum member, not its name: the discriminant on the wire is the enum
+      // VALUE ('agent_execution_blocked').
       const isStandaloneBlocked =
-        (rawEvent as { type?: string }).type === 'AgentExecutionBlocked';
+        (rawEvent as { type?: string }).type ===
+        AgentEventType.AgentExecutionBlocked;
       if (!isStandaloneBlocked) {
         state.sawActivity = true;
       }
-      for (const pub of mapStreamEvent(
+      yield* mapStreamEvent(
         rawEvent as Parameters<typeof mapStreamEvent>[0],
         state,
-      )) {
-        if (pub.type === 'done') {
-          state.emittedDone = true;
-        }
-        yield pub;
-      }
+      );
     }
-    // Loop-end done synthesis: only yield a synthetic done if we saw real
-    // activity or have a pending done reason (mirrors eventAdapter.ts:415-427).
-    if (
-      !state.emittedDone &&
-      (state.sawActivity || state.pendingDoneReason !== null)
-    ) {
+    // Loop-end done synthesis: the SOLE done emission point, and only when we
+    // saw real activity or have a pending done reason (mirrors
+    // eventAdapter.ts).
+    if (state.sawActivity || state.pendingDoneReason !== null) {
       const reason =
         state.pendingDoneReason ??
         (state.lastFinished?.stopReason === 'refusal' ? 'refusal' : 'stop');
@@ -131,6 +127,9 @@ function mapRawStream(
         ...(state.lastFinished !== null
           ? { finished: state.lastFinished }
           : {}),
+        // AgentExecutionStopped now defers its done to this synthesis, so the
+        // stop payload has to be carried here too (mirrors makeDone).
+        ...(state.lastStop !== null ? { stop: state.lastStop } : {}),
       } as AgentEvent;
     }
   })();

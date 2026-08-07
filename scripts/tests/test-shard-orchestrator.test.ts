@@ -8,7 +8,13 @@ import { afterAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseArgs, type CommandRunner, orchestrateTests } from '../test.ts';
+import {
+  parseArgs,
+  type CommandRunner,
+  orchestrateTests,
+  SCRIPTS_SHARD_ROOTS,
+  scriptsRootCommand,
+} from '../test.ts';
 
 // Shared recording runner factory; the identical helper in
 // test-orchestrator.test.ts serves that file's own describe blocks. Kept
@@ -62,6 +68,26 @@ function createFixtureRepo(workspaces: FixtureWorkspace[]): string {
       JSON.stringify({ name: ws.name, scripts: ws.scripts }, null, 2),
     );
   }
+  return root;
+}
+
+/**
+ * A repo fixture the scripts shard will act on: it needs a `scripts/tests`
+ * directory to exist before it issues any root invocation.
+ */
+function createScriptsShardFixture(): string {
+  const root = createFixtureRepo([
+    {
+      dir: 'packages/cli',
+      name: '@scope/cli',
+      scripts: { test: 'vitest run' },
+    },
+  ]);
+  mkdirSync(join(root, 'scripts', 'tests'), { recursive: true });
+  writeFileSync(
+    join(root, 'scripts', 'tests', 'dummy.test.ts'),
+    'export default {};',
+  );
   return root;
 }
 
@@ -276,84 +302,49 @@ describe('orchestrateTests (--shard)', () => {
     expect(summary.results.some((r) => !r.success)).toBe(true);
   });
 
-  // Issue #2780: the long-running release-install smoke test
-  // (issue-2603-release-install.test.ts) must run as a SEPARATE Bun-native
-  // root, so the far larger timeout it needs does not weaken the budget that
-  // catches genuine hangs in the rest of the script harness.
-  it('runs the release-install smoke test as a separate root invocation', () => {
+  // Each scripts-shard root is its own invocation so that one root's timeout
+  // cannot weaken another's. The release-install smoke (issue #2780) is no
+  // longer a root of its own: it is discovered inside `scripts-tests` and gets
+  // its larger budget from a per-file timeout override.
+  it('runs each scripts-shard root as its own invocation', () => {
     const { runner, commands } = createRecordingRunner();
 
-    const fixtureRoot = createFixtureRepo([
-      {
-        dir: 'packages/cli',
-        name: '@scope/cli',
-        scripts: { test: 'vitest run' },
-      },
-    ]);
-    mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
-    writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
-      'export default {};',
-    );
-
     orchestrateTests(
-      fixtureRoot,
+      createScriptsShardFixture(),
       { ...parseArgs(['--shard', 'scripts']) },
       runner,
     );
 
-    const scriptsCommands = commands.filter((c) =>
-      c.command.includes('--root scripts-tests'),
+    const scriptsCommands = commands
+      .map((c) => c.command)
+      .filter((command) => command.includes('run_bun_tests.ts --root '));
+
+    expect(scriptsCommands).toEqual(
+      SCRIPTS_SHARD_ROOTS.map((root) => scriptsRootCommand(root)),
     );
-    // Two invocations: the fast script harness and a dedicated invocation for
-    // the release-install smoke, which needs a far larger time budget.
-    expect(scriptsCommands).toHaveLength(2);
-    expect(
-      scriptsCommands.some((c) => c.command.endsWith('--root scripts-tests')),
-    ).toBe(true);
-    expect(
-      scriptsCommands.some((c) =>
-        c.command.endsWith('--root scripts-tests-slow'),
-      ),
-    ).toBe(true);
   });
 
-  it('skips the release-install smoke invocation when the main scripts suite fails', () => {
+  it('skips the remaining scripts roots when an earlier root fails', () => {
     const commands: Array<{ command: string; cwd: string }> = [];
+    const [firstRoot, ...remainingRoots] = SCRIPTS_SHARD_ROOTS;
     const runner: CommandRunner = (command, cwd) => {
       commands.push({ command, cwd });
-      // Fail only the fast script harness; pass everything else so the slow
-      // invocation is the only thing that could still run.
-      if (command.endsWith('--root scripts-tests')) {
+      if (command === scriptsRootCommand(firstRoot)) {
         return { success: false, exitCode: 1 };
       }
       return { success: true, exitCode: 0 };
     };
 
-    const fixtureRoot = createFixtureRepo([
-      {
-        dir: 'packages/cli',
-        name: '@scope/cli',
-        scripts: { test: 'vitest run' },
-      },
-    ]);
-    mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
-    writeFileSync(
-      join(fixtureRoot, 'scripts', 'tests', 'dummy.test.ts'),
-      'export default {};',
-    );
-
     orchestrateTests(
-      fixtureRoot,
+      createScriptsShardFixture(),
       { ...parseArgs(['--shard', 'scripts']) },
       runner,
     );
 
-    // The slow smoke invocation must NOT run when the main suite failed
-    // (fail-fast semantics).
-    const slowCommand = commands.filter((c) =>
-      c.command.endsWith('--root scripts-tests-slow'),
-    );
-    expect(slowCommand).toHaveLength(0);
+    const executed = commands.map((c) => c.command);
+    expect(executed).toContain(scriptsRootCommand(firstRoot));
+    for (const root of remainingRoots) {
+      expect(executed).not.toContain(scriptsRootCommand(root));
+    }
   });
 });

@@ -39,6 +39,7 @@ import {
   buildFinishReasonMessage,
 } from './streamUtils.js';
 import { observeAssistantMessageCommitted } from '../../../observation/jspWiring.js';
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface AgentEventDeps {
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
@@ -48,6 +49,13 @@ export interface AgentEventDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
+  /**
+   * The per-turn pending response buffer. The dispatcher ends the committed
+   * segment ledger when an assistant message is flushed (finalized) so a later
+   * turn's retry cannot retract an earlier completed message's prefixes
+   * (issue #3048 review finding).
+   */
+  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
@@ -85,6 +93,10 @@ export interface AgentEventDeps {
     remainingTokenCount: number,
   ) => void;
   handleCitationEvent: (text: string, timestamp: number) => void;
+  /**
+   * Discards the abandoned attempt's render state on retry (issue #3048).
+   */
+  handleStreamAttemptDiscarded: () => void;
 }
 
 type DispatchResult = {
@@ -130,6 +142,9 @@ function flushPendingAiContent(
     }
     deps.flushPendingHistoryItem(userMessageTimestamp);
     deps.setPendingHistoryItem(null);
+    // The assistant message is now permanent history: end the committed
+    // segment ledger so a later turn's retry cannot retract its prefixes.
+    deps.pendingResponse.endCommittedSegments();
   }
 }
 
@@ -351,11 +366,13 @@ export function dispatchAgentEvent(
         event.type,
         dispatchDoneEvent(event, deps, userMessageTimestamp),
       );
+    case 'retry':
+      deps.handleStreamAttemptDiscarded();
+      return { agentMessageBuffer: '' };
     case 'tool-call':
     case 'tool-result':
     case 'tool-confirmation':
     case 'tool-status':
-    case 'retry':
     case 'invalid-stream':
     case 'notice':
       // No state change — display flows through displayCallbacks or is

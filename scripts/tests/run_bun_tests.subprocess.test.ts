@@ -17,7 +17,7 @@ import {
 import { tmpdir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isChildSuccess, formatFailureDiagnostic } from '../run_bun_tests.js';
-import { resolveBunNativeTestFiles } from '../bun-test-manifest.js';
+import { resolveBunTestFiles } from '../bun-test-roots.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -147,11 +147,11 @@ function resolveBunBinary(): string | null {
 const bunBinary = resolveBunBinary();
 
 /**
- * How many files the `core` root selects, read from the manifest so these
- * subprocess assertions track it rather than restating a literal.
+ * How many files the `test-setup` root selects, read from the resolver so
+ * these subprocess assertions track it rather than restating a literal.
  */
-function coreFileCount(): number {
-  return resolveBunNativeTestFiles(repoRoot, 'core').length;
+function rootFileCount(): number {
+  return resolveBunTestFiles(repoRoot, 'test-setup').length;
 }
 
 describe('production Bun native test runner', () => {
@@ -163,7 +163,7 @@ describe('production Bun native test runner', () => {
         [
           resolve(repoRoot, 'scripts/run_bun_tests.ts'),
           '--workspace',
-          'core',
+          'test-setup',
           '--dry-run',
         ],
         {
@@ -174,12 +174,12 @@ describe('production Bun native test runner', () => {
       );
 
       expect(child.status, child.stderr).toBe(0);
-      // Derived from the manifest: hardcoding the count breaks whenever a file
-      // is added to the core root, which says nothing about the runner.
+      // Derived from the resolver: hardcoding the count breaks whenever a file
+      // is added to the test-setup root, which says nothing about the runner.
       expect(child.stdout).toContain(
-        `Dry run: ${coreFileCount()} files would be executed:`,
+        `Dry run: ${rootFileCount()} files would be executed:`,
       );
-      expect(child.stdout).toContain('packages/core/src/utils/errors.test.ts');
+      expect(child.stdout).toContain('test-setup/augment-bun-vi.test.ts');
     },
   );
 
@@ -191,7 +191,7 @@ describe('production Bun native test runner', () => {
         [
           resolve(repoRoot, 'scripts/run_bun_tests.ts'),
           '--workspace',
-          'core',
+          'test-setup',
           '--tsconfig',
           resolve(repoRoot, 'tsconfig.json'),
         ],
@@ -203,7 +203,7 @@ describe('production Bun native test runner', () => {
       );
 
       expect(child.status, child.stderr).toBe(0);
-      const count = coreFileCount();
+      const count = rootFileCount();
       expect(child.stdout).toContain(
         `Passed ${count}/${count} isolated native Bun test files`,
       );

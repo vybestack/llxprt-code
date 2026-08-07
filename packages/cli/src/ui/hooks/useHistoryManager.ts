@@ -46,6 +46,13 @@ export interface UseHistoryManagerReturn {
   loadHistory: (newHistory: HistoryItem[]) => void;
 }
 
+export interface RetractableHistoryManagerReturn
+  extends UseHistoryManagerReturn {
+  removeItems: (ids: readonly number[]) => void;
+}
+
+export type RemoveHistoryItems = RetractableHistoryManagerReturn['removeItems'];
+
 export interface UseHistoryOptions {
   maxItems?: number;
   maxBytes?: number;
@@ -71,6 +78,12 @@ const EMPTY_HISTORY_STATE: HistoryState = { entries: [], totalBytes: 0 };
 export function useHistory(
   options?: UseHistoryOptions,
 ): UseHistoryManagerReturn {
+  return useRetractableHistory(options);
+}
+
+export function useRetractableHistory(
+  options?: UseHistoryOptions,
+): RetractableHistoryManagerReturn {
   const maxItems = options?.maxItems;
   const maxBytes = options?.maxBytes;
   const limits = useMemo(
@@ -119,6 +132,13 @@ export function useHistory(
     [limits],
   );
 
+  const removeItems = useCallback(
+    (ids: readonly number[]) => {
+      setState((previous) => removeHistoryItems(previous, ids, limits));
+    },
+    [limits],
+  );
+
   const clearItems = useCallback(() => {
     setState(EMPTY_HISTORY_STATE);
     ConversationContext.startNewConversation();
@@ -130,8 +150,15 @@ export function useHistory(
   );
 
   return useMemo(
-    () => ({ history, addItem, updateItem, clearItems, loadHistory }),
-    [history, addItem, updateItem, clearItems, loadHistory],
+    () => ({
+      history,
+      addItem,
+      updateItem,
+      removeItems,
+      clearItems,
+      loadHistory,
+    }),
+    [history, addItem, updateItem, removeItems, clearItems, loadHistory],
   );
 }
 
@@ -266,6 +293,25 @@ function updateHistoryItem(
     updatedEntry === undefined
       ? previous.totalBytes
       : previous.totalBytes - oldEntry.bytes + updatedEntry.bytes;
+  return trimHistoryState({ entries, totalBytes }, limits);
+}
+
+function removeHistoryItems(
+  previous: HistoryState,
+  ids: readonly number[],
+  limits: HistoryLimits,
+): HistoryState {
+  if (ids.length === 0) {
+    return previous;
+  }
+  const removal = new Set(ids);
+  const entries = previous.entries.filter(
+    (entry) => !removal.has(entry.item.id),
+  );
+  if (entries.length === previous.entries.length) {
+    return previous;
+  }
+  const totalBytes = entries.reduce((total, entry) => total + entry.bytes, 0);
   return trimHistoryState({ entries, totalBytes }, limits);
 }
 

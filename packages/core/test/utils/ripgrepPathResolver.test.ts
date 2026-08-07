@@ -22,6 +22,21 @@ import {
   clearRipgrepAvailabilityCache,
 } from '../../src/utils/ripgrepPathResolver.js';
 
+function mockRipgrepPackageUnavailable(): void {
+  void mock.module(
+    '@lvce-editor/ripgrep',
+    () =>
+      new Proxy(
+        {},
+        {
+          get: () => {
+            throw new Error('Package not available');
+          },
+        },
+      ),
+  );
+}
+
 describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,18 +101,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
   });
   it('should fall back to system ripgrep when package not available', async () => {
     // Mock package to fail
-    void mock.module(
-      '@lvce-editor/ripgrep',
-      () =>
-        new Proxy(
-          {},
-          {
-            get: () => {
-              throw new Error('Package not available');
-            },
-          },
-        ),
-    );
+    mockRipgrepPackageUnavailable();
 
     // Mock system ripgrep available
     const mockExecSync = vi.fn().mockReturnValue('/usr/local/bin/rg\n');
@@ -123,18 +127,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     (os.platform as unknown) = mockPlatform;
 
     // Mock package and system ripgrep to fail
-    void mock.module(
-      '@lvce-editor/ripgrep',
-      () =>
-        new Proxy(
-          {},
-          {
-            get: () => {
-              throw new Error('Package not available');
-            },
-          },
-        ),
-    );
+    mockRipgrepPackageUnavailable();
 
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
@@ -163,18 +156,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     (os.platform as unknown) = mockPlatform;
 
     // Mock package and system ripgrep to fail
-    void mock.module(
-      '@lvce-editor/ripgrep',
-      () =>
-        new Proxy(
-          {},
-          {
-            get: () => {
-              throw new Error('Package not available');
-            },
-          },
-        ),
-    );
+    mockRipgrepPackageUnavailable();
 
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
@@ -201,18 +183,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     (process.pkg as unknown) = { entrypoint: '/path/to/bundle' };
 
     // Mock package and system ripgrep to fail
-    void mock.module(
-      '@lvce-editor/ripgrep',
-      () =>
-        new Proxy(
-          {},
-          {
-            get: () => {
-              throw new Error('Package not available');
-            },
-          },
-        ),
-    );
+    mockRipgrepPackageUnavailable();
 
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');
@@ -243,18 +214,7 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
 
   it('should provide helpful error message when ripgrep not found', async () => {
     // Mock all ripgrep sources to fail
-    void mock.module(
-      '@lvce-editor/ripgrep',
-      () =>
-        new Proxy(
-          {},
-          {
-            get: () => {
-              throw new Error('Package not available');
-            },
-          },
-        ),
-    );
+    mockRipgrepPackageUnavailable();
 
     const mockExecSync = vi.fn().mockImplementation(() => {
       throw new Error('Command not found');

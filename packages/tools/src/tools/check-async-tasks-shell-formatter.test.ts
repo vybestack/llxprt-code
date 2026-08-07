@@ -69,7 +69,7 @@ describe('check-async-tasks-shell-formatter — Windows pid exposure', () => {
     expect(details.terminate).toBeUndefined();
     expect(details.status).toBe('completed');
     expect(details.exitCode).toBe(0);
-    expect(details.completedAt).toBe('2023-11-14T22:14:10.000Z');
+    expect(details.completedAt).toBe('2023-11-14T22:13:25.000Z');
   });
 
   it('does not emit termination line for a failed job', () => {

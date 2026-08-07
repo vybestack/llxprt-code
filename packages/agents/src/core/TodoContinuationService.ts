@@ -148,6 +148,21 @@ export enum PostTurnAction {
   RetryWithReminder = 'retry-with-reminder',
 }
 
+/**
+ * Immutable snapshot of the attempt-local task-list continuation state. The five
+ * values mutated by an in-flight attempt are captured; prompt-scoped state is
+ * excluded. `toolActivityCount` and `toolCallReminderLevel` are included
+ * because recordModelActivity updates them before a transport Retry rolls back
+ * the abandoned attempt.
+ */
+export interface TodoContinuationSnapshot {
+  readonly lastTodoToolTurn: number | undefined;
+  readonly consecutiveComplexTurns: number;
+  readonly lastTodoSnapshot: readonly Todo[] | undefined;
+  readonly toolActivityCount: number;
+  readonly toolCallReminderLevel: 'none' | 'base' | 'escalated';
+}
+
 export interface PostTurnContext {
   hadToolCalls: boolean;
   hadThinking: boolean;
@@ -519,6 +534,43 @@ export class TodoContinuationService {
     this.lastComplexitySuggestionTurn = undefined;
     this.lastTodoToolTurn = undefined;
     this.lastTodoSnapshot = undefined;
+  }
+
+  /**
+   * Snapshot of the attempt-local task-list continuation state for transactional
+   * rollback. Captured at the start of a stream attempt and restored when a
+   * transport retry discards an abandoned attempt, so an abandoned task-list
+   * write cannot mutate reminder cadence for the replacement attempt.
+   *
+   * The task-list snapshot is deeply cloned so nested subtasks and tool-call
+   * metadata cannot alias the live state.
+   */
+  checkpoint(): TodoContinuationSnapshot {
+    return {
+      lastTodoToolTurn: this.lastTodoToolTurn,
+      consecutiveComplexTurns: this.consecutiveComplexTurns,
+      lastTodoSnapshot:
+        this.lastTodoSnapshot !== undefined
+          ? this.lastTodoSnapshot.map((todo) => structuredClone(todo))
+          : undefined,
+      toolActivityCount: this.toolActivityCount,
+      toolCallReminderLevel: this.toolCallReminderLevel,
+    };
+  }
+
+  /**
+   * Restores attempt-local task-list continuation state from a checkpoint.
+   * The task-list snapshot is cloned again so the live state does not alias it.
+   */
+  restore(snapshot: TodoContinuationSnapshot): void {
+    this.lastTodoToolTurn = snapshot.lastTodoToolTurn;
+    this.consecutiveComplexTurns = snapshot.consecutiveComplexTurns;
+    this.lastTodoSnapshot =
+      snapshot.lastTodoSnapshot !== undefined
+        ? snapshot.lastTodoSnapshot.map((todo) => structuredClone(todo))
+        : undefined;
+    this.toolActivityCount = snapshot.toolActivityCount;
+    this.toolCallReminderLevel = snapshot.toolCallReminderLevel;
   }
 
   setLastTodoToolTurn(turn: number): void {

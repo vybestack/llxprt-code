@@ -6,44 +6,67 @@ Bun execution command (or explains why it still requires Vitest).
 
 ## Summary
 
-Counts are the manifest's own resolution — regenerate with
-`bun scripts/run_bun_tests.ts --root <name> --dry-run` rather than editing them
-by hand.
+There is no manifest. Roots are discovery-based: each root in
+`scripts/bun-test-roots.ts` declares the directories to scan and the execution
+settings (preload, tsconfig, timeout, retries, globalSetup), and the runner
+walks the filesystem to resolve test files. A newly added test file is picked
+up automatically and can never be silently dropped. Regenerate the per-root
+counts with `bun scripts/run_bun_tests.ts --root <name> --dry-run` rather than
+editing them by hand.
 
-| Root                          | Bun-native files | Primary runner               |
-| ----------------------------- | ---------------- | ---------------------------- |
-| packages/a2a-server           | 21               | Bun (manifest)               |
-| packages/agents               | all              | Bun (`run-bun-tests.ts`)     |
-| packages/auth                 | all              | Bun (`run-bun-tests.ts`)     |
-| packages/cli                  | 24               | **Vitest** (#2578)           |
-| packages/core                 | 1                | Bun (`run-bun-tests.ts`)     |
-| packages/ide-integration      | 10               | Bun (manifest)               |
-| packages/lsp                  | all              | Bun (`bun test`)             |
-| packages/mcp                  | 43               | Bun (manifest)               |
-| packages/policy               | 12               | Bun (manifest)               |
-| packages/providers            | 492              | Bun (manifest)               |
-| packages/settings             | 15               | Bun (manifest)               |
-| packages/storage              | 32               | Bun (manifest)               |
-| packages/telemetry            | 13               | Bun (manifest)               |
-| packages/test-utils           | 11               | Bun (manifest)               |
-| packages/tools                | 73               | Bun (manifest)               |
-| packages/vscode-ide-companion | 7                | Bun (manifest)               |
-| scripts/tests                 | 212 (+1 slow)    | Bun (manifest)               |
-| test-setup                    | 2                | Bun (manifest)               |
-| evals                         | 1                | Bun (manifest, credentialed) |
-| integration-tests             | 31               | Bun (manifest, credentialed) |
+`scripts/check-test-file-coverage.ts` is the mechanism that keeps this
+inventory honest. It walks the whole repository for test files and fails when
+one exists on disk that no executor runs (AC8) or when two executors both run
+the same file (AC7). Its covered set is derived from each executor's own
+discovery code — the shared root resolver and the bespoke workspace runners —
+rather than restated, so the guard does not duplicate the selection logic it
+checks. What it proves: every test file on disk is claimed by at least one
+executor, and no file is claimed by more than one. What it does not prove:
+that those executors pass (that is the test suite's job) or that the executor
+table itself is complete (that is proven by the ownership test's bespoke-runner
+wiring assertions).
 
-`core` carries a small manifest entry alongside a different primary runner.
-Those files are excluded from the primary selection, so nothing runs twice
-within a workspace.
+| Root                          | Bun-native files | Primary runner                    |
+| ----------------------------- | ---------------- | --------------------------------- |
+| packages/a2a-server           | 21               | Bun (shared runner)               |
+| packages/agents (src)         | 340              | Bun (`run-bun-tests.ts`)          |
+| packages/agents (test-bun)    | 6                | Bun (shared runner)               |
+| packages/auth                 | 42               | Bun (`run-bun-tests.ts`)          |
+| packages/cli                  | 670              | Bun (`run-bun-tests.ts`)          |
+| packages/core                 | 352              | Bun (`run-bun-tests.ts`)          |
+| packages/ide-integration      | 10               | Bun (shared runner)               |
+| packages/lsp                  | 13               | Bun (shared runner)               |
+| packages/mcp                  | 43               | Bun (shared runner)               |
+| packages/policy               | 12               | Bun (shared runner)               |
+| packages/providers            | 544              | Bun (shared runner)               |
+| packages/settings             | 15               | Bun (shared runner)               |
+| packages/storage              | 38               | Bun (shared runner)               |
+| packages/telemetry            | 13               | Bun (shared runner)               |
+| packages/test-utils           | 11               | Bun (shared runner)               |
+| packages/tools                | 88               | Bun (shared runner)               |
+| packages/vscode-ide-companion | 7                | Bun (shared runner)               |
+| scripts/tests                 | 225              | Bun (shared runner)               |
+| test-setup                    | 3                | Bun (shared runner)               |
+| evals                         | 1                | Bun (shared runner, credentialed) |
+| integration-tests             | 32               | Bun (shared runner, credentialed) |
+
+`cli` and `core` no longer have shared roots: their bespoke discovery runners
+(`packages/{cli,core}/run-bun-tests.ts`) discover every test file, so a shared
+root would be strictly redundant. The `agents` shared root now covers only
+`test-bun`; its `src` tests run through the bespoke runner, so nothing in
+`agents/src` runs twice.
+
+`telemetry` and `cli` are redundant-with-a-reason: `telemetry` migrated under
+#2836 and its shared root is already glob/discovery-driven; `cli` migrated
+under #2843 and its bespoke runner discovers everything with no allowlist and
+no exclusion list.
 
 ### Where Vitest still executes
 
-| Path                                                                     | Invoked by                                      |
-| ------------------------------------------------------------------------ | ----------------------------------------------- |
-| `packages/cli` `test` / `test:ci` (+ integration, covered, fast, legacy) | the `cli` shard via `scripts/test.ts`           |
-| `packages/storage` `test:vitest`                                         | `secure_store_backend` in `ci.yml`, and nightly |
-| `packages/test-utils/src/quota-guard-vitest-integration.test.ts`         | itself — it is the test _of_ Vitest integration |
+| Path                                                             | Invoked by                                      |
+| ---------------------------------------------------------------- | ----------------------------------------------- |
+| `packages/storage` `test:vitest`                                 | `secure_store_backend` in `ci.yml`, and nightly |
+| `packages/test-utils/src/quota-guard-vitest-integration.test.ts` | itself — it is the test _of_ Vitest integration |
 
 Everything else that mentions `vitest` is either an unused `test:vitest`
 escape hatch (`auth`, `lsp`, `mcp`, `providers`, `storage`, `tools`) or the
@@ -53,27 +76,28 @@ handler.
 ## Fully migrated workspaces (Bun-native as primary `test` script)
 
 These workspaces run Bun as their `test`/`test:ci` scripts. Most now delegate
-to the shared manifest runner
+to the shared runner
 (`bun ../../scripts/run_bun_tests.ts --workspace <name> --junit junit.xml`),
-which gives one isolated process per file; a few predate it and call
-`bun test` directly.
+which resolves files by discovery and gives one isolated process per file; a
+few predate it and call `bun test` directly, and `cli`/`core`/`agents`/`auth`
+run their own bespoke `run-bun-tests.ts`.
 
 ### packages/a2a-server
 
 **Command:** `bun ../../scripts/run_bun_tests.ts --workspace a2a-server --junit junit.xml`
 
 All 21 test files are Bun-native. Uses a storage-isolation preload that calls
-`isolateStorageRoots()` before any test module imports Storage.
+`isolateStorageRoots()` before any test module imports Storage, plus the
+workspace preload.
 
 ### packages/agents
 
 **Command:** `bun run-bun-tests.ts`
 
-All 331 test files are Bun-native and the workspace `test`/`test:ci` scripts run
+All 340 test files are Bun-native and the workspace `test`/`test:ci` scripts run
 Bun. **Vitest is gone from this workspace entirely** — no `test:vitest` fallback,
 no `vitest.config.ts`, no `vitest` devDependency, and no test file imports it.
-The test API comes from `src/testApi.ts`, which re-exports `bun:test` with two
-corrections to Bun's own type declarations.
+The test API comes straight from `bun:test`.
 
 The Stryker mutation gate (`test:mutation:api`) was dropped with it: Stryker has
 no Bun runner, and its Vitest runner cannot execute suites that import
@@ -104,12 +128,13 @@ CI job.
 
 ### packages/core
 
-**Command:** `bun test --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml`
+**Command:** `bun run-bun-tests.ts`
 
-All 322 core test files are Bun-native (310 original files + 1 new split file
-`SessionLockManager.property.test.ts`). The workspace `test`/`test:ci` scripts
-use `bun test` directly. A `bunfig.toml` preloads a workspace-specific
-`bun-preload.ts` (storage isolation, provider runtime bootstrap).
+All 352 core test files are Bun-native. The workspace `test`/`test:ci` scripts
+use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
+file under `src` and `test`. A `bunfig.toml` preloads a workspace-specific
+`bun-preload.ts` that replicates the
+vitest setupFiles (storage isolation, provider runtime bootstrap).
 
 Migration changes:
 
@@ -130,11 +155,12 @@ Migration changes:
 
 ### packages/auth
 
-**Command:** `bun test --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml`
+**Command:** `bun run-bun-tests.ts`
 
-All 37 auth test files are Bun-native. The workspace `test`/`test:ci` scripts
-use `bun test` directly. A `bunfig.toml` preloads a workspace-specific
-`bun-preload.ts` for storage isolation.
+All 42 auth test files are Bun-native. The workspace `test`/`test:ci` scripts
+use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
+file under `src`. A `bunfig.toml` preloads a
+workspace-specific `bun-preload.ts` for storage isolation.
 
 Migration changes:
 
@@ -147,16 +173,20 @@ Migration changes:
 
 ### packages/lsp
 
-**Command:** `bun test`
+**Command:** `bun ../../scripts/run_bun_tests.ts --workspace lsp --junit junit.xml`
 
-All test files are Bun-native. No Vitest imports remain.
+All 13 test files (under `test/`) are Bun-native and discovered by the shared
+`lsp` root. No Vitest imports remain. The workspace previously used a bare
+`bun test`; it now uses the shared runner, which gives one isolated process per
+file, matching the form used by sibling workspaces.
 
 ### packages/policy
 
-**Command:** `bun test --path-ignore-patterns research`
+**Command:** `bun ../../scripts/run_bun_tests.ts --workspace policy --junit junit.xml`
 
-All 6 test files are Bun-native. The `research/` directory is excluded via
-`--path-ignore-patterns` because it contains non-test source.
+All 12 test files are Bun-native and discovered by the shared `policy` root.
+There is no `src/research` directory and no exclusion list — discovery walks
+`packages/policy` and runs every matching file.
 
 ### packages/test-utils (partially migrated in this PR)
 
@@ -165,7 +195,7 @@ All 6 test files are Bun-native. The `research/` directory is excluded via
 - `src/quota-guard.test.ts` (44 tests)
 - `src/util.test.ts` (7 tests)
 
-**Manifest entry:** `bun scripts/run_bun_tests.ts --workspace test-utils`
+**Root entry:** `bun scripts/run_bun_tests.ts --workspace test-utils`
 
 **Vitest-retained file (1):**
 
@@ -184,65 +214,45 @@ All 6 test files are Bun-native. The `research/` directory is excluded via
   PTY-based testing. Has timing-sensitive behavior under Bun's event loop.
   Deferred for the same runtime reasons as process-run.
 
-## Manifest-based Bun-native test files
+## Shared-runner test files (discovery-based)
 
-These files run under Bun via `scripts/run_bun_tests.ts` separately from their
-workspace's primary selection — either because that workspace's primary `test`
-script still uses Vitest for the bulk of its files, or because the files are
-Bun-only fixtures the primary selection does not match.
+These workspaces run their Bun-native tests through the shared runner
+(`scripts/run_bun_tests.ts`), which resolves files by walking each root's
+declared directories in `scripts/bun-test-roots.ts`. There is no per-file list:
+every `*.{test,spec,bun}.{ts,tsx,js}` file under a root's scanned directories
+runs. The `Bun Native Test Compatibility` job that once re-checked the manifest
+no longer exists — its resolution role is subsumed by the coverage guard above,
+which additionally proves resolution is _complete_.
 
-### packages/agents (3 files)
+### packages/agents (`test-bun`, 6 files)
 
-The workspace runs all of its `*.test.ts` / `*.spec.ts` files through
-`bun run-bun-tests.ts` (see above). These entries stay in the manifest so the
-`Bun Native Test Compatibility` job also covers them, and because the two
-`test-bun/*.bun.ts` files are Bun-only fixtures that the workspace runner's
-`*.test.*` / `*.spec.*` discovery does not match.
+The workspace runs all of its `src/**/*.{test,spec}.{ts,tsx}` files through
+`bun run-bun-tests.ts` (see above). The shared `agents` root now scans only
+`test-bun`, so the `test-bun/*.bun.ts` fixtures — Bun-only suites the bespoke
+runner's `*.test.*` / `*.spec.*` discovery does not match — run through the
+shared runner instead. Nothing in `agents/src` runs twice.
 
-- `src/core/CompressionProfileResolver.proxyKeyStorage.test.ts`
-- `test-bun/generatingModelStamp.issue2511.bun.ts`
-- `test-bun/subagentAnthropicTextSettings.issue1738.bun.ts`
+### packages/cli — bespoke runner (670 files)
 
-### packages/cli (12 files)
-
-- `src/__tests__/cliSessionDispatch.characterization.test.tsx`
-- `src/utils/sandbox-containers.test.ts`
-- `src/zed-integration/zed-session-lifecycle.test.ts`
-
-The JSP/1 observation producer suite (issue #2779) is Bun-native from the start
-rather than migrated. These eight files are excluded from the Vitest selection
-in `packages/cli/vitest.test-groups.ts`, so they run under `bun test` only and
-do not change `SELECTED_FILE_COUNT`:
-
-- `src/observation/jspBounds.test.ts`
-- `src/observation/jspProducer.test.ts`
-- `src/observation/jspProducerState.test.ts`
-- `src/observation/jspRedaction.test.ts`
-- `src/observation/jspSchema.test.ts`
-- `src/observation/jspTransport.test.ts`
-- `src/observation/jspWiring.test.ts`
-- `src/observation/observationTap.test.ts`
-
-The sandbox SSH agent preflight suite (issue #1699) follows the same pattern —
-Bun-native from the start and excluded from the Vitest selection:
-
-- `src/utils/sandbox-ssh-agent-preflight.test.ts`
-
-It partially mocks `node:child_process` through an async `importOriginal`
-factory rather than a bare `vi.mock` automock: automocking walks every export
-and throws on `ChildProcess`'s private `#stdin` getter under Bun's native
-runner.
+`cli` migrated under #2843. Its `test` / `test:ci` scripts run
+`packages/cli/run-bun-tests.ts`, which discovers every
+`*.{test,spec,bun}.{ts,tsx}` file under `src`, `test`, `test-bun` and
+`test-utils` with no allowlist and no exclusion list. The JSP/1 observation
+producer suite (issue #2779) and the sandbox SSH agent preflight suite
+(issue #1699) — both Bun-native from the start — are discovered alongside
+every other file rather than maintained as a separate list. `cli` has no
+shared root: it would be strictly redundant with the bespoke runner.
 
 ### packages/core — fully migrated (see above)
 
-### packages/providers (manifest-driven, ~474 files)
+### packages/providers (discovery-driven, 544 files)
 
-The providers workspace primary `test` script is fully manifest-driven
-(`bun ../../scripts/run_bun_tests.ts --workspace providers`). All listed
-manifest files run under Bun in isolated processes. The manifest has grown
-well beyond the single file listed at issue #2578 time; see
-`scripts/bun-test-manifest.ts` for the authoritative file list. Notable
-#2946 additions:
+The providers workspace primary `test` script is fully discovery-driven
+(`bun ../../scripts/run_bun_tests.ts --workspace providers`). The shared root
+walks `packages/providers` and runs every `*.{test,spec,bun}.{ts,tsx,js}` file
+in its own isolated process. The root has grown well beyond the single file
+listed at issue #2578 time; see `scripts/bun-test-roots.ts` for the
+authoritative root table. Notable #2946 additions:
 
 - `src/__tests__/BaseProvider.proxyKeyStorage.test.ts`
 - `src/gemini/GeminiProvider.auth.test.ts`
@@ -251,11 +261,11 @@ well beyond the single file listed at issue #2578 time; see
 
 Seven storage secure-store test files are genuinely Bun-native: they live under
 `test-bun/` with the `.bun.ts` suffix and import from `bun:test`, following the
-same convention as `packages/tools/test-bun`. They run via
-`scripts/run_bun_tests.ts --workspace storage` (isolated process per file) and
-use the `test-setup-storage-isolation.ts` preload (the same setup file the
-Vitest config uses) so `isolateStorageRoots()` runs before any test module
-imports the `Storage` singleton.
+same convention as `packages/tools/test-bun`. They are discovered by the shared
+`storage` root (`scripts/run_bun_tests.ts --workspace storage`, isolated process
+per file) and use the `test-setup-storage-isolation.ts` preload (the same setup
+file the Vitest config uses) so `isolateStorageRoots()` runs before any test
+module imports the `Storage` singleton.
 
 Because the `.bun.ts` suffix does not match Vitest's default
 `*.{test,spec}.*` include pattern, these files are invisible to `vitest run` —
@@ -279,10 +289,9 @@ invokes — the mock was dead weight and was removed rather than reproduced.
 
 ### packages/cli — extension settings storage
 
-`src/config/extensions/settingsStorage.test.ts` is Bun-native and registered in
-the manifest, following the CLI's existing convention of keeping such files
-under `src/` and excluding them from the Vitest selection (see `baseExclude` in
-`vitest.test-groups.ts`).
+`src/config/extensions/settingsStorage.test.ts` is Bun-native and discovered by
+the cli bespoke runner alongside every other cli test file, following the CLI's
+convention of keeping such files under `src/`.
 
 It previously replaced the entire storage module with a stand-in `SecureStore`
 via `vi.mock`. Rather than reproduce that in bun:test, the production class now
@@ -293,17 +302,13 @@ substituted. Consequently CONFLICT, TIMEOUT, and error classification are now
 exercised through SecureStore's actual code paths instead of hand-thrown
 error-shaped objects.
 
-### packages/telemetry (11 files)
+### packages/telemetry (13 files)
 
-All 11 telemetry test files are verified Bun-native and run via
-`scripts/run_bun_tests.ts --workspace telemetry` (isolated process per file).
-
-The workspace primary `test` script still uses Vitest because
-`@opentelemetry/core`'s CJS `require("@opentelemetry/api")` does not resolve
-`createContextKey` correctly when all telemetry files run in a single Bun
-process on Linux CI. Running each file in its own process (the manifest
-approach) avoids this interop issue. Once the upstream Bun CJS/ESM interop
-issue is resolved, the workspace `test` script can switch to `bun test`.
+All 13 telemetry test files are verified Bun-native and discovered by the
+shared `telemetry` root (`scripts/run_bun_tests.ts --workspace telemetry`,
+isolated process per file). The root is glob/discovery-driven, so telemetry is
+redundant-with-a-reason: it migrated under #2836 and no Vitest selection runs
+it.
 
 - `src/debug/ConfigurationManager.test.ts`
 - `src/debug/DebugLogger.test.ts`
@@ -317,19 +322,26 @@ issue is resolved, the workspace `test` script can switch to `bun test`.
 - `src/telemetry/tool-call-decision.test.ts`
 - `src/telemetry/types.test.ts`
 
-## Runner coverage
+### test-setup (3 files at repo root)
 
-Every root executes under Bun's native runner; no suite runs under Vitest. `settings`,
-`ide-integration`, `vscode-ide-companion`, `a2a-server`, `policy`,
+- `test-setup/stub-helpers.bun.test.ts`
+- `test-setup/vitest-parity.test.ts`
+
+## Remaining workspaces (future migration slices)
+
+Every workspace now runs its full suite under Bun (see the bespoke runners for
+`cli`, `core`, `agents`, `auth` and the shared runner for the rest, including
+`lsp`).
+`settings`, `ide-integration`, `vscode-ide-companion`, `a2a-server`, `policy`,
 `telemetry`, `test-utils`, `scripts/tests`, `evals` and `integration-tests`
 were migrated by #2847, which also deleted their `vitest.config.ts` files.
 
 ## Enumerated Vitest retention (acceptance criterion #8)
 
-No repository suite executes under Vitest. What remains is configuration and
-dependency surface, owned by the teardown issue (#2970).
+Two categories exist. The first still executes; the second does not execute at
+all.
 
-**Still invocable, though nothing routine calls it:**
+**Still executes:**
 
 1. **`packages/storage` `test:vitest`** — the `secure_store_backend` job (and
    its nightly twin) needs the two backend-specific configs
@@ -345,27 +357,31 @@ dependency surface, owned by the teardown issue (#2970).
 
 **Does not execute:**
 
-4. **Per-workspace `test:vitest` scripts** — `auth`, `lsp`, `mcp`,
+3. **Per-workspace `test:vitest` scripts** — `auth`, `lsp`, `mcp`,
    `providers`, `storage` and `tools` keep one as an escape hatch. No
    workflow and no `test` script invokes them. `packages/core` has none: its
-   script was removed with the Bun exclusion list (issue #2968).
+   script was removed with the Bun exclusion list (issue #2968). `packages/cli`
+   migrated fully to Bun under #2843 and has no Vitest selection at all.
 
-5. **The `vitest` import specifier** — migrated test files still import
+4. **The `vitest` import specifier** — migrated test files still import
    `describe`/`it`/`expect` from `'vitest'`, which Bun resolves through its
    own injected handler. `vitest` therefore stays in `devDependencies`.
 
 ## Canonical Bun-native test command
 
 ```bash
-# All native Bun test files (manifest-based):
+# All native Bun test files (discovery-based, all non-credentialed roots):
 bun scripts/run_bun_tests.ts
 
 # A specific workspace:
 bun scripts/run_bun_tests.ts --workspace telemetry
+
+# List what would run without executing (--dry-run):
+bun scripts/run_bun_tests.ts --dry-run
 ```
 
-For the full repository test suite (including vitest-only workspaces during
-the migration transition):
+For the full repository test suite (including the storage Vitest leg and the
+quota-guard Vitest-integration meta-test):
 
 ```bash
 npm run test

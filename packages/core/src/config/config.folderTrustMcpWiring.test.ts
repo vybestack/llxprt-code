@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { runAllTimersAsync, waitFor } from '@vybestack/llxprt-code-test-utils';
+import {
+  advanceTimersByTimeAsync,
+  runAllTimersAsync,
+  waitFor,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 interface InstanceMock {
@@ -380,18 +384,20 @@ describe('Config MCP wiring on folder trust change', () => {
           (error: unknown) => error,
         );
         outcome.catch(() => {});
-        // Advance time past the hook initialization timeout and drain
-        // all pending timers/microtasks.
-        vi.runAllTimers();
-        await runAllTimersAsync();
 
+        await advanceTimersByTimeAsync(0);
+        const initializationSignal = hookInitializers[0].mock.calls[0][0];
+
+        await advanceTimersByTimeAsync(29_999);
+        expect(initializationSignal).toBeInstanceOf(AbortSignal);
+        expect(initializationSignal.aborted).toBe(false);
+
+        await advanceTimersByTimeAsync(1);
         const result = await outcome;
         expect(result).toBeInstanceOf(Error);
         expect(result).toMatchObject({
           message: expect.stringContaining('timed out'),
         });
-        const initializationSignal = hookInitializers[0].mock.calls[0][0];
-        expect(initializationSignal).toBeInstanceOf(AbortSignal);
         expect(initializationSignal.aborted).toBe(true);
       } finally {
         vi.useRealTimers();

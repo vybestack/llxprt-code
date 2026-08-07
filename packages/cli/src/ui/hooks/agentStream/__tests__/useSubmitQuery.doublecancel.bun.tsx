@@ -159,6 +159,7 @@ function createUseSubmitQueryDeps(
       createStreamRuntimeForTest({}, createMockOverrides()),
     agent: createMockAgent(),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
+    removeItems: vi.fn(),
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),

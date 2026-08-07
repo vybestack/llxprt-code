@@ -1673,11 +1673,22 @@ The CLI automatically loads environment variables from `.env` files. The loading
 
 String values in `settings.json` can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax.
 
-### Agent observation variables (`LLXPRT_JSP_BOOTSTRAP_FILE`, `LLXPRT_JSP_NO_CONTENT`)
+### Agent observation variables (`--jsp-bootstrap`, `LLXPRT_JSP_BOOTSTRAP_FILE`, `LLXPRT_JSP_NO_CONTENT`)
 
-These optional variables enable agent-observation and status reporting to a supervising process (for example, a session manager that surfaces agent state in an external UI). They are normally written by that supervisor — not set by hand — and are inherited by descendant processes.
+These optional inputs enable agent-observation and status reporting to a supervising process (for example, a session manager that surfaces agent state in an external UI). They are normally written by that supervisor — not set by hand — and the env var is inherited by descendant processes.
 
-- **`LLXPRT_JSP_BOOTSTRAP_FILE`**: Absolute path to a JSP bootstrap file describing the observation endpoint. When the file **cannot be read** (it is missing, is a directory, or is unreadable for any reason), observation is disabled and the CLI prints a single warning to **stderr** naming the variable, the path, and the errno code, then continues normally. This keeps `stdout` clean for `-p` piping and lets a stale inherited pointer (which outlives the session that wrote the file) degrade gracefully. When the file **exists but is wrong** — malformed JSON, an endpoint that is not a loopback address, or an unsupported protocol version — startup **aborts with exit code 52 on purpose**, because an operator deliberately wrote that file for this run.
+Bootstrap source precedence (highest to lowest):
+
+1. **`--jsp-bootstrap <path>`** — explicit CLI flag.
+2. **`LLXPRT_JSP_BOOTSTRAP_FILE`** — environment-variable fallback.
+3. **Disabled** — no observation producer is started.
+
+The bootstrap file is a mode-0600, credential-bearing artifact (it carries the `publisher_credential`, `agent_id`, and `lifecycle_generation` for the session). To prevent unrelated descendant processes (subagents, shell tools, MCP servers) from inheriting a per-process identity pointer that may already have been rotated away, the CLI captures `LLXPRT_JSP_BOOTSTRAP_FILE` and removes it from its own environment at the very first executable line of startup — before debug logging, help/version handling, settings loading, memory relaunch, or argument parsing. No descendant inherits the variable.
+
+When the CLI performs an intentional direct-replacement relaunch (a memory relaunch or a sandbox hop) and the bootstrap path came from the environment, that path is transported to the child **only** via the hidden argv option `--jsp-bootstrap-internal-env-path`. The variable is never restored to the environment, and only the nonsecret path travels on argv — the credential itself stays inside the bootstrap file and is never placed on the command line.
+
+When the resolved bootstrap file **cannot be read** (it is missing, is a directory, or is unreadable for any reason), observation is disabled and the CLI prints a single warning to **stderr** naming the source channel (`--jsp-bootstrap` or `LLXPRT_JSP_BOOTSTRAP_FILE`), the escaped path, and the errno code, then continues normally. This keeps `stdout` clean for `-p` piping and lets a stale inherited pointer (which outlives the session that wrote the file) degrade gracefully. When the file **exists but is wrong** — malformed JSON, an endpoint that is not a loopback address, or an unsupported protocol version — startup **aborts with exit code 52 on purpose**, because an operator deliberately wrote that file for this run.
+
 - **`LLXPRT_JSP_NO_CONTENT`**: Set to `true` or `1` to suppress assistant message text in the published observation documents while preserving status fields and timestamps.
 
 ## Shell History

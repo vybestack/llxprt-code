@@ -295,9 +295,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(true);
       const okResult = result as Extract<typeof result, { ok: true }>;
-      {
-        expect(okResult.deletedSessionId).toBe(sessionId);
-      }
+      expect(okResult.deletedSessionId).toBe(sessionId);
       expect(await fileExists(filePath)).toBe(false);
     });
 
@@ -322,9 +320,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(true);
       const okResult = result as Extract<typeof result, { ok: true }>;
-      {
-        expect(okResult.deletedSessionId).toBe(sessionId);
-      }
+      expect(okResult.deletedSessionId).toBe(sessionId);
       expect(await fileExists(filePath)).toBe(false);
     });
 
@@ -350,9 +346,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(true);
       const okResult = result as Extract<typeof result, { ok: true }>;
-      {
-        expect(okResult.deletedSessionId).toBe('newest-del');
-      }
+      expect(okResult.deletedSessionId).toBe('newest-del');
       expect(await fileExists(newestPath)).toBe(false);
     });
 
@@ -398,9 +392,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(true);
       const okResult = result as Extract<typeof result, { ok: true }>;
-      {
-        expect(okResult.deletedSessionId).toBe(sessionId);
-      }
+      expect(okResult.deletedSessionId).toBe(sessionId);
     });
 
     it('lists live checkpoint blockers instead of deleting their source', async () => {
@@ -481,9 +473,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
         expect(result.ok).toBe(false);
         const errResult = result as Extract<typeof result, { ok: false }>;
-        {
-          expect(errResult.error).toContain('in use');
-        }
+        expect(errResult.error).toContain('in use');
         // File should still exist
         expect(await fileExists(filePath)).toBe(true);
       } finally {
@@ -513,9 +503,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(true);
       const okResult = result as Extract<typeof result, { ok: true }>;
-      {
-        expect(okResult.deletedSessionId).toBe(sessionId);
-      }
+      expect(okResult.deletedSessionId).toBe(sessionId);
       expect(await fileExists(filePath)).toBe(false);
       expect(await fileExists(lockPath)).toBe(false);
     });
@@ -541,9 +529,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(false);
       const errResult = result as Extract<typeof result, { ok: false }>;
-      {
-        expect(errResult.error).toContain('not found');
-      }
+      expect(errResult.error).toContain('not found');
     });
 
     /**
@@ -560,9 +546,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
       expect(result.ok).toBe(false);
       const errResult = result as Extract<typeof result, { ok: false }>;
-      {
-        expect(errResult.error).toContain('No sessions found');
-      }
+      expect(errResult.error).toContain('No sessions found');
     });
   });
 
@@ -773,9 +757,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
               expect(result.ok).toBe(true);
               const okResult = result as Extract<typeof result, { ok: true }>;
-              {
-                expect(okResult.deletedSessionId).toBe(targetSession.sessionId);
-              }
+              expect(okResult.deletedSessionId).toBe(targetSession.sessionId);
               expect(await fileExists(targetSession.filePath)).toBe(false);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
