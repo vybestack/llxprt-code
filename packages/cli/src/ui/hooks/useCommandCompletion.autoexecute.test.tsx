@@ -7,8 +7,6 @@
  * handleAutocomplete return-value contract.
  */
 
-/** @vitest-environment jsdom */
-
 import { describe, it, expect } from 'bun:test';
 import type { SlashCommand } from '../commands/types.js';
 import { aboutCommand } from '../commands/aboutCommand.js';

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { act } from 'react';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach } from 'bun:test';

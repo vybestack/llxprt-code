@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { Mock } from 'bun:test';

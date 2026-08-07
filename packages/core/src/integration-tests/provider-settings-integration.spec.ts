@@ -2,7 +2,15 @@
  * Integration tests for Phase 12: Provider Settings Integration
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';

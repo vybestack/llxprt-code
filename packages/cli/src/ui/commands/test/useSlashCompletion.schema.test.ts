@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { describe, it, expect, vi } from 'bun:test';
 
 const { schemaHandlerSpy, createHandlerMock } = (() => {

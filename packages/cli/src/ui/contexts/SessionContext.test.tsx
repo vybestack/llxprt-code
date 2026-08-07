@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { type MutableRefObject, act } from 'react';
 import { render, renderHook } from '../../test-utils/render.js';
 import type { SessionMetrics } from './SessionContext.js';

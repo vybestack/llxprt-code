@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';

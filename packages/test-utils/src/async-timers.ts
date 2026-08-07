@@ -108,7 +108,13 @@ export async function advanceTimersByTimeAsync(ms: number): Promise<void> {
     return;
   }
 
+  // Callers should pass whole milliseconds. Vitest carried a sub-millisecond
+  // remainder between calls so repeated fractional advances eventually ticked;
+  // that cannot be reproduced here, because Bun's `advanceTimersByTime(0)`
+  // itself moves the clock a millisecond. Tracking a remainder would add state
+  // without changing what callers observe.
   let remaining = Math.floor(ms);
+
   if (remaining === 0) {
     // Advancing by zero must still run the timers that are already due, which
     // is the usual way to flush a `setTimeout(fn, 0)`.

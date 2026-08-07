@@ -13,8 +13,6 @@
  * future change cannot quietly turn the display bound into data loss.
  */
 
-/** @vitest-environment jsdom */
-
 import { afterEach, describe, expect, it } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';

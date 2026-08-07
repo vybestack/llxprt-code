@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { describe, it, expect } from 'bun:test';
 import stripAnsi from 'strip-ansi';
 import { act } from 'react';

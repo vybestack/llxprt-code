@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** @vitest-environment jsdom */
-
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type React from 'react';
 import { act } from 'react';
