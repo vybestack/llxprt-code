@@ -300,7 +300,9 @@ describe('errorReport rotation (issue 3113)', () => {
     const concurrentFiles = await listMatchingFiles(testDir);
     for (const type of concurrentTypes) {
       expect(
-        concurrentFiles.some((name) => name.includes(type)),
+        concurrentFiles.some((name) =>
+          name.startsWith(`llxprt-client-error-${type}-`),
+        ),
         `${type} should survive every overlapping rotation`,
       ).toBe(true);
     }
