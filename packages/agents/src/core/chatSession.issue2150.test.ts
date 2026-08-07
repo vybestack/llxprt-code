@@ -249,7 +249,21 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     const events = await collectEvents(stream);
     expect(attempt).toBe(2);
-    expect(events.some((event) => event.type === 'retry')).toBe(true);
+    const retryIndex = events.findIndex((event) => event.type === 'retry');
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const replacementBlocks = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === 'chunk' ? event.value.content.blocks : [],
+      );
+    expect(
+      replacementBlocks.some(
+        (block) => block.type === 'text' && block.text === 'recovered response',
+      ),
+    ).toBe(true);
+    expect(replacementBlocks.some((block) => block.type === 'tool_call')).toBe(
+      false,
+    );
   });
 
   it('restarts the turn after a connection error that followed hidden thinking metadata', async () => {
@@ -290,7 +304,21 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     const events = await collectEvents(stream);
     expect(attempt).toBe(2);
-    expect(events.some((event) => event.type === 'retry')).toBe(true);
+    const retryIndex = events.findIndex((event) => event.type === 'retry');
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    const replacementBlocks = events
+      .slice(retryIndex + 1)
+      .flatMap((event) =>
+        event.type === 'chunk' ? event.value.content.blocks : [],
+      );
+    expect(
+      replacementBlocks.some(
+        (block) => block.type === 'text' && block.text === 'recovered response',
+      ),
+    ).toBe(true);
+    expect(replacementBlocks.some((block) => block.type === 'thinking')).toBe(
+      false,
+    );
   });
 
   it('does NOT retry a non-transient error thrown mid-stream and stops the loop', async () => {

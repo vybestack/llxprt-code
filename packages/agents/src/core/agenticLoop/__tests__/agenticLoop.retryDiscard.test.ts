@@ -77,11 +77,11 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
     return { loop, ...scripted };
   }
 
-  /** CallIds of completed tool calls, in order, from the tools_complete event. */
+  /** CallIds of completed tool calls, in order, across all completion batches. */
   function completedCallIds(events: readonly AgenticLoopEvent[]): string[] {
-    const complete = events.find(isToolsComplete);
-    if (!complete) return [];
-    return complete.completed.map((call) => call.request.callId);
+    return events
+      .filter(isToolsComplete)
+      .flatMap((event) => event.completed.map((call) => call.request.callId));
   }
 
   /**

@@ -498,9 +498,8 @@ export class CoderAgentExecutor implements AgentExecutor {
         }
       }
 
-      if (abortSignal.aborted) throw new Error('Execution aborted');
-
       for (const event of attemptEvents) {
+        throwIfAborted(abortSignal);
         await task.acceptAgentMessage(event);
       }
 
