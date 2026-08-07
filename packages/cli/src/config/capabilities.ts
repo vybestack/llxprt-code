@@ -43,3 +43,14 @@ export interface EphemeralSettingsAccess {
   getEphemeralSetting(key: string): unknown;
   setEphemeralSetting(key: string, value: unknown): void;
 }
+
+/** Reads interactivity and records the detected terminal background. */
+export interface TerminalThemeAccess {
+  isInteractive(): boolean;
+  setTerminalBackground(terminalBackground: string | undefined): void;
+}
+
+/** Reads the project root alongside session storage. */
+export interface ProjectStorageSource extends StorageSource {
+  getProjectRoot(): string;
+}

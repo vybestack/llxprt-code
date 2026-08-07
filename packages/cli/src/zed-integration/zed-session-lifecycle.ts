@@ -11,8 +11,8 @@ import {
   SESSION_NOT_FOUND_PREFIX,
   SessionDiscovery,
   type ApprovalMode,
-  type Config,
 } from '@vybestack/llxprt-code-core';
+import type { ProjectStorageSource } from '../config/capabilities.js';
 import { buildSessionModes } from './zed-helpers.js';
 import { listRecordedSessions } from './zed-session-listing.js';
 import type { LifecycleSession } from './zed-session-pagination.js';
@@ -40,7 +40,7 @@ export class SessionLifecycle {
   private readonly knownClosedSessions = new Set<string>();
 
   constructor(
-    private readonly config: Config,
+    private readonly config: ProjectStorageSource,
     private readonly sessions: Map<string, LifecycleSessionHandle>,
     private readonly restore: (
       sessionId: string,

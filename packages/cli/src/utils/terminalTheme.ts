@@ -12,7 +12,8 @@ import { themeManager, DEFAULT_THEME } from '../ui/themes/theme-manager.js';
 import { pickDefaultThemeName } from '../ui/themes/theme.js';
 import { getThemeTypeFromBackgroundColor } from '../ui/themes/color-utils.js';
 import type { LoadedSettings } from '../config/settings.js';
-import { type Config, coreEvents } from '@vybestack/llxprt-code-core';
+import { coreEvents } from '@vybestack/llxprt-code-core';
+import type { TerminalThemeAccess } from '../config/capabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
@@ -22,7 +23,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
  * @returns The detected terminal background color.
  */
 export async function setupTerminalAndTheme(
-  config: Config,
+  config: TerminalThemeAccess,
   settings: LoadedSettings,
 ): Promise<TerminalBackgroundColor> {
   let terminalBackground: TerminalBackgroundColor = undefined;
