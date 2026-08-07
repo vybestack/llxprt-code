@@ -19,11 +19,6 @@ import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { testRegex } from '../../test-utils/regex.js';
 
 vi.mock('../hooks/useTerminalSize.js');
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: () => ({
-    getActiveProvider: () => ({ name: 'openai' }),
-  }),
-}));
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({

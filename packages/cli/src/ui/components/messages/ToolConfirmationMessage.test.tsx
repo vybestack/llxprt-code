@@ -64,8 +64,11 @@ describe('ToolConfirmationMessage', () => {
     );
 
     expect(lastFrame()).toContain('URLs to fetch:');
+    // Asserted on the URL alone: RenderInline now emits OSC-8 hyperlink
+    // escapes around it, so the rendered frame no longer contains the plain
+    // "- <url>" sequence.
     expect(lastFrame()).toContain(
-      '- https://raw.githubusercontent.com/google/gemini-react/main/README.md',
+      'https://raw.githubusercontent.com/google/gemini-react/main/README.md',
     );
   });
 
@@ -126,7 +129,7 @@ describe('ToolConfirmationMessage', () => {
       {
         description: 'for mcp confirmations',
         details: mcpConfirmationDetails,
-        alwaysAllowText: 'always allow',
+        alwaysAllowText: 'Allow tool for this session',
       },
     ])('$description', ({ details, alwaysAllowText }) => {
       it('should show "allow always" when folder is trusted', () => {

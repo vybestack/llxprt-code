@@ -16,7 +16,53 @@ import {
 } from './settingsIntegration.js';
 import type { ExtensionSetting } from './extensionSettings.js';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+// The code under test logs through the telemetry singleton. Spying on a
+// DebugLogger prototype imported from another package only works while both
+// resolve to the same class, which stops being true once telemetry resolves
+// to its build output — so spy on the exact instance the source uses.
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+
+// ExtensionSettingsStorage delegates every read and write to SecureStore, which
+// calls the @napi-rs/keyring native module. A GitHub Linux runner has no
+// keyring service and that native call segfaults the process; Bun surfaces it
+// as "panic(main thread): Segmentation fault", which reads like a Bun bug but
+// is an unmocked OS keychain call. SecureStore already accepts an injectable
+// keyring, so the real storage class is kept and only the keychain is swapped
+// for the in-memory adapter that test-bun/settingsStorage.bun.ts uses.
+vi.mock('./settingsStorage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./settingsStorage.js')>();
+  const entries = new Map<string, string>();
+  const keyring = {
+    async getPassword(service: string, account: string) {
+      return entries.get(`${service}:${account}`) ?? null;
+    },
+    async setPassword(service: string, account: string, password: string) {
+      entries.set(`${service}:${account}`, password);
+    },
+    async deletePassword(service: string, account: string) {
+      return entries.delete(`${service}:${account}`);
+    },
+    async findCredentials(service: string) {
+      return [...entries.entries()]
+        .filter(([key]) => key.startsWith(`${service}:`))
+        .map(([key, password]) => ({
+          account: key.slice(service.length + 1),
+          password,
+        }));
+    },
+  };
+  class InMemoryExtensionSettingsStorage extends actual.ExtensionSettingsStorage {
+    constructor(extensionName: string, extensionDir: string) {
+      super(extensionName, extensionDir, {
+        keyringLoader: async () => keyring,
+      });
+    }
+  }
+  return {
+    ...actual,
+    ExtensionSettingsStorage: InMemoryExtensionSettingsStorage,
+  };
+});
 
 vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
   const actual =
@@ -27,11 +73,20 @@ vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
   };
 });
 
+const actualGitUtils = await vi.importActual<
+  typeof import('../../utils/gitUtils.js')
+>('../../utils/gitUtils.js');
+
 describe('settingsIntegration', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    vi.mocked(getWorkspaceIdentity).mockRestore();
+    // Re-established explicitly rather than relying on mockRestore(): the two
+    // runners disagree on whether that returns a mock to the implementation it
+    // was constructed with.
+    vi.mocked(getWorkspaceIdentity).mockImplementation(
+      actualGitUtils.getWorkspaceIdentity,
+    );
     tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-settings-test-'),
     );
@@ -280,7 +335,7 @@ describe('settingsIntegration', () => {
       const mockPrompt = vi.fn().mockResolvedValue('new-value');
 
       const debugErrorSpy = vi
-        .spyOn(DebugLogger.prototype, 'error')
+        .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
       const result = await updateSetting(

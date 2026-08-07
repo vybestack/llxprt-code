@@ -44,7 +44,6 @@ import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import {
   observeAgentEvent,
   observeTurnFailed,
-  observeTurnSettled,
   observeTurnStarted,
 } from '../../../observation/jspWiring.js';
 
@@ -86,6 +85,7 @@ export interface UseSubmitQueryDeps {
     timestamp?: number,
     isResuming?: boolean,
   ) => number;
+  removeItems?: (ids: readonly number[]) => void;
   settings: Parameters<typeof useStreamEventHandlers>[0]['settings'];
   onDebugMessage: (message: string) => void;
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
@@ -190,6 +190,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     agent: deps.agent,
     settings: deps.settings,
     addItem: deps.addItem,
+    removeItems: deps.removeItems,
     onDebugMessage: deps.onDebugMessage,
     onCancelSubmit: deps.onCancelSubmit,
     sanitizeContent: deps.sanitizeContent,
@@ -256,6 +257,7 @@ function useProcessAgentEvent(
   handlers: Pick<
     ReturnType<typeof useStreamEventHandlers>,
     | 'handleContentEvent'
+    | 'handleStreamAttemptDiscarded'
     | 'handleUserCancelledEvent'
     | 'handleErrorEvent'
     | 'handleChatCompressionEvent'
@@ -299,6 +301,7 @@ function useProcessAgentEvent(
           addItem: latestDeps.current.addItem,
           sanitizeContent: latestDeps.current.sanitizeContent,
           flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
+          pendingResponse: latestDeps.current.pendingResponse,
           pendingHistoryItemRef: latestDeps.current.pendingHistoryItemRef,
           thinkingBlocksRef: latestDeps.current.thinkingBlocksRef,
           turnCancelledRef: latestDeps.current.turnCancelledRef,
@@ -685,6 +688,10 @@ async function runSubmitQueryCore(
   cbd.setIsResponding(true);
   cbd.setInitError(null);
   observeTurnStarted();
+  // Establish a fresh committed-segment boundary for this top-level turn
+  // before any event can arrive, so ids left over from a previous completed
+  // message cannot be retracted by this turn's retry (issue #3048 review).
+  cbd.pendingResponse.beginCommittedSegments();
 
   try {
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
@@ -717,14 +724,6 @@ async function runSubmitQueryCore(
       } catch {
         /* non-fatal */
       }
-    }
-    // The stream has settled: every event for this turn, including tool
-    // results that arrive after the terminal `done`, has been processed. This
-    // is the honest moment a pause-ended turn can open a user_input
-    // wait (issue #3071). Guarded so a superseded turn cannot open a wait for
-    // a turn that no longer owns the controller.
-    if (isCurrentTurn(cbd, turn.abortSignal)) {
-      observeTurnSettled();
     }
   }
 }

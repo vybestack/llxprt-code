@@ -70,22 +70,10 @@ import {
 // Preserve the CompressionConfig export from the same path for consumers.
 export type { CompressionConfig };
 
-type MutationFailure = { failed: false } | { failed: true; error: unknown };
-
-function combineMutationFailures(
-  primary: MutationFailure,
-  queued: MutationFailure,
-): MutationFailure {
-  if (!primary.failed) return queued;
-  if (!queued.failed) return primary;
-  return {
-    failed: true,
-    error: new AggregateError(
-      [primary.error, queued.error],
-      'Multiple history mutations failed',
-    ),
-  };
-}
+import {
+  type MutationFailure,
+  combineMutationFailures,
+} from './historyMutationFailure.js';
 
 type QueuedHistoryMutation =
   | { kind: 'synchronous'; execute: () => void }
@@ -117,6 +105,17 @@ export class HistoryService
   private logger = new DebugLogger('llxprt:history:service');
 
   private chronology = new ChronologyStamper();
+
+  /**
+   * Monotonic cache anchor: the highest chronology `seq` that must remain in
+   * the preserved head across every subsequent middle-out compression. Once a
+   * head entry is preserved by one compression, no later compression may drop
+   * it, which keeps the provider-visible prefix byte-identical (#3070).
+   *
+   * Survives the compression clear/rebuild; reset explicitly by session-reset
+   * and history-restore paths.
+   */
+  private cacheAnchorSeq: number = 0;
 
   /**
    * @plan:PLAN-20260603-ISSUE1584.P05
@@ -512,11 +511,6 @@ export class HistoryService
     const generation = this.syncGeneration;
     this.history.push(content);
 
-    this.logger.debug(
-      'Content added successfully, history length:',
-      this.history.length,
-    );
-
     try {
       this.emit('contentAdded', content);
     } catch (error: unknown) {
@@ -594,10 +588,15 @@ export class HistoryService
   }
 
   /**
-   * Add multiple contents to the history
+   * Add multiple contents to the history.
+   *
+   * Iterates a snapshot because `add` appends to `this.history`: if `contents`
+   * aliases the backing array (`getRawHistory()`), a live iterator would keep
+   * consuming its own appends and never terminate. `replaceAll` is already
+   * immune the same way — its `filter` produces a fresh array before use.
    */
-  addAll(contents: IContent[], modelName?: string): void {
-    for (const content of contents) {
+  addAll(contents: readonly IContent[], modelName?: string): void {
+    for (const content of [...contents]) {
       this.add(content, modelName);
     }
   }
@@ -1190,5 +1189,33 @@ export class HistoryService
    */
   getChronologyTrace(): ChronologyTraceEntry[] {
     return buildChronologyTrace(this.history);
+  }
+
+  /**
+   * The highest chronology `seq` that the preserved head must always include.
+   * Zero means no anchor has been established yet (#3070).
+   */
+  getCacheAnchorSeq(): number {
+    return this.cacheAnchorSeq;
+  }
+
+  /**
+   * Set the chronology identity of the current preserved-head boundary. The
+   * boundary moves monotonically by array position, but chronology seq values
+   * do not: synthetic compression entries receive newer seq values before
+   * preserved tail entries. Exact identity, not numeric ordering, is required.
+   */
+  setCacheAnchorSeq(seq: number): void {
+    if (!Number.isInteger(seq) || seq <= 0) {
+      throw new Error(
+        `Cache-anchor seq must be a positive integer: got ${seq}`,
+      );
+    }
+    this.cacheAnchorSeq = seq;
+  }
+
+  /** Reset the anchor to 0 for session-reset / history-restore paths. @see #3070 */
+  resetCacheAnchorSeq(): void {
+    this.cacheAnchorSeq = 0;
   }
 }

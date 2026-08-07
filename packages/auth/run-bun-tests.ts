@@ -13,12 +13,22 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { availableParallelism } from 'node:os';
 
-const PRELOAD = './bun-preload.ts';
+/**
+ * Every path this runner touches — discovery, the child's working directory,
+ * the preload and the JUnit report — is anchored here rather than at
+ * `process.cwd()`, so the runner behaves identically no matter where it is
+ * invoked from.
+ */
+const WORKSPACE_ROOT = import.meta.dir;
+const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');
+const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 const CONCURRENCY = Math.min(8, availableParallelism());
 const PER_FILE_TIMEOUT_MS = 60_000;
+
+const TEST_ROOTS = ['src'] as const;
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
@@ -36,7 +46,10 @@ function findTestFiles(dir: string): string[] {
     if (stat.isDirectory()) {
       results.push(...findTestFiles(fullPath));
     } else if (
-      (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) &&
+      (entry.endsWith('.test.ts') ||
+        entry.endsWith('.test.tsx') ||
+        entry.endsWith('.spec.ts') ||
+        entry.endsWith('.spec.tsx')) &&
       !entry.endsWith('.d.ts')
     ) {
       results.push(fullPath);
@@ -45,21 +58,39 @@ function findTestFiles(dir: string): string[] {
   return results.sort();
 }
 
-interface TestResult {
+/**
+ * Returns the absolute paths of every test file this runner would execute for
+ * the given absolute workspace `root`. The script entry point calls this same
+ * function (see `main`), so the two can never diverge.
+ *
+ * Root scanned: `src`. Files match `*.test.ts` / `*.test.tsx` / `*.spec.ts` /
+ * `*.spec.tsx` (`.d.ts` excluded); `dist`, `node_modules`, `coverage` and
+ * dot-prefixed entries are skipped.
+ */
+export function discoverTestFiles(root: string): string[] {
+  const results: string[] = [];
+  for (const testRoot of TEST_ROOTS) {
+    results.push(...findTestFiles(join(root, testRoot)));
+  }
+  return results;
+}
+
+export interface TestResult {
   file: string;
   passed: boolean;
   exitCode: number | null;
   timedOut: boolean;
+  signal: NodeJS.Signals | null;
 }
 
-function runTestFile(file: string): Promise<TestResult> {
+export function runTestFile(file: string): Promise<TestResult> {
   return new Promise((resolve) => {
     let resolved = false;
     const child = spawn(
       process.execPath,
       ['test', '--preload', PRELOAD, file],
       {
-        cwd: process.cwd(),
+        cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
         env: process.env,
       },
@@ -69,14 +100,26 @@ function runTestFile(file: string): Promise<TestResult> {
       if (resolved) return;
       resolved = true;
       child.kill('SIGKILL');
-      resolve({ file, passed: false, exitCode: null, timedOut: true });
+      resolve({
+        file,
+        passed: false,
+        exitCode: null,
+        timedOut: true,
+        signal: null,
+      });
     }, PER_FILE_TIMEOUT_MS);
 
-    child.on('exit', (code) => {
+    child.on('exit', (code, signal) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timer);
-      resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
+      resolve({
+        file,
+        passed: code === 0,
+        exitCode: code,
+        timedOut: false,
+        signal: signal ?? null,
+      });
     });
 
     child.on('error', (err: Error) => {
@@ -84,7 +127,13 @@ function runTestFile(file: string): Promise<TestResult> {
       resolved = true;
       clearTimeout(timer);
       console.error(`Error spawning test for ${file}: ${err.message}`);
-      resolve({ file, passed: false, exitCode: -1, timedOut: false });
+      resolve({
+        file,
+        passed: false,
+        exitCode: -1,
+        timedOut: false,
+        signal: null,
+      });
     });
   });
 }
@@ -97,7 +146,17 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function generateJUnit(
+export function formatFailureReason(result: TestResult): string {
+  if (result.timedOut) {
+    return `Timed out after ${PER_FILE_TIMEOUT_MS / 1000}s`;
+  }
+  if (result.signal !== null) {
+    return `Killed by signal ${result.signal}`;
+  }
+  return `Exit code ${result.exitCode ?? -1}`;
+}
+
+export function generateJUnit(
   results: TestResult[],
   totalFiles: number,
   failedCount: number,
@@ -106,12 +165,11 @@ function generateJUnit(
   const testCases = results
     .map((r) => {
       const className = escapeXml(
-        r.file.replace(/^src\//, '').replace(/\.test\.tsx?$/, ''),
+        r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
       );
-      const exitCode = r.exitCode ?? -1;
       const failureXml = r.passed
         ? ''
-        : `<failure message="Exit code ${exitCode}">FAILED</failure>`;
+        : `<failure message="${formatFailureReason(r)}">FAILED</failure>`;
       const timeAttr = r.passed ? '' : ' time="0"';
       return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
     })
@@ -128,7 +186,9 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
-  const testFiles = findTestFiles('src');
+  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
+    relative(WORKSPACE_ROOT, file),
+  );
   if (testFiles.length === 0) {
     console.error('No test files found');
     process.exit(1);
@@ -150,10 +210,7 @@ async function main(): Promise<void> {
   const failed = results.filter((r) => !r.passed);
 
   for (const result of failed) {
-    const reason = result.timedOut
-      ? `TIMEOUT after ${PER_FILE_TIMEOUT_MS}ms`
-      : `exit code ${result.exitCode ?? -1}`;
-    console.error(`FAILED: ${result.file} (${reason})`);
+    console.error(`FAILED: ${result.file} (${formatFailureReason(result)})`);
   }
 
   console.log(
@@ -162,11 +219,13 @@ async function main(): Promise<void> {
   );
 
   writeFileSync(
-    'junit.xml',
+    JUNIT_PATH,
     generateJUnit(results, testFiles.length, failed.length),
   );
 
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
-main();
+if (import.meta.main) {
+  await main();
+}

@@ -16,11 +16,17 @@ vi.mock('../../utils/resolvePath.js', () => ({
   resolvePath: (value: string) => value.replace('~', '/mock/home/user'),
 }));
 
-vi.mock('../../utils/package.js', () => ({
-  getPackageJson: vi.fn(async () => ({
-    config: { sandboxImageUri: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0' },
-  })),
-}));
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+  return {
+    ...actual,
+    getPackageJson: vi.fn(async () => ({
+      config: {
+        sandboxImageUri: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0',
+      },
+    })),
+  };
+});
 
 vi.mock('command-exists', () => ({
   default: {

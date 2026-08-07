@@ -57,6 +57,11 @@ describe('TurnProcessor stream idle timeout error contract (issue #2817)', () =>
     const params = { message: [] } as unknown as SendMessageParams;
 
     expect(isNetworkTransientError(error)).toBe(false);
-    expect(shouldRetryStreamAttempt(error, params, 0)).toBe(false);
+    expect(
+      shouldRetryStreamAttempt(error, params, 0, { hasYieldedOutput: false }),
+    ).toBe(false);
+    expect(
+      shouldRetryStreamAttempt(error, params, 0, { hasYieldedOutput: true }),
+    ).toBe(false);
   });
 });

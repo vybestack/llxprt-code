@@ -18,7 +18,17 @@
 import { JSDOM } from 'jsdom';
 import { join } from 'node:path';
 import React from 'react';
-import { mock, afterEach } from 'bun:test';
+import {
+  afterEach,
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  test,
+  vi,
+} from 'bun:test';
 import {
   clearActiveProviderRuntimeContext,
   DebugLogger,
@@ -46,9 +56,52 @@ Object.assign(globalThis, {
 });
 
 // ---------------------------------------------------------------------------
+// Test globals
+//
+// The Vitest configuration for this workspace sets `globals: true`, so many
+// test files reference `describe` / `it` / `expect` without importing them.
+// Bun only injects those names into files that import from 'bun:test' or
+// 'vitest', so expose the same globals here to preserve that contract.
+// ---------------------------------------------------------------------------
+const testGlobals: Record<string, unknown> = {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  test,
+  vi,
+};
+for (const [name, value] of Object.entries(testGlobals)) {
+  if (!(name in globalThis)) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Environment
 // ---------------------------------------------------------------------------
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+
+// Clear credential-proxy env vars so unit tests do not inherit the host
+// process's proxy configuration, which would skip proactive renewal
+// scheduling, alter token-store behaviour, and change sandbox paths. The
+// runner passes the parent environment to every child, so without this a
+// developer's live capability material reaches the tests.
+delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+delete process.env.LLXPRT_CAPABILITY_TOKEN;
+delete process.env.LLXPRT_CAPABILITY_FD;
+// A developer running the suite from inside llxprt exports this, pointing at a
+// session-scoped bootstrap file. Anything that boots the CLI in-process then
+// dies with "JSP bootstrap file could not be read".
+delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
 if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
@@ -78,7 +131,11 @@ Bun.plugin({
 // ---------------------------------------------------------------------------
 // Provider aliases mock (prevents "Provider not found" in fs-mocked tests)
 // ---------------------------------------------------------------------------
-mock.module(
+// Registered through `vi.mock` rather than `mock.module` so the compatibility
+// shim snapshots the real module first; a test that needs the genuine aliases
+// (test/providers/providerAliases.test.ts) can then restore them with
+// `vi.unmock`.
+vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerAliases.js',
   () => ({
     loadProviderAliasEntries: () => [
@@ -278,6 +335,14 @@ const { __resetCleanupStateForTesting } = await import(
   './src/utils/cleanup.js'
 );
 
+// Bun's mock.module patches a module namespace in place and shares it with
+// this preload, so a test that mocks '@vybestack/llxprt-code-core' would
+// otherwise replace the cleanup helpers this file relies on. Capture the real
+// implementations now, before any test file can register a module mock.
+const resetDebugLoggerForTesting =
+  DebugLogger.resetForTesting.bind(DebugLogger);
+const clearProviderRuntimeContext = clearActiveProviderRuntimeContext;
+
 const managedProcessEvents = [
   'exit',
   'SIGINT',
@@ -318,11 +383,51 @@ function restoreProcessListeners(eventName: ManagedProcessEvent): void {
   }
 }
 
-afterEach(async () => {
-  for (const eventName of managedProcessEvents) {
-    restoreProcessListeners(eventName);
+// Ink teardown must run before the shared process and runtime state below are
+// reset, so it is invoked at the top of the same hook rather than registered
+// separately. Without this, a component mounted in one test stays mounted for
+// the rest of the file, leaking effects, timers and the global active stdin.
+const { cleanup: cleanupInkRenders } = await import(
+  './test-utils/ink-testing-library.js'
+);
+
+async function runCleanupPhases(
+  phases: ReadonlyArray<() => void | Promise<void>>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const phase of phases) {
+    try {
+      await phase();
+    } catch (error) {
+      errors.push(error);
+    }
   }
-  await DebugLogger.resetForTesting();
-  __resetCleanupStateForTesting();
-  clearActiveProviderRuntimeContext();
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'Multiple CLI test cleanup phases failed');
+  }
+}
+
+afterEach(async () => {
+  await runCleanupPhases([
+    () => cleanupInkRenders(),
+    () => {
+      // Code under test (for example the extension commands) signals failure
+      // with `process.exitCode = 1`. Under Vitest that happens inside a worker,
+      // but a Bun test file IS the process, so a leftover exit code would fail
+      // the file even when every test passed. Bun sets the real exit status
+      // from the test results after the hooks have run.
+      process.exitCode = 0;
+    },
+    () => {
+      for (const eventName of managedProcessEvents) {
+        restoreProcessListeners(eventName);
+      }
+    },
+    () => resetDebugLoggerForTesting(),
+    () => __resetCleanupStateForTesting(),
+    () => clearProviderRuntimeContext(),
+  ]);
 });

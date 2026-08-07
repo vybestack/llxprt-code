@@ -35,6 +35,11 @@ function makeSseResponse(): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+        ),
+      );
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
     },

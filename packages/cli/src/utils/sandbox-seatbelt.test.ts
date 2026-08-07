@@ -425,7 +425,7 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
     },
   );
 
-  it.runIf(isMacOS)(
+  it.skipIf(!isMacOS)(
     'real sandbox-exec child inherits no capability transport markers from the post-consumption parent env',
     () => {
       expect(fs.existsSync(PERMISSIVE_OPEN_PROFILE)).toBe(true);
@@ -452,7 +452,7 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
     },
   );
 
-  it.runIf(isMacOS)(
+  it.skipIf(!isMacOS)(
     'O16: asserts real macOS sandbox-exec spawn success/failure surfaces correctly',
     () => {
       expect(fs.existsSync(PERMISSIVE_OPEN_PROFILE)).toBe(true);

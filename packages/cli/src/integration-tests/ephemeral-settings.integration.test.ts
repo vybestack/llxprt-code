@@ -185,12 +185,13 @@ describe('Ephemeral Settings Integration Tests', () => {
       streamingEnabled = streamingSetting !== 'disabled';
       expect(streamingEnabled).toBe(false);
 
-      // Test case sensitivity - Config accepts any value, normalization happens at UI layer
+      // Case is normalised by Config itself now, rather than being left to
+      // the UI layer.
       config.setEphemeralSetting('streaming', 'ENABLED');
-      expect(config.getEphemeralSetting('streaming')).toBe('ENABLED');
+      expect(config.getEphemeralSetting('streaming')).toBe('enabled');
 
       config.setEphemeralSetting('streaming', 'DISABLED');
-      expect(config.getEphemeralSetting('streaming')).toBe('DISABLED');
+      expect(config.getEphemeralSetting('streaming')).toBe('disabled');
     });
 
     it('should validate streaming mode values', () => {

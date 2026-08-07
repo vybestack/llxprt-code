@@ -36,7 +36,6 @@ export interface InputPromptProps {
   suggestionsPosition?: 'above' | 'below';
   vimHandleInput?: (key: Key) => boolean;
   approvalMode?: ApprovalMode;
-  popAllMessages?: (callback: (messages: string) => void) => void;
   vimModeEnabled?: boolean;
   isEmbeddedShellFocused?: boolean;
   setQueueErrorMessage?: (message: string | null) => void;

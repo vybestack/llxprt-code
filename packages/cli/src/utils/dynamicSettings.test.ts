@@ -6,10 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core';
-import {
-  dynamicSettingsRegistry,
-  generateDynamicToolSettings,
-} from './dynamicSettings.js';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 // Mock DebugLogger
@@ -35,6 +31,12 @@ vi.mock('@vybestack/llxprt-code-telemetry', async (importOriginal) => {
     },
   };
 });
+
+// Loaded with top-level await instead of a static import so the module under
+// test constructs its DebugLogger from the mock registered above.
+const { dynamicSettingsRegistry, generateDynamicToolSettings } = await import(
+  './dynamicSettings.js'
+);
 
 // Mock console methods to avoid noise in tests
 const originalConsoleError = globalThis.console.error;

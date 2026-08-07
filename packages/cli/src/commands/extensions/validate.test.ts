@@ -39,6 +39,7 @@ describe('handleValidate', () => {
   let processSpy: MockInstance;
   let tempHomeDir: string;
   let tempWorkspaceDir: string;
+  let originalCwd: string;
 
   beforeEach(() => {
     debugLoggerLogSpy = vi.spyOn(debugLogger, 'log');
@@ -49,11 +50,15 @@ describe('handleValidate', () => {
       .mockImplementation(() => undefined as never);
     tempHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-home'));
     tempWorkspaceDir = fs.mkdtempSync(path.join(tempHomeDir, 'test-workspace'));
-    vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
+    // Bun's path.resolve uses the OS-level cwd, not process.cwd(). Use
+    // process.chdir so both process.cwd() and path.resolve see tempWorkspaceDir.
+    originalCwd = process.cwd();
+    process.chdir(tempWorkspaceDir);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    process.chdir(originalCwd);
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
   });

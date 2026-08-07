@@ -7,6 +7,7 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
+import { ESC_TIMEOUT } from '../contexts/KeypressContext.js';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
@@ -115,9 +116,13 @@ describe('InputPrompt', () => {
       text: '',
       cursor: [0, 0],
       lines: [''],
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       setText: vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
+        mockBuffer.transformationsByLine = [[]];
+        mockBuffer.visualToTransformedMap = [0];
         mockBuffer.cursor = [0, newText.length];
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
@@ -454,16 +459,35 @@ describe('InputPrompt', () => {
       await act(async () => {
         stdin.write(`\x1b[200~${pastedText}\x1b[201~`);
       });
+      // Each of these pastes is five lines, which is at or above
+      // LARGE_PASTE_LINE_THRESHOLD, so the prompt collapses it to a placeholder
+      // instead of inserting the raw text.
       await waitFor(() => {
-        // Verify that the buffer's handleInput was called once with the full text
-        expect(props.buffer.handleInput).toHaveBeenCalledTimes(1);
-        expect(props.buffer.handleInput).toHaveBeenCalledWith(
-          expect.objectContaining({
-            name: 'paste',
-            sequence: pastedText,
-          }),
-        );
+        expect(props.buffer.setText).toHaveBeenCalledTimes(1);
       });
+      expect(props.buffer.setText).toHaveBeenCalledWith(
+        expect.stringContaining('lines pasted'),
+      );
+      expect(props.buffer.handleInput).not.toHaveBeenCalled();
+
+      unmount();
+    });
+
+    it('inserts a paste below the large-paste threshold as a single input with normalised newlines', async () => {
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+
+      await act(async () => {
+        stdin.write('\x1b[200~one\r\ntwo\x1b[201~');
+      });
+
+      await waitFor(() => {
+        expect(props.buffer.handleInput).toHaveBeenCalledTimes(1);
+      });
+      expect(props.buffer.handleInput).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'paste', sequence: 'one\ntwo' }),
+      );
 
       unmount();
     });
@@ -648,7 +672,10 @@ describe('InputPrompt', () => {
     it('should clear buffer on second ESC press', async () => {
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
+      // Seed the buffer, then clear the spy so the later assertion is about
+      // the ESC-driven clear rather than this setup call.
       props.buffer.setText('text to clear');
+      (props.buffer.setText as unknown as Mock).mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -661,6 +688,11 @@ describe('InputPrompt', () => {
           expect(onEscapePromptChange).toHaveBeenCalledWith(false);
         });
       });
+
+      // A second escape arriving inside ESC_TIMEOUT is coalesced with the
+      // first into a single escape sequence, so the component would see one
+      // press rather than two. Wait past that window to press ESC again.
+      await new Promise((resolve) => setTimeout(resolve, ESC_TIMEOUT + 10));
 
       await act(async () => {
         stdin.write('\x1B');

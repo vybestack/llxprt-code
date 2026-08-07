@@ -7,7 +7,7 @@
 // Bun-native tests for the Mermaid sequenceDiagram sanitizer and the
 // sequenceDiagram prompt hardening added for issue #2944. These run under
 // Bun's native test runner via the scripts-tests root (see
-// scripts/bun-test-manifest.ts).
+// scripts/bun-test-roots.ts).
 
 import { describe, expect, it } from 'bun:test';
 import { sanitizeSequenceDiagram } from '../pr-review-walkthrough-parse.ts';

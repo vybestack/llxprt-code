@@ -82,10 +82,10 @@ describe('Drag and Drop File Paths', () => {
     const { result } = renderHook(() =>
       useTextBuffer({ viewport, isValidPath: (p) => validPaths.has(p) }),
     );
-    const filePaths = '/path/to/my\\\\ file.txt /other/path.txt';
+    const filePaths = '/path/to/my\\ file.txt /other/path.txt';
     act(() => result.current.insert(filePaths, { paste: true }));
     expect(getBufferState(result).text).toBe(
-      '@/path/to/my\\\\ file.txt @/other/path.txt ',
+      '@/path/to/my\\ file.txt @/other/path.txt ',
     );
   });
 

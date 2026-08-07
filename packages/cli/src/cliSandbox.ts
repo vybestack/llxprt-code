@@ -18,6 +18,10 @@ import { ExtensionStorage } from './config/extension.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
+import {
+  augmentArgvWithInternalEnvPath,
+  type BootstrapSelection,
+} from './observation/jspWiring.js';
 
 /**
  * Resolve the container memory (in MB) requested via sandbox-related env vars.
@@ -43,8 +47,9 @@ export function resolveContainerMemoryMB(): number | undefined {
 
 /**
  * Compute the memory args to pass when relaunching into the sandbox.
- * Always returns args (the sandbox starts fresh with Node's default heap),
- * unlike the host-relaunch heuristic at the top of main().
+ * Under Bun this returns an empty array (Bun ignores --max-old-space-size);
+ * under Node it returns the computed heap argument unless auto-configure is
+ * disabled, unlike the host-relaunch heuristic at the top of main().
  */
 export function computeSandboxMemoryArgsFromEnv(
   config: Config,
@@ -131,6 +136,13 @@ export interface SandboxHopOptions {
   initialAuthFailed: boolean;
   readStdin: () => Promise<string>;
   hasPipedInput: boolean;
+  /**
+   * The already-consumed bootstrap selection. An env-origin path must be
+   * transported to the inner CLI argv (without restoring
+   * LLXPRT_JSP_BOOTSTRAP_FILE to the outer process env), preserving its
+   * original source so inner diagnostics still name the env var.
+   */
+  bootstrapSelection: BootstrapSelection | null;
 }
 
 /**
@@ -150,6 +162,7 @@ export async function maybeHopIntoSandbox(
     initialAuthFailed,
     readStdin: readStdinData,
     hasPipedInput,
+    bootstrapSelection,
   } = options;
 
   if (process.env.SANDBOX) {
@@ -177,12 +190,20 @@ export async function maybeHopIntoSandbox(
 
   const stdinData = hasPipedInput ? await readStdinData() : '';
   const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
+  // Transport the env-origin bootstrap selection into the child argv (without
+  // restoring LLXPRT_JSP_BOOTSTRAP_FILE to this outer process env). Only an
+  // env-origin path needs transport; a flag-origin path is already in argv.
+  const envPath =
+    bootstrapSelection?.source === ('LLXPRT_JSP_BOOTSTRAP_FILE' as const)
+      ? bootstrapSelection.path
+      : undefined;
+  const finalSandboxArgs = augmentArgvWithInternalEnvPath(sandboxArgs, envPath);
 
   const exitCode = await start_sandbox(
     sandboxConfig,
     sandboxMemoryArgs,
     partialConfig,
-    sandboxArgs,
+    finalSandboxArgs,
   );
   process.exit(exitCode);
 }

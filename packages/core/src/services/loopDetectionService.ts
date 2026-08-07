@@ -23,6 +23,32 @@ const DEFAULT_TOOL_CALL_LOOP_THRESHOLD = 50;
 const DEFAULT_CONTENT_LOOP_THRESHOLD = 50;
 
 /**
+ * Immutable snapshot of the attempt-mutable loop-detection state. The
+ * `contentStats` map is deep-copied (each index array cloned) so restoring
+ * cannot alias the live detector's arrays.
+ */
+export interface LoopDetectionSnapshot {
+  readonly lastToolCallKey: string | null;
+  readonly toolCallRepetitionCount: number;
+  readonly streamContentHistory: string;
+  readonly contentStats: ReadonlyMap<string, number[]>;
+  readonly lastContentIndex: number;
+  readonly loopDetected: boolean;
+  readonly inCodeBlock: boolean;
+}
+
+/** Deep-copies a content-stats map so snapshots and restores do not alias. */
+function copyContentStats(
+  source: ReadonlyMap<string, readonly number[]>,
+): Map<string, number[]> {
+  const copy = new Map<string, number[]>();
+  for (const [hash, indices] of source) {
+    copy.set(hash, [...indices]);
+  }
+  return copy;
+}
+
+/**
  * Counts non-overlapping occurrences of a literal substring.
  */
 function countOccurrences(haystack: string, needle: string): number {
@@ -478,6 +504,41 @@ export class LoopDetectionService {
     this.resetContentTracking();
     this.resetTurnTracking();
     this.loopDetected = false;
+  }
+
+  /**
+   * Snapshot of the attempt-mutable detector state for transactional rollback.
+   * Captured at the start of a stream attempt and restored when a transport
+   * retry discards the abandoned attempt, so abandoned Content/ToolCallRequest
+   * cannot contaminate the detector (issue #3048 review finding).
+   *
+   * Prompt identity ({@link promptId}) and {@link turnsInCurrentPrompt} are
+   * deliberately excluded: they are prompt-scoped, not attempt-scoped.
+   */
+  checkpoint(): LoopDetectionSnapshot {
+    return {
+      lastToolCallKey: this.lastToolCallKey,
+      toolCallRepetitionCount: this.toolCallRepetitionCount,
+      streamContentHistory: this.streamContentHistory,
+      contentStats: copyContentStats(this.contentStats),
+      lastContentIndex: this.lastContentIndex,
+      loopDetected: this.loopDetected,
+      inCodeBlock: this.inCodeBlock,
+    };
+  }
+
+  /**
+   * Restores attempt-mutable detector state from a snapshot taken by
+   * {@link checkpoint}. Prompt identity and turn counts are preserved.
+   */
+  restore(snapshot: LoopDetectionSnapshot): void {
+    this.lastToolCallKey = snapshot.lastToolCallKey;
+    this.toolCallRepetitionCount = snapshot.toolCallRepetitionCount;
+    this.streamContentHistory = snapshot.streamContentHistory;
+    this.contentStats = copyContentStats(snapshot.contentStats);
+    this.lastContentIndex = snapshot.lastContentIndex;
+    this.loopDetected = snapshot.loopDetected;
+    this.inCodeBlock = snapshot.inCodeBlock;
   }
 
   private resetToolCallCount(): void {

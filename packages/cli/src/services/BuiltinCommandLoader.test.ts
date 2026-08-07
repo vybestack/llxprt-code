@@ -73,7 +73,6 @@ vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
 vi.mock('../ui/commands/chatCommand.js', () => ({ chatCommand: {} }));
 vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
 vi.mock('../ui/commands/compressCommand.js', () => ({ compressCommand: {} }));
-vi.mock('../ui/commands/corgiCommand.js', () => ({ corgiCommand: {} }));
 vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
 vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
 vi.mock('../ui/commands/extensionsCommand.js', () => ({
@@ -96,7 +95,6 @@ vi.mock('../ui/commands/quotaCommand.js', async () => {
     },
   };
 });
-vi.mock('../ui/commands/resumeCommand.js', () => ({ resumeCommand: {} }));
 vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
 vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
@@ -110,6 +108,16 @@ vi.mock('../ui/commands/mcpCommand.js', () => ({
     kind: 'BUILT_IN',
   },
 }));
+
+// Default the file to production behavior. The dedicated development case at
+// the end re-registers this module immediately before exercising uiprofile.
+vi.mock('../utils/installationInfo.js', async () => {
+  const actual = await vi.importActual('./../utils/installationInfo.js');
+  return {
+    ...actual,
+    isDevelopment: false,
+  };
+});
 
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;
@@ -189,6 +197,14 @@ describe('BuiltinCommandLoader', () => {
     expect(permissionsCmd).toBeDefined();
   });
 
+  it('should exclude development-only commands in production mode', async () => {
+    const loader = new BuiltinCommandLoader(mockConfig);
+    const commands = await loader.loadCommands(new AbortController().signal);
+    expect(
+      commands.find((command) => command.name === 'uiprofile'),
+    ).toBeUndefined();
+  });
+
   // `/help` (Help.tsx) and slash completion both render this loaded list, and
   // Help filters on a non-empty `description`. Asserting the description here
   // is therefore what guarantees `/image` is discoverable in both surfaces.
@@ -229,7 +245,6 @@ describe('BuiltinCommandLoader profile', () => {
   let mockConfig: Config;
 
   beforeEach(() => {
-    vi.resetModules();
     mockConfig = {
       getFolderTrust: vi.fn().mockReturnValue(false),
       getCheckpointingEnabled: () => false,
@@ -244,8 +259,6 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should always include profile command', async () => {
-    process.env['NODE_ENV'] = 'production';
-    const { BuiltinCommandLoader } = await import('./BuiltinCommandLoader.js');
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
     const profileCmd = commands.find((c) => c.name === 'profile');
@@ -253,8 +266,13 @@ describe('BuiltinCommandLoader profile', () => {
   });
 
   it('should include uiprofile command when isDevelopment is true', async () => {
-    process.env['NODE_ENV'] = 'development';
-    const { BuiltinCommandLoader } = await import('./BuiltinCommandLoader.js');
+    vi.mock('../utils/installationInfo.js', async () => {
+      const actual = await vi.importActual('./../utils/installationInfo.js');
+      return {
+        ...actual,
+        isDevelopment: true,
+      };
+    });
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
     const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');

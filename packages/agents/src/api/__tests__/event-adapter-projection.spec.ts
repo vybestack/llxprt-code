@@ -38,7 +38,10 @@ import {
   streamStopped,
   streamBlocked,
   streamContent,
+  streamError,
   streamFinished,
+  streamFinishedWithUsage,
+  streamUserCancelled,
   wrapStream,
   loopStream,
   isToolResultEvent,
@@ -291,9 +294,9 @@ describe('Event adapter projection @plan:PLAN-20260617-COREAPI.P14 @requirement:
     expect('systemMessage' in blocked[0].info).toBe(false);
   });
 
-  // ─── loop-end done synthesis vs self-emitted done ─────────────────────────
+  // ─── loop-end done synthesis (the SOLE done emission point) ──────────────
 
-  it('Finished stream event self-emits exactly one done{stop} with the finished payload; no duplicate loop-end done @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
+  it('Finished stream event yields exactly one done{stop} carrying the finished payload @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
     const events = await runAdapterStatic(loopStream(streamFinished()));
     const done = events.filter(isDoneEvent);
     expect(done).toHaveLength(1);
@@ -318,6 +321,134 @@ describe('Event adapter projection @plan:PLAN-20260617-COREAPI.P14 @requirement:
     expect(done).toHaveLength(1);
     expect(done[0].reason).toBe('stop');
     expect(events[events.length - 1].type).toBe('done');
+  });
+
+  // ─── done is terminal: never before a turn's tool activity (@issue:3087) ──
+  //
+  // A model iteration that requested tools emits its Finished (and, when the
+  // AfterAgent hook clears context, its AgentExecutionStopped) BEFORE the loop
+  // schedules those tools. The adapter must therefore defer every terminal
+  // reason to loop end so the single public `done` is genuinely last.
+
+  it('Finished on a tool-bearing iteration yields ONE done{stop} AFTER the tool events @issue:3087', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamFinished()),
+      loopToolUpdate('c-1', 'search', 'executing'),
+      loopToolsComplete('c-1', 'search', 'found it'),
+      wrapStream(streamFinished()),
+    ]);
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('stop');
+    expect(events[events.length - 1].type).toBe('done');
+    expect(events.indexOf(events.filter(isToolResultEvent)[0])).toBeLessThan(
+      events.indexOf(done[0]),
+    );
+  });
+
+  it('AgentExecutionStopped on a tool-bearing iteration yields ONE done{hook-stopped} AFTER the tool events, carrying stop @issue:3087', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamFinished()),
+      wrapStream(streamStopped('context cleared by hook')),
+      loopToolUpdate('c-2', 'search', 'executing'),
+      loopToolsComplete('c-2', 'search', 'found it'),
+    ]);
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('hook-stopped');
+    expect(done[0].stop?.reason).toBe('context cleared by hook');
+    expect(events[events.length - 1].type).toBe('done');
+    expect(events.indexOf(events.filter(isToolResultEvent)[0])).toBeLessThan(
+      events.indexOf(done[0]),
+    );
+  });
+
+  it('UserCancelled followed by loop tool events yields ONE done{aborted} that is last @issue:3087', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamUserCancelled()),
+      loopToolUpdate('c-3', 'search', 'cancelled'),
+      loopToolsCompleteCancelled('c-3', 'search', true),
+    ]);
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('aborted');
+    expect(events[events.length - 1].type).toBe('done');
+  });
+
+  it('Error followed by a later Finished keeps the explicit done{error} @issue:3087', async () => {
+    const events = await runAdapterStatic(
+      loopStream(streamError({ message: 'boom' }), streamFinished()),
+    );
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('error');
+    expect(events[events.length - 1].type).toBe('done');
+  });
+
+  it('AgentExecutionStopped followed by a later Finished keeps done{hook-stopped} @issue:3087', async () => {
+    const events = await runAdapterStatic(
+      loopStream(streamStopped('cleared'), streamFinished()),
+    );
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('hook-stopped');
+    expect(done[0].stop?.reason).toBe('cleared');
+  });
+
+  it('an entirely empty loop stream emits NO events at all @issue:3087', async () => {
+    const events = await runAdapterStatic([]);
+    expect(events).toStrictEqual([]);
+  });
+
+  it('the terminal done keeps the last REPORTED usage when the final iteration reports none @issue:3087', async () => {
+    // A provider reports usage only on the iterations whose terminal chunk
+    // carries token counts. Collapsing to one done must not lose the counts a
+    // consumer used to keep from an earlier per-iteration done.
+    const events = await runAdapterStatic([
+      wrapStream(
+        streamFinishedWithUsage({
+          promptTokens: 42,
+          completionTokens: 8,
+          totalTokens: 50,
+        }),
+      ),
+      loopToolsComplete('c-usage', 'search', 'found it'),
+      wrapStream(streamFinished()),
+    ]);
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].finished?.usageMetadata).toStrictEqual({
+      promptTokenCount: 42,
+      candidatesTokenCount: 8,
+      totalTokenCount: 50,
+    });
+  });
+
+  it('a later Finished that DOES report usage overrides the earlier counts @issue:3087', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(
+        streamFinishedWithUsage({
+          promptTokens: 42,
+          completionTokens: 8,
+          totalTokens: 50,
+        }),
+      ),
+      loopToolsComplete('c-usage-2', 'search', 'found it'),
+      wrapStream(
+        streamFinishedWithUsage({
+          promptTokens: 90,
+          completionTokens: 10,
+          totalTokens: 100,
+        }),
+      ),
+    ]);
+    const done = events.filter(isDoneEvent);
+    expect(done).toHaveLength(1);
+    expect(done[0].finished?.usageMetadata).toStrictEqual({
+      promptTokenCount: 90,
+      candidatesTokenCount: 10,
+      totalTokenCount: 100,
+    });
   });
 
   // ─── property-based invariants ───────────────────────────────────────────

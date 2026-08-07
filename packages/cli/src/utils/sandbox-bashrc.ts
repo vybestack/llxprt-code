@@ -6,6 +6,7 @@
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 /**
@@ -49,53 +50,84 @@ function runBashrcProbe(
   workdir: string,
   childEnv: NodeJS.ProcessEnv,
 ): { envOutput: string; cwdOutput: string } {
+  // The payloads travel on dedicated channels so that anything the sourced
+  // bashrc prints cannot be mistaken for protocol data. Files are used rather
+  // than inherited file descriptors 3 and 4 because `spawnSync` only populates
+  // stdio slots 0-2 under Bun, which silently yielded empty payloads.
+  const protocolDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'llxprt-bashrc-probe-'),
+  );
+  const envPath = path.join(protocolDir, 'env');
+  const cwdPath = path.join(protocolDir, 'cwd');
   const probeScript = [
     'cd "$2"',
     'source "$1" || exit $?',
-    'env -0 >&3',
-    'printf "%s\\0" "$PWD" >&4',
+    'env -0 >"$3"',
+    'printf "%s\\0" "$PWD" >"$4"',
   ].join('\n');
-  const result = spawnSync(
-    'env',
-    [
-      '-u',
-      'BASH_ENV',
-      'bash',
-      '--noprofile',
-      '--norc',
-      '-c',
-      probeScript,
-      '--',
-      resolvedBashrc,
-      workdir,
-    ],
-    {
-      encoding: 'utf8',
-      env: childEnv,
-      cwd: workdir,
-      stdio: ['inherit', 'inherit', 'inherit', 'pipe', 'pipe'],
-    },
-  );
-  if (result.error !== undefined) {
-    throw new Error(
-      `sandbox.bashrc child could not be spawned: ${
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error)
-      }`,
+  let result;
+  try {
+    result = spawnSync(
+      'env',
+      [
+        '-u',
+        'BASH_ENV',
+        'bash',
+        '--noprofile',
+        '--norc',
+        '-c',
+        probeScript,
+        '--',
+        resolvedBashrc,
+        workdir,
+        envPath,
+        cwdPath,
+      ],
+      {
+        encoding: 'utf8',
+        env: childEnv,
+        cwd: workdir,
+        stdio: ['inherit', 'inherit', 'inherit'],
+      },
     );
+  } catch (error) {
+    fs.rmSync(protocolDir, { recursive: true, force: true });
+    throw error;
   }
-  if (result.status !== 0) {
-    throw new Error(`sandbox.bashrc child exited with status ${result.status}`);
+  const readProtocolFile = (filePath: string): string => {
+    try {
+      return fs.readFileSync(filePath, 'utf8');
+    } catch {
+      return '';
+    }
+  };
+
+  try {
+    if (result.error !== undefined) {
+      throw new Error(
+        `sandbox.bashrc child could not be spawned: ${
+          result.error instanceof Error
+            ? result.error.message
+            : String(result.error)
+        }`,
+      );
+    }
+    if (result.status !== 0) {
+      throw new Error(
+        `sandbox.bashrc child exited with status ${result.status}`,
+      );
+    }
+    const envOutput = readProtocolFile(envPath);
+    const cwdOutput = readProtocolFile(cwdPath);
+    if (cwdOutput === '') {
+      throw new Error(
+        'sandbox.bashrc child produced no cwd payload on the dedicated protocol pipe',
+      );
+    }
+    return { envOutput, cwdOutput };
+  } finally {
+    fs.rmSync(protocolDir, { recursive: true, force: true });
   }
-  const envOutput = result.output[3] ?? '';
-  const cwdOutput = result.output[4] ?? '';
-  if (cwdOutput === '') {
-    throw new Error(
-      'sandbox.bashrc child produced no cwd payload on the dedicated protocol pipe',
-    );
-  }
-  return { envOutput, cwdOutput };
 }
 
 function parseBashrcPayload(

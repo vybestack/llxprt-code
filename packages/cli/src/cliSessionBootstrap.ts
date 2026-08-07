@@ -37,6 +37,7 @@ import type { ParsedCliArgs } from './cliBootstrap.js';
 import {
   initializeObservationProducer,
   stopObservationProducer,
+  type BootstrapSelection,
 } from './observation/jspWiring.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
@@ -199,24 +200,32 @@ async function releaseResumedResources(
  * @plan:PLAN-20260211-SESSIONRECORDING.P26
  * @pseudocode recording-integration.md lines 115-132
  *
- * Set up session recording: compute project hash, create the chats directory,
- * handle --list-sessions / --delete-session early exits, create the recording
- * service (new or resumed), restore history when resuming, and register the
- * recording cleanup hook.
+ * Wire observation from the already-consumed bootstrap selection. The
+ * selection (and its env scrub) happened immediately after argument parsing in
+ * the CLI entry point; this only performs the deferred fail-fast file
+ * validation and producer construction. Exported so AC15 coverage can drive
+ * the real cliSessionBootstrap → observation seam without the full
+ * recording-suite weight.
  */
-function setupObservation(config: Config): void {
+export function setupObservation(
+  config: Config,
+  selection: BootstrapSelection | null,
+): void {
   const projectRoot = config.getProjectRoot();
-  // loadBootstrapFromEnv disables observation (one stderr warning, startup
-  // continues) when the bootstrap file cannot be read, but still fails fast
+  // loadBootstrap disables observation (one stderr warning, startup continues)
+  // when the bootstrap file cannot be read, but still fails fast
   // (FatalConfigError, exit 52) on a file that reads but is malformed,
   // insecure, or version-mismatched. Recording cleanup is registered above,
   // so the process exits cleanly on either path.
-  initializeObservationProducer({
-    repository: basename(projectRoot),
-    path: projectRoot,
-    agentKind: 'llxprt',
-    displayName: basename(projectRoot),
-  });
+  initializeObservationProducer(
+    {
+      repository: basename(projectRoot),
+      path: projectRoot,
+      agentKind: 'llxprt',
+      displayName: basename(projectRoot),
+    },
+    selection,
+  );
 }
 
 function registerRecordingCleanup(
@@ -244,6 +253,7 @@ function registerRecordingCleanup(
 export async function setupSessionRecording(
   config: Config,
   argv: ParsedCliArgs,
+  bootstrapSelection: BootstrapSelection | null,
 ): Promise<SessionRecordingSetup> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = join(config.getProjectTempDir(), 'chats');
@@ -331,7 +341,7 @@ export async function setupSessionRecording(
     activeRecordingService,
     activeLockHandle,
   );
-  setupObservation(config);
+  setupObservation(config, bootstrapSelection);
 
   return {
     recordingService: activeRecordingService,

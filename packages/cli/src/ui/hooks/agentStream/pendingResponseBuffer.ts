@@ -5,6 +5,7 @@
  */
 
 import type { EmojiFilter } from '@vybestack/llxprt-code-core';
+import { CommittedSegmentLedger } from './committedSegmentLedger.js';
 import { IncrementalSplitScanner } from './incrementalSplitScanner.js';
 import { StreamingSanitizer } from './streamingSanitizer.js';
 
@@ -32,6 +33,7 @@ export interface PendingResponsePushResult {
 export class PendingResponseBuffer {
   private readonly sanitizer: StreamingSanitizer;
   private readonly scanner = new IncrementalSplitScanner();
+  private readonly committedSegments = new CommittedSegmentLedger();
   private provisional = '';
 
   constructor(filter: EmojiFilter | undefined) {
@@ -95,6 +97,30 @@ export class PendingResponseBuffer {
       blocked: false,
       ...(flushed.feedback !== undefined ? { feedback: flushed.feedback } : {}),
     };
+  }
+
+  beginCommittedSegments(): void {
+    this.committedSegments.begin();
+  }
+
+  recordCommittedSegment(id: number): void {
+    this.committedSegments.record(id);
+  }
+
+  drainCommittedSegments(): readonly number[] {
+    return this.committedSegments.drain();
+  }
+
+  /**
+   * Ends the committed-segment lifecycle for the assistant message that just
+   * completed normally. Its committed prefixes are now permanent history, so
+   * the ledger is cleared without retracting them. This bounds the ledger to a
+   * single assistant message/stream: a later turn that emits only thinking or
+   * tool state before a retry cannot drain an earlier completed message's ids
+   * (issue #3048 review finding).
+   */
+  endCommittedSegments(): void {
+    this.committedSegments.end();
   }
 
   reset(): void {

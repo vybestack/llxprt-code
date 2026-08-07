@@ -5,8 +5,22 @@
  */
 
 import { render } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi } from '../../test-utils/bunTest.js';
+import { act } from 'react';
 import { Footer } from './Footer.js';
+
+let mockProcessVersions: NodeJS.ProcessVersions;
+const mockHeapStatistics: { heap_size_limit: number } = {
+  heap_size_limit: 8 * 1024 ** 3,
+};
+const mockMemoryUsage: NodeJS.MemoryUsage = {
+  rss: 1024 * 1024 * 1024,
+  heapUsed: 100 * 1024 * 1024,
+  heapTotal: 200 * 1024 * 1024,
+  external: 10 * 1024 * 1024,
+  arrayBuffers: 5 * 1024 * 1024,
+};
 
 // Mock the responsive hooks and utilities
 vi.mock('../hooks/useResponsive.js', () => ({
@@ -19,21 +33,21 @@ vi.mock('../utils/responsive.js', () => ({
   ),
 }));
 
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(() => ({
-    getActiveProvider: vi.fn(() => ({ name: 'gemini' })),
-  })),
-}));
-
 vi.mock('node:process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:process')>();
+  // Under Bun, require('node:process') returns the process namespace
+  // directly (no .default wrapper), so normalize the shape.
+  const actualDefault =
+    (actual as { default?: typeof process }).default ?? actual;
+  mockProcessVersions = { ...actualDefault.versions };
   return {
     ...actual,
     default: {
-      ...actual.default,
-      memoryUsage: vi.fn(() => ({ rss: 1024 * 1024 * 1024 })),
+      ...actualDefault,
+      memoryUsage: vi.fn(() => ({ ...mockMemoryUsage })),
+      versions: mockProcessVersions,
       env: {
-        ...actual.default.env,
+        ...actualDefault.env,
         SANDBOX: 'test-sandbox',
       },
     },
@@ -42,10 +56,14 @@ vi.mock('node:process', async (importOriginal) => {
 
 vi.mock('node:v8', () => ({
   default: {
-    getHeapStatistics: vi.fn(() => ({
-      heap_size_limit: 8 * 1024 * 1024 * 1024,
-    })),
+    getHeapStatistics: vi.fn(() => mockHeapStatistics),
   },
+}));
+
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => ({
+    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+  }),
 }));
 
 import { useResponsive } from '../hooks/useResponsive.js';
@@ -71,6 +89,13 @@ describe('Footer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProcessVersions.bun = '';
+    mockHeapStatistics.heap_size_limit = 8 * 1024 ** 3;
+    mockMemoryUsage.rss = 1024 * 1024 * 1024;
+    mockMemoryUsage.heapUsed = 100 * 1024 * 1024;
+    mockMemoryUsage.heapTotal = 200 * 1024 * 1024;
+    mockMemoryUsage.external = 10 * 1024 * 1024;
+    mockMemoryUsage.arrayBuffers = 5 * 1024 * 1024;
   });
 
   describe('branch and path display order', () => {
@@ -83,18 +108,10 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(<Footer {...defaultProps} />);
-
-      // The component should have two main lines
-      // First line: Memory | Context | Time (optional)
-      // Second line: Branch info and model
+      const { lastFrame } = render(<Footer {...defaultProps} />);
 
       // Branch should appear before path in the display
-      // Currently this is incorrect and needs to be fixed
-      const textElements = container.querySelectorAll('*');
-      const textContent = Array.from(textElements)
-        .map((el) => el.textContent)
-        .join(' ');
+      const textContent = lastFrame() ?? '';
 
       // Should contain branch name
       expect(textContent).toContain('20250808-gmerge');
@@ -110,9 +127,9 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = container.textContent;
+      const textContent = lastFrame();
       // Branch should have asterisk indicating modified state
       expect(textContent).toContain('20250808-gmerge*');
     });
@@ -129,10 +146,10 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} branchName={longBranchName} />,
       );
-      const textContent = container.textContent ?? '';
+      const textContent = lastFrame() ?? '';
 
       // The untruncated branch name is 63 chars; truncated narrow layout must
       // render strictly fewer characters of it and include the truncation
@@ -150,11 +167,11 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} branchName={undefined} />,
       );
 
-      const textContent = container.textContent;
+      const textContent = lastFrame();
       // Should show path without branch info
       expect(textContent).toContain('/home/user/project');
       expect(textContent).not.toContain('*');
@@ -201,10 +218,10 @@ describe('Footer', () => {
       (scenario) => {
         mockUseResponsive.mockReturnValue(scenario);
 
-        const { container } = render(
+        const { lastFrame } = render(
           <Footer {...defaultProps} branchName={longBranchName} />,
         );
-        const textContent = container.textContent ?? '';
+        const textContent = lastFrame() ?? '';
 
         expect(textContent).not.toContain(longBranchName);
         expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
@@ -214,12 +231,26 @@ describe('Footer', () => {
     it('preserves the full branch name at the WIDE breakpoint', () => {
       mockUseResponsive.mockReturnValue(preservingScenario);
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} branchName={longBranchName} />,
       );
-      const textContent = container.textContent ?? '';
+      const textContent = lastFrame() ?? '';
 
-      expect(textContent).toContain(longBranchName);
+      // WIDE breakpoint has enough room so truncateMiddle must not fire.
+      //
+      // The test renderer's stdout is 100 columns, so the untruncated name is
+      // split across lines with other footer columns interleaved; a plain
+      // toContain would fail on the wrap rather than on a real defect. Assert
+      // instead that every character of the name survives IN ORDER, which
+      // still fails if the middle is corrupted, reordered or dropped.
+      expect(textContent).not.toContain('...');
+      const flattened = textContent.replace(/\n/g, '');
+      let cursor = 0;
+      for (const char of longBranchName) {
+        cursor = flattened.indexOf(char, cursor);
+        expect(cursor).toBeGreaterThanOrEqual(0);
+        cursor += 1;
+      }
     });
 
     it('should show different information based on breakpoint', () => {
@@ -232,14 +263,14 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container: narrowContainer } = render(
+      const { lastFrame: narrowLastFrame } = render(
         <Footer {...defaultProps} />,
       );
 
-      let textContent = narrowContainer.textContent ?? '';
+      let textContent = narrowLastFrame() ?? '';
 
       // Narrow should show compact memory and context
-      expect(textContent).toContain('Mem:');
+      expect(textContent).toContain('Heap:');
       expect(textContent).toContain('Ctx:');
 
       // Wide: Full details including timestamp
@@ -251,12 +282,12 @@ describe('Footer', () => {
         isWide: true,
       });
 
-      const { container: wideContainer } = render(<Footer {...defaultProps} />);
+      const { lastFrame: wideLastFrame } = render(<Footer {...defaultProps} />);
 
-      textContent = wideContainer.textContent ?? '';
+      textContent = wideLastFrame() ?? '';
 
-      // Wide should show full memory info and timestamp
-      expect(textContent).toContain('Memory:');
+      // Wide should show full heap info (External, ArrayBuffers)
+      expect(textContent).toContain('External:');
     });
   });
 
@@ -270,8 +301,8 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(<Footer {...defaultProps} />);
-      const textContent = container.textContent ?? '';
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const textContent = lastFrame() ?? '';
 
       // Branch (with modified asterisk) and path must both render, with the
       // branch indicator appearing before the path in reading order so the
@@ -294,11 +325,11 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} isTrustedFolder={false} />,
       );
 
-      const textContent = container.textContent;
+      const textContent = lastFrame();
       expect(textContent).toContain('(untrusted)');
     });
 
@@ -311,11 +342,11 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} isTrustedFolder={true} />,
       );
 
-      const textContent = container.textContent;
+      const textContent = lastFrame();
       expect(textContent).not.toContain('(untrusted)');
     });
 
@@ -328,11 +359,11 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} isTrustedFolder={undefined} />,
       );
 
-      const textContent = container.textContent;
+      const textContent = lastFrame();
       expect(textContent).not.toContain('(untrusted)');
     });
 
@@ -345,7 +376,7 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer
           {...defaultProps}
           branchName="test-branch"
@@ -353,7 +384,7 @@ describe('Footer', () => {
         />,
       );
 
-      const textContent = container.textContent;
+      const textContent = lastFrame();
       expect(textContent).toContain('test-branch*');
       expect(textContent).toContain('(untrusted)');
     });
@@ -369,8 +400,8 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(<Footer {...defaultProps} hideCWD={true} />);
-      expect(container.textContent).not.toContain(defaultProps.targetDir);
+      const { lastFrame } = render(<Footer {...defaultProps} hideCWD={true} />);
+      expect(lastFrame()).not.toContain(defaultProps.targetDir);
     });
 
     it('should hide sandbox status when hideSandboxStatus is true', () => {
@@ -382,14 +413,14 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer
           {...defaultProps}
           isTrustedFolder={true}
           hideSandboxStatus={true}
         />,
       );
-      expect(container.textContent).not.toContain('no sandbox');
+      expect(lastFrame()).not.toContain('no sandbox');
     });
 
     it('should hide model info when hideModelInfo is true', () => {
@@ -401,15 +432,16 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
+      const { lastFrame } = render(
         <Footer {...defaultProps} hideModelInfo={true} />,
       );
-      expect(container.textContent).not.toContain(defaultProps.model);
+      expect(lastFrame()).not.toContain(defaultProps.model);
     });
   });
 
   describe('memory display uses actual heap limit', () => {
     it('should calculate percentage against actual heap limit and show correct denominator', () => {
+      mockProcessVersions.bun = '';
       mockUseResponsive.mockReturnValue({
         width: 180,
         breakpoint: 'WIDE',
@@ -418,13 +450,171 @@ describe('Footer', () => {
         isWide: true,
       });
 
-      const { container } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = container.textContent ?? '';
+      const textContent = lastFrame() ?? '';
 
       expect(textContent).toContain('8.0GB');
       expect(textContent).not.toContain('4.8GB');
-      expect(textContent).toContain('Memory: 13%');
+    });
+  });
+
+  describe('Bun memory display (no heap denominator)', () => {
+    afterEach(() => {
+      mockProcessVersions.bun = '';
+    });
+
+    it('compact: Heap shows used heap only with G suffix, no denominator, RSS present', () => {
+      mockProcessVersions.bun = '1.3.14';
+      mockUseResponsive.mockReturnValue({
+        width: 70,
+        breakpoint: 'NARROW',
+        isNarrow: true,
+        isStandard: false,
+        isWide: false,
+      });
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+
+      const textContent = lastFrame() ?? '';
+      expect(textContent).toContain('Heap: 0.1G');
+      expect(textContent).not.toContain('0.1G/');
+      expect(textContent).toContain('RSS:');
+    });
+
+    it('standard: Heap shows used heap only with GB suffix, no denominator, RSS present', () => {
+      mockProcessVersions.bun = '1.3.14';
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+
+      const textContent = lastFrame() ?? '';
+      expect(textContent).toContain('Heap: 0.1GB');
+      expect(textContent).not.toContain('0.1GB/');
+      expect(textContent).toContain('RSS:');
+    });
+
+    it('wide: Heap, External, ArrayBuffers, and RSS all present with no denominator', () => {
+      mockProcessVersions.bun = '1.3.14';
+      mockUseResponsive.mockReturnValue({
+        width: 180,
+        breakpoint: 'WIDE',
+        isNarrow: false,
+        isStandard: false,
+        isWide: true,
+      });
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+
+      const textContent = lastFrame() ?? '';
+      expect(textContent).toContain('Heap: 0.1GB');
+      expect(textContent).not.toContain('0.1GB/');
+      expect(textContent).toContain('External:');
+      expect(textContent).toContain('ArrayBuffers:');
+      expect(textContent).toContain('RSS:');
+    });
+
+    it('does not show the heap-limit denominator even when v8 reports a large limit', () => {
+      mockProcessVersions.bun = '1.3.14';
+      mockHeapStatistics.heap_size_limit = 8 * 1024 ** 3;
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+
+      const textContent = lastFrame() ?? '';
+      expect(textContent).not.toContain('8.0GB');
+    });
+  });
+
+  describe('Node memory display re-reads heap statistic on refresh', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('updates the denominator when the heap statistic changes on the two-second refresh', async () => {
+      mockProcessVersions.bun = '';
+      mockHeapStatistics.heap_size_limit = 4 * 1024 ** 3;
+
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      vi.useFakeTimers();
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+
+      let textContent = lastFrame() ?? '';
+      expect(textContent).toContain('0.1GB/4.0GB');
+
+      mockHeapStatistics.heap_size_limit = 8 * 1024 ** 3;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+
+      textContent = lastFrame() ?? '';
+      expect(textContent).toContain('0.1GB/8.0GB');
+      expect(textContent).not.toContain('4.0GB');
+    });
+  });
+
+  describe('Bun memory display refreshes on the two-second timer', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      mockProcessVersions.bun = '';
+    });
+
+    it('renders updated heap and RSS values after the refresh with no heap-limit denominator', async () => {
+      mockProcessVersions.bun = '1.3.14';
+      mockUseResponsive.mockReturnValue({
+        width: 180,
+        breakpoint: 'WIDE',
+        isNarrow: false,
+        isStandard: false,
+        isWide: true,
+      });
+
+      vi.useFakeTimers();
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+
+      let textContent = lastFrame() ?? '';
+      expect(textContent).toContain('Heap: 0.1GB');
+      expect(textContent).toContain('RSS: 1.0GB');
+      expect(textContent).not.toContain('0.1GB/');
+
+      mockMemoryUsage.heapUsed = 300 * 1024 * 1024;
+      mockMemoryUsage.rss = 2 * 1024 * 1024 * 1024;
+      mockMemoryUsage.external = 20 * 1024 * 1024;
+      mockMemoryUsage.arrayBuffers = 8 * 1024 * 1024;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+
+      textContent = lastFrame() ?? '';
+      expect(textContent).toContain('Heap: 0.3GB');
+      expect(textContent).toContain('RSS: 2.0GB');
+      expect(textContent).toContain('External: 0.0GB');
+      expect(textContent).toContain('ArrayBuffers: 0.0GB');
+      expect(textContent).not.toContain('0.3GB/');
+      expect(textContent).not.toContain('8.0GB');
     });
   });
 });

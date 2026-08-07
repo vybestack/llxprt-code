@@ -504,6 +504,25 @@ function handleQuietEvent(event: AgentEvent, state: StreamState): boolean {
   }
 }
 
+/**
+ * Discards every per-attempt accumulator that the abandoned attempt populated
+ * (REQ-3048-010). The emoji filter's held partial chunk belongs to that
+ * attempt, so it is drained via flushBuffer() and the returned fragment is
+ * thrown away. pendingDone is intentionally untouched — a retry precedes the
+ * replacement attempt, and clearing it would mask an ordering bug.
+ * Already-written stdout / stream-json deltas are unretractable (spec §8) and
+ * are not compensated.
+ */
+function discardAbandonedAttempt(
+  state: StreamState,
+  context: StreamConsumerContext,
+): void {
+  context.emojiFilter?.flushBuffer();
+  state.responseText = '';
+  state.quietTextBuffer = '';
+  state.thoughtBuffer = [];
+}
+
 function dispatchAgentEvent(
   event: AgentEvent,
   state: StreamState,
@@ -511,9 +530,7 @@ function dispatchAgentEvent(
   writeProfileName: () => void,
   includeThinking: boolean,
 ): void {
-  if (context.quiet && handleQuietEvent(event, state)) {
-    return;
-  }
+  if (context.quiet && handleQuietEvent(event, state)) return;
   switch (event.type) {
     case 'thinking':
       state.thoughtBuffer = handleThinking(
@@ -567,9 +584,7 @@ function dispatchAgentEvent(
       return;
     }
     case 'idle-timeout':
-      if (context.quiet) {
-        throw reconstructError(event.error);
-      }
+      if (context.quiet) throw reconstructError(event.error);
       return throwStructuredStreamError(
         event.error,
         context.streamFormatter,
@@ -579,6 +594,9 @@ function dispatchAgentEvent(
       return throwStructuredStreamError(event.error, context.streamFormatter);
     case 'done':
       state.pendingDone = event;
+      return;
+    case 'retry':
+      discardAbandonedAttempt(state, context);
       return;
     default:
       return;
@@ -591,10 +609,10 @@ function dispatchAgentEvent(
  * write, JSON accumulation, stream-JSON emission), preserving the user-visible
  * output, exit-code, and stderr behavior of the legacy manual turn loop.
  *
- * The loop emits a per-turn `done` (from `Finished`); when a tool is requested
- * the loop continues past it. This consumer records each `done` and acts only
- * on the final one at stream exhaustion — returning early would abandon the
- * generator mid-loop and prevent tool execution.
+ * The loop emits a single terminal `done` as its LAST event (issue #3087).
+ * This consumer still records it and acts on it only at stream exhaustion:
+ * returning early on `done` would abandon the generator instead of letting it
+ * complete.
  */
 export async function processAgentStream(
   events: AsyncIterable<AgentEvent>,

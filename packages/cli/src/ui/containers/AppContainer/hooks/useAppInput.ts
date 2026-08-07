@@ -47,6 +47,7 @@ export interface AppInputParams {
   subagentManager?: UiSubagentManager;
   history: AppBootstrapResult['history'];
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
+  removeItems: (ids: readonly number[]) => void;
   clearItems: AppBootstrapResult['clearItems'];
   loadHistory: AppBootstrapResult['loadHistory'];
   todos: AppBootstrapResult['todos'];
@@ -316,6 +317,7 @@ function useInputStreamSetup(
     settings,
     history,
     addItem,
+    removeItems,
     recordingIntegration,
     runtimeMessageBus,
     stdout,
@@ -351,6 +353,7 @@ function useInputStreamSetup(
     recordingIntegration,
     runtimeMessageBus,
     p.subagentManager,
+    removeItems,
   );
   return { ...bufferSetup, agentStreamResult };
 }

@@ -509,6 +509,7 @@ jobs:
           else
             TARGET_REF="$(git rev-parse HEAD)"
           fi
+          TARGET_SHA="$(git rev-parse "${TARGET_REF}^{commit}")"
 
           # Ship the source-containing CLI npm tarball as the release asset
           # instead of the esbuild bundle (retired by S4). The tarball is
@@ -519,17 +520,36 @@ jobs:
             exit 1
           fi
 
+          TAG_OBJECT="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${RELEASE_TAG}" \
+            --jq '.[] | select(.ref == "refs/tags/" + $ENV.RELEASE_TAG) | .object.type + " " + .object.sha')"
+
+          if [[ -n "$TAG_OBJECT" ]]; then
+            EXISTING_TYPE="${TAG_OBJECT%% *}"
+            EXISTING_SHA="${TAG_OBJECT##* }"
+            if [[ "$EXISTING_TYPE" == "tag" ]]; then
+              EXISTING_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${EXISTING_SHA}" --jq '.object.sha')"
+            fi
+            if [[ "$EXISTING_SHA" != "$TARGET_SHA" ]]; then
+              echo "Tag refs/tags/$RELEASE_TAG already exists at $EXISTING_SHA and does not match target commit $TARGET_SHA" >&2
+              exit 1
+            fi
+            echo "Reusing existing tag refs/tags/$RELEASE_TAG at $TARGET_SHA"
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f "ref=refs/tags/${RELEASE_TAG}" \
+              -f "sha=${TARGET_SHA}" \
+              --silent
+          fi
+
           if [[ -n "${VSIX_PATH}" && -f "${VSIX_PATH}" ]]; then
             gh release create "$RELEASE_TAG" \
               "$CLI_TARBALL" \
               "${VSIX_PATH}" \
-              --target "$TARGET_REF" \
               --title "Release $RELEASE_TAG" \
               --notes-file release-notes.md
           else
             gh release create "$RELEASE_TAG" \
               "$CLI_TARBALL" \
-              --target "$TARGET_REF" \
               --title "Release $RELEASE_TAG" \
               --notes-file release-notes.md
           fi

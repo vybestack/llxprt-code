@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 
 interface InstanceMock {
   startConfiguredMcpServers: ReturnType<typeof vi.fn>;
@@ -379,18 +379,20 @@ describe('Config MCP wiring on folder trust change', () => {
           (error: unknown) => error,
         );
         outcome.catch(() => {});
-        // Advance time past the hook initialization timeout and drain
-        // all pending timers/microtasks.
-        vi.runAllTimers();
-        await vi.runAllTimersAsync();
 
+        await vi.advanceTimersByTimeAsync(0);
+        const initializationSignal = hookInitializers[0].mock.calls[0][0];
+
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(initializationSignal).toBeInstanceOf(AbortSignal);
+        expect(initializationSignal.aborted).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
         const result = await outcome;
         expect(result).toBeInstanceOf(Error);
         expect(result).toMatchObject({
           message: expect.stringContaining('timed out'),
         });
-        const initializationSignal = hookInitializers[0].mock.calls[0][0];
-        expect(initializationSignal).toBeInstanceOf(AbortSignal);
         expect(initializationSignal.aborted).toBe(true);
       } finally {
         vi.useRealTimers();

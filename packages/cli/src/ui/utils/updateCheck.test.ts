@@ -242,6 +242,7 @@ describe('checkForUpdates', () => {
 
       // Advance timers to trigger the timeout
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);
+      await vi.runAllTimersAsync();
 
       const result = await checkPromise;
       expect(result).toBeNull();

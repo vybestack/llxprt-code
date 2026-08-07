@@ -55,6 +55,7 @@ export interface AppDialogsParams {
   runtime: ReturnType<typeof useRuntimeApi>;
   consoleMessages: ConsoleMessageItem[];
   setLlxprtMdFileCount: (count: number) => void;
+  suppressStartupWelcome?: boolean;
 }
 
 function useDialogsState() {
@@ -275,6 +276,7 @@ function useDialogsAuth(
     settings,
     isFolderTrustComplete: !folderTrust.isFolderTrustDialogOpen,
     agent: p.agent,
+    suppressStartup: p.suppressStartupWelcome === true,
   });
   useIdeTrustEffect(config, st);
   const authProviders = useDialogsAuthProviders(

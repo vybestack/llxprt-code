@@ -20,9 +20,6 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Mock } from 'vitest';
 
-// This test writes real alias files, needs real providerAliases module
-vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
-
 /**
  * Minimal typed Agent double for the /provider switch path. The command only
  * invokes `agent.setProvider(...)`, so a stub typed to that exact Mock surface
@@ -48,6 +45,30 @@ const mocks = vi.hoisted(() => {
     runtimeApi,
     getRuntimeApiMock: vi.fn(() => runtimeApi),
     agent,
+  };
+});
+
+// This test writes real alias files, but the workspace test preload replaces
+// providerAliases.js with a stub whose writeProviderAliasConfig is a no-op.
+// Restore the genuine module, then re-export its real functions through the
+// composition.js mock that providerCommand.ts imports from.
+vi.unmock('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+
+vi.mock('@vybestack/llxprt-code-providers/composition.js', async () => {
+  // vi.importActual resolves the genuine module on both runners: Vitest
+  // bypasses its own mock registry, and the Bun shim returns the snapshot it
+  // captured before the preload registered its stub. It must be read inside
+  // the factory because Vitest hoists this call above the module body.
+  const real = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js')
+  >('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+  return {
+    getProviderManager: mocks.getProviderManagerMock,
+    refreshAliasProviders: mocks.refreshAliasProvidersMock,
+    writeProviderAliasConfig: real.writeProviderAliasConfig,
+    loadProviderAliasEntries: real.loadProviderAliasEntries,
+    getUserAliasDir: real.getUserAliasDir,
+    getAliasFilePath: real.getAliasFilePath,
   };
 });
 

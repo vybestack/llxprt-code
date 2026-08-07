@@ -7,6 +7,8 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
+import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
@@ -85,6 +87,20 @@ const mockSlashCommands: SlashCommand[] = [
   },
 ];
 
+/**
+ * A return arriving within FAST_RETURN_TIMEOUT of the previous key is treated
+ * as pasted multi-line text and rewritten to Shift+Enter (a newline) — see
+ * bufferFastReturn in KeypressContext. Tests that mean "the user pressed Enter"
+ * must therefore leave a human-sized gap after the preceding keystroke,
+ * otherwise they silently exercise the paste path instead of submit.
+ */
+const pressEnter = async (stdin: { write: (data: string) => void }) => {
+  await new Promise((resolve) => setTimeout(resolve, FAST_RETURN_TIMEOUT + 10));
+  await act(async () => {
+    stdin.write('\r');
+  });
+};
+
 describe('InputPrompt', () => {
   let props: InputPromptProps;
   let mockShellHistory: UseShellHistoryReturn;
@@ -115,9 +131,16 @@ describe('InputPrompt', () => {
       text: '',
       cursor: [0, 0],
       lines: [''],
+      // inputPromptRender indexes transformationsByLine and treats
+      // visualToTransformedMap as a number; without both the component throws
+      // while rendering.
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
       setText: vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
+        mockBuffer.transformationsByLine = [[]];
+        mockBuffer.visualToTransformedMap = [0];
         mockBuffer.cursor = [0, newText.length];
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
@@ -288,9 +311,7 @@ describe('InputPrompt', () => {
     props.buffer.setText('ls -l');
     const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
-    await act(async () => {
-      stdin.write('\r');
-    });
+    await pressEnter(stdin);
     await waitFor(() => {
       expect(mockShellHistory.addCommandToHistory).toHaveBeenCalledWith(
         'ls -l',
@@ -316,9 +337,7 @@ describe('InputPrompt', () => {
       expect(mockInputHistory.navigateDown).toHaveBeenCalled(),
     );
 
-    await act(async () => {
-      stdin.write('\r'); // Enter
-    });
+    await pressEnter(stdin);
     await waitFor(() =>
       expect(props.onSubmit).toHaveBeenCalledWith('some text'),
     );
@@ -537,8 +556,9 @@ describe('InputPrompt', () => {
     });
 
     it('should handle errors during clipboard operations', async () => {
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+      // The handler reports through the telemetry debug logger, not console.
+      const debugErrorSpy = vi
+        .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
       vi.mocked(clipboardUtils.clipboardHasImage).mockRejectedValue(
         new Error('Clipboard error'),
@@ -552,14 +572,14 @@ describe('InputPrompt', () => {
         stdin.write('\x16'); // Ctrl+V
       });
       await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Error handling clipboard image:',
+        expect(debugErrorSpy).toHaveBeenCalledWith(
+          'Error handling clipboard paste:',
           expect.any(Error),
         );
       });
       expect(mockBuffer.setText).not.toHaveBeenCalled();
 
-      consoleErrorSpy.mockRestore();
+      debugErrorSpy.mockRestore();
       unmount();
     });
   });
@@ -625,9 +645,7 @@ describe('InputPrompt', () => {
 
     const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
-    await act(async () => {
-      stdin.write('\r');
-    });
+    await pressEnter(stdin);
     await waitFor(() => {
       // The app should autocomplete the text, NOT submit.
       expect(mockCommandCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
@@ -691,9 +709,7 @@ describe('InputPrompt', () => {
 
     const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
-    await act(async () => {
-      stdin.write('\r');
-    });
+    await pressEnter(stdin);
     await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith('/clear'));
     unmount();
   });
@@ -711,13 +727,9 @@ describe('InputPrompt', () => {
     });
     props.buffer.text = '/review';
 
-    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />, {
-      uiActions,
-    });
+    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
-    await act(async () => {
-      stdin.write('\r');
-    });
+    await pressEnter(stdin);
 
     await waitFor(() => {
       expect(props.onSubmit).toHaveBeenCalledWith('/review');
@@ -738,13 +750,9 @@ describe('InputPrompt', () => {
     });
     props.buffer.text = '/review';
 
-    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />, {
-      uiActions,
-    });
+    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
-    await act(async () => {
-      stdin.write('\r');
-    });
+    await pressEnter(stdin);
 
     await waitFor(() => {
       // Should handle autocomplete for index 1
@@ -765,9 +773,7 @@ describe('InputPrompt', () => {
 
     const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
-    await act(async () => {
-      stdin.write('\r');
-    });
+    await pressEnter(stdin);
     await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith('/clear'));
     unmount();
   });

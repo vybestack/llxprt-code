@@ -13,7 +13,7 @@ const getRuntimeBridgeMock = vi.fn(() => ({
   runWithScope: runWithScopeMock,
 }));
 
-vi.mock('../contexts/RuntimeContext.js', () => ({
+vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: getRuntimeBridgeMock,
 }));
 
@@ -22,13 +22,17 @@ let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
 vi.mock('../../utils/autoPromptGenerator.js', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../utils/autoPromptGenerator.js')>();
+  // Capture the real function before mock.module patches the namespace
+  // in place — otherwise actual.generateAutoPrompt becomes the override
+  // itself, causing infinite recursion.
+  const realGenerateAutoPrompt = actual.generateAutoPrompt;
   return {
     ...actual,
     generateAutoPrompt: (...args: unknown[]) => {
       if (generateAutoPromptOverride) {
         return generateAutoPromptOverride(...args);
       }
-      return actual.generateAutoPrompt(
+      return realGenerateAutoPrompt(
         ...(args as Parameters<typeof actual.generateAutoPrompt>),
       );
     },
@@ -75,10 +79,8 @@ const findSubCommand = (name: string) =>
   subagentCommand.subCommands!.find((cmd) => cmd.name === name)!;
 
 const loadSubagentCommandModule = async () => {
-  // Reset modules to ensure fresh import with mocks
-  vi.resetModules();
-
-  // Import module — vi.resetModules() above ensures a fresh evaluation
+  // Import module — each test file runs in its own Bun process, so the
+  // module registry is already fresh with the mocks registered above.
   const mod = await import('../subagentCommand.js');
   subagentCommand = mod.subagentCommand;
 };

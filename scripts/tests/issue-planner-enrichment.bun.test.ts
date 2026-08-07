@@ -13,7 +13,7 @@
 // the pattern established for the related-candidate step (#2972).
 //
 // These run under Bun's native runner via the scripts-tests root (see
-// scripts/bun-test-manifest.ts).
+// scripts/bun-test-roots.ts).
 
 import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';

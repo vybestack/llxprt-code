@@ -103,14 +103,35 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     category: 'cli-behavior',
     description: 'Maximum number of retry attempts for API calls',
     type: 'number',
+    hint: 'non-negative integer (e.g., 3)',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'retries must be a non-negative integer (e.g., 3)',
+      };
+    },
   },
   {
     key: 'retrywait',
     category: 'cli-behavior',
     description: 'Initial delay in milliseconds between retry attempts',
     type: 'number',
+    hint: 'positive integer in milliseconds (e.g., 5000 for 5 seconds)',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'retrywait must be a positive integer in milliseconds (e.g., 5000 for 5 seconds)',
+      };
+    },
   },
   {
     key: 'auth-retry-timeout',

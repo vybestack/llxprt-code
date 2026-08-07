@@ -26,7 +26,7 @@ describe('clipboardUtils', () => {
       },
     );
 
-    it.runIf(isClipboardPlatform)(
+    it.skipIf(!isClipboardPlatform)(
       'should return boolean on macOS or Windows',
       async () => {
         const result = await clipboardHasImage();
@@ -68,13 +68,13 @@ describe('clipboardUtils', () => {
   describe('cleanupOldClipboardImages', () => {
     it('should not throw errors', async () => {
       // Should handle missing directories gracefully
-      await expect(
-        cleanupOldClipboardImages('/path/that/does/not/exist'),
-      ).resolves.not.toThrow();
+      await cleanupOldClipboardImages('/path/that/does/not/exist');
+      expect.assertions(0);
     });
 
     it('should complete without errors on valid directory', async () => {
-      await expect(cleanupOldClipboardImages('.')).resolves.not.toThrow();
+      await cleanupOldClipboardImages('.');
+      expect.assertions(0);
     });
   });
 

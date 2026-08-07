@@ -427,21 +427,11 @@ describe('Auth workspace DAG constraints', () => {
 // ─────────────────────────────────────────────────────────────────
 // Build artifact checks
 // ─────────────────────────────────────────────────────────────────
-
-describe('Auth package build artifacts', () => {
-  /**
-   * @plan:PLAN-20260608-ISSUE1586.P04
-   * @requirement:REQ-AUTH-001.3
-   */
-  it('dist/index.js exists', () => {
-    expect(fs.existsSync(path.join(AUTH_DIR, 'dist', 'index.js'))).toBe(true);
-  });
-
-  /**
-   * @plan:PLAN-20260608-ISSUE1586.P04
-   * @requirement:REQ-AUTH-001.3
-   */
-  it('dist/index.d.ts exists', () => {
-    expect(fs.existsSync(path.join(AUTH_DIR, 'dist', 'index.d.ts'))).toBe(true);
-  });
-});
+//
+// Removed by issue #2983. These asserted that `dist/index.js` and
+// `dist/index.d.ts` were present on disk, which only held because the test
+// job compiled the workspace first. Tests resolve TypeScript source through
+// the `bun` export condition and never read `dist`, so the assertions
+// measured the CI harness rather than this package. REQ-AUTH-001.3's
+// published contract stays pinned by the `main`, `types`, and `exports`
+// assertions above.

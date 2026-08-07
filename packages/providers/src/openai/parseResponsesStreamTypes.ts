@@ -80,4 +80,14 @@ export type DispatchState = {
 
 export type DispatchResult = DispatchState & {
   lastLoggedType: string | undefined;
+  /**
+   * The `type` of the event that was successfully parsed and dispatched in
+   * this step, independent of the deduplicated `lastLoggedType`. `undefined`
+   * when the event was malformed JSON and therefore not dispatched.
+   *
+   * Used to record accepted-terminal state monotonically per data line so
+   * that a nonterminal event following a terminal one in the same reader
+   * chunk cannot mask the terminal (issue #3049).
+   */
+  dispatchedEventType: string | undefined;
 };

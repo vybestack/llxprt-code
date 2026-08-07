@@ -7,6 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { render } from 'ink-testing-library';
 import type React from 'react';
+import { Box, Text } from 'ink';
+import { Colors } from '../ui/colors.js';
 import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
 import { useResponsive } from '../ui/hooks/useResponsive.js';
 
@@ -18,11 +20,13 @@ vi.mock('../ui/hooks/useTerminalSize');
 // Test component to verify the responsive testing utilities
 function TestComponent(): React.ReactElement {
   const { breakpoint, width } = useResponsive();
+  // Ink primitives: renderAtWidth renders through ink, which rejects bare
+  // strings outside <Text> and does not understand DOM elements.
   return (
-    <div>
-      <span data-testid="breakpoint">{breakpoint}</span>
-      <span data-testid="width">{width}</span>
-    </div>
+    <Box>
+      <Text color={Colors.Foreground}>{breakpoint}</Text>
+      <Text color={Colors.Foreground}>{width}</Text>
+    </Box>
   );
 }
 

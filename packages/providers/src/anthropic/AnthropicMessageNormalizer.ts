@@ -35,6 +35,7 @@ import {
   stripEmptyTextBlocks,
 } from './AnthropicMessageValidator.js';
 import { stripCrossModelThinking } from './crossModelThinkingStrip.js';
+import { tagAnchorMessage } from './AnthropicAnchorCache.js';
 
 // Type definitions moved from AnthropicProvider.ts
 
@@ -504,9 +505,27 @@ function convertContentToMessages(
 ): AnthropicMessage[] {
   const messages: AnthropicMessage[] = [];
   let pendingToolResults: AnthropicToolResultBlock[] = [];
+  // True while the next pending-tool-result flush is derived from the
+  // anchored content, so the anchor marker rides on that flushed message.
+  let anchorPending = false;
+
+  // Tag the message just appended for `anchored`, if any (#3070).
+  const tagIfAnchored = (anchored: boolean, before: number): void => {
+    if (anchored && messages.length > before) {
+      tagAnchorMessage(messages[messages.length - 1]);
+    }
+  };
+
+  const flushPending = (): void => {
+    const before = messages.length;
+    pendingToolResults = flushPendingToolResults(messages, pendingToolResults);
+    tagIfAnchored(anchorPending, before);
+    anchorPending = false;
+  };
 
   for (let contentIndex = 0; contentIndex < contents.length; contentIndex++) {
     const c = contents[contentIndex];
+    const anchored = c.metadata?.cacheAnchor === true;
     const speaker: string = c.speaker;
     const toolResponseBlocks = c.blocks.filter(
       (b): b is ToolResponseBlock => b.type === 'tool_response',
@@ -521,30 +540,32 @@ function convertContentToMessages(
       );
 
     if (toolResponseBlocks.length > 0) {
-      const results = buildToolResults(
-        c,
-        toolResponseBlocks,
-        nonToolResponseBlocks,
-        options,
+      pendingToolResults.push(
+        ...buildToolResults(
+          c,
+          toolResponseBlocks,
+          nonToolResponseBlocks,
+          options,
+        ),
       );
-      pendingToolResults.push(...results);
     }
 
     if (speaker === 'human') {
-      pendingToolResults = flushPendingToolResults(
-        messages,
-        pendingToolResults,
-      );
-
+      flushPending();
       if (!onlyToolResponseContent) {
+        const before = messages.length;
         pushHumanMessageIfPresent(messages, c);
+        tagIfAnchored(anchored, before);
+      } else if (anchored) {
+        // Human content whose only payload is tool responses: its derived
+        // message is the pending tool-result flush.
+        anchorPending = true;
       }
     } else if (speaker === 'ai') {
-      pendingToolResults = flushPendingToolResults(
-        messages,
-        pendingToolResults,
-      );
+      flushPending();
+      const before = messages.length;
       convertAIMessage(c, contentIndex, redactedIndices, messages, options);
+      tagIfAnchored(anchored, before);
     } else {
       if (speaker !== 'tool') {
         throw new Error(`Unknown speaker type: ${speaker}`);
@@ -552,10 +573,13 @@ function convertContentToMessages(
       if (toolResponseBlocks.length === 0) {
         throw new Error('Tool content must have a tool_response block');
       }
+      if (anchored) {
+        anchorPending = true;
+      }
     }
   }
 
-  pendingToolResults = flushPendingToolResults(messages, pendingToolResults);
+  flushPending();
   return messages;
 }
 

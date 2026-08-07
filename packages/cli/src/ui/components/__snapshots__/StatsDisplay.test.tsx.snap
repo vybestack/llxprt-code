@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`<StatsDisplay /> > Code Changes Display > displays Code Changes when line counts are present 1`] = `
+exports[`<StatsDisplay /> Code Changes Display displays Code Changes when line counts are present 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -21,7 +21,7 @@ exports[`<StatsDisplay /> > Code Changes Display > displays Code Changes when li
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > Code Changes Display > hides Code Changes when no lines are added or removed 1`] = `
+exports[`<StatsDisplay /> Code Changes Display hides Code Changes when no lines are added or removed 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -41,7 +41,7 @@ exports[`<StatsDisplay /> > Code Changes Display > hides Code Changes when no li
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in green for high values 1`] = `
+exports[`<StatsDisplay /> Conditional Color Tests renders success rate in green for high values 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -60,7 +60,7 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in gr
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in red for low values 1`] = `
+exports[`<StatsDisplay /> Conditional Color Tests renders success rate in red for low values 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -79,7 +79,7 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in re
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in yellow for medium values 1`] = `
+exports[`<StatsDisplay /> Conditional Color Tests renders success rate in yellow for medium values 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -98,7 +98,7 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in ye
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > Conditional Rendering Tests > hides Efficiency section when cache is not used 1`] = `
+exports[`<StatsDisplay /> Conditional Rendering Tests hides Efficiency section when cache is not used 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -122,7 +122,7 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides Efficiency secti
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement when no decisions are made 1`] = `
+exports[`<StatsDisplay /> Conditional Rendering Tests hides User Agreement when no decisions are made 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -142,7 +142,7 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement w
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > renders a table with two models correctly 1`] = `
+exports[`<StatsDisplay /> renders a table with two models correctly 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -170,7 +170,7 @@ exports[`<StatsDisplay /> > renders a table with two models correctly 1`] = `
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > renders all sections when all data is present 1`] = `
+exports[`<StatsDisplay /> renders all sections when all data is present 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │
@@ -203,7 +203,7 @@ exports[`<StatsDisplay /> > renders all sections when all data is present 1`] = 
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<StatsDisplay /> > renders only the Performance section in its zero state 1`] = `
+exports[`<StatsDisplay /> renders only the Performance section in its zero state 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Session Stats                                                                                   │

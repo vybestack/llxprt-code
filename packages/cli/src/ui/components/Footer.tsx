@@ -25,8 +25,17 @@ import { truncateMiddle } from '../utils/responsive.js';
 import { ThemedGradient } from './ThemedGradient.js';
 
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
-const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
-const heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
+
+function isBunRuntime(): boolean {
+  return (
+    typeof process.versions.bun === 'string' && process.versions.bun.length > 0
+  );
+}
+
+function getHeapSizeLimit(): number {
+  const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
+  return rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
+}
 
 function areFooterStablePropsEqual(
   prevProps: FooterProps,
@@ -99,10 +108,12 @@ function formatMemoryUsage(
   detailed: boolean,
 ): string {
   const heapUsed = formatGigabytes(usage.heapUsed);
-  const heapLimit = formatGigabytes(heapSizeLimit);
   const rssValue = formatGigabytes(usage.rss);
-  const heap = `Heap: ${heapUsed}${compact ? 'G' : 'GB'}/${heapLimit}${compact ? 'G' : 'GB'}`;
+  const heapSuffix = compact ? 'G' : 'GB';
   const rss = `RSS: ${rssValue}${compact ? 'G' : 'GB'}`;
+  const heap = isBunRuntime()
+    ? `Heap: ${heapUsed}${heapSuffix}`
+    : `Heap: ${heapUsed}${heapSuffix}/${formatGigabytes(getHeapSizeLimit())}${heapSuffix}`;
   if (compact || !detailed) {
     return `${heap} ${rss}`;
   }

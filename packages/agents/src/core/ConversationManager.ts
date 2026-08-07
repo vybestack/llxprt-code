@@ -187,7 +187,10 @@ export class ConversationManager {
    * Validates the history and converts each IContent before adding.
    * Called from ChatSession constructor after ConversationManager is created.
    */
-  importInitialHistory(initialHistory: IContent[], model: string): void {
+  importInitialHistory(
+    initialHistory: readonly IContent[],
+    model: string,
+  ): void {
     if (initialHistory.length === 0) {
       return;
     }
@@ -529,16 +532,25 @@ export class ConversationManager {
   /**
    * Gets the conversation history in neutral IContent format.
    * @param curated - If true, returns curated history; otherwise returns all history
+   *
+   * Entries are returned BY REFERENCE — no deep clone (issue #3109). Two
+   * separate guarantees are at work, and they are not the same strength:
+   *
+   * - Membership is isolated: both HistoryService.getAll() and getCurated()
+   *   already build a fresh array, so splicing or reordering the result cannot
+   *   reach the live history. `readonly` makes that a compile error too.
+   * - Entry contents are SHARED. `readonly IContent[]` is shallow, so it does
+   *   NOT stop a caller from mutating `entry.blocks` or a block in place. That
+   *   entries are not mutated after insertion is an invariant maintained by the
+   *   history layer (post-insertion edits replace the array slot — see
+   *   HistoryService.replaceToolResponse and applyDensityMutations), not
+   *   something the type system enforces. This matches what
+   *   HistoryService.getAll()/getCurated() have always exposed to their callers.
    */
-  getHistory(curated: boolean = false): IContent[] {
-    // Get history from HistoryService in IContent format (already neutral)
-    const iContents = curated
+  getHistory(curated: boolean = false): readonly IContent[] {
+    return curated
       ? this.historyService.getCurated()
       : this.historyService.getAll();
-
-    // Deep copy the history to avoid mutating the history outside of the
-    // chat session.
-    return structuredClone(iContents);
   }
 
   /**
@@ -546,6 +558,7 @@ export class ConversationManager {
    */
   clearHistory(): void {
     this.historyService.clear();
+    this.historyService.resetCacheAnchorSeq();
   }
 
   /**
@@ -562,13 +575,14 @@ export class ConversationManager {
   /**
    * Sets the full chat history, replacing any existing history.
    */
-  setHistory(history: IContent[]): void {
+  setHistory(history: readonly IContent[]): void {
     // The second argument to historyService.add is only a logging/token-
     // estimation hint, not attribution. This is a restore path that may run
     // before any provider is active, so read the runtime-state model directly
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
     this.historyService.clear();
+    this.historyService.resetCacheAnchorSeq();
     for (const content of history) {
       const turnKey = this.historyService.generateTurnKey();
       this.historyService.add(

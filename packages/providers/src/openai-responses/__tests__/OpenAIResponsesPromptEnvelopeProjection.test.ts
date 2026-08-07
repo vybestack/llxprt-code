@@ -237,6 +237,11 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       const encoder = new TextEncoder();
       const body = new ReadableStream({
         start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+            ),
+          );
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         },

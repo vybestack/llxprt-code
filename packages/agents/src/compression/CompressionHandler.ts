@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -33,6 +31,8 @@ import {
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
 import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.js';
+import { applyCompressionWithAnchor } from './cacheAnchor.js';
+import { buildCompressionContext as buildContext } from './compressionContextBuilder.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
@@ -48,7 +48,6 @@ import {
   extractThinkingBlocks,
   estimateThinkingTokens,
 } from './reasoningUtils.js';
-import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
@@ -88,6 +87,7 @@ export class CompressionHandler {
   private compressionFailureCount: number = 0;
   private lastCompressionFailureTime: number | null = null;
   private lastSuccessfulCompressionTime: number | null = null;
+  private compressionSummary: IContent | undefined;
   densityDirty: boolean = true;
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
@@ -271,16 +271,14 @@ export class CompressionHandler {
     // Calculate fresh each time to respect runtime setting changes
     const threshold = this.runtimeContext.ephemerals.compressionThreshold();
     const contextLimit = this.runtimeContext.ephemerals.contextLimit();
-    const completionBudget = Math.max(
-      0,
-      getCompletionBudget(
-        this.generationConfig,
-        this.runtimeContext.state.model,
-        undefined,
-        this.providerRuntimeNullable?.settingsService,
-      ),
+    const completionBudget = getCompletionBudget(
+      this.generationConfig,
+      this.runtimeContext.state.model,
+      undefined,
+      this.providerRuntimeNullable?.settingsService,
+      contextLimit,
     );
-    const effectiveLimit = Math.max(0, contextLimit - completionBudget);
+    const effectiveLimit = contextLimit - completionBudget;
     const compressionThreshold = threshold * effectiveLimit;
 
     this.logger.debug('Compression threshold:', {
@@ -397,17 +395,15 @@ export class CompressionHandler {
     limit: number;
     marginAdjustedLimit: number;
   } {
-    const completionBudget = Math.max(
-      0,
-      getCompletionBudget(
-        this.generationConfig,
-        this.runtimeContext.state.model,
-        provider,
-        this.providerRuntimeNullable?.settingsService,
-      ),
-    );
     const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
     const limit = tokenLimit(this.runtimeContext.state.model, userContextLimit);
+    const completionBudget = getCompletionBudget(
+      this.generationConfig,
+      this.runtimeContext.state.model,
+      provider,
+      this.providerRuntimeNullable?.settingsService,
+      limit,
+    );
     const marginAdjustedLimit = computeMarginAdjustedLimit(limit);
     return { completionBudget, limit, marginAdjustedLimit };
   }
@@ -418,10 +414,7 @@ export class CompressionHandler {
     enforcer: ProviderContentEnforcer,
     pendingContents: IContent[] | undefined,
   ): void {
-    if (!provider) {
-      return;
-    }
-    if (typeof provider.setCompressionCallback !== 'function') {
+    if (!provider || typeof provider.setCompressionCallback !== 'function') {
       return;
     }
 
@@ -447,12 +440,6 @@ export class CompressionHandler {
     };
 
     provider.setCompressionCallback(callback);
-  }
-
-  private detachCompressionCallback(provider?: IProvider): void {
-    if (provider && typeof provider.setCompressionCallback === 'function') {
-      provider.setCompressionCallback(null);
-    }
   }
 
   private pushSuppressDensityDirty(): void {
@@ -488,7 +475,9 @@ export class CompressionHandler {
    */
   clearProviderCompressionCallback(provider?: IProvider): void {
     try {
-      this.detachCompressionCallback(provider);
+      if (provider && typeof provider.setCompressionCallback === 'function') {
+        provider.setCompressionCallback(null);
+      }
     } catch (error) {
       this.logger.warn(
         () =>
@@ -522,7 +511,11 @@ export class CompressionHandler {
           const outcome = await this.performFallbackCompression(
             context,
             new Error('Provider content fallback truncation triggered'),
-            applyAndResetPromptCount,
+            // The enforcer owns its own history restore (restoreHistory) which
+            // already resets the cache anchor; the topPreserved parameter is
+            // not consumed on this path.
+            (newHistory, _summary, _topPreserved) =>
+              applyAndResetPromptCount(newHistory),
             { swallowErrors: false },
           );
           return outcome === 'applied';
@@ -656,11 +649,11 @@ export class CompressionHandler {
     const preCompressionCount =
       this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
-    let compressionSummary: IContent | undefined;
     // Compression outcome determined by runCompressionWithRetryAndFallback.
     // On 'noop', we must avoid history mutation, recording events, and
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
+    this.compressionSummary = undefined;
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -668,22 +661,7 @@ export class CompressionHandler {
     try {
       compressionOutcome = await this.runCompressionWithRetryAndFallback(
         prompt_id,
-        (newHistory, summary) => {
-          // Record which chronology span the summary stands in for BEFORE the
-          // write-back, so the destroyed seq range is still derivable (#1721).
-          // The subsequent add() calls stamp the summary's own marker.
-          const annotated = annotateCompressionSpan(
-            this.historyService.getRawHistory(),
-            newHistory,
-          );
-          // Apply result: clear history, add each entry from newHistory
-          this.historyService.clear();
-          for (const content of annotated) {
-            this.historyService.add(content, this.runtimeContext.state.model);
-          }
-          this.lastPromptTokenCount = null;
-          compressionSummary = summary;
-        },
+        this.createApplyCallback(),
       );
     } finally {
       this.setSuppressDensityDirty(false);
@@ -694,7 +672,7 @@ export class CompressionHandler {
         this.historyService.endCompression();
       } else {
         this.historyService.endCompression(
-          compressionSummary,
+          this.compressionSummary,
           preCompressionCount,
         );
       }
@@ -717,6 +695,33 @@ export class CompressionHandler {
     );
 
     return PerformCompressionResult.FAILED;
+  }
+
+  /**
+   * Create the apply callback for runCompressionWithRetryAndFallback.
+   *
+   * Resolves and validates the new cache anchor BEFORE mutating history so an
+   * invalid strategy result cannot leave a partially applied compression
+   * (#3070 Defect 3). After mutation: if the prefix was destroyed
+   * (topPreserved <= 0), explicitly reset the anchor (#3070 Defect 5);
+   * otherwise set it to the last preserved-head entry's exact identity.
+   */
+  private createApplyCallback(): (
+    newHistory: IContent[],
+    summary: IContent | undefined,
+    topPreserved: number,
+  ) => void {
+    return (newHistory, summary, topPreserved) => {
+      applyCompressionWithAnchor(
+        this.historyService,
+        newHistory,
+        topPreserved,
+        this.runtimeContext.state.model,
+        annotateCompressionSpan,
+      );
+      this.lastPromptTokenCount = null;
+      this.compressionSummary = summary;
+    };
   }
 
   /**
@@ -802,6 +807,7 @@ export class CompressionHandler {
     applyResult: (
       newHistory: IContent[],
       summary: IContent | undefined,
+      topPreserved: number,
     ) => void,
   ): Promise<'applied' | 'noop' | 'failed'> {
     const context = await this.buildCompressionContext(promptId);
@@ -856,7 +862,8 @@ export class CompressionHandler {
     const fallbackOutcome = await this.performFallbackCompression(
       context,
       primaryError,
-      (newHistory, summary) => applyResult(newHistory, summary),
+      (newHistory, summary, topPreserved) =>
+        applyResult(newHistory, summary, topPreserved),
     );
     return fallbackOutcome;
   }
@@ -876,6 +883,7 @@ export class CompressionHandler {
     applyResult: (
       newHistory: IContent[],
       summary: IContent | undefined,
+      topPreserved: number,
     ) => void,
   ): Promise<'applied' | 'noop'> {
     if (configuredStrategyName !== 'middle-out') {
@@ -919,20 +927,28 @@ export class CompressionHandler {
     applyResult: (
       newHistory: IContent[],
       summary: IContent | undefined,
+      topPreserved: number,
     ) => void,
   ): void {
     if (result.kind === 'noop') {
-      // Defensive: callers (pending enforcer) already filter noop, but ensure
-      // a truthful no-op never mutates history if reached directly.
       this.logger.debug(
         `applyFallbackCompressionResult received structural no-op (${result.reason}); not applying`,
       );
       return;
     }
+    // Delegate the history mutation to the caller-supplied applyResult so each
+    // caller's rewrite runs with its own contract: createApplyCallback applies
+    // the cache anchor via applyCompressionWithAnchor on the primary path,
+    // while the enforcer wrappers (executeFallbackTruncation,
+    // PendingContextWindowEnforcer) own their clear/rebuild and rely on this
+    // callback to mark history as applied (historyRestored). Every caller also
+    // clears the stale prompt-token baseline, so applying it here directly
+    // would bypass those contracts (#3070 fallback truncation propagation).
     const summary = CompressionHandler.selectCompressionSummary(
       result.newHistory,
     );
-    applyResult(result.newHistory, summary);
+    applyResult(result.newHistory, summary, result.metadata.topPreserved ?? 0);
+    this.compressionSummary = summary;
     this.compressionFailureCount = 0;
     this.lastCompressionFailureTime = null;
     this.lastSuccessfulCompressionTime = Date.now();
@@ -966,6 +982,7 @@ export class CompressionHandler {
     applyResult: (
       newHistory: IContent[],
       summary: IContent | undefined,
+      topPreserved: number,
     ) => void,
     options?: { swallowErrors?: boolean },
   ): Promise<'applied' | 'noop' | 'failed'> {
@@ -1022,46 +1039,14 @@ export class CompressionHandler {
    * @requirement REQ-CS-001.6
    */
   async buildCompressionContext(promptId: string): Promise<CompressionContext> {
-    const promptResolver = new PromptResolver();
-    const promptBaseDir = path.join(Storage.getGlobalConfigDir(), 'prompts');
-
-    let activeTodos: string | undefined;
-    if (this.activeTodosProvider) {
-      try {
-        activeTodos = await this.activeTodosProvider();
-      } catch (error) {
-        this.logger.debug(
-          'Failed to fetch active todos for compression',
-          error,
-        );
-      }
-    }
-
-    // Get config from runtimeContext for bucket failover handling
-    const config = this.providerRuntimeNullable?.config;
-
-    return {
-      history: this.historyService.getCurated(),
-      runtimeContext: this.runtimeContext,
-      runtimeState: this.runtimeContext.state,
-      estimateTokens: (contents) =>
-        this.historyService.estimateTokensForContents(contents as IContent[]),
-      currentTokenCount: this.historyService.getTotalTokens(),
-      logger: this.logger,
-      resolveProvider: (profileName?) =>
-        Promise.resolve(this.providerResolver(profileName)),
-      promptResolver,
-      promptBaseDir,
-      promptContext: {
-        provider: this.runtimeContext.state.provider,
-        model: this.runtimeContext.state.model,
-      },
+    return buildContext(
       promptId,
-      ...(activeTodos ? { activeTodos } : {}),
-      compressionVerification:
-        this.runtimeContext.ephemerals.compressionVerification(),
-      ...(config ? { config } : {}),
-    };
+      this.runtimeContext,
+      this.historyService,
+      (profileName?) => Promise.resolve(this.providerResolver(profileName)),
+      this.activeTodosProvider,
+      this.logger,
+    );
   }
 
   /**

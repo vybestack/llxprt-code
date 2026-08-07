@@ -22,7 +22,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { parseBootstrapArgs } from '../packages/cli/dist/src/config/profileBootstrap.js';
 import {
   isErrnoException,
   messageOf,
@@ -38,7 +37,6 @@ const root = join(__dirname, '..');
 const pkg = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf-8'),
 ) as PackageJson;
-parseBootstrapArgs();
 
 /**
  * Prepare NODE_OPTIONS for child processes in DEV mode.

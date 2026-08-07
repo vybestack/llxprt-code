@@ -29,8 +29,31 @@ export class StreamOutputAccumulator {
   private envelope: ModelOutput = emptyModelOutput();
   private readonly blocks: ModelStreamChunk['content']['blocks'] = [];
 
+  /**
+   * Index of the most recent thinking block for each `streamId`. Anthropic
+   * streams re-emit the full accumulated thought on every `thinking_delta`
+   * (streamStatus: 'delta') and close the span with a single
+   * streamStatus: 'complete' block. Appending every delta retains N copies of
+   * an O(L)-byte thought per span — unbounded growth over a long session
+   * (issue #3111). The `streamId` field exists precisely to identify which
+   * incremental update a block replaces (see IContent.ThinkingBlock), so each
+   * span is collapsed to its latest block, kept at the span's original
+   * position so block order is preserved.
+   */
+  private readonly thinkingByStreamId = new Map<string, number>();
+
   add(chunk: ModelStreamChunk): void {
     for (const block of chunk.content.blocks) {
+      if (block.type === 'thinking' && typeof block.streamId === 'string') {
+        const existingIndex = this.thinkingByStreamId.get(block.streamId);
+        if (existingIndex !== undefined) {
+          this.blocks[existingIndex] = block;
+        } else {
+          this.thinkingByStreamId.set(block.streamId, this.blocks.length);
+          this.blocks.push(block);
+        }
+        continue;
+      }
       this.blocks.push(block);
     }
     this.envelope = accumulateModelStreamChunk(this.envelope, {

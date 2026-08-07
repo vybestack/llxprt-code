@@ -645,6 +645,10 @@ export class ProviderContentEnforcer {
   private restoreHistory(history: IContent[]): void {
     const backup = this.deps.historyService.getCurated();
     this.deps.historyService.clear();
+    // Post-truncation rebuild: the prefix is already destroyed, so reset the
+    // cache anchor (#3070). Subsequent clears in the error-handling flow find
+    // it already at 0.
+    this.deps.historyService.resetCacheAnchorSeq();
     try {
       this.addHistoryEntries(history);
     } catch (restoreError) {
@@ -740,17 +744,15 @@ export class ProviderContentEnforcer {
     provider: IProvider | undefined,
     model: string,
   ): ContextLimits {
-    const completionBudget = Math.max(
-      0,
-      getCompletionBudget(
-        this.deps.generationConfig,
-        model,
-        provider,
-        this.deps.providerRuntimeNullable?.settingsService,
-      ),
-    );
     const userContextLimit = this.deps.runtimeContext.ephemerals.contextLimit();
     const limit = tokenLimit(model, userContextLimit);
+    const completionBudget = getCompletionBudget(
+      this.deps.generationConfig,
+      model,
+      provider,
+      this.deps.providerRuntimeNullable?.settingsService,
+      limit,
+    );
     const marginAdjustedLimit = computeMarginAdjustedLimit(limit);
     return {
       completionBudget,
