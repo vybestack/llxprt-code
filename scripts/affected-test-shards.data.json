@@ -38,6 +38,7 @@
       "policy",
       "providers",
       "settings",
+      "test-utils",
       "tools"
     ],
     "auth": [],
@@ -51,6 +52,7 @@
       "settings",
       "storage",
       "telemetry",
+      "test-utils",
       "tools"
     ],
     "core": [
@@ -67,15 +69,7 @@
     "lsp": [],
     "mcp": ["core", "settings", "storage", "tools"],
     "policy": [],
-    "providers": [
-      "auth",
-      "core",
-      "settings",
-      "storage",
-      "telemetry",
-      "test-utils",
-      "tools"
-    ],
+    "providers": ["auth", "core", "settings", "storage", "telemetry", "tools"],
     "settings": ["storage"],
     "storage": [],
     "telemetry": ["storage"],
@@ -84,10 +78,11 @@
     "vscode-ide-companion": ["ide-integration"]
   },
   "testOnlyEdges": {
-    "agents": ["storage", "test-utils"],
-    "cli": ["test-utils"],
+    "agents": ["storage"],
     "core": ["providers", "test-utils"],
-    "tools": ["storage", "test-utils"]
+    "tools": ["storage", "test-utils"],
+    "auth": ["test-utils"],
+    "providers": ["test-utils"]
   },
   "observers": {
     "agents": [
