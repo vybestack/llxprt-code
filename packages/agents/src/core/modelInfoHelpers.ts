@@ -3,7 +3,7 @@
  * to keep it within the max-lines lint limit.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ModelInfoConfig } from '../config/capabilities.js';
 import { AgentEventType } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ModelInfo } from './turn.js';
@@ -57,7 +57,7 @@ export function buildEffectiveModelIdentity(
 }
 
 /** Resolves the current profile name from the config's settings service. */
-export function resolveProfileName(config: Config): string | null {
+export function resolveProfileName(config: ModelInfoConfig): string | null {
   try {
     const svc = (
       config as unknown as {
@@ -79,7 +79,7 @@ export function resolveProfileName(config: Config): string | null {
 }
 
 export function buildModelInfo(
-  config: Config,
+  config: ModelInfoConfig,
   identity: EffectiveModelIdentity,
 ): ModelInfo {
   const profileName = resolveProfileName(config);
@@ -105,7 +105,7 @@ export function modelIdentityKey(info: ModelInfo): string {
 
 /** Emits a ModelInfo event for a new sequence (always emitted). */
 export async function* emitModelInfoForNewSequence(
-  config: Config,
+  config: ModelInfoConfig,
   identity: EffectiveModelIdentity,
 ): AsyncGenerator<ServerAgentStreamEvent, void> {
   yield {

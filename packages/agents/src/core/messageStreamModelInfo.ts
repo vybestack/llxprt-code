@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ModelInfoConfig } from '../config/capabilities.js';
 import type { ModelInfo } from './turn.js';
 
 export interface ModelInfoDeps {
-  config: Config;
+  config: ModelInfoConfig;
   getProviderName: () => string;
   getEffectiveModel: () => string;
 }
@@ -71,7 +71,7 @@ export function modelIdentityKey(info: ModelInfo): string {
   ]);
 }
 
-export function getProfileName(config: Config): string | null {
+export function getProfileName(config: ModelInfoConfig): string | null {
   try {
     const settingsService = config.getSettingsService();
     const profileName = settingsService.getCurrentProfileName();

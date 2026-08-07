@@ -21,6 +21,7 @@
  */
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
@@ -96,4 +97,23 @@ export interface ToolConfirmationConfig extends HookConfigBoundary {
   getApprovalMode(): ApprovalMode;
   getPolicyEngine(): PolicyEngine;
   isInteractive(): boolean;
+}
+
+/**
+ * What the message-stream orchestrator and its terminal handler read.
+ *
+ * Three members across the two files: session limits from the orchestrator and
+ * the failed-call continuation flag from the terminal handler, which receives
+ * the same deps bundle.
+ */
+export interface MessageStreamConfig extends ModelInfoConfig {
+  getIdeMode(): boolean;
+  getMaxSessionTurns(): number;
+  getContinueOnFailedApiCall(): boolean;
+}
+
+/** What model-info projection reads: the settings service and the active generator config. */
+export interface ModelInfoConfig {
+  getSettingsService(): SettingsService;
+  getContentGeneratorConfig(): ContentGeneratorConfig | undefined;
 }

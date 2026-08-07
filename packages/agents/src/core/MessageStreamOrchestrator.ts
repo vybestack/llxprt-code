@@ -20,7 +20,7 @@ import {
   modelIdentityKey,
   type EffectiveModelIdentity,
 } from './modelInfoHelpers.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageStreamConfig } from '../config/capabilities.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   iContentFromBlocks,
@@ -39,7 +39,7 @@ import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/co
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 
 export interface MessageStreamDeps {
-  config: Config;
+  config: MessageStreamConfig;
   getChat: () => ChatSession;
   logger: DebugLogger;
   loopDetector: LoopDetectionService;
