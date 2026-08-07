@@ -6,10 +6,11 @@
  * three members or fewer — the files that can move to a narrow capability
  * interface (see `packages/<pkg>/src/config/capabilities.ts`).
  *
- * IMPORTANT: the list over-reports. A file appears here based on members read
+ * IMPORTANT: the list still over-reports. A file appears here based on members read
  * on a directly-annotated receiver, which cannot see whether the file forwards
  * its Config to a callee that still requires the full type. Roughly half the
- * candidates fail for that reason. The working method is therefore: apply to
+ * candidates fail for that reason. Files that construct a Config are excluded,
+ * since they need the concrete class regardless of how little they read. The working method is therefore: apply to
  * all candidates, typecheck, revert whatever the compiler rejects, repeat —
  * each round narrows callees and unblocks their callers.
  *
@@ -104,6 +105,28 @@ function isBindable(n: ts.Node): boolean {
   );
 }
 
+/**
+ * True when the file constructs a Config itself. Such a file is a factory or
+ * test harness and needs the concrete class, not a capability interface, no
+ * matter how few members it reads.
+ */
+function constructsConfig(sf: ts.SourceFile): boolean {
+  let found = false;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (
+      ts.isNewExpression(n) &&
+      ts.isIdentifier(n.expression) &&
+      n.expression.text === 'Config'
+    ) {
+      found = true;
+    }
+    if (!found) ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return found;
+}
+
 /** Identifiers annotated exactly `Config` in this file. */
 function configIdentifiers(sf: ts.SourceFile): Set<string> {
   const idents = new Set<string>();
@@ -142,6 +165,7 @@ function analyseFile(abs: string): { file: string; members: string[] } | null {
 
   const sf = ts.createSourceFile(abs, src, ts.ScriptTarget.Latest, true);
   if (!importsConfig(sf)) return null;
+  if (constructsConfig(sf)) return null;
 
   const idents = configIdentifiers(sf);
   if (idents.size === 0) return null;
