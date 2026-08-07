@@ -202,11 +202,6 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     root: 'lsp',
   },
   {
-    root: 'test-setup',
-    cwd: '.',
-    directories: ['test-setup'],
-  },
-  {
     root: 'scripts-tests',
     cwd: '.',
     directories: ['scripts/tests'],
