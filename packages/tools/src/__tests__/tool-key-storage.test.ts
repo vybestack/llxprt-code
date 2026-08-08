@@ -89,9 +89,7 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
     it('fully masks keys of 8 characters or fewer', () => {
       for (const shortKey of ['abc', '12345678', '', 'x']) {
         const masked = maskKeyForDisplay(shortKey);
-        if (shortKey.length <= 8) {
-          expect(masked).toBe('*'.repeat(shortKey.length));
-        }
+        expect(masked).toBe('*'.repeat(shortKey.length));
       }
     });
   });
@@ -207,9 +205,9 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       expect(storageMasked).toBe(pureMasked);
       // Also verify fixture match
       const fixtureEntry = MASK_KEY_FIXTURES.find((f) => f.input === testKey);
-      if (fixtureEntry) {
-        expect(storageMasked).toBe(fixtureEntry.output);
-      }
+      expect(
+        fixtureEntry === undefined || fixtureEntry.output === storageMasked,
+      ).toBe(true);
     });
   });
 

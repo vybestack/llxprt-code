@@ -231,19 +231,17 @@ describe('AB1: delete_line_range preserves trailing-newline state', () => {
     },
   ];
 
-  cases.forEach((c, index) => {
-    it(c.name, async () => {
-      const filePath = join(tempDir(), `ab1-${index}.txt`);
-      writeFileSync(filePath, c.file, 'utf-8');
+  it.each(cases)('$name', async (c: (typeof cases)[number]) => {
+    const filePath = join(tempDir(), `ab1-${c.name}.txt`);
+    writeFileSync(filePath, c.file, 'utf-8');
 
-      await runDelete(tempDir(), {
-        file_path: filePath,
-        start_line: c.start,
-        end_line: c.end,
-      });
-
-      expect(readFileSync(filePath, 'utf-8')).toBe(c.expected);
+    await runDelete(tempDir(), {
+      file_path: filePath,
+      start_line: c.start,
+      end_line: c.end,
     });
+
+    expect(readFileSync(filePath, 'utf-8')).toBe(c.expected);
   });
 
   it('echoes exactly the real deleted lines with no phantom blank', async () => {
@@ -662,26 +660,24 @@ describe('regression: insert_at_line preserves newline state across content/file
     },
   ];
 
-  cases.forEach((c, index) => {
-    it(c.name, async () => {
-      const filePath = join(tempDir(), `regress-newline-${index}.txt`);
-      const fileContent =
-        joinLines('aaa', 'bbb', 'ccc') + (c.fileTrailingNewline ? NEWLINE : '');
-      writeFileSync(filePath, fileContent, 'utf-8');
+  it.each(cases)('$name', async (c: (typeof cases)[number]) => {
+    const filePath = join(tempDir(), `regress-newline-${c.name}.txt`);
+    const fileContent =
+      joinLines('aaa', 'bbb', 'ccc') + (c.fileTrailingNewline ? NEWLINE : '');
+    writeFileSync(filePath, fileContent, 'utf-8');
 
-      const insertContent = 'xxx' + (c.contentTrailingNewline ? NEWLINE : '');
-      const result = await runInsert(tempDir(), {
-        file_path: filePath,
-        line_number: 2,
-        content: insertContent,
-      });
-
-      expect(result.error).toBeUndefined();
-      const expected =
-        joinLines('aaa', 'xxx', 'bbb', 'ccc') +
-        (c.expectedTrailingNewline ? NEWLINE : '');
-      expect(readFileSync(filePath, 'utf-8')).toBe(expected);
+    const insertContent = 'xxx' + (c.contentTrailingNewline ? NEWLINE : '');
+    const result = await runInsert(tempDir(), {
+      file_path: filePath,
+      line_number: 2,
+      content: insertContent,
     });
+
+    expect(result.error).toBeUndefined();
+    const expected =
+      joinLines('aaa', 'xxx', 'bbb', 'ccc') +
+      (c.expectedTrailingNewline ? NEWLINE : '');
+    expect(readFileSync(filePath, 'utf-8')).toBe(expected);
   });
 
   it('appends at totalLines + 1 to a file with no final newline', async () => {

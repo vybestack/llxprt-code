@@ -58,7 +58,7 @@ describe('ast_edit force flag: refuses a newly-introduced AST syntax error (REQ-
 
     expect(result.error).toBeDefined();
     expect(result.error?.type).toBe('ast_syntax_error');
-    expect(() => readFileSync(filePath, 'utf-8')).toThrow();
+    expect(() => readFileSync(filePath, 'utf-8')).toThrow(/ENOENT/);
   });
 });
 

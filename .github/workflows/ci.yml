@@ -375,6 +375,10 @@ jobs:
         run: |-
           npm run lint:legacy-paths
 
+      - name: 'Run no-vitest guard (#2970)'
+        run: |-
+          npm run lint:no-vitest
+
       - name: 'Check for new JS files (#2745)'
         run: |-
           npm run lint:no-new-js
@@ -838,7 +842,7 @@ jobs:
   # a summary — using a dry-run mode that does not actually execute the
   # workspace test suites. This catches regressions in the orchestrator itself
   # without the cost of a full test matrix. The actual workspace tests still
-  # run under Vitest via the existing `test` job; this job only validates the
+  # run under Bun's native runner via the existing `test` job; this job only
   # Bun-backed orchestration script.
   bun_test_orchestrator_smoke:
     name: 'Bun Test Orchestrator Smoke'
@@ -896,7 +900,7 @@ jobs:
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
   # deterministically materializes incomplete copies of third-party packages
   # (e.g. uuid, yargs, ajv) whose package.json entry points at files that the
-  # copy is missing, breaking vitest's import resolution. Revisit once Bun's
+  # copy is missing, breaking the test runner's import resolution. Revisit once Bun's
   # hoisted linker materializes complete packages.
   #
   # setup-bun is still installed here (pinned via .bun-version) because the LSP
@@ -981,8 +985,8 @@ jobs:
           bun install
           git checkout -- bun.lock
       # Issue #2983: tests never read compiled output. Every workspace declares
-      # a `bun` export condition resolving to TypeScript source, and
-      # packages/cli/vitest.config.ts aliases cross-workspace imports straight
+      # a `bun` export condition resolving to TypeScript source, and Bun's
+      # native test runner resolves cross-workspace imports straight
       # at source, so a full build here produced JavaScript nothing loaded.
       #
       # Two shards are the exception. Both run the agents API-surface guard
@@ -1020,34 +1024,6 @@ jobs:
         run: |-
           npm run lint:test-shards
 
-      # Cap parallel forks on Windows and macOS. Under heavy load a high fork
-      # count saturates the vitest main process event loop so worker RPC
-      # acknowledgments (e.g. onTaskUpdate) time out (birpc DEFAULT_TIMEOUT
-      # 60s), producing spurious `[vitest-worker]: Timeout calling ...`
-      # unhandled errors that fail the shard even when every test passed.
-      # Ubuntu runners have enough headroom without a cap.
-      #
-      # macOS runners have 3 vCPUs (Windows has 4). With VITEST_MAX_FORKS=2,
-      # two worker forks plus the vitest main process saturate all 3 cores,
-      # starving the main process and causing the onTaskUpdate RPC timeout.
-      # A single fork leaves a spare core for the main process to stay
-      # responsive to worker RPCs. Windows tolerates 2 forks because its
-      # 4th core provides the same headroom.
-      - name: 'Limit Vitest forks (macOS — single fork)'
-        if: runner.os == 'macOS'
-        run: |
-          echo "VITEST_MAX_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
-          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
-      - name: 'Limit Vitest forks (Windows)'
-        if: runner.os == 'Windows'
-        run: |
-          echo "VITEST_MAX_FORKS=2" >> "$GITHUB_ENV"
-          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
-          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
-
       - name: 'Run shard tests (issue #2707)'
         env:
           # Provider configuration from repository secrets/variables
@@ -1062,18 +1038,10 @@ jobs:
           NO_COLOR: true
           # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
-          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
-          VITEST_TEST_TIMEOUT: 15000
-          # Compute coverage only on the cli+core shards on ubuntu-latest —
-          # the exact legs whose coverage artifacts post_coverage_comment
-          # downloads. All other shard/os combinations waste instrumentation
-          # time since their coverage is never consumed (#2708). Default-on
-          # so local runs keep the signal; the env var is only set in CI.
-          LLXPRT_COVERAGE: ${{ (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' && 'true' || 'false' }}
         # The orchestrator expands --shard to the shard's workspaces (or runs
         # npm run test:scripts for the scripts shard). Each workspace's tests
         # run under whichever runner its own `test` script selects — Bun-native
-        # for the migrated workspaces, Vitest for the rest (issue #2578).
+        # for all workspaces (issue #2578, #2970).
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Report harness toolchain versions'
@@ -1126,25 +1094,13 @@ jobs:
           name: 'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/junit.xml'
 
-      - name: 'Upload coverage reports'
-        # Only the cli and core shards on ubuntu-latest produce coverage
-        # summaries consumed by post_coverage_comment. Coverage is disabled on
-        # all other shard/os combinations (#2708), so uploading from them
-        # would waste storage and compute.
-        if: |-
-          ${{ always() && (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' }}
-        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
-        with:
-          name: 'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
-          path: 'packages/*/coverage'
-
   #
   # Test: virtual aggregator (issue #2707)
   #
   # Mirrors the existing `lint` virtual job: it depends on every shard leg and
   # only succeeds when all of them do. Keeping the required-check name as
   # `Test` means branch-protection rules do not need to change — downstream
-  # jobs (post_coverage_comment) and required checks keep gating on a single
+  # jobs and required checks keep gating on a single
   # name while the real work fans out across the matrix.
   #
   # `if: always()` is essential: when a `test_shard` leg fails or is skipped
@@ -1505,66 +1461,6 @@ jobs:
         with:
           name: 'secure-store-results-fork-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
           path: 'packages/storage/junit.secure-store.xml'
-
-  post_coverage_comment:
-    name: 'Post Coverage Comment'
-    runs-on: 'ubuntu-latest'
-    needs: ['test', 'doc_change_filter', 'shard_selector']
-    # Issue #2709: only post the coverage comment when both the cli and core
-    # shards were selected (coverage_complete=true), since those are the only
-    # shards that produce coverage artifacts. When either is skipped, the
-    # download-artifact steps would fail; gate the whole job instead.
-    if: |-
-      ${{ always() && needs.test.result == 'success' && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name == github.repository) && needs.shard_selector.outputs.coverage_complete == 'true' }}
-    continue-on-error: true
-    permissions:
-      contents: 'read' # For checkout
-      pull-requests: 'write' # For commenting
-    strategy:
-      matrix:
-        # Reduce noise by only posting the comment once
-        os:
-          - 'ubuntu-latest'
-        node-version:
-          - '24.x'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
-
-      - name: 'Download CLI coverage (cli shard)'
-        # Issue #2707: coverage is now per-shard. The composite action consumes
-        # the cli + core coverage summaries, produced by their respective shards.
-        # CLI tests migrated to Bun's native runner (issue #2843) and no longer
-        # upload a Vitest coverage artifact, exactly as core did in #2842.
-        # Continue-on-error lets the post-coverage-comment action report "N/A"
-        # for cli instead of failing the job on a missing artifact.
-        continue-on-error: true
-        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
-        with:
-          name: 'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}'
-          path: 'coverage_cli'
-
-      - name: 'Download core coverage (core shard)'
-        # Core tests migrated to Bun's native runner (issue #2842) and no
-        # longer upload a Vitest coverage artifact.  Continue-on-error lets
-        # the post-coverage-comment action report "N/A" for core instead of
-        # failing the job.
-        continue-on-error: true
-        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
-        with:
-          name: 'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}'
-          path: 'coverage_core'
-
-      - name: 'Post Coverage Comment using Composite Action'
-        uses: './.github/actions/post-coverage-comment' # Path to the composite action directory
-        with:
-          cli_json_file: 'coverage_cli/packages/cli/coverage/coverage-summary.json'
-          core_json_file: 'coverage_core/packages/core/coverage/coverage-summary.json'
-          cli_full_text_summary_file: 'coverage_cli/packages/cli/coverage/full-text-summary.txt'
-          core_full_text_summary_file: 'coverage_core/packages/core/coverage/full-text-summary.txt'
-          node_version: '${{ matrix.node-version }}'
-          os: '${{ matrix.os }}'
-          github_token: '${{ secrets.GITHUB_TOKEN }}'
 
   codeql:
     name: 'CodeQL'

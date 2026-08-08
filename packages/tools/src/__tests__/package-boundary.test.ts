@@ -143,10 +143,10 @@ describe('Package Boundary Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
       expect(scripts.typecheck).toBeDefined();
     });
 
-    it('has vitest in devDependencies', () => {
+    it('does not have vitest in devDependencies', () => {
       const pkg = loadPackageJson();
       const devDeps = pkg.devDependencies as Record<string, unknown>;
-      expect(devDeps.vitest).toBeDefined();
+      expect(devDeps.vitest).toBeUndefined();
     });
   });
 

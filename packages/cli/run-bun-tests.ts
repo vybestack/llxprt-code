@@ -13,7 +13,7 @@
  * would leak mocks between files.
  *
  * Discovery is purely structural: there is no manifest, allow-list or exclude
- * list. The Vitest setup this replaced carried both a large `baseExclude` glob
+ * list. The former Vitest setup this replaced carried both a large `baseExclude` glob
  * list and a separate integration-only command, and files matching either were
  * silently never run — they drifted out of sync with the product without any
  * signal. Every test file in the workspace runs here.
@@ -29,7 +29,7 @@ import { availableParallelism } from 'node:os';
 const PER_FILE_TIMEOUT_MS = 120_000;
 const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**
- * Per-test timeout, matching the testTimeout the removed vitest.config.ts set.
+ * Per-test timeout, matching the testTimeout the removed vitest config set.
  * Bun defaults to 5s, which the tests that spawn the real CLI exceed once the
  * suite runs with concurrency. Passed as a flag because the bunfig.toml key is
  * not picked up for a single-file invocation.
@@ -55,7 +55,7 @@ const TEST_ROOTS = ['src', 'test', 'test-bun', 'test-utils'];
 /**
  * Test files use three naming conventions in this workspace: `*.test.*`,
  * `*.spec.*`, and `*.bun.*` for suites that import `bun:test` directly rather
- * than through the Vitest shim. All three must be discovered — the `.bun.*`
+ * than through a third-party runner. All three must be discovered — the `.bun.*`
  * suites were previously reachable only through the shared manifest, so
  * matching just `.test`/`.spec` would silently stop running eleven files.
  */
@@ -278,7 +278,7 @@ export function escapeXml(value: string): string {
 /**
  * Reads the per-file case tallies out of Bun's summary lines, e.g.
  * " 12 pass", " 1 fail", " 2 skip". Reported so the migration's test-count
- * parity with Vitest can be checked mechanically rather than by eye.
+ * parity with the former Vitest runner can be checked mechanically rather than by eye.
  */
 /**
  * Removes CSI escape sequences so summary parsing does not depend on whether

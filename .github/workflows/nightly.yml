@@ -85,14 +85,6 @@ jobs:
         run: |-
           npm run lint:agents-api-surface
 
-      - name: 'Limit Vitest forks on Windows'
-        if: runner.os == 'Windows'
-        run: |
-          echo "VITEST_MAX_FORKS=2" >> "$GITHUB_ENV"
-          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
-          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
-
       - name: 'Run tests and generate reports'
         env:
           # Provider configuration from repository secrets/variables
@@ -107,11 +99,6 @@ jobs:
           NO_COLOR: true
           # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
-          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
-          VITEST_TEST_TIMEOUT: 15000
-          # Windows coverage is never consumed (no post_coverage_comment in
-          # nightly), so skip the instrumentation cost (#2708).
-          LLXPRT_COVERAGE: 'false'
         run: 'npm run test'
 
       - name: 'Run script harness tests (macOS)'
@@ -196,19 +183,6 @@ jobs:
         run: |-
           npm run lint:agents-api-surface
 
-      - name: 'Limit Vitest forks (macOS — single fork)'
-        # macOS runners have 3 vCPUs. With VITEST_MAX_FORKS=2, two worker
-        # forks plus the vitest main process saturate all 3 cores, starving
-        # the main process and causing onTaskUpdate RPC timeouts. A single
-        # fork leaves a spare core for the main process to stay responsive.
-        # VITEST_TEST_TIMEOUT is not set here because the step-level env on
-        # "Run tests and generate reports" sets it to 15000, which takes
-        # precedence over $GITHUB_ENV.
-        run: |
-          echo "VITEST_MAX_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
-
       - name: 'Run tests and generate reports'
         env:
           # Provider configuration from repository secrets/variables
@@ -223,11 +197,6 @@ jobs:
           NO_COLOR: true
           # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
-          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
-          VITEST_TEST_TIMEOUT: 15000
-          # macOS coverage is never consumed (no post_coverage_comment in
-          # nightly), so skip the instrumentation cost (#2708).
-          LLXPRT_COVERAGE: 'false'
         run: 'npm run test'
 
       - name: 'Run script harness tests'
@@ -269,7 +238,7 @@ jobs:
   #
   # The macOS keyring SecureStore leg moved out of PR CI (ci.yml) into this
   # nightly job. The ubuntu keyring and fallback legs remain in PR CI
-  # (ci.yml secure_store_backend). This job runs the native-keyring vitest
+  # (ci.yml secure_store_backend). This job runs the native-keyring test
   # config on macOS, which tests the macOS native keychain integration.
   macos_secure_store:
     name: 'macOS SecureStore Backend (Nightly)'
@@ -308,10 +277,9 @@ jobs:
           CI: true
           NO_COLOR: true
           SECURE_STORE_MODE: 'keyring'
-          TEST_CONFIG: 'vitest.config.native-keyring.ts'
           KEYRING_PASSWORD: 'llxprt-ci-keyring'
         run: |-
-          npm run test:vitest --workspace @vybestack/llxprt-code-storage -- --config "$TEST_CONFIG"
+          npm run test:secure-store:keyring --workspace @vybestack/llxprt-code-storage
 
   e2e_full:
     name: 'E2E Full - ${{ matrix.os }} - ${{ matrix.sandbox }}'

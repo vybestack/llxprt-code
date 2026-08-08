@@ -2,7 +2,7 @@
 
 This document is the checked-in inventory required by issue #2578 acceptance
 criterion #1. It accounts for every repository test file and identifies its
-Bun execution command (or explains why it still requires Vitest).
+Bun execution command. Vitest has been fully removed (issue #2970).
 
 ## Summary
 
@@ -61,17 +61,11 @@ root would be strictly redundant. The `agents` shared root now covers only
 under #2843 and its bespoke runner discovers everything with no allowlist and
 no exclusion list.
 
-### Where Vitest still executes
+### Vitest is fully removed (issue #2970)
 
-| Path                                                             | Invoked by                                      |
-| ---------------------------------------------------------------- | ----------------------------------------------- |
-| `packages/storage` `test:vitest`                                 | `secure_store_backend` in `ci.yml`, and nightly |
-| `packages/test-utils/src/quota-guard-vitest-integration.test.ts` | itself — it is the test _of_ Vitest integration |
-
-Everything else that mentions `vitest` is either an unused `test:vitest`
-escape hatch (`auth`, `lsp`, `mcp`, `providers`, `storage`, `tools`) or the
-`vitest` import specifier, which Bun resolves through its own injected
-handler.
+No workspace uses Vitest. The `test:vitest` escape-hatch scripts, Vitest config
+files, Vitest devDependencies, and the `@vitest/eslint-plugin` have all been
+deleted. A CI guard (`npm run lint:no-vitest`) prevents reintroduction.
 
 ## Fully migrated workspaces (Bun-native as primary `test` script)
 
@@ -95,12 +89,12 @@ workspace preload.
 **Command:** `bun run-bun-tests.ts`
 
 All 340 test files are Bun-native and the workspace `test`/`test:ci` scripts run
-Bun. **Vitest is gone from this workspace entirely** — no `test:vitest` fallback,
-no `vitest.config.ts`, no `vitest` devDependency, and no test file imports it.
+Bun. Vitest is gone from this workspace — no `test:vitest` fallback,
+no vitest config, no vitest devDependency, and no test file imports it.
 The test API comes straight from `bun:test`.
 
-The Stryker mutation gate (`test:mutation:api`) was dropped with it: Stryker has
-no Bun runner, and its Vitest runner cannot execute suites that import
+The Stryker mutation gate (`test:mutation:api`) was dropped: Stryker has
+no Bun runner and cannot execute suites that import
 `bun:test`.
 
 `run-bun-tests.ts` discovers every `src/**/*.{test,spec}.{ts,tsx}` file and runs
@@ -111,7 +105,7 @@ files register module mocks. There is deliberately no exclusion list.
 Two Bun behaviours the runner works around:
 
 - Bun 1.3.14 ignores a `[test] timeout` key in `bunfig.toml` and falls back to
-  its 5s default, so the 30s budget matching the previous Vitest `testTimeout`
+  its 5s default, so the 30s budget matching the previous `testTimeout`
   is passed as `--timeout` on the command line.
 - File concurrency is kept below the core count (half the cores, clamped to
   [2, 4], overridable via `LLXPRT_AGENTS_TEST_CONCURRENCY`), because every file
@@ -134,7 +128,7 @@ All 352 core test files are Bun-native. The workspace `test`/`test:ci` scripts
 use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
 file under `src` and `test`. A `bunfig.toml` preloads a workspace-specific
 `bun-preload.ts` that replicates the
-vitest setupFiles (storage isolation, provider runtime bootstrap).
+test setupFiles (storage isolation, provider runtime bootstrap).
 
 Migration changes:
 
@@ -197,13 +191,6 @@ There is no `src/research` directory and no exclusion list — discovery walks
 
 **Root entry:** `bun scripts/run_bun_tests.ts --workspace test-utils`
 
-**Vitest-retained file (1):**
-
-- `src/quota-guard-vitest-integration.test.ts` — This file spawns nested
-  `vitest run` subprocesses to test vitest's own runtime semantics
-  (ctx.skip, beforeEach hooks, exit codes). It cannot run under Bun because
-  it tests vitest itself. Retained on Vitest per acceptance criterion #8.
-
 **Deferred files (2) — Bun runtime compatibility:**
 
 - `src/process-run.test.ts` — Spawns child processes with signal handling
@@ -263,16 +250,13 @@ Seven storage secure-store test files are genuinely Bun-native: they live under
 `test-bun/` with the `.bun.ts` suffix and import from `bun:test`, following the
 same convention as `packages/tools/test-bun`. They are discovered by the shared
 `storage` root (`scripts/run_bun_tests.ts --workspace storage`, isolated process
-per file) and use the `test-setup-storage-isolation.ts` preload (the same setup
-file the Vitest config uses) so `isolateStorageRoots()` runs before any test
+per file) and use the `test-setup-storage-isolation.ts` preload so
+`isolateStorageRoots()` runs before any test
 module imports the `Storage` singleton.
 
-Because the `.bun.ts` suffix does not match Vitest's default
-`*.{test,spec}.*` include pattern, these files are invisible to `vitest run` —
-they are executed only by Bun, with no dual-runner shim involved.
-
-The workspace primary `test` script still uses Vitest (`vitest run`) for the
-remaining 24 storage test files, which are untouched by this work.
+The workspace `test` script runs all storage test files under Bun.
+The `test:secure-store:keyring` and `test:secure-store:fallback` scripts run
+the backend-specific secure-store tests that CI invokes directly.
 
 Neither of the two files that previously needed Vitest module mocking still
 does. `storage.test.ts` mocked `fs` only to stub `mkdirSync`, but the sole
@@ -335,37 +319,8 @@ Every workspace now runs its full suite under Bun (see the bespoke runners for
 `settings`, `ide-integration`, `vscode-ide-companion`, `a2a-server`, `policy`,
 `telemetry`, `test-utils`, `scripts/tests`, `evals` and `integration-tests`
 were migrated by #2847, which also deleted their `vitest.config.ts` files.
-
-## Enumerated Vitest retention (acceptance criterion #8)
-
-Two categories exist. The first still executes; the second does not execute at
-all.
-
-**Still executes:**
-
-1. **`packages/storage` `test:vitest`** — the `secure_store_backend` job (and
-   its nightly twin) needs the two backend-specific configs
-   (`vitest.config.native-keyring.ts`, `vitest.config.fallback-behavior.ts`)
-   to force a keyring backend per leg.
-
-2. **`packages/test-utils/src/quota-guard-vitest-integration.test.ts`** —
-   spawns `vitest run` subprocesses to test Vitest's own runtime semantics.
-   A meta-test of the runner, not an application test. Note that the
-   production quota hook it once mirrored now lives in
-   `integration-tests/setup-quota-guard.ts` and always throws under Bun, so
-   this file no longer characterises the shipped behaviour.
-
-**Does not execute:**
-
-3. **Per-workspace `test:vitest` scripts** — `auth`, `lsp`, `mcp`,
-   `providers`, `storage` and `tools` keep one as an escape hatch. No
-   workflow and no `test` script invokes them. `packages/core` has none: its
-   script was removed with the Bun exclusion list (issue #2968). `packages/cli`
-   migrated fully to Bun under #2843 and has no Vitest selection at all.
-
-4. **The `vitest` import specifier** — migrated test files still import
-   `describe`/`it`/`expect` from `'vitest'`, which Bun resolves through its
-   own injected handler. `vitest` therefore stays in `devDependencies`.
+Vitest was fully removed by #2970 (configs, deps, escape-hatch scripts, and
+the ESLint plugin).
 
 ## Canonical Bun-native test command
 
@@ -380,8 +335,7 @@ bun scripts/run_bun_tests.ts --workspace telemetry
 bun scripts/run_bun_tests.ts --dry-run
 ```
 
-For the full repository test suite (including the storage Vitest leg and the
-quota-guard Vitest-integration meta-test):
+For the full repository test suite:
 
 ```bash
 npm run test

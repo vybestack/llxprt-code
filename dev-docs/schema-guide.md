@@ -21,7 +21,7 @@ resolver without resurrecting manual completion code.
 2. Replace any `completion` function with a `schema` property.
 3. Provide `description` strings for hints, and async `completer` functions when
    suggestions depend on services (profiles, MCP servers, etc.).
-4. Update Vitest suites to assert resolver output via `createCompletionHandler`.
+4. Update Bun test suites to assert resolver output via `createCompletionHandler`.
 
 ### Reference Implementations
 
@@ -38,7 +38,7 @@ resolver without resurrecting manual completion code.
 - Suggested commands:
   - `npm run lint`
   - `npm run typecheck`
-  - `npx vitest run path/to/your/new/tests`
+  - `npm run test --workspace @vybestack/llxprt-code-cli -- path/to/your/new/tests`
 
 ## Migration Checklist
 

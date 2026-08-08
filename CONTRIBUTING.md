@@ -169,7 +169,7 @@ If you'd like to run the source build outside the llxprt-code folder you can uti
 
 ### Running Tests
 
-This project contains two types of tests: unit tests and integration tests. Testing uses [vitest](https://vitest.dev), which is retained as the test runner (invoked via Bun).
+This project contains two types of tests: unit tests and integration tests. Testing uses [bun:test](https://bun.sh/docs/test) as the test runner.
 
 #### Unit Tests
 

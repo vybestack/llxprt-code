@@ -459,12 +459,14 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       new AbortController().signal,
     );
     expect(confirmationWith).not.toBe(false);
-    if (confirmationWith !== false) {
-      expect(confirmationWith.type).toBe('exec');
-      if (confirmationWith.type === 'exec') {
-        expect(confirmationWith.isBackground).toBe(true);
-      }
-    }
+    expect(confirmationWith !== false && confirmationWith.type === 'exec').toBe(
+      true,
+    );
+    expect(
+      confirmationWith !== false &&
+        confirmationWith.type === 'exec' &&
+        confirmationWith.isBackground === true,
+    ).toBe(true);
   });
 
   it('Windows accepts is_background: true as a managed background job (T21)', () => {

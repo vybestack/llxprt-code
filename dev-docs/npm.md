@@ -14,7 +14,7 @@ This package contains the core logic for interacting with the Gemini API. It is 
 
 This package is not bundled. When it is published, it is published as a standard npm package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. The package ships its TypeScript source (`index.ts`, `src/`), which Bun consumers resolve directly via the `bun` export condition.
 
-Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
+Testing uses [bun:test](https://bun.sh/docs/test) as the test runner.
 
 # Release Process
 
@@ -210,7 +210,7 @@ Stage 4: Publishing to NPM
 - Why: Publishing from the package with an explicit `files` allowlist prevents test files and development-only configuration
   from being accidentally uploaded while preserving the runtime sources the Bun launcher needs.
 
-Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
+Testing uses [bun:test](https://bun.sh/docs/test) as the test runner.
 
 Summary of File Flow
 
