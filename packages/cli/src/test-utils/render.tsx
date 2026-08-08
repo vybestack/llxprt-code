@@ -30,8 +30,23 @@ export const render = (
   const originalUnmount = renderResult.unmount;
   const originalRerender = renderResult.rerender;
 
+  const actWrappedStdin = new Proxy(renderResult.stdin, {
+    get(target, prop, receiver) {
+      if (prop === 'write') {
+        return (...args: Parameters<typeof renderResult.stdin.write>) => {
+          act(() => {
+            target.write(...args);
+          });
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+
   return {
     ...renderResult,
+    stdin: actWrappedStdin,
     unmount: () => {
       act(() => {
         originalUnmount();

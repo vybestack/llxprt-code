@@ -133,6 +133,37 @@ async function resolveSubProfileAuthToken(
   }
 }
 
+/**
+ * Maximum time to spend resolving a member's context window from its provider
+ * during load-balancer registration. The context window is advisory — an
+ * unresolved window degrades gracefully to the load-balancer's configured
+ * context limit — so a slow or unreachable member endpoint must never block
+ * registration or subagent launch (issue #3149: the LB orchestrator tests hung
+ * ~20s per member when getModels() hit an endpoint that never responded).
+ */
+const SUBPROFILE_CONTEXT_WINDOW_TIMEOUT_MS = 3_000;
+
+/**
+ * Resolves to the awaited value, or `undefined` if the timeout elapses first.
+ * Bounds best-effort provider lookups whose underlying fetch exposes no abort
+ * hook. The losing promise keeps a handler attached via Promise.race, so a
+ * late rejection is not reported as unhandled.
+ */
+function raceWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  });
+}
+
 async function resolveSubProfileContextWindow(
   providerName: string,
   modelId: string,
@@ -144,7 +175,17 @@ async function resolveSubProfileContextWindow(
   }
 
   try {
-    const models = await provider.getModels();
+    const models = await raceWithTimeout(
+      provider.getModels(),
+      SUBPROFILE_CONTEXT_WINDOW_TIMEOUT_MS,
+    );
+    if (models === undefined) {
+      deps.lbLogger.warn(
+        () =>
+          `Timed out resolving context window for sub-profile model ${providerName}/${modelId} after ${SUBPROFILE_CONTEXT_WINDOW_TIMEOUT_MS}ms`,
+      );
+      return undefined;
+    }
     const model = models.find((candidate) => candidate.id === modelId);
     return model?.contextWindow;
   } catch (error) {
@@ -227,17 +268,21 @@ async function resolveLoadBalancerSubProfiles(
   profileInput: LoadBalancerProfile,
   deps: LoadBalancerResolutionDeps,
 ): Promise<ResolvedSubProfile[]> {
-  const resolvedSubProfiles: ResolvedSubProfile[] = [];
-  for (const profileName of profileInput.profiles) {
-    deps.lbLogger.debug(() => `Loading sub-profile: ${profileName}`);
-    const resolved = await resolveLoadBalancerSubProfile(profileName, deps);
-    resolvedSubProfiles.push(resolved);
-    deps.lbLogger.debug(
-      () =>
-        `Resolved sub-profile ${profileName}: provider=${resolved.providerName}, model=${resolved.model}`,
-    );
-  }
-  return resolvedSubProfiles;
+  // Members are independent of each other, so resolve them concurrently. This
+  // keeps registration latency bounded by the slowest member (each bounded by
+  // SUBPROFILE_CONTEXT_WINDOW_TIMEOUT_MS) rather than the sum of all of them,
+  // and preserves the input order in the resolved array (Promise.all).
+  return Promise.all(
+    profileInput.profiles.map(async (profileName) => {
+      deps.lbLogger.debug(() => `Loading sub-profile: ${profileName}`);
+      const resolved = await resolveLoadBalancerSubProfile(profileName, deps);
+      deps.lbLogger.debug(
+        () =>
+          `Resolved sub-profile ${profileName}: provider=${resolved.providerName}, model=${resolved.model}`,
+      );
+      return resolved;
+    }),
+  );
 }
 
 export async function maybeRegisterLoadBalancerProfile(

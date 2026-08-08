@@ -439,7 +439,7 @@ describe('.github/workflows/nightly.yml', () => {
     );
     expect(
       asOptionalRecord(nightlyParsed?.concurrency)?.['cancel-in-progress'],
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('runs lint:agents-api-surface before npm run test in the Windows CI job', () => {

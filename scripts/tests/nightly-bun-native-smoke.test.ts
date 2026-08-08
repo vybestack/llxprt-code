@@ -161,7 +161,10 @@ describe('nightly Windows Bun native-module smoke', () => {
       ? notifyJob?.needs
       : [notifyJob?.needs].filter((n): n is string => typeof n === 'string');
     expect(needs).toContain('windows_bun_native_smoke');
-    expect(notifyJob?.permissions).toEqual({ issues: 'write' });
+    expect(notifyJob?.permissions).toEqual({
+      issues: 'write',
+      contents: 'read',
+    });
     expect(notifyStep?.env?.['GH_TOKEN']).toBe('${{ secrets.GITHUB_TOKEN }}');
     expect(notifyStep?.env?.['GH_REPO']).toBe('${{ github.repository }}');
     expect(notifyStep?.env?.['WINDOWS_BUN_NATIVE_SMOKE_RESULT']).toBe(

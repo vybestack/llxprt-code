@@ -25,6 +25,7 @@ import {
   discoverTestFiles,
   escapeXml,
   exitCodeForRun,
+  failureExcerpt,
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
@@ -283,5 +284,119 @@ describe('discoverTestFiles symlink safety', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * React's "not wrapped in act(...)" warning is a fixed ~10-line block. These
+ * tests pin the behaviour that keeps assertion failures visible in a truncated
+ * log instead of being crowded out by the repeated warning. (issue #3149)
+ */
+function actWarningBlock(component: string): string {
+  return [
+    `An update to ${component} inside a test was not wrapped in act(...).`,
+    '',
+    'When testing, code that causes React state updates should be wrapped into act(...):',
+    '',
+    'act(() => {',
+    '  /* fire events that update state */',
+    '});',
+    '/* assert on the output */',
+    '',
+    "This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act",
+  ].join(String.fromCharCode(10));
+}
+
+describe('failureExcerpt', () => {
+  it('returns short output unchanged', () => {
+    expect(failureExcerpt('short output', 100)).toBe('short output');
+  });
+
+  it('handles empty string without throwing', () => {
+    expect(failureExcerpt('', 100)).toBe('');
+  });
+
+  it('respects the budget even when it is smaller than the elision marker', () => {
+    const excerpt = failureExcerpt('x'.repeat(500), 10);
+    expect(excerpt.length).toBeLessThanOrEqual(10);
+  });
+
+  it('preserves the failing assertion that a naive tail would have dropped', () => {
+    const nl = String.fromCharCode(10);
+    const assertion = `error: expect(received).toBe(expected)${nl}`;
+    const assertionRepeat = assertion.repeat(3);
+    // Many warning blocks AFTER the assertion, large enough to push it out of
+    // a 600-character tail on their own.
+    const warnings = `${actWarningBlock('BaseSelectionList')}${nl}`.repeat(30);
+    const output = `${assertionRepeat}${warnings}5 fail${nl}`;
+
+    const naiveTail = output.slice(-600);
+    const excerpt = failureExcerpt(output, 600);
+
+    // The naive tail is entirely warning text and loses the assertion.
+    expect(naiveTail).not.toContain('expect(received)');
+    // The excerpt keeps the assertion visible and counts the elided warnings.
+    expect(excerpt).toContain('expect(received)');
+    expect(excerpt).toContain(
+      'React "not wrapped in act(...)" warning block(s) elided',
+    );
+    // The excerpt stays within the requested budget.
+    expect(excerpt.length).toBeLessThanOrEqual(600);
+  });
+
+  it('keeps the trailing summary when warnings are collapsed', () => {
+    const nl = String.fromCharCode(10);
+    const warnings = `${actWarningBlock('Dialog')}${nl}`.repeat(20);
+    const output = `${warnings}17 pass${nl}5 fail${nl}`;
+    const excerpt = failureExcerpt(output, 400);
+    expect(excerpt).toContain('5 fail');
+    expect(excerpt).toContain('17 pass');
+  });
+
+  it('uses head and tail when the remaining content still exceeds the budget', () => {
+    // No act() warnings, just a long output that must be truncated.
+    const nl = String.fromCharCode(10);
+    const head = `FIRST-LINE${nl}`;
+    const middle = 'x'.repeat(2000);
+    const tail = `${nl}LAST-LINE${nl}`;
+    const output = `${head}${middle}${tail}`;
+    const excerpt = failureExcerpt(output, 100);
+    expect(excerpt).toContain('FIRST-LINE');
+    expect(excerpt).toContain('LAST-LINE');
+    expect(excerpt).toContain('output elided');
+    expect(excerpt.length).toBeLessThanOrEqual(100);
+  });
+
+  it('preserves head, tail, and warning count when both warnings and body are large', () => {
+    // Exercises the combined path: collapseActWarnings + banner + headTail.
+    const nl = String.fromCharCode(10);
+    const warnings = `${actWarningBlock('Menu')}${nl}`.repeat(5);
+    const middle = 'y'.repeat(2000);
+    const output = `HEAD${nl}${warnings}${middle}${nl}TAIL${nl}3 fail${nl}`;
+    const excerpt = failureExcerpt(output, 200);
+    expect(excerpt).toContain('warning block(s) elided');
+    expect(excerpt).toContain('output elided');
+    expect(excerpt).toContain('HEAD');
+    expect(excerpt).toContain('3 fail');
+    expect(excerpt.length).toBeLessThanOrEqual(200);
+  });
+
+  it('does not swallow assertions following a truncated (unterminated) warning block', () => {
+    const nl = String.fromCharCode(10);
+    // A warning block whose end marker never appears (truncated at the source)
+    // must not consume every subsequent line including the assertion.
+    const truncatedWarning =
+      'An update to Foo inside a test was not wrapped in act(...).';
+    // The standard warning block is ~10 lines; we need >15 lines of padding
+    // to exceed the cap and verify recovery.
+    const padding = Array.from(
+      { length: 20 },
+      (_, i) => `padding line ${i}`,
+    ).join(nl);
+    const assertion = 'expect(received).toBe(expected)';
+    const summary = '5 fail';
+    const output = `${truncatedWarning}${nl}${padding}${nl}${assertion}${nl}${summary}${nl}`;
+    const excerpt = failureExcerpt(output, 600);
+    expect(excerpt).toContain(assertion);
   });
 });
