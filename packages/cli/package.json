@@ -11,7 +11,7 @@
   "main": "index.ts",
   "types": "index.ts",
   "bin": {
-    "llxprt": "bin/llxprt"
+    "llxprt": "bin/llxprt.mjs"
   },
   "scripts": {
     "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js",
@@ -121,6 +121,24 @@
     "react-dom": "^19.2.0",
     "typescript": "^5.3.3",
     "vitest": "^3.2.6"
+  },
+  "optionalDependencies": {
+    "@oven/bun-darwin-aarch64": "1.3.14",
+    "@oven/bun-darwin-x64": "1.3.14",
+    "@oven/bun-darwin-x64-baseline": "1.3.14",
+    "@oven/bun-linux-aarch64": "1.3.14",
+    "@oven/bun-linux-aarch64-musl": "1.3.14",
+    "@oven/bun-linux-x64": "1.3.14",
+    "@oven/bun-linux-x64-baseline": "1.3.14",
+    "@oven/bun-linux-x64-musl": "1.3.14",
+    "@oven/bun-linux-x64-musl-baseline": "1.3.14",
+    "@oven/bun-linux-aarch64-android": "1.3.14",
+    "@oven/bun-linux-x64-android": "1.3.14",
+    "@oven/bun-freebsd-aarch64": "1.3.14",
+    "@oven/bun-freebsd-x64": "1.3.14",
+    "@oven/bun-windows-x64": "1.3.14",
+    "@oven/bun-windows-x64-baseline": "1.3.14",
+    "@oven/bun-windows-aarch64": "1.3.14"
   },
   "engines": {
     "node": ">=24"

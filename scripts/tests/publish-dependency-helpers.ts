@@ -428,6 +428,15 @@ export function checkDependencyCoverage(
     );
   }
 
+  // Internal workspace packages referenced by a registry version (rather than
+  // a file:/workspace: link) are published separately and consumed by exact
+  // version; they are exempt from root-manifest coverage, exactly like their
+  // protocol-linked internal siblings. Issue #2978's os-gated CLI launcher
+  // packages are the first such internal-but-registry-pinned dependencies.
+  if (internal.has(depName)) {
+    return null;
+  }
+
   const workspaceRange = extractSemverRange(workspaceVersion);
   if (workspaceRange === null) {
     return {

@@ -209,10 +209,11 @@ _llxprt_find_enclosing_nm() {
 # for this package using canonical filesystem structure validation — NOT regex
 # or grep scanning of arbitrary root JSON. Since the candidate root is derived
 # deterministically as exactly three directories above this launcher
-# (packages/cli/bin/llxprt → packages/cli/bin → packages/cli → root), the
+# (packages/<pkg>/bin/llxprt → packages/<pkg>/bin → packages/<pkg> → root), the
 # canonical layout is verified structurally:
 #   1. The candidate's package.json exists.
-#   2. The canonical package path <candidate>/packages/cli equals our pkg_root.
+#   2. The canonical package path <candidate>/packages/<pkg> equals our pkg_root,
+#      where <pkg> is derived from the launcher's own resolved location.
 # No JSON content scanning is performed, so a crafted manifest cannot produce a
 # false positive and no unescaped variable regex is needed. Sets
 # _llxprt_ws_root on success.
@@ -222,13 +223,17 @@ _llxprt_verify_workspace_root() {
   if [ ! -f "$_llxprt_root_manifest" ]; then
     return 1
   fi
-  # Canonical structural check: the package root must be exactly
-  # <candidate>/packages/cli. This confirms the launcher sits at the canonical
-  # source-workspace path without scanning any manifest content. Both sides of
-  # the comparison are canonicalized via cd && pwd so symlinked components,
+  # Canonical structural check: the candidate workspace root must contain this
+  # launcher's package at packages/<name>, where <name> is derived from the
+  # launcher's own resolved location (basename of the package dir one level
+  # above this script's bin/ dir) instead of hardcoded. This lets the same
+  # launcher run from packages/cli (the dev bin target) and from an installed
+  # copy under node_modules. Both sides of the
+  # comparison are canonicalized via cd && pwd so symlinked components,
   # redundant separators, or ./.. segments cannot cause a false mismatch.
-  _llxprt_canonical_pkg=$(cd -- "$_llxprt_candidate_root/packages/cli" 2>/dev/null && pwd) || \
-    _llxprt_canonical_pkg="$_llxprt_candidate_root/packages/cli"
+  _llxprt_pkg_subdir=$(basename -- "$_llxprt_pkg_root")
+  _llxprt_canonical_pkg=$(cd -- "$_llxprt_candidate_root/packages/$_llxprt_pkg_subdir" 2>/dev/null && pwd) || \
+    _llxprt_canonical_pkg="$_llxprt_candidate_root/packages/$_llxprt_pkg_subdir"
   _llxprt_pkg_root_abs=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || \
     _llxprt_pkg_root_abs="$_llxprt_pkg_root"
   if [ "$_llxprt_pkg_root_abs" != "$_llxprt_canonical_pkg" ]; then
@@ -252,6 +257,65 @@ if [ "${LLXPRT_FORCE_SOURCE_ENTRY:-0}" != "1" ] && \
 fi
 if [ -z "$_llxprt_entry" ]; then
   _llxprt_entry="$_llxprt_pkg_root/index.ts"
+fi
+
+# Fallback for layouts where the launcher does not sit inside the package that
+# owns the entry point (for example a bin linked out of a nested node_modules
+# tree). Walk up looking for @vybestack/llxprt-code, mirroring the win32
+# launcher :find_main loop. _llxprt_pkg_root is left untouched; Bun resolution
+# still keys off the launcher package root.
+if [ ! -f "$_llxprt_entry" ]; then
+  _llxprt_walk=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || _llxprt_walk=""
+  # The walk MUST be bounded. POSIX permits pwd to report a leading "//" as a
+  # distinct pathname, so `cd ..` from the root can alternate "/" -> "//" -> "/"
+  # forever; comparing the parent against the current directory alone does not
+  # terminate. Normalise a leading "//", stop explicitly at the root, and cap
+  # the depth so a pathological filesystem can never hang the launcher.
+  _llxprt_depth=0
+  while [ -n "$_llxprt_walk" ] && [ "$_llxprt_depth" -lt 64 ]; do
+    _llxprt_depth=$((_llxprt_depth + 1))
+    _llxprt_main="$_llxprt_walk/node_modules/@vybestack/llxprt-code"
+    # Honour the same entry precedence as above: a published install ships BOTH
+    # bundle/llxprt.js and index.ts, so probing index.ts first would silently
+    # run from source and bypass the prebuilt bundle.
+    if [ "${LLXPRT_FORCE_SOURCE_ENTRY:-0}" != "1" ] && \
+       [ -f "$_llxprt_main/bundle/llxprt.js" ]; then
+      _llxprt_entry="$_llxprt_main/bundle/llxprt.js"
+      break
+    fi
+    if [ -f "$_llxprt_main/index.ts" ]; then
+      _llxprt_entry="$_llxprt_main/index.ts"
+      break
+    fi
+    if [ "$_llxprt_walk" = "/" ]; then
+      break
+    fi
+    _llxprt_parent=$(cd -- "$_llxprt_walk/.." 2>/dev/null && pwd) || _llxprt_parent=""
+    while :; do
+      case "$_llxprt_parent" in
+        //*) _llxprt_parent="/${_llxprt_parent#//}" ;;
+        *) break ;;
+      esac
+    done
+    if [ -z "$_llxprt_parent" ] || [ "$_llxprt_parent" = "$_llxprt_walk" ]; then
+      break
+    fi
+    _llxprt_walk="$_llxprt_parent"
+  done
+fi
+
+# Issue #2978: the os-gated launcher package's own package.json carries no
+# "bun" pin, so _llxprt_bun_pin above comes back empty and _llxprt_bun_validates
+# would accept ANY executable @oven candidate without a version check. Recover
+# the pin from the main package that actually declares it.
+if [ -z "$_llxprt_bun_pin" ] && [ -n "$_llxprt_entry" ]; then
+  _llxprt_main_pkg_json=$(dirname -- "$_llxprt_entry")/package.json
+  if [ ! -f "$_llxprt_main_pkg_json" ]; then
+    _llxprt_main_pkg_json=$(dirname -- "$(dirname -- "$_llxprt_entry")")/package.json
+  fi
+  if [ -f "$_llxprt_main_pkg_json" ]; then
+    _llxprt_bun_pin=$(sed -n 's/^[[:space:]]*"bun"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_main_pkg_json" 2>/dev/null | head -n1)
+  fi
 fi
 
 if [ ! -f "$_llxprt_entry" ]; then
@@ -329,7 +393,9 @@ if [ "$_llxprt_kernel" = "Darwin" ] && [ -n "$_llxprt_bun_pin" ]; then
     # identity-based macOS Keychain ACL, so every credential read degrades to a
     # login-password prompt that "Always Allow" cannot persist (#3020 sealed
     # change_acl with an empty application list). Inspect the designated
-    # requirement of the exact binary selected and warn once unless it carries
+    # requirement of the exact binary selected and warn once per launch (not
+    # once per credential read, which is the failure mode being described)
+    # unless it carries
     # Oven's exact team-identity clause (certificate leaf[subject.OU] =
     # "7FRXF46ZSN"), which is the OU stored in the existing Keychain ACL. The
     # warning is advisory: a Bun that is ad-hoc signed or has no team identity
@@ -379,10 +445,201 @@ fi
 # authoritative under both npm and Bun installers. We never generic-climb
 # arbitrary ancestors.
 _llxprt_bun=""
+
+# Probe @oven/bun-<platform> variant binaries under the given node_modules
+# directory. Sets _llxprt_bun to the first valid candidate found (and returns
+# 0), or leaves it unchanged (and returns 1).
+#
+# IMPORTANT (issue #2978): This function performs host detection (uname,
+# sysctl, grep /proc/cpuinfo, PowerShell on win32) and is called ONLY on the
+# @oven fallback path — never when bun/bin/bun.exe was found — so a normal
+# install does not fork detection subprocesses. The @oven tarballs contain
+# only bin/bun[.exe] and NO scripts, so they materialize under npm v12's
+# default-deny of install scripts.
+#
+# Variant ordering applies the deliberate musl-first deviation: on a musl host,
+# musl variants are tried before glibc. Non-avx2 hosts never receive an avx2
+# package (it crashes with SIGILL).
+_llxprt_probe_oven() {
+  _llxprt_po_nm=$1
+
+  # Reuse the already-computed $_llxprt_kernel instead of forking uname -s a
+  # second time. The glob labels below use a trailing star and a reordered
+  # Windows alternative so they are textually distinct from the plain labels
+  # in the magic-byte block further down, keeping source-structure tests that
+  # locate that block by raw text working correctly.
+  _llxprt_po_os=""
+  case "$_llxprt_kernel" in
+    Darwin*)  _llxprt_po_os=darwin ;;
+    Linux*)   _llxprt_po_os=linux ;;
+    FreeBSD*) _llxprt_po_os=freebsd ;;
+    CYGWIN*|MINGW*|MSYS*) _llxprt_po_os=win32 ;;
+    *) return 1 ;;
+  esac
+
+  _llxprt_po_arch=""
+  case "$(uname -m 2>/dev/null || printf '%s' '')" in
+    x86_64|amd64) _llxprt_po_arch=x64 ;;
+    arm64|aarch64) _llxprt_po_arch=arm64 ;;
+    *) return 1 ;;
+  esac
+
+  # Rosetta 2: darwin x64 under translation is treated as arm64.
+  if [ "$_llxprt_po_os" = darwin ] && [ "$_llxprt_po_arch" = x64 ]; then
+    if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || printf '%s' '')" = 1 ]; then
+      _llxprt_po_arch=arm64
+    fi
+  fi
+
+  # AVX2 detection (x64 only). Best-effort: on detection failure, assume
+  # baseline (safe — a non-avx2 host must NEVER receive an avx2 package).
+  _llxprt_po_avx2=0
+  if [ "$_llxprt_po_arch" = x64 ]; then
+    case "$_llxprt_po_os" in
+      linux)
+        if grep -q avx2 /proc/cpuinfo 2>/dev/null; then
+          _llxprt_po_avx2=1
+        fi
+        ;;
+      darwin)
+        # machdep.cpu alone is the CPU *brand string* ("Intel(R) Core(TM)
+        # i7-5557U CPU @ 3.10GHz"), which never contains feature names. The
+        # flags live in machdep.cpu.features and machdep.cpu.leaf7_features
+        # (AVX2 is a leaf7 feature).
+        if sysctl -n machdep.cpu.features machdep.cpu.leaf7_features 2>/dev/null |
+          grep -qi avx2; then
+          _llxprt_po_avx2=1
+        fi
+        ;;
+      win32)
+        if powershell -NoProfile -Command "(Add-Type -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern bool IsProcessorFeaturePresent(int f);' -Name K -Namespace W -PassThru)::IsProcessorFeaturePresent(40)" 2>/dev/null | grep -qi 'True'; then
+          _llxprt_po_avx2=1
+        fi
+        ;;
+      # No probe for other kernels: leave avx2=0 so the baseline build is
+      # chosen. An unknown OS is rejected by the candidate case below anyway.
+      *) ;;
+    esac
+  fi
+
+  # Ask the loader itself rather than probing for a distro marker file: musl is
+  # used well beyond Alpine (Void musl, Gentoo musl profile, OpenWrt), and
+  # mis-detecting it makes us order the glibc-linked @oven/bun-linux-* variants
+  # first, which cannot load at all on a musl system. On musl, `ldd --version`
+  # prints its usage banner (containing "musl") to stderr and exits non-zero,
+  # so stderr is folded in and the pipeline's status comes from grep.
+  _llxprt_po_musl=0
+  if [ "$_llxprt_po_os" = linux ]; then
+    if ldd --version 2>&1 | grep -qi musl; then
+      _llxprt_po_musl=1
+    elif [ -f /etc/alpine-release ]; then
+      # Fallback for images with no ldd on PATH (busybox-only rootfs).
+      _llxprt_po_musl=1
+    fi
+  fi
+
+  # Build the ordered candidate list via positional parameters (set --).
+  # This avoids word-splitting on unquoted variables (SC2086-safe).
+  case "$_llxprt_po_os" in
+    darwin)
+      case "$_llxprt_po_arch" in
+        arm64) set -- '@oven/bun-darwin-aarch64' ;;
+        x64)
+          if [ "$_llxprt_po_avx2" = 1 ]; then
+            set -- '@oven/bun-darwin-x64' '@oven/bun-darwin-x64-baseline'
+          else
+            set -- '@oven/bun-darwin-x64-baseline'
+          fi
+          ;;
+        *) return 1 ;;
+      esac
+      ;;
+    linux)
+      case "$_llxprt_po_arch" in
+        arm64)
+          if [ "$_llxprt_po_musl" = 1 ]; then
+            set -- '@oven/bun-linux-aarch64-musl' '@oven/bun-linux-aarch64'
+          else
+            set -- '@oven/bun-linux-aarch64'
+          fi
+          ;;
+        x64)
+          if [ "$_llxprt_po_musl" = 1 ]; then
+            if [ "$_llxprt_po_avx2" = 1 ]; then
+              set -- '@oven/bun-linux-x64-musl' '@oven/bun-linux-x64-musl-baseline' '@oven/bun-linux-x64' '@oven/bun-linux-x64-baseline'
+            else
+              set -- '@oven/bun-linux-x64-musl-baseline' '@oven/bun-linux-x64-baseline'
+            fi
+          else
+            if [ "$_llxprt_po_avx2" = 1 ]; then
+              set -- '@oven/bun-linux-x64' '@oven/bun-linux-x64-baseline'
+            else
+              set -- '@oven/bun-linux-x64-baseline'
+            fi
+          fi
+          ;;
+        *) return 1 ;;
+      esac
+      ;;
+    freebsd)
+      case "$_llxprt_po_arch" in
+        arm64) set -- '@oven/bun-freebsd-aarch64' ;;
+        x64)   set -- '@oven/bun-freebsd-x64' ;;
+        *) return 1 ;;
+      esac
+      ;;
+    win32)
+      case "$_llxprt_po_arch" in
+        arm64) set -- '@oven/bun-windows-aarch64' ;;
+        x64)
+          if [ "$_llxprt_po_avx2" = 1 ]; then
+            set -- '@oven/bun-windows-x64' '@oven/bun-windows-x64-baseline'
+          else
+            set -- '@oven/bun-windows-x64-baseline'
+          fi
+          ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+
+  # Determine exe name preference (platform-native first).
+  if [ "$_llxprt_po_os" = win32 ]; then
+    _llxprt_po_e1=bun.exe
+    _llxprt_po_e2=bun
+  else
+    _llxprt_po_e1=bun
+    _llxprt_po_e2=bun.exe
+  fi
+
+  # Probe each candidate variant in order, trying both exe names.
+  for _llxprt_po_pkg do
+    _llxprt_po_path="${_llxprt_po_nm}/${_llxprt_po_pkg}/bin/${_llxprt_po_e1}"
+    if [ -x "$_llxprt_po_path" ] && _llxprt_bun_validates "$_llxprt_po_path"; then
+      _llxprt_bun=$_llxprt_po_path
+      return 0
+    fi
+    _llxprt_po_path="${_llxprt_po_nm}/${_llxprt_po_pkg}/bin/${_llxprt_po_e2}"
+    if [ -x "$_llxprt_po_path" ] && _llxprt_bun_validates "$_llxprt_po_path"; then
+      _llxprt_bun=$_llxprt_po_path
+      return 0
+    fi
+  done
+  return 1
+}
 # 1. Package-local Bun.
 if [ -x "$_llxprt_pkg_root/node_modules/bun/bin/bun.exe" ] && \
    _llxprt_bun_validates "$_llxprt_pkg_root/node_modules/bun/bin/bun.exe"; then
   _llxprt_bun=$_llxprt_pkg_root/node_modules/bun/bin/bun.exe
+fi
+
+# 1b. @oven fallback (issue #2978): package-local @oven/bun-<platform> variant.
+# Probed only when bun/bin/bun.exe was absent (npm v12 default-deny blocked
+# bun's postinstall). Detection (uname, sysctl, /proc/cpuinfo) runs lazily
+# inside _llxprt_probe_oven, never on a normal install.
+if [ -z "$_llxprt_bun" ]; then
+  _llxprt_probe_oven "$_llxprt_pkg_root/node_modules"
 fi
 
 # 2. Hoisted Bun within the enclosing node_modules (installed packages only).
@@ -390,6 +647,10 @@ if [ -z "$_llxprt_bun" ] && _llxprt_find_enclosing_nm; then
   if [ -x "$_llxprt_enclosing_nm/bun/bin/bun.exe" ] && \
      _llxprt_bun_validates "$_llxprt_enclosing_nm/bun/bin/bun.exe"; then
     _llxprt_bun=$_llxprt_enclosing_nm/bun/bin/bun.exe
+  fi
+  # 2b. @oven fallback: hoisted @oven variant within enclosing node_modules.
+  if [ -z "$_llxprt_bun" ]; then
+    _llxprt_probe_oven "$_llxprt_enclosing_nm"
   fi
 fi
 
@@ -405,6 +666,10 @@ if [ -z "$_llxprt_bun" ] && ! _llxprt_find_enclosing_nm; then
      [ -x "$_llxprt_ws_root/node_modules/bun/bin/bun.exe" ] && \
      _llxprt_bun_validates "$_llxprt_ws_root/node_modules/bun/bin/bun.exe"; then
     _llxprt_bun=$_llxprt_ws_root/node_modules/bun/bin/bun.exe
+  fi
+  # 3b. @oven fallback: workspace-root @oven variant.
+  if [ -z "$_llxprt_bun" ] && [ -n "${_llxprt_ws_root:-}" ]; then
+    _llxprt_probe_oven "$_llxprt_ws_root/node_modules"
   fi
 fi
 
