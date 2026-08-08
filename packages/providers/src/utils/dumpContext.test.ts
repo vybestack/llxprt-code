@@ -137,6 +137,34 @@ describe('dumpContext', () => {
       expect(redacted.headers['x-api-key']).toBe('[REDACTED]');
     });
 
+    it('should redact every credential-bearing header name @issue:3140', () => {
+      const request = {
+        url: 'https://api.example.com',
+        method: 'POST',
+        headers: {
+          'proxy-authorization': 'Basic proxy-secret',
+          'x-goog-api-key': 'AIza-google-secret',
+          'X-Goog-Api-Key': 'AIza-google-secret-mixed-case',
+          'api-key': 'azure-secret',
+          cookie: 'session=cookie-secret',
+          'set-cookie': 'session=set-cookie-secret',
+          'Content-Type': 'application/json',
+        },
+        body: { test: 'data' },
+      };
+
+      const redacted = redactSensitiveData(request);
+
+      expect(redacted.headers['proxy-authorization']).toBe('[REDACTED]');
+      expect(redacted.headers['x-goog-api-key']).toBe('[REDACTED]');
+      expect(redacted.headers['X-Goog-Api-Key']).toBe('[REDACTED]');
+      expect(redacted.headers['api-key']).toBe('[REDACTED]');
+      expect(redacted.headers.cookie).toBe('[REDACTED]');
+      expect(redacted.headers['set-cookie']).toBe('[REDACTED]');
+      expect(redacted.headers['Content-Type']).toBe('application/json');
+      expect(JSON.stringify(redacted.headers)).not.toContain('secret');
+    });
+
     it('should redact credential headers case-insensitively', () => {
       const request = {
         url: 'https://api.example.com',

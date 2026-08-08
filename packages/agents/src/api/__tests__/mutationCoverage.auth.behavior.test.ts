@@ -417,9 +417,15 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
     async () => {
       await fc.assert(
         fc.asyncProperty(
+          // A model identity must be non-BLANK, not merely non-empty by
+          // length. resolveModelForSystemPrompt (ChatSessionFactory, issue
+          // #3138) fails fast when config.getModel() trims to ''. A
+          // whitespace-only string is therefore an input the system
+          // deliberately rejects, not a valid model name, and generating one
+          // made this property fail intermittently once that guard landed.
           fc
             .string({ minLength: 1, maxLength: 30 })
-            .filter((s) => !s.includes('__proto__')),
+            .filter((s) => !s.includes('__proto__') && s.trim() !== ''),
           async (model) => {
             const { agent, cleanup } = await buildAgent('plain-text.jsonl');
             try {
