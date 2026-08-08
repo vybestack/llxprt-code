@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>llxprt perf telemetry — the decision, explained</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --bd:#30363d;
+    --tx:#e6edf3; --mu:#8b949e; --dim:#6e7681;
+    --blue:#58a6ff; --green:#3fb950; --yellow:#d29922;
+    --red:#f85149; --purple:#bc8cff; --cyan:#39c5cf; --grey:#484f58;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:52px 32px 120px}
+  header{border-bottom:1px solid var(--bd);padding-bottom:26px;margin-bottom:40px}
+  h1{font-size:33px;line-height:1.2;margin:0;letter-spacing:-.02em}
+  h1 small{display:block;font-size:15px;font-weight:400;color:var(--mu);margin-top:10px;letter-spacing:0}
+  h2{font-size:25px;margin:58px 0 8px;letter-spacing:-.01em}
+  h2 .n{color:var(--dim);font-variant-numeric:tabular-nums;margin-right:12px;font-weight:400}
+  h3{font-size:17.5px;margin:34px 0 8px;color:var(--blue)}
+  p{margin:14px 0}
+  .lead{font-size:18.5px;color:#c9d1d9}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;
+    background:var(--panel2);border:1px solid var(--bd);border-radius:5px;padding:1px 5px;color:#c9d1d9}
+  pre{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:16px 18px;
+    overflow-x:auto;font-size:13px;line-height:1.6;font-family:ui-monospace,Menlo,monospace}
+  pre code{background:none;border:none;padding:0}
+  .fig{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:24px;margin:28px 0}
+  .fig svg{display:block;width:100%;height:auto}
+  .cap{color:var(--mu);font-size:13.5px;margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)}
+  .cap b{color:var(--tx)}
+  .panel{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:20px 24px;margin:24px 0}
+  .good{border-left:3px solid var(--green);background:rgba(63,185,80,.07)}
+  .bad{border-left:3px solid var(--red);background:rgba(248,81,73,.07)}
+  .warn{border-left:3px solid var(--yellow);background:rgba(210,153,34,.07)}
+  .info{border-left:3px solid var(--blue);background:rgba(88,166,255,.07)}
+  table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mu);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em}
+  tr:last-child td{border-bottom:none}
+  .keep{color:var(--green);font-weight:700}
+  .cut{color:var(--red);font-weight:700}
+  ul,ol{padding-left:22px}
+  li{margin:8px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:20px;margin:4px 0 6px;font-size:13px;color:var(--mu)}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:7px;vertical-align:-1px}
+  .big{font-family:ui-monospace,Menlo,monospace;font-size:26px;color:var(--blue)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media (max-width:860px){.two{grid-template-columns:1fr}}
+  hr{border:none;border-top:1px solid var(--bd);margin:50px 0}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--bd);color:var(--dim);font-size:13px}
+  .q{background:linear-gradient(180deg,rgba(88,166,255,.10),rgba(88,166,255,.03));
+     border:1px solid rgba(88,166,255,.35);border-radius:12px;padding:22px 26px;margin:30px 0}
+  .q h3{margin-top:0;color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Performance telemetry: what I need you to decide
+    <small>llxprt-code &middot; issue #3167 &middot; plain-language companion to PLAN.md</small>
+  </h1>
+</header>
+
+<p class="lead">
+  There is one decision to make. Everything else is settled. This page explains what we are building, the one
+  mistake that shaped the design, and the two versions you can pick between &mdash; with the reasoning in
+  pictures rather than prose.
+</p>
+
+<hr>
+
+<h2><span class="n">01</span>What we are actually trying to learn</h2>
+
+<p>
+  Right now, when llxprt feels slow, we cannot tell whether <em>we</em> got slower or the <em>model</em> did.
+  Every number we record is about the provider. Worse, the arithmetic on the stats screen is built so that our
+  own time is invisible by construction:
+</p>
+
+<pre><code>apiTimePercent  = totalApiTime  / (API + Tool)
+toolTimePercent = totalToolTime / (API + Tool)
+                                   ^^^^^^^^^^
+                  API% + Tool% = 100%, always. There is no room for us.</code></pre>
+
+<p>
+  So the goal is a single trend line: <b>the time llxprt itself spends, per turn, tracked across releases.</b>
+  If that line drifts up between 0.11 and 0.12, we have a regression and we know it is ours.
+</p>
+
+<h2><span class="n">02</span>The mistake that shaped everything</h2>
+
+<p>
+  My first design said: take the whole turn, subtract the provider's time and the tools' time, and whatever is
+  left must be us. That is intuitive. It is also <b>wrong</b>, and the reason is worth seeing.
+</p>
+
+<div class="fig">
+<div class="legend">
+  <span><i style="background:var(--green)"></i>provider request (network + model)</span>
+  <span><i style="background:var(--purple)"></i>our render work</span>
+  <span><i style="background:var(--cyan)"></i>our stream handling</span>
+</div>
+<svg viewBox="0 0 1000 330" role="img" aria-label="Streaming overlap makes subtraction invalid">
+  <defs><style>
+    .t{fill:#e6edf3;font:600 13px ui-monospace,Menlo,monospace}
+    .s{fill:#8b949e;font:11.5px ui-monospace,Menlo,monospace}
+    .r{fill:#f85149;font:700 13px ui-monospace,Menlo,monospace}
+    .g{fill:#3fb950;font:700 13px ui-monospace,Menlo,monospace}
+    .ax{stroke:#484f58;stroke-width:1.2}
+    .tick{stroke:#30363d;stroke-width:1}
+  </style></defs>
+
+  <text class="s" x="0" y="16">WHAT I ASSUMED — neat, sequential, subtractable</text>
+  <rect x="0" y="26" width="620" height="34" rx="5" fill="#3fb950"/>
+  <text class="t" x="310" y="48" text-anchor="middle" fill="#0d1117">provider request</text>
+  <rect x="626" y="26" width="180" height="34" rx="5" fill="#39c5cf"/>
+  <text class="t" x="716" y="48" text-anchor="middle" fill="#0d1117">our work</text>
+  <rect x="812" y="26" width="188" height="34" rx="5" fill="#bc8cff"/>
+  <text class="t" x="906" y="48" text-anchor="middle" fill="#0d1117">our render</text>
+  <text class="g" x="0" y="82">subtract the green -> the rest is us. Correct, IF this were the shape.</text>
+
+  <line class="tick" x1="0" y1="108" x2="1000" y2="108"/>
+
+  <text class="s" x="0" y="136">WHAT ACTUALLY HAPPENS — streaming, so it is all one overlapping window</text>
+
+  <rect x="0" y="148" width="1000" height="34" rx="5" fill="#3fb950"/>
+  <text class="t" x="500" y="170" text-anchor="middle" fill="#0d1117">provider request — one streaming call, start to finish</text>
+
+  <!-- interleaved our-work chunks inside -->
+  <g>
+    <rect x="60"  y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="150" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="240" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="330" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="430" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="530" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="640" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="760" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="880" y="192" width="34" height="26" rx="4" fill="#39c5cf"/>
+    <rect x="100" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="200" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="300" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="400" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="500" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="610" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="730" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+    <rect x="850" y="224" width="30" height="26" rx="4" fill="#bc8cff"/>
+  </g>
+  <text class="s" x="0" y="210">decode delta</text>
+  <text class="s" x="0" y="242">paint frame</text>
+
+  <text class="r" x="0" y="278">Subtract the green and you subtract ALL of it. Result: "our time" = 0 ms.</text>
+  <text class="r" x="0" y="298">Then "core time = our time - render time" = NEGATIVE. On a completely normal turn.</text>
+  <text class="s" x="0" y="320">Clamping that to zero would not fix the model — it would just hide that the model is wrong.</text>
+</svg>
+<div class="cap">
+  <b>This is the whole reason the design changed.</b> A streaming request is not a period when we are idle
+  waiting &mdash; it is exactly when we are busiest, decoding tokens and repainting. The provider's clock and
+  our clock run <em>at the same time</em>, so you cannot get one by subtracting the other.
+</div>
+</div>
+
+<div class="panel good">
+  <p style="margin:0">
+    <b>The fix:</b> stop subtracting. Put a stopwatch directly on each piece of <em>our</em> work and add those
+    up. Report the provider's time separately and say plainly that the two overlap. Anything left unaccounted
+    for gets an honest name &mdash; <code>unclassified_elapsed_ms</code> &mdash; instead of being called "our
+    time" by default.
+  </p>
+</div>
+
+<h2><span class="n">03</span>What gets measured, in plain terms</h2>
+
+<p>Five stopwatches, each on a specific piece of our own work:</p>
+
+<table>
+  <tr><th>Stopwatch</th><th>What it times</th><th>How we get it</th></tr>
+  <tr><td><code>client_prepare_ms</code></td><td>Assembling the request before we send anything &mdash; history, prompt, token counting</td><td>Timer around the prepare step</td></tr>
+  <tr><td><code>stream_handler_ms</code></td><td>Our own CPU decoding each chunk as it arrives</td><td>Sum of small timers in the delta handler</td></tr>
+  <tr><td><code>ink_render_ms</code></td><td>Turning state into text for the terminal</td><td><b>Free</b> &mdash; Ink already measures this and hands it to us via <code>onRender</code></td></tr>
+  <tr><td><code>stdout_bytes</code></td><td>How much we actually wrote to the terminal</td><td>Counter at the one place Ink writes</td></tr>
+  <tr><td><code>client_finalize_ms</code></td><td>Cleanup after the last response</td><td>Timer around the finalize step</td></tr>
+</table>
+
+<p>
+  Plus the provider's and tools' time reported <em>alongside</em> rather than subtracted, and the context we need
+  to compare fairly: llxprt version, commit, provider, model, terminal size. One line of JSON per turn, written
+  to a file.
+</p>
+
+<div class="panel info">
+  <p style="margin:0">
+    <b>Why <code>stdout_bytes</code> matters more than it sounds.</b> It is a <em>count</em>, not a duration, so
+    it barely cares how busy your laptop is. If a change makes us repaint the whole screen instead of one line,
+    that number jumps immediately &mdash; on any machine. Durations are noisy; counts are much less so.
+  </p>
+</div>
+
+<h2><span class="n">04</span>The decision: two versions</h2>
+
+<p>
+  An architecture review argued the plan builds roughly twice the machinery the trend line needs. It agreed the
+  measurement model above is right, and objected to everything around it. Here are the pieces, and which
+  version keeps them.
+</p>
+
+<div class="fig">
+<svg viewBox="0 0 1000 560" role="img" aria-label="Full versus halved design, component by component">
+  <defs><style>
+    .hd{fill:#8b949e;font:600 12px ui-monospace,Menlo,monospace}
+    .cn{fill:#e6edf3;font:12.5px ui-monospace,Menlo,monospace}
+    .cs{fill:#6e7681;font:10.5px ui-monospace,Menlo,monospace}
+    .box{fill:#1c2128;stroke:#30363d}
+    .kbox{fill:rgba(63,185,80,.13);stroke:#3fb950}
+    .xbox{fill:rgba(248,81,73,.10);stroke:#f85149;stroke-dasharray:5 3}
+    .yes{fill:#3fb950;font:700 15px ui-monospace,Menlo,monospace}
+    .no{fill:#f85149;font:700 15px ui-monospace,Menlo,monospace}
+  </style></defs>
+
+  <text class="hd" x="14" y="20">COMPONENT</text>
+  <text class="hd" x="700" y="20" text-anchor="middle">FULL</text>
+  <text class="hd" x="880" y="20" text-anchor="middle">HALVED</text>
+  <line x1="0" y1="30" x2="1000" y2="30" stroke="#30363d"/>
+
+  <!-- rows: keep -->
+  <g>
+    <rect class="kbox" x="0" y="42" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="60">Five client stopwatches</text>
+    <text class="cs" x="14" y="75">the actual measurement — the whole point</text>
+    <text class="yes" x="700" y="68" text-anchor="middle">keep</text>
+    <text class="yes" x="880" y="68" text-anchor="middle">keep</text>
+
+    <rect class="kbox" x="0" y="90" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="108">Provider/tool time reported separately</text>
+    <text class="cs" x="14" y="123">cheap, and stops the subtraction mistake recurring</text>
+    <text class="yes" x="700" y="116" text-anchor="middle">keep</text>
+    <text class="yes" x="880" y="116" text-anchor="middle">keep</text>
+
+    <rect class="kbox" x="0" y="138" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="156">One file per run, created exclusively</text>
+    <text class="cs" x="14" y="171">measured: sharing one file destroyed 49% of records</text>
+    <text class="yes" x="700" y="164" text-anchor="middle">keep</text>
+    <text class="yes" x="880" y="164" text-anchor="middle">keep</text>
+
+    <rect class="kbox" x="0" y="186" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="204">Delete oldest when the folder gets big</text>
+    <text class="cs" x="14" y="219">the disk guarantee</text>
+    <text class="yes" x="700" y="212" text-anchor="middle">keep</text>
+    <text class="yes" x="880" y="212" text-anchor="middle">keep</text>
+
+    <rect class="kbox" x="0" y="234" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="252">A command that reads it and shows the trend</text>
+    <text class="cs" x="14" y="267">without this the data is inert — see #3164</text>
+    <text class="yes" x="700" y="260" text-anchor="middle">keep</text>
+    <text class="yes" x="880" y="260" text-anchor="middle">keep</text>
+
+    <rect class="kbox" x="0" y="282" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="300">Off by default, opt-in</text>
+    <text class="cs" x="14" y="315">required by our own privacy policy</text>
+    <text class="yes" x="700" y="308" text-anchor="middle">keep</text>
+    <text class="yes" x="880" y="308" text-anchor="middle">keep</text>
+  </g>
+
+  <line x1="0" y1="334" x2="1000" y2="334" stroke="#30363d" stroke-dasharray="4 4"/>
+  <text class="hd" x="14" y="352">THE DISPUTED HALF</text>
+
+  <g>
+    <rect class="xbox" x="0" y="360" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="378">New id threaded through the agent loop</text>
+    <text class="cs" x="14" y="393">the id already exists as a string prefix — see §05</text>
+    <text class="yes" x="700" y="386" text-anchor="middle">keep</text>
+    <text class="no"  x="880" y="386" text-anchor="middle">cut</text>
+
+    <rect class="xbox" x="0" y="408" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="426">Queue with a drop policy</text>
+    <text class="cs" x="14" y="441">one record per turn — there is no burst to absorb</text>
+    <text class="yes" x="700" y="434" text-anchor="middle">keep</text>
+    <text class="no"  x="880" y="434" text-anchor="middle">cut</text>
+
+    <rect class="xbox" x="0" y="456" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="474">Retry N times before giving up</text>
+    <text class="cs" x="14" y="489">a full disk does not heal — give up on the first failure</text>
+    <text class="yes" x="700" y="482" text-anchor="middle">keep</text>
+    <text class="no"  x="880" y="482" text-anchor="middle">cut</text>
+
+    <rect class="xbox" x="0" y="504" width="640" height="40" rx="6"/>
+    <text class="cn" x="14" y="522">A 10x/second timer + gzip + extra rolling</text>
+    <text class="cs" x="14" y="537">the timer costs more than what it measures; gzip saves 55 MB</text>
+    <text class="yes" x="700" y="530" text-anchor="middle">keep</text>
+    <text class="no"  x="880" y="530" text-anchor="middle">cut</text>
+  </g>
+</svg>
+<div class="cap">
+  <b>The top six are identical in both versions.</b> The disagreement is entirely about the bottom four, and
+  <em>none of them changes the trend number</em> &mdash; they are about robustness, storage efficiency, and
+  precision of contention measurement. That is what makes this a judgement call rather than a correctness one.
+</div>
+</div>
+
+<h2><span class="n">05</span>The single best argument for cutting</h2>
+
+<p>
+  My plan wanted to mint a new id at submission and thread it down through the agent loop, so all the sends
+  belonging to one of your prompts could be grouped together. The review pointed out that <b>this id already
+  exists</b> &mdash; it is right there in the prompt ids the code already generates:
+</p>
+
+<div class="fig">
+<svg viewBox="0 0 1000 300" role="img" aria-label="The operation id already exists as a prompt id prefix">
+  <defs><style>
+    .m{fill:#e6edf3;font:600 13px ui-monospace,Menlo,monospace}
+    .mm{fill:#8b949e;font:12px ui-monospace,Menlo,monospace}
+    .lb{fill:#6e7681;font:11px ui-monospace,Menlo,monospace}
+    .hi{fill:#3fb950;font:700 13px ui-monospace,Menlo,monospace}
+    .bk{fill:#1c2128;stroke:#30363d}
+  </style></defs>
+
+  <text class="lb" x="0" y="16">You type one thing. The agent then makes several calls on your behalf:</text>
+
+  <rect class="bk" x="0" y="30" width="1000" height="30" rx="5"/>
+  <text class="mm" x="12" y="50">send 1  <tspan class="hi">abc123#agentic-loop#f7e2</tspan></text>
+
+  <rect class="bk" x="0" y="66" width="1000" height="30" rx="5"/>
+  <text class="mm" x="12" y="86">send 2  <tspan class="hi">abc123#agentic-loop#f7e2</tspan>#continuation#1</text>
+
+  <rect class="bk" x="0" y="102" width="1000" height="30" rx="5"/>
+  <text class="mm" x="12" y="122">send 3  <tspan class="hi">abc123#agentic-loop#f7e2</tspan>#continuation#2</text>
+
+  <rect class="bk" x="0" y="138" width="1000" height="30" rx="5"/>
+  <text class="mm" x="12" y="158">send 4  <tspan class="hi">abc123#agentic-loop#f7e2</tspan>#continuation#3</text>
+
+  <path d="M300 176 L300 196" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="3 3" fill="none"/>
+  <text class="hi" x="0" y="212">The green part is identical across all of them. That IS the group id.</text>
+
+  <rect x="0" y="228" width="1000" height="34" rx="6" fill="rgba(63,185,80,.13)" stroke="#3fb950"/>
+  <text class="m" x="12" y="250">operation_id = promptId.split('#continuation#')[0]      // computed when reading. zero plumbing.</text>
+
+  <text class="lb" x="0" y="286">Versus: mint a new id, pass it into the agent package, thread it through every call site, and keep it in sync forever.</text>
+</svg>
+<div class="cap">
+  <b>This is the finding that convinced me.</b> The grouping is already encoded in data we already write. Doing
+  it my way means touching <code>packages/agents</code> &mdash; and that package deliberately has no dependency
+  on the telemetry package at all. I would have been adding a "measure me" wire into business logic to rebuild
+  something a one-line string split already gives us.
+</div>
+</div>
+
+<h2><span class="n">06</span>Where the code has to live (this one is not a choice)</h2>
+
+<p>
+  I never said which package owns what, which was an oversight. The dependency graph settles it, because
+  packages can only depend downward:
+</p>
+
+<div class="fig">
+<svg viewBox="0 0 1000 340" role="img" aria-label="Package layering and ownership">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L6,3 z" fill="#484f58"/>
+    </marker>
+    <style>
+      .pk{fill:#1c2128;stroke:#30363d}
+      .pt{fill:#e6edf3;font:600 13px ui-monospace,Menlo,monospace}
+      .ps{fill:#6e7681;font:10.5px ui-monospace,Menlo,monospace}
+      .ar{stroke:#484f58;stroke-width:1.5;fill:none;marker-end:url(#a)}
+      .own{fill:#58a6ff;font:11.5px ui-monospace,Menlo,monospace}
+      .hh{fill:#8b949e;font:600 12px ui-monospace,Menlo,monospace}
+    </style>
+  </defs>
+
+  <text class="hh" x="0" y="16">higher layers depend on lower ones — never the reverse</text>
+
+  <rect class="pk" x="0" y="28" width="220" height="52" rx="8"/>
+  <text class="pt" x="110" y="50" text-anchor="middle">packages/cli</text>
+  <text class="ps" x="110" y="68" text-anchor="middle">the terminal UI</text>
+  <text class="own" x="240" y="46">owns: turn boundaries, Ink wiring,</text>
+  <text class="own" x="240" y="64">the setting, and the report command</text>
+
+  <path class="ar" d="M110 84 L110 106"/>
+
+  <rect class="pk" x="0" y="112" width="220" height="52" rx="8"/>
+  <text class="pt" x="110" y="134" text-anchor="middle">packages/agents</text>
+  <text class="ps" x="110" y="152" text-anchor="middle">the agent loop</text>
+  <text class="own" x="240" y="130" style="fill:#3fb950">owns: NOTHING — and that is the point.</text>
+  <text class="own" x="240" y="148">It has no telemetry dependency. Keep it that way.</text>
+
+  <path class="ar" d="M110 168 L110 190"/>
+
+  <rect class="pk" x="0" y="196" width="220" height="52" rx="8"/>
+  <text class="pt" x="110" y="218" text-anchor="middle">packages/core</text>
+  <text class="ps" x="110" y="236" text-anchor="middle">shared machinery</text>
+  <text class="own" x="240" y="214">owns: just the stdout byte counter</text>
+  <text class="own" x="240" y="232">(the terminal write path lives here)</text>
+
+  <path class="ar" d="M110 252 L110 274"/>
+
+  <rect x="0" y="280" width="220" height="52" rx="8" fill="rgba(88,166,255,.14)" stroke="#58a6ff" stroke-width="1.8"/>
+  <text class="pt" x="110" y="302" text-anchor="middle" style="fill:#58a6ff">packages/telemetry</text>
+  <text class="ps" x="110" y="320" text-anchor="middle">lowest layer involved</text>
+  <text class="own" x="240" y="298">owns: the record format, the file writer,</text>
+  <text class="own" x="240" y="316">the delete-oldest logic. Reachable by everything above.</text>
+</svg>
+<div class="cap">
+  <b>Telemetry sits at the bottom, so putting the writer there means everything above can reach it without any
+  new dependency.</b> Put it in <code>cli</code> instead and the stdout counter in <code>core</code> cannot see
+  it. This also explains &sect;05: threading an id through <code>agents</code> would force a brand-new
+  <code>agents &rarr; telemetry</code> dependency purely to carry a measurement concern.
+</div>
+</div>
+
+<h2><span class="n">07</span>One thing that already exists and I missed it</h2>
+
+<div class="panel warn">
+  <p style="margin:0 0 10px">
+    <code>packages/telemetry/src/debug/FileOutput.ts</code> already does most of the file writer I proposed to
+    build: JSONL append into the global log directory, a unique id in the filename, day and size rolling, a
+    write queue, and flush-on-exit. My plan never mentions it.
+  </p>
+  <p style="margin:0">
+    It also has a real bug worth fixing while we are there: <b>it never deletes anything.</b>
+    <code>llxprt-debug-*.jsonl</code> grows forever &mdash; the same unbounded-growth problem as
+    <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a>, sitting in the package this
+    feature would join. Extending it fixes two things at once.
+  </p>
+</div>
+
+<h2><span class="n">08</span>The other thing I have to write before coding</h2>
+
+<div class="panel bad">
+  <p style="margin:0 0 10px">
+    <b>The record format itself does not exist yet.</b> My plan says "define the schema" as a task but never
+    defines it. That is the single most important artifact here, because it is the contract between the thing
+    that writes and the thing that reads.
+  </p>
+  <p style="margin:0">
+    And we have a live example of what happens when those two drift: <b>#3164</b> is a cleanup routine that
+    looked for <code>.json</code> files while the writer produced <code>.jsonl</code>. It matched nothing,
+    deleted nothing, for months &mdash; with passing tests, because the test fixtures used the old shape. That
+    is 3.8&nbsp;GB on your disk right now. So: one schema definition, both sides derive from it, and the test
+    must use a record produced by the real writer rather than one typed by hand.
+  </p>
+</div>
+
+<h2><span class="n">09</span>What you get at the end</h2>
+
+<pre><code>$ llxprt perf trend
+
+version   turns   client p50   render p50   stdout KB/turn
+0.10.2     4210        112ms         41ms            38.2
+0.11.0     3877        118ms         44ms            39.1
+0.12.0     2904        186ms         96ms           171.4      <-- something happened here
+                                     ^^^^^          ^^^^^
+                          render time doubled and we are writing
+                          4x the bytes. That is a rendering regression,
+                          not the model, and it is ours.</code></pre>
+
+<p>
+  That is the deliverable. One command, grouped by version, comparing like with like. The bytes column is the
+  tell-tale that does not care how busy your machine was.
+</p>
+
+<div class="q">
+  <h3>What I need from you</h3>
+  <p style="margin:0 0 12px">
+    <b>Full or halved?</b> Both produce the table above and are identical for the first six components. Halved
+    drops the id plumbing, the queue, the retry threshold, the 10&nbsp;Hz timer, gzip and the extra rolling.
+  </p>
+  <p style="margin:0 0 12px">
+    My recommendation is <b>halved</b>, for one reason beyond simplicity: the id-plumbing cut is the difference
+    between touching <code>packages/agents</code> and not touching it. Keeping a measurement concern out of the
+    agent loop is worth more than any of the features being dropped.
+  </p>
+  <p style="margin:0">
+    Two smaller calls that follow from it: whether the memory-trend work becomes its own issue (I think yes
+    &mdash; it is a separate feature that happens to share a file), and whether we produce the full
+    <code>specification.md</code> plus pseudocode structure that <code>dev-docs/PLAN.md</code> mandates, or
+    record a deliberate deviation.
+  </p>
+</div>
+
+<footer>
+  Companion to <a href="./PLAN.md">PLAN.md</a> (authoritative) and
+  <a href="./design.html">design.html</a> (detail and evidence). Written on branch
+  <code>issue3167-design</code>. Diagrams are schematic; the streaming-overlap shape in &sect;02 and the prompt-id
+  structure in &sect;05 are faithful to the code.
+</footer>
+
+</div>
+</body>
+</html>
