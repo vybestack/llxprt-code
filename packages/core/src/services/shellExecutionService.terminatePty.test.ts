@@ -49,6 +49,22 @@ async function waitForPidGone(pid: number, timeoutMs: number): Promise<void> {
   }
 }
 
+/**
+ * Poll until a pid is observable by taskkill, up to `timeoutMs`. A static
+ * delay is flaky on a loaded CI runner where the child may take longer than
+ * the fixed window to be observable; polling keeps the readiness gate stable.
+ */
+async function waitForPidVisible(
+  pid: number,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isPidAlive(pid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 /** Best-effort cleanup of a registered fake entry and its escalation timer. */
 function removeFakeEntry(pid: number): void {
   const entry = serviceInternals.activePtys.get(pid);
@@ -167,10 +183,13 @@ describe.skipIf(!isWindows)(
         ['-NoProfile', '-Command', 'Start-Sleep -Seconds 60'],
         { windowsHide: true, stdio: 'ignore' },
       );
+      child.on('error', () => {});
       child.unref();
       const childPid = child.pid ?? 0;
       expect(childPid).toBeGreaterThan(0);
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Wait until the pid is observable by taskkill rather than a fixed
+      // delay, which can be too short on a loaded CI runner.
+      await waitForPidVisible(childPid, 8000);
 
       const terminal = new Terminal({
         allowProposedApi: true,

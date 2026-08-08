@@ -117,6 +117,7 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'escalate-pid0-'));
     const siblingMarker = path.join(dir, 'sibling.pid');
     const calledMarker = path.join(dir, 'called');
+    const returnedMarker = path.join(dir, 'returned');
     const scriptPath = path.join(dir, 'probe.ts');
     const modulePath = path
       .join(__dirname, 'shellProcessKill.ts')
@@ -132,6 +133,7 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
       `import { createExitGuard } from '${guardPath}';`,
       `const siblingMarker = process.argv[2];`,
       `const calledMarker = process.argv[3];`,
+      `const returnedMarker = process.argv[4];`,
       `// Sibling shares THIS helper's process group (not detached).`,
       `const sibling = spawn('sleep', ['30'], { stdio: 'ignore' });`,
       `await writeFile(siblingMarker, String(sibling.pid));`,
@@ -139,6 +141,10 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
       `const guard = createExitGuard();`,
       `// If the bug is present this reaps our own group (SIGTERM then SIGKILL).`,
       `await escalateKillUnix(0, guard, () => {});`,
+      `// Written only AFTER escalateKillUnix(0) returned, so the parent waiting`,
+      `// on this marker proves the helper SURVIVED the call, not merely that it`,
+      `// reached it (the pre-call marker can only prove reachability).`,
+      `await writeFile(returnedMarker, 'returned');`,
       `// Survived: stay alive briefly so the parent can observe liveness.`,
       `await new Promise((r) => setTimeout(r, 4000));`,
       `try { sibling.kill('SIGKILL'); } catch { /* already gone */ }`,
@@ -148,7 +154,7 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
 
     const helper = spawn(
       process.execPath,
-      [scriptPath, siblingMarker, calledMarker],
+      [scriptPath, siblingMarker, calledMarker, returnedMarker],
       { detached: true, stdio: 'ignore' },
     );
     helper.unref();
@@ -156,8 +162,14 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
     let siblingPid = 0;
     try {
       siblingPid = Number(await waitForMarker(siblingMarker, 8000));
-      // Proves the helper reached the escalateKillUnix(0) call.
+      // Diagnosability: proves the helper reached the escalateKillUnix(0) call.
       await waitForMarker(calledMarker, 8000);
+      // THE gate: this marker is written only AFTER escalateKillUnix(0)
+      // returned, so reaching here proves the helper SURVIVED the call rather
+      // than merely reaching it. A future change that hangs inside
+      // escalateKillUnix before the guard would never write this marker and
+      // this wait would time out, instead of wrongly passing.
+      await waitForMarker(returnedMarker, 8000);
       // Allow time for the SIGTERM (t=0) + SIGKILL escalation (t=200ms).
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -309,11 +321,13 @@ describe.skipIf(!isWindows)(
         ['-NoProfile', '-Command', 'Start-Sleep -Seconds 60'],
         { windowsHide: true, stdio: 'ignore' },
       );
+      child.on('error', () => {});
       child.unref();
       const childPid = child.pid ?? 0;
       expect(childPid).toBeGreaterThan(0);
-      // Give the process a moment to be observable by taskkill.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Wait until the pid is observable by taskkill rather than a fixed
+      // delay, which can be too short on a loaded CI runner.
+      await waitForPidVisible(childPid, 8000);
       try {
         const result = await boundedTaskkill(childPid);
         expect(result.ok).toBe(true);
@@ -338,8 +352,9 @@ describe.skipIf(!isWindows)(
       const exited = new Promise<void>((resolve) => {
         child.once('exit', () => resolve());
       });
-      // Give the process a moment to be observable by taskkill.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Wait until the pid is observable by taskkill rather than a fixed
+      // delay, which can be too short on a loaded CI runner.
+      await waitForPidVisible(childPid, 8000);
       try {
         taskkillTree(childPid);
         await Promise.race([
@@ -364,6 +379,22 @@ async function waitForPidGone(pid: number, timeoutMs: number): Promise<void> {
   while (Date.now() < deadline) {
     if (!isPidAlive(pid)) return;
     await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+}
+
+/**
+ * Poll until a pid is observable by taskkill, up to `timeoutMs`. A static
+ * delay is flaky on a loaded CI runner where the child may take longer than
+ * the fixed window to be observable; polling keeps the readiness gate stable.
+ */
+async function waitForPidVisible(
+  pid: number,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isPidAlive(pid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 

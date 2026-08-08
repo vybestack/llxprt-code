@@ -13,6 +13,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import {
   SIGKILL_TIMEOUT_MS,
   boundedTaskkill,
+  isKillablePid,
   type TaskkillResult,
 } from './shellProcessKill.js';
 import { ShellJobBudget } from './shellJobBudget.js';
@@ -414,13 +415,15 @@ export class ShellJobManager {
    * rejection.
    */
   private safeWindowsKill(pid: number | undefined): Promise<TaskkillResult> {
-    // An absent pid (spawn never produced one) cannot be taskkilled; resolve
-    // as a no-op failure rather than entering the timeout race, so no
-    // taskkill process is ever spawned for an unknown pid.
-    if (pid === undefined) {
+    // A non-killable pid (undefined, 0, negative, NaN, Infinity, or fractional)
+    // must never reach taskkill: 0 would be reinterpreted and an absent/invalid
+    // pid would only error. Resolve as a no-op failure BEFORE entering the
+    // timeout race, so no taskkill process is ever spawned and the
+    // never-rejecting contract is preserved.
+    if (!isKillablePid(pid)) {
       return Promise.resolve({
         ok: false,
-        error: new Error('Cannot taskkill: process has no pid'),
+        error: new Error(`Cannot taskkill non-killable pid: ${String(pid)}`),
       });
     }
     return new Promise<TaskkillResult>((resolve) => {
@@ -804,10 +807,9 @@ export class ShellJobManager {
       .map(([id, entry]) => ({
         id,
         pid: entry.pid,
-        remediation:
-          entry.pid === undefined
-            ? 'pid unknown; cannot emit taskkill remediation'
-            : `taskkill /T /F /PID ${entry.pid}`,
+        remediation: !isKillablePid(entry.pid)
+          ? 'pid unknown; cannot emit taskkill remediation'
+          : `taskkill /T /F /PID ${entry.pid}`,
       }));
     if (remaining.length > 0) {
       debugLogger.warn(
