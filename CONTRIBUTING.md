@@ -173,13 +173,15 @@ This project contains two types of tests: unit tests and integration tests. Test
 
 #### Unit Tests
 
-To execute the unit test suite for the project:
+`npm run test` runs every workspace's `test` script — the full set of workspace
+suites — but does **not** include the `scripts/tests` harness. For the complete
+uncredentialed suite (every workspace plus the script harness, honouring
+pretest hooks), use `bun run test:bun`. For the standard pre-PR check, run
+`bun run presubmit`.
 
 ```bash
-bun run test
+bun run presubmit
 ```
-
-This will run tests located in the `packages/core` and `packages/cli` directories. Ensure tests pass before submitting any changes. For the standard pre-PR check, run `bun run presubmit`.
 
 Type checking uses `tsc --noEmit`:
 
@@ -187,9 +189,23 @@ Type checking uses `tsc --noEmit`:
 bun run typecheck
 ```
 
-#### The canonical test command
+#### The canonical test commands
 
-One command runs the complete suite:
+**Complete repository suite (including credentialed roots):**
+
+```bash
+bun run test:bun:all
+```
+
+This is the canonical command that runs _every_ Bun-native test root in the
+repository — the uncredentialed workspace-plus-script suite (`test:bun`), the
+credentialed integration-tests root in sandbox:none mode
+(`test:integration:sandbox:none`), and all credentialed evals with
+`RUN_EVALS=1` (`test:all_evals`) — in fail-fast order. Every test file
+executes directly under Bun. **Credentials and provider quota are required**
+for this command because the integration and evals roots call a real provider.
+
+**Complete uncredentialed suite (workspaces + script harness):**
 
 ```bash
 bun run test:bun
@@ -201,8 +217,9 @@ workspace executes under **Bun's native test runner** via
 `scripts/run_bun_tests.ts` (one isolated process per test file). Tests import
 `bun:test`; see `dev-docs/bun.md` for the mocking patterns Bun requires.
 
-Two roots are excluded from that run because they call a real provider and
-consume quota — run them explicitly when you have credentials:
+Two roots are excluded from that uncredentialed run because they call a real
+provider and consume quota. `test:bun:all` includes them; alternatively, run
+them individually:
 
 ```bash
 npm run test:integration:sandbox:none

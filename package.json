@@ -78,6 +78,7 @@
     "bundle": "npm run generate && bun scripts/bun-build.config.ts",
     "test": "npm run test --workspaces --if-present",
     "test:bun": "bun scripts/test.ts",
+    "test:bun:all": "bun run test:bun && bun run test:integration:sandbox:none && bun run test:all_evals",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "bun scripts/test.ts --shard scripts",
     "test:shell": "./scripts/run-shell-tests.sh",

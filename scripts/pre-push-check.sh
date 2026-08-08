@@ -35,11 +35,6 @@ run_check() {
     fi
 }
 
-# Kill any running vitest processes first
-echo "Cleaning up any running test processes..."
-pkill -f vitest || true
-sleep 1
-
 # JavaScript/TypeScript checks
 run_check "Format check" npm run format:check
 run_check "Lint" npm run lint:ci
@@ -51,9 +46,6 @@ run_check "Build" npm run build
 # Tests
 echo "Running tests (this may take a while)..."
 run_check "Tests" npm run test:ci
-
-# Kill any leftover vitest processes
-pkill -f vitest || true
 
 # Shell script checks (if shellcheck is installed)
 if command -v shellcheck &> /dev/null; then

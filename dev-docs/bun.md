@@ -510,18 +510,34 @@ The `--workspace` flag matches by directory name (`core`), relative path
 
 ### The canonical command
 
-One command runs the complete suite:
+The canonical command that runs _every_ Bun-native test root in the repository
+— the uncredentialed workspace-plus-script suite, the credentialed
+integration-tests root (sandbox:none mode), and all credentialed evals
+(`RUN_EVALS=1`) — in fail-fast order is:
+
+```bash
+bun run test:bun:all
+```
+
+**Credentials and provider quota are required** for this command because the
+integration and evals roots call a real provider. Every test file executes
+directly under Bun.
+
+The complete _uncredentialed_ suite (every workspace plus the script harness,
+honouring pretest hooks) is:
 
 ```bash
 bun run test:bun
 ```
 
-It orchestrates every workspace plus the script harness, honouring pretest
-hooks. `npm run test` remains available and runs the same per-workspace
-`test` scripts, so the two agree by construction.
+`npm run test` runs the same per-workspace `test` scripts but does **not**
+include the `scripts/tests` harness, so the two do not agree fully:
+`test:bun` additionally runs scripts/tests. `npm run test` is useful as a
+legacy-compatible entry point for per-workspace suites.
 
-Two roots are deliberately **not** part of that run because they call a real
-provider and consume quota. Request them by name when you have credentials:
+Two roots are deliberately **not** part of the uncredentialed run because
+they call a real provider and consume quota. `test:bun:all` includes them, or
+request them by name when you have credentials:
 
 ```bash
 npm run test:integration:sandbox:none   # bun scripts/run_bun_tests.ts --root integration-tests

@@ -892,6 +892,10 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
     });
 
+    // ── Active process.env.VITEST reference detection (issue #2578) ───
+    // Tests for the env-reference detector live in
+    // no-vitest-env-reference.test.ts (extracted to satisfy max-lines).
+
     // ── Self-exclusion ─────────────────────────────────────────────────
     describe('self-exclusion', () => {
       it('does not flag its own source or test fixtures', () => {
