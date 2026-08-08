@@ -400,26 +400,35 @@ describe('KeypressContext - Kitty Protocol', () => {
           stdin.write(PASTE_END.slice(3));
         },
       },
-    ])('should $name', async ({ pastedText, writeSequence }) => {
-      const keyHandler = vi.fn();
+    ])(
+      'should $name',
+      async ({
+        pastedText,
+        writeSequence,
+      }: {
+        pastedText: string;
+        writeSequence: (text: string) => void;
+      }) => {
+        const keyHandler = vi.fn();
 
-      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+        const { result } = renderHook(() => useKeypressContext(), { wrapper });
 
-      act(() => result.current.subscribe(keyHandler));
+        act(() => result.current.subscribe(keyHandler));
 
-      act(() => writeSequence(pastedText));
+        act(() => writeSequence(pastedText));
 
-      await waitFor(() => {
-        expect(keyHandler).toHaveBeenCalledTimes(1);
-      });
+        await waitFor(() => {
+          expect(keyHandler).toHaveBeenCalledTimes(1);
+        });
 
-      expect(keyHandler).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'paste',
-          sequence: pastedText,
-        }),
-      );
-    });
+        expect(keyHandler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'paste',
+            sequence: pastedText,
+          }),
+        );
+      },
+    );
   });
 
   describe('Parameterized functional keys', () => {
