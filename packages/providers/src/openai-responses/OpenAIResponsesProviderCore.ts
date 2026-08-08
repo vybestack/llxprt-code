@@ -61,7 +61,6 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       isCodexBaseURL: (baseURL) => this.isCodexMode(baseURL),
       getCodexAccountId: () => this.getCodexAccountId(),
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
-      generateSyntheticCallId: () => this.generateSyntheticCallId(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
       getDefaultModel: () => this.getDefaultModel(),
       getGlobalConfig: () => this.globalConfig,
