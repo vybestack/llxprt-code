@@ -165,8 +165,10 @@ describe('Load balancer sub-profile context-window timeout (issue #3149)', () =>
     // (not a numeric fallback), proving the rejection was handled, not hidden.
     const subProfile = lbProvider!.selectNextSubProfile();
     expect(isResolvedSubProfile(subProfile)).toBe(true);
-    if (isResolvedSubProfile(subProfile)) {
-      expect(subProfile.contextWindow).toBeUndefined();
-    }
+    // Early return rather than an `if` around the assertion: the guard is
+    // already asserted above, and this keeps `expect` out of a branch for
+    // jest/no-conditional-expect while still narrowing for the compiler.
+    if (!isResolvedSubProfile(subProfile)) return;
+    expect(subProfile.contextWindow).toBeUndefined();
   });
 });
