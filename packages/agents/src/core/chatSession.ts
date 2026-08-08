@@ -582,17 +582,25 @@ export class ChatSession {
   private async _withResolvedSystemPrompt<T>(
     send: () => Promise<T>,
   ): Promise<T> {
-    const run = this.systemPromptTurnChain.then(async () => {
-      await this._resolveSystemPromptForTurn();
-      return send();
-    });
-    // Keep the chain alive after a failed turn; a rejection here must not
+    // Only the RESOLUTION is serialized, never the send. Concurrent sends are
+    // intended behavior (see chatSession.runtime.timeout.test.ts: "two
+    // simultaneous sends timeout independently without signal leakage"), so
+    // chaining the send itself would break a documented invariant.
+    //
+    // Serializing resolution alone keeps the shared-state mutation
+    // (generationConfig.systemInstruction + base token offset) atomic, so two
+    // turns cannot resolve interleaved and produce a torn prompt.
+    const resolved = this.systemPromptTurnChain.then(() =>
+      this._resolveSystemPromptForTurn(),
+    );
+    // Keep the chain alive after a failed resolution; a rejection must not
     // permanently wedge every later send.
-    this.systemPromptTurnChain = run.then(
+    this.systemPromptTurnChain = resolved.then(
       () => undefined,
       () => undefined,
     );
-    return run;
+    await resolved;
+    return send();
   }
 
   async sendMessage(

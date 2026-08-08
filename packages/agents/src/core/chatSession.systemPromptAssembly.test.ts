@@ -281,11 +281,12 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
   // --- No assembler → unchanged behavior ---
 
-  it("does not let a concurrent send overwrite an in-flight turn's system prompt", async () => {
-    // Resolution mutates shared state and runs before TurnProcessor's own
-    // send barrier, so two overlapping sends could otherwise both resolve and
-    // the second clobber the first — the first turn then transmits the
-    // second turn's prompt.
+  it('serializes prompt resolution so concurrent sends cannot tear it', async () => {
+    // Resolution mutates shared state (systemInstruction + base token offset).
+    // Two turns resolving interleaved could observe a torn result. Only
+    // RESOLUTION is serialized — concurrent sends stay intended behavior (see
+    // chatSession.runtime.timeout.test.ts), so this must not become a
+    // send-level lock.
     const events: string[] = [];
     let turn = 0;
 
