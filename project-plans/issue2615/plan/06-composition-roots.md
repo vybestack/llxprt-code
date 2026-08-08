@@ -59,15 +59,38 @@ Lives in core, takes the concrete `Config`, returns the record. This is the
 getters. It is not a shim: it is the composition step, and it is where the
 application entry point is expected to build its dependency record.
 
-## Deliverable 3 — migrate the five roots
+## Deliverable 3 — migrate the roots
 
-| File | Current | After |
+P01 identified **21** composition roots, not the 5 this file originally named.
+The authoritative list is `analysis/role-assignment.json` -> `compositionRoots`,
+ordered by members read:
+
+| File | members | calls fromConfig |
 |---|---|---|
-| `packages/agents/src/core/client.ts` | `Config` | `RuntimeDependencies` |
-| `packages/agents/src/core/ChatSessionFactory.ts` (`createChatSessionSafe`) | `Config` | `RuntimeDependencies` |
-| `packages/agents/src/core/subagentOrchestrator.ts` | `Config` | `RuntimeDependencies` |
-| `packages/cli/src/zed-integration/zedIntegration.ts` | `Config` | `RuntimeDependencies` |
-| `packages/cli/src/cli.tsx` | `Config` | `RuntimeDependencies` |
+| `agents/src/api/agentImpl.ts` | 17 | no |
+| `providers/src/runtime/runtimeContextFactory.ts` | 13 | no |
+| `agents/src/core/subagentRuntimeSetup.ts` | 12 | no |
+| `agents/src/core/ChatSessionFactory.ts` | 12 | no |
+| `agents/src/api/fromConfig.ts` | 11 | (is the boundary) |
+| `mcp/src/client/mcp-client-manager.ts` | 11 | no |
+| `agents/src/api/createAgent.ts` | 10 | no |
+| `cli/src/config/postConfigRuntime.ts` | 10 | no |
+| `cli/src/nonInteractiveCli.ts` | 10 | **yes** |
+| `providers/src/runtime/providerSwitch.ts` | 9 | no |
+| `cli/src/cliSessionBootstrap.ts` | 9 | no |
+| `a2a-server/src/agent/task.ts` | 9 | no |
+| `agents/src/agents/executor.ts` | 7 | **yes** |
+| `cli/src/zed-integration/zedIntegration.ts` | 7 | **yes** |
+| `agents/src/core/client.ts` | 6 | no |
+| `agents/src/tools/task.ts` | 3 | no |
+| `cli/src/cliAgentBootstrap.ts` | 2 | **yes** |
+| `agents/src/api/agentBootstrap.ts` | 1 | no |
+| plus 3 with 0 members read | — | no |
+
+Migrate every root in this table except `fromConfig.ts` itself.
+
+Order matters: do the four `fromConfig` callers last, since they are the ones
+that need the concrete-`Config` passthrough field.
 
 Callers build the record with `runtimeDependenciesFromConfig(config)` at the
 application entry point, once.
@@ -85,8 +108,11 @@ Composition roots that currently call `fromConfig` pass through the concrete
 `RuntimeDependencies.config`, a field typed as the concrete class and permitted
 only here.
 
-If P01 shows more than two roots need that escape hatch, stop and report rather
-than widening it.
+P01 shows **four** roots call `fromConfig`: `cli/src/nonInteractiveCli.ts`,
+`agents/src/agents/executor.ts`, `cli/src/zed-integration/zedIntegration.ts`
+and `cli/src/cliAgentBootstrap.ts`. Those four — and only those four — may
+carry a `config` field typed as the concrete class. If a fifth appears, stop and
+report rather than widening it.
 
 ## Acceptance criteria
 
