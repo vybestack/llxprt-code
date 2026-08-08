@@ -283,7 +283,55 @@ or full volume the guarantee degrades to "no further growth", because eviction i
 
 ---
 
-## 7. Still open
+## 7. Claim verification
+
+Every load-bearing claim above was checked against source rather than taken from a review. Earlier revisions of
+this plan propagated a finding that turned out to be a test artifact, so the evidence is recorded here to stop
+that recurring.
+
+**Dependency edges** — from the internal `dependencies` in each `package.json`:
+
+```
+agents    -> auth, core, ide-integration, policy, providers, settings, tools     <- no telemetry
+telemetry -> storage                                                              <- lowest layer
+core      -> auth, ide-integration, mcp, policy, settings, storage, telemetry, tools
+cli       -> agents, auth, core, ide-integration, mcp, providers, settings, storage, telemetry, tools
+```
+
+Confirms §4: `telemetry` sits below `core`, and `agents` genuinely has no telemetry edge.
+
+**`superseded` really is unreachable via the ownership release** — `useSubmitQuery.ts:650-659`:
+
+```ts
+} finally {
+  // Guard against stale cleanup: a terminal error/idle-timeout event
+  // may have already released interactive ownership ... (issue #2954)
+  if (isCurrentTurn(current, turnSignal)) {
+    current.activeTurnRef.current = false;
+    current.scheduleNextQueuedSubmission();
+  }
+}
+```
+
+The release is inside the guard, so a superseded turn never reaches it. There is also a **second** release site
+at `:293`, and the acquire at `:620` is unconditional. Confirms that finalisation needs its own registry and
+sweep rather than hanging off ownership.
+
+**`IntervalUnion` is private and quadratic** — `sessionMetricsAggregator.ts`: `add()` calls
+`recomputeDuration()`, which walks the entire interval list on every insertion. The file's only exports are
+`ApiAttemptRecord`, `ModelBreakdown`, `SessionMetricsSnapshot` and `SessionMetricsAggregator` — the class itself
+is not exported. Confirms §5: extract, export, and make the duration incremental.
+
+**`FileOutput` never deletes** — `grep -c 'unlink|rm(|rmSync'` over
+`packages/telemetry/src/debug/FileOutput.ts` returns **0**, alongside `private static instance`,
+`maxFileSize = 10 * 1024 * 1024`, `maxQueueSize = 1000`, `batchSize = 50`, `flushInterval = 1000`, and an
+unguarded `console.error`. Confirms §5.
+
+**Ink exposes render timing** — `ink/build/render.d.ts:44` declares
+`onRender?: (metrics: RenderMetrics) => void`, `ink.d.ts:9` exports the type, and `ink.js:74-76` throttles the
+callback so it fires per actual render pass. Confirms that `ink_render_ms` is a pure accumulate.
+
+## 8. Still open
 
 | Item                                                                    | Blocks                          |
 | ----------------------------------------------------------------------- | ------------------------------- |
