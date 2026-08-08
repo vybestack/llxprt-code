@@ -14,6 +14,7 @@ import { spawnTestPty, type TestPtySpawnOptions } from './pty-backend.js';
 import stripAnsi from 'strip-ansi';
 import { createDiagnosticsSink } from './diagnostics.js';
 import { InteractiveRun } from './interactive-run.js';
+import { recordRealProviderRun } from './model-request-ledger.js';
 import { getDefaultTimeout, poll, sanitizeTestName } from './util.js';
 import {
   assertProviderConfig,
@@ -135,6 +136,26 @@ export class TestRig {
     return this._lastRunCapture === null ? null : { ...this._lastRunCapture };
   }
 
+  /**
+   * Record a run that will hit a real provider so the E2E real-model budget
+   * guard can account for it. Fake-responses runs never reach a provider and
+   * are therefore not recorded.
+   */
+  private _recordIfRealProviderRun(caller: string): void {
+    if (this.fakeResponsesPath !== undefined) {
+      return;
+    }
+    if (this.testName === undefined) {
+      throw new Error(
+        `TestRig.${caller}() against a real provider requires setup() to be called first to establish the test name`,
+      );
+    }
+    recordRealProviderRun({
+      testName: this.testName,
+      testDir: this.testDir as string,
+    });
+  }
+
   private beginRun(): void {
     if (this._runInProgress) {
       throw new Error('TestRig does not support overlapping run operations');
@@ -198,6 +219,7 @@ export class TestRig {
     this.beginRun();
     try {
       assertProviderConfig(this.fakeResponsesPath);
+      this._recordIfRealProviderRun('run');
 
       const yolo = options.yolo !== false;
       const extraArgs = buildExtraArgs(this.fakeResponsesPath, yolo);
@@ -473,6 +495,7 @@ export class TestRig {
     yolo?: boolean;
   }): Promise<InteractiveRun> {
     assertProviderConfig(this.fakeResponsesPath);
+    this._recordIfRealProviderRun('runInteractive');
 
     const yolo = options?.yolo !== false;
     const extraArgs = buildExtraArgs(this.fakeResponsesPath, yolo);

@@ -11,6 +11,7 @@ export * from './env-test-helpers.js';
 export * from './export-surface-helpers.js';
 export * from './file-system-test-helpers.js';
 export * from './global-test-helpers.js';
+export * from './model-request-ledger.js';
 export * from './quota-guard.js';
 export * from './test-rig.js';
 export * from './wait-for.js';

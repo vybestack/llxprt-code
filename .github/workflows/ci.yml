@@ -1033,6 +1033,12 @@ jobs:
         run: |-
           npm run lint:test-shards
 
+      - name: 'Verify E2E real-model budget (issue #2278)'
+        # Validates the checked-in E2E real-model API request budget so a new
+        # real-provider test cannot exceed the declared ceiling without review.
+        run: |-
+          npm run lint:e2e-model-budget
+
       - name: 'Run shard tests (issue #2707)'
         env:
           # Provider configuration from repository secrets/variables

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { TestRig } from './test-rig.js';
+import { readLedger } from './model-request-ledger.js';
 
 describe('TestRig setup and cleanup behavior', () => {
   const tempDirs: string[] = [];
@@ -80,5 +81,88 @@ describe('TestRig setup and cleanup behavior', () => {
     await expect(secondRun).rejects.toThrow(/overlapping run operations/);
 
     await firstRun;
+  });
+
+  // The awaited run must exhaust the provider retry path against an
+  // unreachable base URL, which outlives the default per-test timeout.
+  it('records a real-provider run to the ledger when LLXPRT_E2E_MODEL_LEDGER is set', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'gpt-4o-mini');
+    setEnv('OPENAI_API_KEY', 'test-key');
+    setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:1');
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+
+    const ledgerPath = join(root, 'ledger.jsonl');
+    setEnv('LLXPRT_E2E_MODEL_LEDGER', ledgerPath);
+
+    const rig = new TestRig();
+    rig.setup('real-provider-ledger-test');
+
+    // The ledger entry is written synchronously before the CLI is spawned, so
+    // it is observable without waiting for the (unreachable) provider call to
+    // fail. The run is still awaited afterwards so the child is reaped.
+    const runPromise = rig.run({ args: 'test prompt' });
+
+    const records = readLedger(ledgerPath);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.testName).toBe('real-provider-ledger-test');
+    const expectedDir = rig.testDir;
+    if (expectedDir === null) {
+      throw new Error('testDir should not be null after setup');
+    }
+    expect(records[0]?.testDir).toBe(expectedDir);
+
+    await runPromise.catch(() => undefined);
+  }, 30_000);
+
+  it('refuses a real-provider run when setup() has not established a test name', () => {
+    const root = createRoot();
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'gpt-4o-mini');
+    setEnv('OPENAI_API_KEY', 'test-key');
+    setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:1');
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+    setEnv('LLXPRT_E2E_MODEL_LEDGER', join(root, 'ledger.jsonl'));
+
+    const rig = new TestRig();
+
+    expect(rig.run({ args: 'test prompt' })).rejects.toThrow(
+      /requires setup\(\) to be called first/,
+    );
+  });
+
+  it('does not record to the ledger when fakeResponsesPath is set', async () => {
+    const root = createRoot();
+    const fixturePath = join(root, 'fake.jsonl');
+    const fixture = JSON.stringify({
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'OK' }],
+          metadata: {
+            usage: {
+              promptTokens: 1,
+              completionTokens: 1,
+              totalTokens: 2,
+            },
+          },
+        },
+      ],
+    });
+    writeFileSync(fixturePath, `${fixture}\n`);
+
+    const ledgerPath = join(root, 'ledger.jsonl');
+    setEnv('LLXPRT_E2E_MODEL_LEDGER', ledgerPath);
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+
+    const rig = new TestRig();
+    rig.setup('fake-provider-ledger-test', {
+      fakeResponsesPath: fixturePath,
+    });
+
+    await rig.run({ args: 'test prompt' }).catch(() => {});
+
+    expect(existsSync(ledgerPath)).toBe(false);
   });
 });
