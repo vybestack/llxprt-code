@@ -107,7 +107,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 
 /**
@@ -764,7 +764,7 @@ export class ChatSession {
    * Returns the Config instance from the provider runtime.
    * Used by Turn and other consumers to access ephemeral settings.
    */
-  getConfig(): Config | undefined {
+  getConfig(): ProviderRuntimeContext['config'] {
     return this.runtimeContext.providerRuntime.config;
   }
 }

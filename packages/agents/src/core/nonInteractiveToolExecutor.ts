@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
@@ -16,7 +15,19 @@ import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configType
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { canonicalizeToolName } from './toolGovernance.js';
+
+/** Signature of Config.getOrCreateScheduler without depending on Config. */
+type SchedulerFactoryFn = (
+  sessionId: string,
+  callbacks: SchedulerCallbacks,
+  options?: SchedulerOptions,
+  dependencies?: { messageBus?: MessageBus; toolRegistry?: ToolRegistry },
+) => Promise<ToolSchedulerContract>;
 
 /**
  * Configuration subset required for non-interactive tool execution.
@@ -29,7 +40,7 @@ export type ToolExecutionConfig = {
   getExcludeTools(): string[] | undefined;
   getSessionId(): string;
   getTelemetryLogPromptsEnabled(): boolean;
-  getOrCreateScheduler: Config['getOrCreateScheduler'];
+  getOrCreateScheduler: SchedulerFactoryFn;
   disposeScheduler(sessionId: string): void;
 } & Partial<{
   getAllowedTools(): string[] | undefined;
@@ -57,7 +68,7 @@ export type ToolExecutionConfig = {
  * so it is not duplicated here.
  */
 type SchedulerConfig = ToolExecutionConfig & {
-  getOrCreateScheduler: Config['getOrCreateScheduler'];
+  getOrCreateScheduler: SchedulerFactoryFn;
 };
 
 async function createScheduler(

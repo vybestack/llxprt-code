@@ -21,13 +21,12 @@ import {
 import type {
   AgentClientContract,
   AgentRuntimeState,
-  Config,
 } from '@vybestack/llxprt-code-core';
 
 const capturedRuntimeStates: Array<{ provider: string; model: string }> = [];
 
 function captureAgentClientFactory(
-  _config: Config,
+  _config: unknown,
   runtimeState: AgentRuntimeState,
 ): AgentClientContract {
   capturedRuntimeStates.push({

@@ -21,7 +21,7 @@ import {
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { ChatSession } from '../core/chatSession.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { EphemeralSettings } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { EmitActivityFn } from './executor-tool-dispatch.js';
 import { isToolNameRestricted } from '../core/hookToolRestrictions.js';
 
@@ -59,7 +59,7 @@ export async function callModelAndConsumeStream(
   tools: unknown,
   signal: AbortSignal,
   promptId: string,
-  runtimeContext: Config,
+  runtimeContext: EphemeralSettings,
   emitActivity: EmitActivityFn,
 ): Promise<AgentModelResult> {
   const timeoutController = new AbortController();

@@ -14,7 +14,7 @@
  */
 
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   RuntimeGenerateChatOptions,
@@ -218,7 +218,7 @@ export async function prepareAtSendSeam(
     return { estimate: null, options };
   }
   const config = (options.config ?? options.runtime?.config) as
-    | { getTokenizerFactory: Config['getTokenizerFactory'] }
+    | { getTokenizerFactory: () => RuntimeTokenizerFactory | undefined }
     | undefined;
   const getTokenizerFactory = config?.getTokenizerFactory;
   const tokenizerFactory =

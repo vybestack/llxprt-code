@@ -7,8 +7,8 @@
 
 import { z } from 'zod';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { AgentRuntimeProfileSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { PolicyEngineConfig } from '@vybestack/llxprt-code-core/policy/types.js';
 import type {
   HookDefinition,
@@ -342,8 +342,10 @@ export interface AgentConfig {
   readonly settings?: Readonly<Record<string, unknown>>;
 }
 
-export interface FromConfigOptions {
-  readonly config: Config;
+export interface FromConfigOptions<
+  TConfig = AgentRuntimeProfileSnapshot['config'],
+> {
+  readonly config: TConfig;
   readonly messageBus?: MessageBus;
   readonly onApproval?: ApprovalHandler;
   readonly onOAuthPrompt?: OAuthPromptHandler;

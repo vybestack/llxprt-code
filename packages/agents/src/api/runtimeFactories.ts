@@ -19,8 +19,20 @@
  * public helper instead (#2204).
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { isRuntimeDependencies } from '@vybestack/llxprt-code-core/config/roles.js';
+import {
+  isRuntimeDependencies,
+  type SessionIdentity,
+  type RuntimeLifecycle,
+  type ModelSelection,
+  type EphemeralSettings,
+  type WorkspacePaths,
+  type MemoryAccess,
+  type ToolAccess,
+  type PolicyAccess,
+  type McpAccess,
+  type TelemetryAccess,
+  type Diagnostics,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -48,10 +60,46 @@ import type {
 
 export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+
+type FactoryConfigSurface = SessionIdentity &
+  ModelSelection &
+  EphemeralSettings &
+  WorkspacePaths &
+  MemoryAccess &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess &
+  Diagnostics &
+  RuntimeLifecycle &
+  EnvironmentContextConfig & {
+    getSettingsService: () => SettingsService;
+    getToolRegistry: () => ToolRegistry;
+    getPolicyEngine: () => PolicyEngine;
+    getOrCreateScheduler: (
+      sessionId: string,
+      callbacks: SchedulerCallbacks,
+      options?: SchedulerOptions,
+      dependencies?: {
+        messageBus?: MessageBus;
+        toolRegistry?: ToolRegistry;
+      },
+    ) => Promise<ToolSchedulerContract>;
+  };
+
 function assertConfig(
   value: unknown,
   context: string,
-): asserts value is Config {
+): asserts value is FactoryConfigSurface {
   if (!isRuntimeDependencies(value)) {
     throw new TypeError(`${context}: expected Config instance`);
   }
@@ -82,7 +130,7 @@ export function createAgentRuntimeFactoryBindings(): AgentRuntimeFactoryBindings
  * class (#2204).
  */
 export function createAgentClient(
-  config: Config,
+  config: ConstructorParameters<typeof AgentClient>[0],
   runtimeState: AgentRuntimeState,
 ): AgentClientContract {
   return new AgentClient(config, runtimeState);

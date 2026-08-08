@@ -72,7 +72,7 @@ export type {
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
 export function internalConfig(agent: Agent): Config {
-  return getInternalConfig(agent);
+  return getInternalConfig(agent) as unknown as Config;
 }
 
 // ─── Agent construction via the production env seam ─────────────────────────

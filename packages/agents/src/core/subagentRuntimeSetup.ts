@@ -14,13 +14,13 @@
 
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   RuntimeLifecycle,
   ToolAccess,
   PolicyAccess,
   McpAccess,
   TelemetryAccess,
+  EphemeralSettings,
 } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
@@ -621,7 +621,7 @@ function resolveConfigAccessors(
   foregroundConfig: SubagentRuntimeSetupConfig,
   defensiveConfig: DefensiveConfig,
 ): Pick<
-  Config,
+  EphemeralSettings & ToolAccess & TelemetryAccess,
   | 'getEphemeralSettings'
   | 'getEphemeralSetting'
   | 'getExcludeTools'
@@ -681,7 +681,7 @@ export function createSchedulerConfig(
   toolExecutorContext: ToolExecutionConfig,
   foregroundConfig: SubagentRuntimeSetupConfig,
   options?: { interactive?: boolean },
-): Config {
+): ToolExecutionConfig {
   const isInteractive = options?.interactive ?? false;
 
   // Defensive runtime guard: test doubles and bootstrap configs may not
@@ -744,7 +744,7 @@ export function createSchedulerConfig(
     getHookSystem: () => defensiveConfig.getHookSystem?.(),
     getWorkingDir: () => defensiveConfig.getWorkingDir?.() ?? process.cwd(),
     getTargetDir: () => defensiveConfig.getTargetDir?.() ?? process.cwd(),
-  } as unknown as Config;
+  } as ToolExecutionConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -759,7 +759,7 @@ export interface CreateChatObjectParams {
   runtimeContext: AgentRuntimeContext;
   contentGenerator: ContentGenerator;
   environmentContextLoader: EnvironmentContextLoader;
-  foregroundConfig: Config;
+  foregroundConfig: SubagentRuntimeSetupConfig;
   context: ContextState;
 }
 

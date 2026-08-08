@@ -11,8 +11,20 @@ import {
   type ToolResult,
   type LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  SessionIdentity,
+  ModelSelection,
+  EphemeralSettings,
+  WorkspacePaths,
+  MemoryAccess,
+  ToolAccess,
+  PolicyAccess,
+  McpAccess,
+  TelemetryAccess,
+  Diagnostics,
+  RuntimeLifecycle,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   SubagentOrchestrator,
@@ -22,6 +34,13 @@ import type { SubAgentScope } from '../core/subagent.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
@@ -31,6 +50,32 @@ import {
   validateTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+
+type TaskConfigSurface = SessionIdentity &
+  ModelSelection &
+  EphemeralSettings &
+  WorkspacePaths &
+  MemoryAccess &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess &
+  Diagnostics &
+  RuntimeLifecycle &
+  EnvironmentContextConfig & {
+    getSettingsService: () => SettingsService;
+    getToolRegistry: () => ToolRegistry;
+    getPolicyEngine: () => PolicyEngine;
+    getOrCreateScheduler: (
+      sessionId: string,
+      callbacks: SchedulerCallbacks,
+      options?: SchedulerOptions,
+      dependencies?: {
+        messageBus?: MessageBus;
+        toolRegistry?: ToolRegistry;
+      },
+    ) => Promise<ToolSchedulerContract>;
+  };
 import {
   createAbortState,
   createTimeoutControllers,
@@ -69,12 +114,12 @@ const taskLogger = new DebugLogger('llxprt:task');
  * `@typescript-eslint/no-unnecessary-condition`.
  */
 function resolveOptionalConfigMethod<T>(
-  config: Config,
+  config: TaskConfigSurface,
   methodName: 'getProfileManager' | 'getSubagentManager',
 ): T | undefined {
   const fn = (config as unknown as Record<string, unknown>)[methodName];
   return typeof fn === 'function'
-    ? (fn as (this: Config) => T).call(config)
+    ? (fn as (this: TaskConfigSurface) => T).call(config)
     : undefined;
 }
 
@@ -135,7 +180,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   ToolResult
 > {
   constructor(
-    private readonly config: Config,
+    private readonly config: TaskConfigSurface,
     params: TaskToolParams,
     private readonly normalized: TaskToolInvocationParams,
     private readonly deps: TaskToolInvocationDeps,
@@ -738,7 +783,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   static readonly Name = 'task';
 
   constructor(
-    private readonly config: Config,
+    private readonly config: TaskConfigSurface,
     private readonly dependencies: TaskToolDependencies = {},
   ) {
     super(

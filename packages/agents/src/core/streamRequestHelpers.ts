@@ -24,6 +24,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ProjectionSnapshot } from './boundaryRecovery.js';
 
 export type ToolGroupArray = Array<{
   functionDeclarations?: Array<{
@@ -369,4 +370,24 @@ export function contentForTelemetry(chunk: ModelStreamChunk): IContent {
       usage: chunk.usage,
     },
   };
+}
+
+/**
+ * Extract the allowedFunctionNames array from a tool-config object.
+ */
+export function extractAllowedFunctionNames(
+  toolConfig: unknown,
+): string[] | undefined {
+  if (toolConfig === null || toolConfig === undefined) return undefined;
+  if (typeof toolConfig !== 'object') return undefined;
+  if (!('allowedFunctionNames' in toolConfig)) return undefined;
+  if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
+  return toolConfig.allowedFunctionNames;
+}
+
+/** Result of firing the BeforeModel hook (contents + metadata + pre-hook snapshot). */
+export interface BeforeModelHookFireResult {
+  contents: IContent[];
+  hookOutput: BeforeModelHookOutput | undefined;
+  snapshot: ProjectionSnapshot | undefined;
 }

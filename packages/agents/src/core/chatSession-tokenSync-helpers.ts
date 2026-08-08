@@ -11,7 +11,7 @@
  */
 
 import { vi } from '../testApi.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -25,7 +25,7 @@ export interface MockContentGenerator {
 }
 
 export interface TokenSyncTestFixture {
-  mockConfig: Config;
+  mockConfig: SessionIdentity;
   runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   providerRuntimeSnapshot: ProviderRuntimeContext;
   mockContentGenerator: MockContentGenerator;

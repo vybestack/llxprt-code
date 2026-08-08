@@ -242,6 +242,6 @@ export async function setupAgentClient(
     contentGeneratorConfig,
     mockFns.createTurn,
   );
-  const mockConfig = client['config'];
+  const mockConfig = client['config'] as unknown as Config;
   return { client, mockConfig };
 }

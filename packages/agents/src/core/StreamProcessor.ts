@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { SendMessageParams } from './chatSession.js';
 import type {
@@ -64,8 +65,10 @@ import {
   resolveUserMemory,
   logOutgoingRequest,
   extractSystemInstructionText,
+  extractAllowedFunctionNames,
   type ToolGroupArray,
   type ToolSelectionHookResult,
+  type BeforeModelHookFireResult,
 } from './streamRequestHelpers.js';
 import {
   resolvePendingBoundaryFromHook,
@@ -89,34 +92,11 @@ import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { safeJsonStringify } from './turnJsonUtils.js';
 
-/**
- * Extract the allowedFunctionNames array from a tool-config object.
- *
- * Returns `undefined` when the config is absent or does not carry an
- * `allowedFunctionNames` string array, otherwise returns the typed array.
- */
-function extractAllowedFunctionNames(
-  toolConfig: unknown,
-): string[] | undefined {
-  if (toolConfig === null || toolConfig === undefined) return undefined;
-  if (typeof toolConfig !== 'object') return undefined;
-  if (!('allowedFunctionNames' in toolConfig)) return undefined;
-  if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
-  return toolConfig.allowedFunctionNames;
-}
-
-/** Result of firing the BeforeModel hook (contents + metadata + pre-hook snapshot). */
-interface BeforeModelHookFireResult {
-  contents: IContent[];
-  hookOutput: BeforeModelHookOutput | undefined;
-  snapshot: ProjectionSnapshot | undefined;
-}
-
 /** Narrow config surface for StreamProcessor hook/bucket members. */
 type HookRuntimeConfig = {
-  getEnableHooks: Config['getEnableHooks'];
-  getHookSystem: Config['getHookSystem'];
-  getBucketFailoverHandler: Config['getBucketFailoverHandler'];
+  getEnableHooks: () => boolean;
+  getHookSystem: () => HookSystem | undefined;
+  getBucketFailoverHandler: () => BucketFailoverHandler | undefined;
 };
 
 export class StreamProcessor {
@@ -275,7 +255,7 @@ export class StreamProcessor {
     provider: IProvider,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const { contents: requestContents, pending: pendingUserIContents } =
-      this._buildRequestContents(userContent);
+      buildRequestContentsResult(userContent, this.historyService);
 
     const configForHooks = this.runtimeContext.providerRuntime.config as
       | HookRuntimeConfig
@@ -288,20 +268,18 @@ export class StreamProcessor {
       this._prepareRequestPayload(requestContents, toolSelection.tools, params);
 
     try {
-      const originalContents = requestPayload.contents;
       const hookResult = await this._fireBeforeModelHook(
         configForHooks,
-        originalContents,
+        requestPayload.contents,
         toolSelection.tools as ProviderToolset | undefined,
         toolSelection.allowedFunctionNames,
       );
       const { contents: finalContents, hookOutput, snapshot } = hookResult;
-      const pendingContents = resolvePendingBoundaryFromHook(
-        originalContents,
+      const pendingContents = this._resolvePendingContents(
+        requestPayload.contents,
         finalContents,
         pendingUserIContents,
         hookOutput,
-        (msg) => this.logger.debug(() => msg),
         snapshot,
       );
 
@@ -353,6 +331,23 @@ export class StreamProcessor {
       this.compressionHandler.clearProviderCompressionCallback(provider);
       throw error;
     }
+  }
+
+  private _resolvePendingContents(
+    originalContents: IContent[],
+    finalContents: IContent[],
+    pendingUserIContents: IContent[],
+    hookOutput: BeforeModelHookOutput | undefined,
+    snapshot: ProjectionSnapshot | undefined,
+  ): IContent[] | undefined {
+    return resolvePendingBoundaryFromHook(
+      originalContents,
+      finalContents,
+      pendingUserIContents,
+      hookOutput,
+      (msg) => this.logger.debug(() => msg),
+      snapshot,
+    );
   }
 
   /**
@@ -631,13 +626,6 @@ export class StreamProcessor {
     }
 
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-  }
-
-  private _buildRequestContents(userContent: IContent | IContent[]): {
-    contents: IContent[];
-    pending: IContent[];
-  } {
-    return buildRequestContentsResult(userContent, this.historyService);
   }
 
   private async _handleBucketFailover(

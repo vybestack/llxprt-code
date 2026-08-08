@@ -21,12 +21,14 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import {
+  loadAgentRuntime,
+  type AgentRuntimeProfileSnapshot,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ModelSelection,
   MemoryAccess,
@@ -34,30 +36,50 @@ import type {
   McpAccess,
   WorkspacePaths,
   SessionIdentity,
+  ToolAccess,
+  TelemetryAccess,
+  Diagnostics,
+  PolicyAccess,
+  RuntimeLifecycle,
 } from '@vybestack/llxprt-code-core/config/roles.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+
+/** Narrow config view for ChatSessionFactory member reads. */
+type ChatSessionConfigView = ModelSelection &
+  MemoryAccess &
+  EphemeralSettings &
+  McpAccess &
+  WorkspacePaths &
+  SessionIdentity &
+  ToolAccess &
+  TelemetryAccess &
+  Diagnostics &
+  PolicyAccess &
+  RuntimeLifecycle &
+  EnvironmentContextConfig & {
+    getProviderManager: () => RuntimeProviderManager | undefined;
+    getSettingsService: () => SettingsService;
+    getSubagentManager: () => SubagentManager | undefined;
+    getToolRegistry: () => ToolRegistry;
+  };
 
 /**
  * Assembles ephemeral settings into an immutable snapshot for the runtime.
  * Pure function — reads config, no side effects.
  */
 
-/** Narrow config view for ChatSessionFactory member reads. */
-function asConfigView(config: Config): ModelSelection &
-  MemoryAccess &
-  EphemeralSettings &
-  McpAccess &
-  WorkspacePaths &
-  SessionIdentity & {
-    getProviderManager: Config['getProviderManager'];
-    getSettingsService: Config['getSettingsService'];
-  } {
+/** Narrows a config-like object to the view ChatSessionFactory needs. */
+function asConfigView(config: ChatSessionConfigView): ChatSessionConfigView {
   return config;
 }
 
 export function buildSettingsSnapshot(
-  config: Config,
+  config: ChatSessionConfigView,
   getToolGovernance: typeof getToolGovernanceEphemerals = getToolGovernanceEphemerals,
 ): ReadonlySettingsSnapshot {
   const rawCompressionThreshold = asConfigView(config).getEphemeralSetting(
@@ -128,7 +150,7 @@ export function buildSettingsSnapshot(
  * in clientLlmUtilities which skips env context, core memory, and JIT memory.
  */
 export async function buildSystemInstruction(
-  config: Config,
+  config: ChatSessionConfigView,
   enabledToolNames: string[],
   envParts: Array<{ text?: string }>,
   model: string,
@@ -173,7 +195,7 @@ export async function buildSystemInstruction(
 }
 
 export interface CreateChatSessionDeps {
-  config: Config;
+  config: ChatSessionConfigView;
   runtimeState: AgentRuntimeState;
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
@@ -279,7 +301,7 @@ function buildGenerateContentConfig(
  * Builds the runtime bundle, tool declarations, and ChatSession instance.
  */
 async function buildChatFromRuntime(
-  config: Config,
+  config: ChatSessionConfigView,
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
@@ -301,14 +323,14 @@ async function buildChatFromRuntime(
   const settings = buildSettingsSnapshot(config);
   const providerRuntime = createSettingsProviderRuntimeContext({
     settingsService: asConfigView(config).getSettingsService(),
-    config,
+    config: config as AgentRuntimeProfileSnapshot['config'],
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'AgentClient.startChat' },
   });
 
   const runtimeBundle = await loadRuntime({
     profile: {
-      config,
+      config: config as AgentRuntimeProfileSnapshot['config'],
       state: runtimeState,
       settings,
       providerRuntime,
@@ -377,12 +399,12 @@ export async function createChatSession(
     createHistoryService,
   );
 
-  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
-    'getTokenizerFactory'
-  ];
+  const getTokenizerFactory = (
+    config as ChatSessionConfigView & Record<string, unknown>
+  )['getTokenizerFactory'];
   if (typeof getTokenizerFactory === 'function') {
     const tokenizerFactory = getTokenizerFactory.call(config);
-    if (tokenizerFactory) {
+    if (tokenizerFactory !== undefined && tokenizerFactory !== null) {
       historyService.setTokenizerFactory(tokenizerFactory);
     }
   }

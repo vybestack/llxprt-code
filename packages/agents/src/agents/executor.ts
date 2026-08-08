@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ModelSelection, EphemeralSettings, SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ExecutorConfigView } from '../api/configViews.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { ChatSession } from '../core/chatSession.js';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import {
+  loadAgentRuntime,
+  type AgentRuntimeProfileSnapshot,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { type ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
@@ -128,23 +130,13 @@ function registerToolsFromConfig(
  * This executor runs the agent in a loop, calling tools until it calls the
  * mandatory `complete_task` tool to signal completion.
  */
-/** Narrow config surface for executor member reads. */
-type ExecutorConfigView = ModelSelection &
-  EphemeralSettings &
-  SessionIdentity & {
-    getAgentClient: Config['getAgentClient'];
-    getProviderManager: Config['getProviderManager'];
-    getSettingsService: Config['getSettingsService'];
-    getToolRegistry: Config['getToolRegistry'];
-  };
-
 
 export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   readonly definition: AgentDefinition<TOutput>;
 
   private readonly agentId: string;
   private readonly toolRegistry: ToolRegistry;
-  private readonly runtimeContext: Config;
+  private readonly runtimeContext: ExecutorConfigView;
 
   /** Narrow view of runtimeContext for member reads (avoids Config holder detection). */
   private get cfg(): ExecutorConfigView {
@@ -171,7 +163,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    */
   static async create<TOutput extends z.ZodTypeAny>(
     definition: AgentDefinition<TOutput>,
-    runtimeContext: Config,
+    runtimeContext: ExecutorConfigView,
     messageBus: MessageBus,
     onActivity?: ActivityCallback,
   ): Promise<AgentExecutor<TOutput>> {
@@ -220,7 +212,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    */
   private constructor(
     definition: AgentDefinition<TOutput>,
-    runtimeContext: Config,
+    runtimeContext: ExecutorConfigView,
     toolRegistry: ToolRegistry,
     messageBus: MessageBus,
     onActivity?: ActivityCallback,
@@ -806,14 +798,14 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
     const providerRuntime = createSettingsProviderRuntimeContext({
       settingsService: this.cfg.getSettingsService(),
-      config: this.runtimeContext,
+      config: this.runtimeContext as AgentRuntimeProfileSnapshot['config'],
       runtimeId: runtimeState.runtimeId,
       metadata: { source: 'AgentExecutor.createChatObject' },
     });
 
     return loadAgentRuntime({
       profile: {
-        config: this.runtimeContext,
+        config: this.runtimeContext as AgentRuntimeProfileSnapshot['config'],
         state: runtimeState,
         settings,
         providerRuntime,
@@ -837,8 +829,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         ? rawCompressionThreshold
         : 0.8;
 
-    const rawContextLimit =
-      this.cfg.getEphemeralSetting('context-limit');
+    const rawContextLimit = this.cfg.getEphemeralSetting('context-limit');
     const contextLimit =
       typeof rawContextLimit === 'number' &&
       Number.isFinite(rawContextLimit) &&

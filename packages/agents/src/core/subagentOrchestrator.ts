@@ -5,12 +5,27 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import type {
   EphemeralSettings,
   SessionIdentity,
+  ModelSelection,
+  WorkspacePaths,
+  MemoryAccess,
+  ToolAccess,
+  PolicyAccess,
+  McpAccess,
+  TelemetryAccess,
+  Diagnostics,
+  RuntimeLifecycle,
 } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
   isLoadBalancerProfile,
@@ -112,8 +127,28 @@ export interface SubagentLaunchResult {
 
 /** Narrow config surface for subagent orchestration. */
 type SubagentOrchestratorConfig = SessionIdentity &
-  EphemeralSettings & {
+  ModelSelection &
+  EphemeralSettings &
+  WorkspacePaths &
+  MemoryAccess &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess &
+  Diagnostics &
+  RuntimeLifecycle &
+  EnvironmentContextConfig & {
     getToolRegistry(): ToolRegistry;
+    getPolicyEngine(): PolicyEngine;
+    getOrCreateScheduler(
+      sessionId: string,
+      callbacks: SchedulerCallbacks,
+      options?: SchedulerOptions,
+      dependencies?: {
+        messageBus?: MessageBus;
+        toolRegistry?: ToolRegistry;
+      },
+    ): Promise<ToolSchedulerContract>;
   };
 
 export interface SubagentOrchestratorOptions {
@@ -186,7 +221,7 @@ export class SubagentOrchestrator {
   ): Promise<SubAgentScope> {
     return this.scopeFactory(
       subagent.name,
-      this.options.foregroundConfig as Config,
+      this.options.foregroundConfig,
       promptConfig,
       modelConfig,
       runConfig,
@@ -195,7 +230,7 @@ export class SubagentOrchestrator {
       {
         runtimeBundle: runtimeResult,
         environmentContextLoader: async (_runtime) =>
-          getEnvironmentContext(this.options.foregroundConfig as Config),
+          getEnvironmentContext(this.options.foregroundConfig),
         messageBus: this.options.messageBus,
       },
       signal,

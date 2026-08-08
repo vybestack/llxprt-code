@@ -17,11 +17,25 @@ import {
 import type { Turn } from './turn.js';
 import { type ServerAgentStreamEvent } from './turn.js';
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ModelSelection,
   SessionIdentity,
+  EphemeralSettings,
+  WorkspacePaths,
+  MemoryAccess,
+  ToolAccess,
+  PolicyAccess,
+  McpAccess,
+  TelemetryAccess,
+  Diagnostics,
+  RuntimeLifecycle,
 } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
+import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import {
   buildToolDeclarationsFromView,
@@ -38,7 +52,10 @@ import {
   createContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
+import {
+  type LoopDetectionConfig,
+  LoopDetectionService,
+} from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
@@ -79,10 +96,30 @@ import {
   type RoutedModelProvider,
 } from './modelInfoHelpers.js';
 
-/** Narrow config surface for agent client member reads. */
-type ClientConfigSurface = ModelSelection &
-  SessionIdentity & {
-    getToolRegistry: Config['getToolRegistry'];
+/** Config surface for agent client member reads. */
+type ClientConfigSurface = SessionIdentity &
+  ModelSelection &
+  EphemeralSettings &
+  WorkspacePaths &
+  MemoryAccess &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess &
+  Diagnostics &
+  RuntimeLifecycle &
+  EnvironmentContextConfig & {
+    getEnableHooks?(): boolean;
+    getHookSystem?(): HookSystem | undefined;
+    getContinueOnFailedApiCall(): boolean;
+    getSettingsService(): SettingsService;
+    getSubagentManager(): SubagentManager | undefined;
+    getToolRegistry(): ToolRegistry;
+    getProviderManager(): RuntimeProviderManager | undefined;
+    getTelemetryEnabled(): boolean;
+    getTelemetryOutfile(): string | undefined;
+    getSandbox(): unknown;
+    getCoreTools(): string[] | undefined;
   };
 
 export class AgentClient implements AgentClientContract {
@@ -140,7 +177,7 @@ export class AgentClient implements AgentClientContract {
    * Otherwise falls back to Config-based operation (backward compatibility)
    */
   constructor(
-    private readonly config: Config,
+    private readonly config: ClientConfigSurface,
     runtimeState: AgentRuntimeState,
     historyService?: HistoryService,
     createTurn?: MessageStreamDeps['createTurn'],
@@ -173,7 +210,9 @@ export class AgentClient implements AgentClientContract {
 
     const embeddingModel = (config as ModelSelection).getEmbeddingModel();
     this.embeddingModel = embeddingModel ?? runtimeState.model;
-    this.loopDetector = new LoopDetectionService(config);
+    this.loopDetector = new LoopDetectionService(
+      this.config as unknown as LoopDetectionConfig,
+    );
     this.lastPromptId = runtimeState.sessionId;
 
     // Initialize complexity analyzer with config settings
@@ -319,8 +358,7 @@ export class AgentClient implements AgentClientContract {
     }
     // Use pending config if available (from initialize() call), otherwise fall back to current config
     const contentGenConfig =
-      this._pendingConfig ??
-      (this.config as ClientConfigSurface).getContentGeneratorConfig();
+      this._pendingConfig ?? this.config.getContentGeneratorConfig();
     if (!contentGenConfig) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -328,8 +366,8 @@ export class AgentClient implements AgentClientContract {
     }
     this.contentGenerator = await createContentGenerator(
       contentGenConfig,
-      this.config,
-      (this.config as ClientConfigSurface).getSessionId(),
+      this.config as Parameters<typeof createContentGenerator>[1],
+      this.config.getSessionId(),
     );
 
     // Don't create chat here - that causes infinite recursion with startChat()
@@ -509,10 +547,8 @@ export class AgentClient implements AgentClientContract {
   }
 
   async setTools(): Promise<void> {
-    const toolRegistry = (
-      this.config as ClientConfigSurface
-    ).getToolRegistry() as unknown as
-      | ReturnType<Config['getToolRegistry']>
+    const toolRegistry = this.config.getToolRegistry() as unknown as
+      | ToolRegistry
       | null
       | undefined;
     if (toolRegistry == null) {
@@ -733,7 +769,7 @@ export class AgentClient implements AgentClientContract {
       extraHistory,
       generateContentConfig: this.generateContentConfig,
       todoContinuationService: this.todoContinuationService,
-      toolRegistry: (this.config as ClientConfigSurface).getToolRegistry(),
+      toolRegistry: this.config.getToolRegistry(),
       createHistoryService: () => new HistoryService(),
       createChatSessionInstance: (...args) => new ChatSession(...args),
     });
@@ -742,7 +778,7 @@ export class AgentClient implements AgentClientContract {
   }
 
   private _getEffectiveModelIdentity(): EffectiveModelIdentity {
-    const configFallback = (this.config as ClientConfigSurface).getModel();
+    const configFallback = this.config.getModel();
     const runtimeProviderName = this.runtimeState.provider;
     let routedProviderName = runtimeProviderName;
     let routedProvider: RoutedModelProvider | undefined = undefined;
@@ -815,7 +851,7 @@ export class AgentClient implements AgentClientContract {
       abortSignal,
       model,
       { ...this.generateContentConfig, ...config },
-      this.lastPromptId ?? (this.config as ClientConfigSurface).getSessionId(),
+      this.lastPromptId ?? this.config.getSessionId(),
     );
   }
 
@@ -833,7 +869,7 @@ export class AgentClient implements AgentClientContract {
       generationConfig,
       abortSignal,
       model,
-      this.lastPromptId ?? (this.config as ClientConfigSurface).getSessionId(),
+      this.lastPromptId ?? this.config.getSessionId(),
       this.generateContentConfig,
     );
     return output;

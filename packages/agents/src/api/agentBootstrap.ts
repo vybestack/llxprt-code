@@ -20,8 +20,12 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  SessionIdentity,
+  RuntimeLifecycle,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -123,12 +127,9 @@ export function validateAgentRuntimeId(runtimeId: unknown): void {
  * Returns an AgentClientFactory that constructs the agents-owned AgentClient.
  * @pseudocode createAgent.md step 21
  */
-export function buildAgentClientFactory(): (
-  config: Config,
-  runtimeState: AgentRuntimeState,
-) => AgentClientContract {
+export function buildAgentClientFactory(): AgentClientFactory {
   return (
-    config: Config,
+    config: ConstructorParameters<typeof AgentClient>[0],
     runtimeState: AgentRuntimeState,
   ): AgentClientContract => new AgentClient(config, runtimeState);
 }
@@ -370,7 +371,8 @@ export interface OwnershipRecord {
   runtimeHandle: {
     cleanup: () => Promise<void> | void;
   };
-  config: Config;
+  config: SessionIdentity &
+    RuntimeLifecycle & { getExtensionLoader: () => ExtensionLoader };
   messageBus: unknown;
   loopHolder: {
     current?: unknown;
@@ -436,15 +438,13 @@ export interface OwnershipRecord {
  */
 export function recordOwnership(deps: {
   runtimeHandle: OwnershipRecord['runtimeHandle'];
-  config: Config;
+  config: SessionIdentity &
+    RuntimeLifecycle & { getExtensionLoader: () => ExtensionLoader };
   messageBus: unknown;
-  loopHolder: OwnershipRecord['loopHolder'];
   runtimeState: AgentRuntimeState;
   injectedSchedulerHandles: AgentSchedulerHandle[];
   sessionLocks?: SessionLock[];
-  // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-  // Optional for backward compatibility with existing callers that construct
-  // an agent-owned Config (the historical default); defaults to 'agent'.
+  loopHolder: OwnershipRecord['loopHolder'];
   configOwnership?: 'agent' | 'caller';
 }): OwnershipRecord {
   return {

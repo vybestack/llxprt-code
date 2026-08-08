@@ -18,7 +18,19 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  SessionIdentity,
+  ModelSelection,
+  EphemeralSettings,
+  WorkspacePaths,
+  MemoryAccess,
+  ToolAccess,
+  PolicyAccess,
+  McpAccess,
+  TelemetryAccess,
+  Diagnostics,
+  RuntimeLifecycle,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -63,6 +75,18 @@ import {
 // Run context — carries all collaborators the non-interactive path needs
 // ---------------------------------------------------------------------------
 
+type NonInteractiveConfig = SessionIdentity &
+  ModelSelection &
+  EphemeralSettings &
+  WorkspacePaths &
+  MemoryAccess &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess &
+  Diagnostics &
+  RuntimeLifecycle;
+
 /**
  * Collaborator bag for the non-interactive execution path.
  * Mirrors the SubAgentScope private fields consumed by runNonInteractive.
@@ -73,7 +97,7 @@ export interface NonInteractiveRunContext {
   readonly name: string;
   readonly runtimeContext: AgentRuntimeContext;
   readonly logger: DebugLogger;
-  readonly config: Config;
+  readonly config: NonInteractiveConfig;
   readonly runConfig: RunConfig;
   readonly outputConfig?: OutputConfig;
   readonly toolExecutorContext: ToolExecutionConfig;
@@ -187,7 +211,7 @@ export async function consumeNonInteractiveStream(
   responseStream: AsyncIterable<StreamEvent>,
   abortController: AbortController,
   currentTurn: number,
-  config: Config,
+  config: NonInteractiveConfig,
   logger: DebugLogger,
   subagentId: string,
   output: OutputObject,
@@ -339,7 +363,7 @@ export async function runNonInteractiveTurn(
   sessionId: string,
   subagentId: string,
   execCtx: ExecutionLoopContext,
-  config: Config,
+  config: NonInteractiveConfig,
   logger: DebugLogger,
   output: OutputObject,
 ): Promise<{ functionCalls: ToolCallBlock[]; textResponse: string }> {

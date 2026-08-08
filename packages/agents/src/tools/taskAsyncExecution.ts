@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { EphemeralSettings } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   SubagentOrchestrator,
   SubagentLaunchRequest,
@@ -56,7 +56,7 @@ export interface AsyncSetupResult {
 /** Collaborators needed to run an async task. */
 export interface AsyncTaskCollaborators {
   config: EphemeralSettings & {
-    getSettingsService: Config['getSettingsService'];
+    getSettingsService: () => SettingsService;
   };
   normalized: TaskToolInvocationParams;
   params: { timeout_seconds?: number; grace_period_seconds?: number };
@@ -93,7 +93,7 @@ export function normalizeSubagentStreamingText(text: string): string {
  */
 export function checkAsyncSettings(
   config: EphemeralSettings & {
-    getSettingsService: Config['getSettingsService'];
+    getSettingsService: () => SettingsService;
   },
 ): ToolResult | undefined {
   const settingsService =

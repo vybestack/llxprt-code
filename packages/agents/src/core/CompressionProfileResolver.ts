@@ -5,7 +5,7 @@
  */
 
 import fs from 'node:fs/promises';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -19,7 +19,6 @@ import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 
 /** Provides access to the profile manager service. */
@@ -331,7 +330,7 @@ export async function resolveStandardCompressionProvider(
   profileName: string,
   profile: StandardProfile,
   profileManager: ProfileManager,
-  config: Config | undefined,
+  config: ProviderRuntimeContext['config'],
   parentEphemerals: Record<string, unknown> = {},
 ): Promise<CompressionProviderResult> {
   const provider = ctx.resolveExplicitCompressionProvider(
@@ -401,7 +400,7 @@ export async function buildCompressionLoadBalancerCandidates(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: Config | undefined,
+  config: ProviderRuntimeContext['config'],
   profileManager: ProfileManager,
 ): Promise<CompressionLoadBalancerCandidate[]> {
   const candidates: CompressionLoadBalancerCandidate[] = [];
@@ -447,7 +446,7 @@ export async function resolveLoadBalancedCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: Config | undefined,
+  config: ProviderRuntimeContext['config'],
   profileManager: ProfileManager,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(

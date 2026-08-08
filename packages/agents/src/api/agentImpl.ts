@@ -12,18 +12,10 @@
  */
 
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  McpAccess,
-  RuntimeLifecycle,
-  PolicyAccess,
-  EphemeralSettings,
-  SessionIdentity,
-  WorkspacePaths,
-} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { AgentImplConfigView } from './configViews.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
@@ -137,7 +129,7 @@ import { AggregateDisposeError } from './disposeErrors.js';
  * @pseudocode createAgent.md steps 150-160
  */
 export interface AgentDeps {
-  readonly config: Config;
+  readonly config: AgentImplConfigView;
   readonly providerManager: RuntimeProviderManager;
   readonly oauthManager: OAuthManager;
   readonly settingsService: SettingsService;
@@ -211,21 +203,6 @@ export interface AgentProviderState {
  * @requirement:REQ-001
  * @requirement:REQ-003
  */
-/** Narrow config surface for AgentImpl member reads. */
-type AgentImplConfigView = McpAccess &
-  RuntimeLifecycle &
-  PolicyAccess &
-  EphemeralSettings &
-  SessionIdentity &
-  WorkspacePaths & {
-    getAgentClient: Config['getAgentClient'];
-    getAsyncTaskManager: Config['getAsyncTaskManager'];
-    getExtensionLoader: Config['getExtensionLoader'];
-    getPolicyEngine: Config['getPolicyEngine'];
-    getShellJobManager: Config['getShellJobManager'];
-    getToolRegistry: Config['getToolRegistry'];
-    initializeContentGeneratorConfig: Config['initializeContentGeneratorConfig'];
-  };
 
 export class AgentImpl implements Agent {
   readonly profiles: ProfilesControl;

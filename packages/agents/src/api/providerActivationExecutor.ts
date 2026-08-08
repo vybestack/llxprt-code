@@ -37,12 +37,12 @@
 
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   EphemeralSettings,
   ModelSelection,
 } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProvider,
   setActiveModel,
@@ -70,8 +70,8 @@ import { PLACEHOLDER_MODEL } from './constants.js';
 /** Narrow config surface for provider activation. */
 export type ProviderActivationConfig = EphemeralSettings &
   ModelSelection & {
-    getProviderManager: Config['getProviderManager'];
-    getSettingsService: Config['getSettingsService'];
+    getProviderManager: () => RuntimeProviderManager | undefined;
+    getSettingsService: () => SettingsService;
   };
 
 export interface ProviderActivationResult {
@@ -276,7 +276,10 @@ async function ensureProviderManagerOnConfig(
   config: ProviderActivationConfig,
   manager: RuntimeProviderManager,
 ): Promise<void> {
-  configureProviderRuntimeFactories(config as Config, manager);
+  configureProviderRuntimeFactories(
+    config as Parameters<typeof configureProviderRuntimeFactories>[0],
+    manager,
+  );
   const serverToolsProvider = manager.getServerToolsProvider();
   if (
     serverToolsProvider &&

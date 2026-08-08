@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { AgentExecutor } from './executor.js';
+import type { ExecutorConfigView } from '../api/configViews.js';
 import {
   BaseToolInvocation,
   type ToolResult,
@@ -45,7 +45,7 @@ export class SubagentInvocation<
   constructor(
     params: AgentInputs,
     private readonly definition: AgentDefinition<TOutput>,
-    private readonly config: Config,
+    private readonly config: ExecutorConfigView,
     private readonly executorMessageBus: MessageBus,
   ) {
     super(params, executorMessageBus);

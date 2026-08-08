@@ -6,7 +6,43 @@ Members not covered by any of the 11 role interfaces in
 preserves full type safety while avoiding Config-type member-read
 detection by the boundary guard.
 
-## Service-Locator Accessors (15 members)
+## P07b Remediation
+
+P07b closed the guard hole by detecting ALL type-level Config references
+(indexed access, typeof, keyof, generic args, heritage clauses, type
+aliases, mapped/utility types). Every `Config['methodName']` reference was
+replaced with an explicit function signature using the service's own
+exported type. No `Config['...']` indexed access remains in production
+code outside core and the exempt `fromConfig.ts`.
+
+### Remediation Summary
+
+All 15 service-locator members were resolved by replacing
+`Config['methodName']` with `() => ServiceType` (or a more specific
+function signature) in local config-view types. Config satisfies these
+structurally because it has the corresponding getter methods.
+
+### Role-Gap Findings
+
+The following services have NO exported role interface of their own in
+`packages/core/src/config/roles/`. They are injected via explicit function
+signatures using the narrowest available return type:
+
+| Member | Return Type | Import Source | Notes |
+|---|---|---|---|
+| `getEnableHooks` | `() => boolean` | (primitive) | No interface needed — returns a primitive |
+| `getHookSystem` | `() => HookSystem \| undefined` | `@vybestack/llxprt-code-core/hooks/hookSystem.js` | HookSystem exported from hooks module |
+| `getBucketFailoverHandler` | `() => BucketFailoverHandler \| undefined` | `@vybestack/llxprt-code-core/config/configTypes.js` | BucketFailoverHandler exported from configTypes |
+| `getTokenizerFactory` | `() => RuntimeTokenizerFactory \| undefined` | `@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js` | RuntimeTokenizerFactory has its own module |
+| `getProfileManager` | `() => ProfileManager \| undefined` | `@vybestack/llxprt-code-settings` | Already used by RuntimeDependencies |
+| `getOrCreateScheduler` | `(sessionId, callbacks, options?, deps?) => Promise<ToolSchedulerContract>` | core config/schedulerSingleton + core/toolSchedulerContract | Matches RuntimeDependencies field signature |
+
+These members should eventually be added to a core role interface so
+consumers can depend on the role rather than a function signature.
+
+## Historical Record (P07)
+
+### Service-Locator Accessors (15 members)
 
 These are getter methods on Config that return singleton service objects.
 They are available on `RuntimeDependencies` as record fields (e.g.
@@ -30,19 +66,6 @@ They are available on `RuntimeDependencies` as record fields (e.g.
 | `getProfileManager` | CompressionProfileResolver.ts |
 | `getOrCreateScheduler` | subagentRuntimeSetup.ts, nonInteractiveToolExecutor.ts |
 | `initializeContentGeneratorConfig` | agentImpl.ts, createAgent.ts |
-
-## Resolution Approach
-
-All gap members were resolved using `Config['methodName']` indexed-access
-type syntax in local type aliases. This approach:
-
-1. **Preserves type safety** — the return type is exactly Config's method
-   return type, not `unknown`.
-2. **Avoids boundary guard detection** — `Config['method']` is a type-level
-   operation (`ts.isIndexedAccessType`), not a runtime property access
-   (`ts.isPropertyAccessExpression`). The guard only checks runtime accesses.
-3. **No consumer-owned capability module needed** — the local type alias
-   satisfies the structural requirement without introducing a new module.
 
 ## Recommendation for Future Phases
 

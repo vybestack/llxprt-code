@@ -10,7 +10,44 @@
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  SessionIdentity,
+  ModelSelection,
+  EphemeralSettings,
+  WorkspacePaths,
+  MemoryAccess,
+  ToolAccess,
+  PolicyAccess,
+  McpAccess,
+  TelemetryAccess,
+  Diagnostics,
+  RuntimeLifecycle,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+
+type SubagentConfig = SessionIdentity &
+  ModelSelection &
+  EphemeralSettings &
+  WorkspacePaths &
+  MemoryAccess &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess &
+  Diagnostics &
+  RuntimeLifecycle &
+  EnvironmentContextConfig & {
+    getPolicyEngine: () => PolicyEngine;
+    getOrCreateScheduler: (
+      sessionId: string,
+      callbacks: SchedulerCallbacks,
+      options?: SchedulerOptions,
+      dependencies?: {
+        messageBus?: MessageBus;
+        toolRegistry?: ToolRegistry;
+      },
+    ) => Promise<ToolSchedulerContract>;
+  };
 import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
@@ -32,6 +69,13 @@ import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { type EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   filterToolsAgainstRuntime,
   createToolExecutionConfig,
@@ -177,7 +221,7 @@ export class SubAgentScope {
     private readonly contentGenerator: ContentGenerator,
     private readonly toolExecutorContext: ToolExecutionConfig,
     private readonly environmentContextLoader: EnvironmentContextLoader,
-    private readonly config: Config,
+    private readonly config: SubagentConfig,
     private readonly messageBus?: MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
@@ -210,7 +254,7 @@ export class SubAgentScope {
    */
   static async create(
     name: string,
-    foregroundConfig: Config,
+    foregroundConfig: SubagentConfig,
     promptConfig: PromptConfig,
     modelConfig: ModelConfig,
     runConfig: RunConfig,
