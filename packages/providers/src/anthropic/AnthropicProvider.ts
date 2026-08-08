@@ -18,6 +18,7 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import type { SystemPromptPlacement } from '../utils/systemPromptPlacement.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -365,6 +366,24 @@ export class AnthropicProvider extends BaseProvider {
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
     return 'claude-opus-5';
+  }
+
+  /**
+   * Issue #3136: declare where the assembled system prompt may go.
+   *
+   * Under OAuth (`claudecode`) Anthropic REJECTS any request whose `system`
+   * field carries content other than the Claude Code string, so the prompt
+   * must be placed at the top of the context instead. This is a declaration
+   * consumed by the shared placement policy, not a placement decision made
+   * here.
+   */
+  getSystemPromptPlacement(
+    options: GenerateChatOptions,
+  ): SystemPromptPlacement {
+    const authToken = options.resolved?.authToken;
+    return typeof authToken === 'string' && this.classifyOAuthToken(authToken)
+      ? 'context-prefix'
+      : 'system-field';
   }
 
   /**

@@ -38,6 +38,7 @@ import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/promp
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { mergeSystemInstruction as mergeSystemInstructionShared } from '../utils/systemInstructionMerge.js';
+import { formatContextPrefix } from '../utils/systemPromptPlacement.js';
 
 /**
  * Request preparation context returned to caller
@@ -321,17 +322,20 @@ async function buildOAuthSystemContext(params: {
   );
 
   if (systemMessage) {
+    // Issue #3136: Anthropic under OAuth declares `context-prefix` placement —
+    // its `system` field may carry ONLY the Claude Code string, so the real
+    // prompt is unshifted to the TOP OF THE CONTEXT (never inside history).
+    // The wrapper format is owned by the shared placement policy so this
+    // provider does not re-derive it.
+    const contextPrefixText = formatContextPrefix(systemMessage);
+
     if (wantCaching) {
       messages.unshift({
         role: 'user',
         content: [
           {
             type: 'text',
-            text: `<system>
-${systemMessage}
-</system>
-
-User provided conversation begins here:`,
+            text: contextPrefixText,
             cache_control: { type: 'ephemeral', ttl },
           } as {
             type: 'text';
@@ -344,11 +348,7 @@ User provided conversation begins here:`,
     } else {
       messages.unshift({
         role: 'user',
-        content: `<system>
-${systemMessage}
-</system>
-
-User provided conversation begins here:`,
+        content: contextPrefixText,
       });
     }
   }
