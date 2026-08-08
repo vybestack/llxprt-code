@@ -78,7 +78,6 @@ function buildDeps(
     isCodexBaseURL: (url) => (url ?? '').includes('backend-api/codex'),
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'codex-token',
-    generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,

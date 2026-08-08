@@ -94,7 +94,6 @@ function buildDeps(
     isCodexBaseURL: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
-    generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5',
     getGlobalConfig: () => undefined,
