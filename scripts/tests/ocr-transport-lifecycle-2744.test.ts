@@ -107,6 +107,8 @@ function responseCallbackFailureProbe(): Record<string, unknown> {
       execFileSync(process.execPath, ['-e', source], {
         cwd: process.cwd(),
         encoding: 'utf8',
+        timeout: 30_000,
+        killSignal: 'SIGKILL',
       }),
     ),
   );

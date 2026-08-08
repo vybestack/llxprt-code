@@ -127,9 +127,11 @@ export async function withOcrScenario<T>(
   const cleanupFailures: unknown[] = [];
   for (const request of Array.from(clientRequests)) {
     try {
-      if (!request.destroyed) {
-        request.destroy();
+      if (request.destroyed) {
+        clientRequests.delete(request);
+        continue;
       }
+      request.destroy();
     } catch (error) {
       cleanupFailures.push(error);
     }
