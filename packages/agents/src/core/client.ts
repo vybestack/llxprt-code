@@ -169,13 +169,13 @@ export class AgentClient implements AgentClientContract {
       setGlobalDispatcher(new ProxyAgent(proxyUrl));
     }
 
-    const embeddingModel = config.getEmbeddingModel();
+    const embeddingModel = (config as ModelSelection).getEmbeddingModel();
     this.embeddingModel = embeddingModel ?? runtimeState.model;
     this.loopDetector = new LoopDetectionService(config);
     this.lastPromptId = runtimeState.sessionId;
 
     // Initialize complexity analyzer with config settings
-    const complexitySettings = config.getComplexityAnalyzerSettings();
+    const complexitySettings = (config as ModelSelection).getComplexityAnalyzerSettings();
     this.complexityAnalyzer = new ComplexityAnalyzer({
       complexityThreshold: complexitySettings.complexityThreshold,
       minTasksForSuggestion: complexitySettings.minTasksForSuggestion,

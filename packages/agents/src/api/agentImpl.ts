@@ -322,7 +322,7 @@ export class AgentImpl implements Agent {
     // scheduler/coordinator the facade owns so the T13 disposal probe reads the
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
-    this.agentClient = deps.config.getAgentClient();
+    this.agentClient = this.cfg.getAgentClient();
     const rs = deps.runtimeState;
     this.providerState = {
       provider: rs.provider,
@@ -358,7 +358,7 @@ export class AgentImpl implements Agent {
       setLoadBalancer: (isLb) => {
         this.providerState.isLoadBalancer = isLb;
       },
-      workingDir: deps.config.getTargetDir(),
+      workingDir: this.cfg.getTargetDir(),
     });
     this.auth = this.buildAuthControl();
     this.mcp = this.buildMcpControl();

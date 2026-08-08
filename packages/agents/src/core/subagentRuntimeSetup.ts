@@ -67,7 +67,15 @@ type SubagentRuntimeSetupConfig = RuntimeLifecycle &
   PolicyAccess &
   McpAccess &
   TelemetryAccess & {
-    getOrCreateScheduler: Config['getOrCreateScheduler'];
+    getOrCreateScheduler(
+      sessionId: string,
+      callbacks: SchedulerCallbacks,
+      options?: SchedulerOptions,
+      dependencies?: {
+        messageBus?: MessageBus;
+        toolRegistry?: ToolRegistry;
+      },
+    ): Promise<ToolSchedulerContract>;
     getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
   };
 // ---------------------------------------------------------------------------
@@ -277,7 +285,12 @@ export function createToolExecutionConfig(
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
-    getOrCreateScheduler: (sessionId: string, callbacks: Parameters<Config['getOrCreateScheduler']>[1], options: Parameters<Config['getOrCreateScheduler']>[2], dependencies: Parameters<Config['getOrCreateScheduler']>[3]) =>
+    getOrCreateScheduler: (
+      sessionId: string,
+      callbacks: SchedulerCallbacks,
+      options: SchedulerOptions | undefined,
+      dependencies: { messageBus?: MessageBus; toolRegistry?: ToolRegistry } | undefined,
+    ) =>
       foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
         messageBus: dependencies?.messageBus ?? messageBus,
         toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
