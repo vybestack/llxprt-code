@@ -24,7 +24,10 @@ import {
 import { isSlashCommand } from '../utils/commandUtils.js';
 import type { InputHandlerDeps } from './inputPromptKeyHandlers.js';
 import { handleInputKey } from './inputPromptKeyHandlers.js';
-import { insertPathReference } from './inputPromptText.js';
+import {
+  expandLargePastePlaceholders,
+  insertPathReference,
+} from './inputPromptText.js';
 import type {
   InputPromptProps,
   InputPromptRuntimeProps,
@@ -95,17 +98,10 @@ const useSubmitHandlers = (
 ) => {
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
-      let actualValue = submittedValue;
-      const pendingPastes = pendingLargePastesRef.current;
-      if (pendingPastes.size > 0) {
-        pendingPastes.forEach((actualContent, placeholderLabel) => {
-          if (actualValue.includes(placeholderLabel)) {
-            actualValue = actualValue
-              .split(placeholderLabel)
-              .join(actualContent);
-          }
-        });
-      }
+      const actualValue = expandLargePastePlaceholders(
+        submittedValue,
+        pendingLargePastesRef.current,
+      );
 
       if (shellModeActive) {
         shellHistory.addCommandToHistory(actualValue);

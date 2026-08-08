@@ -13,7 +13,10 @@ import { Command, keyMatchers } from '../keyMatchers.js';
 import { isAutoExecutableCommand } from '../utils/commandUtils.js';
 import { cpSlice } from '../utils/textUtils.js';
 import type { Suggestion } from './SuggestionsDisplay.js';
-import { handleLargePaste } from './inputPromptText.js';
+import {
+  expandLargePastePlaceholders,
+  handleLargePaste,
+} from './inputPromptText.js';
 import { logicalPosToOffset } from './shared/buffer-operations.js';
 import type { TextBuffer } from './shared/text-buffer.js';
 import type React from 'react';
@@ -543,7 +546,12 @@ const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
       resetCompletionState();
       return true;
     }
-    const consumed = deps.handleSteer(buffer.text);
+    const consumed = deps.handleSteer(
+      expandLargePastePlaceholders(
+        buffer.text,
+        deps.pendingLargePastesRef.current,
+      ),
+    );
     if (consumed) {
       buffer.setText('');
       resetCompletionState();
