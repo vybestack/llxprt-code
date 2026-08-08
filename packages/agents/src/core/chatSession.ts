@@ -38,6 +38,13 @@ export interface ChatSessionConfig extends ModelGenerationSettings {
   providerRequestContext?: Record<string, unknown>;
   tools?: ToolGroupArray;
   toolConfig?: unknown;
+  /**
+   * Caller-supplied re-renderer carried onto provider options so a router
+   * provider (e.g. a load balancer) can re-render the assembled prompt for the
+   * sub-profile model it selects (issue #3157). Assembly stays owned by
+   * ChatSession; this port only re-invokes it.
+   */
+  systemPromptAssembler?: SystemPromptAssembler;
 }
 
 /**
@@ -222,6 +229,13 @@ export class ChatSession {
     this.historyService = view.history;
     this.generationConfig = generationConfig;
     this.systemPromptAssembler = systemPromptAssembler;
+    // Carry the assembler onto the generation config so the three send seams
+    // (TurnProcessor/StreamProcessor/DirectMessageProcessor) thread it onto
+    // the provider options alongside systemInstruction. A router provider
+    // re-invokes it after sub-profile selection (issue #3157).
+    if (systemPromptAssembler !== undefined) {
+      this.generationConfig.systemPromptAssembler = systemPromptAssembler;
+    }
     void contentGenerator;
 
     // Wire density-dirty tracking on historyService.add

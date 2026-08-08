@@ -5,7 +5,7 @@
  */
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SendMessageParams } from './chatSession.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type {
   ModelStreamChunk,
   ModelOutput,
@@ -144,7 +144,7 @@ export class StreamProcessor {
       extras?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
     private readonly historyService: HistoryService,
-    private readonly generationConfig: AgentClientGenerateConfig,
+    private readonly generationConfig: ChatSessionConfig,
     private readonly flushAuthScope: typeof flushRuntimeAuthScope = flushRuntimeAuthScope,
   ) {}
 
@@ -506,6 +506,7 @@ export class StreamProcessor {
       systemInstruction: extractSystemInstructionText(
         this.generationConfig.systemInstruction,
       ),
+      systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     } as GenerateChatOptions;
   }
 

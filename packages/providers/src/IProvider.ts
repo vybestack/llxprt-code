@@ -27,6 +27,7 @@ import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
+  SystemPromptAssembler,
   UserMemoryInput,
 } from './types/providerRuntime.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -84,6 +85,14 @@ export interface GenerateChatOptions {
    * the provider, because the provider rebuilds its own generic core prompt.
    */
   systemInstruction?: string;
+  /**
+   * Caller-supplied re-renderer for the assembled system prompt (issue #3157).
+   * A router provider (e.g. a load balancer) that overrides the model invokes
+   * this after sub-profile selection so the rendered model matches
+   * `resolved.model`. Assembly stays owned by the agent layer; this port only
+   * re-invokes it.
+   */
+  systemPromptAssembler?: SystemPromptAssembler;
 }
 
 /**
