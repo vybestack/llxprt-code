@@ -79,12 +79,7 @@ describe('test:bun:all canonical aggregate script', () => {
     for (const name of EXPECTED_CHAIN) {
       const underlying = rootPackage.scripts?.[name];
       expect(underlying).toBeDefined();
-      const value = underlying ?? '';
-      // test:bun invokes the Bun orchestrator (scripts/test.ts); the other
-      // two invoke run_bun_tests.ts. All run directly under Bun.
-      const isBunNative =
-        value.includes('run_bun_tests') || value.includes('scripts/test.ts');
-      expect(isBunNative).toBe(true);
+      expect(underlying ?? '').toMatch(/(?:^|\s)bun(?:\s|$)/);
     }
   });
 
