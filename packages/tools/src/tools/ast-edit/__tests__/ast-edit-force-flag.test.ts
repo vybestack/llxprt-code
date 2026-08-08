@@ -58,7 +58,16 @@ describe('ast_edit force flag: refuses a newly-introduced AST syntax error (REQ-
 
     expect(result.error).toBeDefined();
     expect(result.error?.type).toBe('ast_syntax_error');
-    expect(() => readFileSync(filePath, 'utf-8')).toThrow(/ENOENT/);
+
+    // Assert the stable errno rather than the message text: `code` is Node's
+    // documented contract, the wording of the message is not.
+    let readError: NodeJS.ErrnoException | undefined;
+    try {
+      readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      readError = error as NodeJS.ErrnoException;
+    }
+    expect(readError).toMatchObject({ code: 'ENOENT' });
   });
 });
 
