@@ -11,7 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolGovernanceAccess } from '../config/capabilities.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 
 export { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
@@ -51,7 +51,7 @@ function toToolDeclaration(decl: {
  * Reads the tool governance ephemeral settings (allowed/disabled tool lists).
  * Returns undefined if neither list is configured.
  */
-export function getToolGovernanceEphemerals(config: Config):
+export function getToolGovernanceEphemerals(config: ToolGovernanceAccess):
   | {
       allowed?: string[];
       disabled?: string[];
@@ -148,7 +148,9 @@ export function buildToolDeclarationsFromView(
 /**
  * Returns the deduplicated list of enabled tool names for use in system prompts.
  */
-export function getEnabledToolNamesForPrompt(config: Config): string[] {
+export function getEnabledToolNamesForPrompt(
+  config: ToolGovernanceAccess,
+): string[] {
   const registry: unknown = config.getToolRegistry();
   if (
     registry == null ||
@@ -174,7 +176,7 @@ export function getEnabledToolNamesForPrompt(config: Config): string[] {
  * Delegates to the shared shouldIncludeSubagentDelegation function.
  */
 export async function shouldIncludeSubagentDelegationForConfig(
-  config: Config,
+  config: ToolGovernanceAccess,
   enabledToolNames: string[],
 ): Promise<boolean> {
   return shouldIncludeSubagentDelegation(enabledToolNames, () =>

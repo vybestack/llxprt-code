@@ -4,11 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { createHash } from 'node:crypto';
 import { AgentEventType, type ServerAgentStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
-import type { Config } from '../config/config.js';
+/**
+ * The single configuration member loop detection reads.
+ *
+ * LoopDetectionConfig satisfies this structurally, so callers are unaffected.
+ * Part of the #2615 LoopDetectionConfig decomposition.
+ */
+export interface LoopDetectionConfig extends TelemetryConfig {
+  getEphemeralSetting(key: string): unknown;
+}
 
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 5000;
@@ -152,7 +161,7 @@ function detectMarkdownBlockquote(content: string): boolean {
  * Monitors tool call repetitions and content sentence repetitions.
  */
 export class LoopDetectionService {
-  private readonly config: Config;
+  private readonly config: LoopDetectionConfig;
   private promptId = '';
 
   // Tool call tracking
@@ -169,7 +178,7 @@ export class LoopDetectionService {
   // Turn tracking for potential future rule-based checks
   private turnsInCurrentPrompt = 0;
 
-  constructor(config: Config) {
+  constructor(config: LoopDetectionConfig) {
     this.config = config;
   }
 

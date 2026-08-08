@@ -4,18 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '../config/config.js';
+import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import type { WorkspaceContext } from './workspaceContext.js';
+
+/**
+ * The configuration surface environment-context assembly reads.
+ *
+ * Three members rather than the whole EnvironmentContextConfig. Part of the #2615 decomposition.
+ */
+export interface EnvironmentContextConfig {
+  getEnvironmentMemory(): string;
+  getFileService(): FileDiscoveryService;
+  getWorkspaceContext(): WorkspaceContext;
+}
 import { getFolderStructure } from './getFolderStructure.js';
 
 export const INITIAL_HISTORY_LENGTH = 1;
 
 /**
  * Generates a string describing the current workspace directories and their structures.
- * @param {Config} config - The runtime configuration and services.
+ * @param {EnvironmentContextConfig} config - The runtime configuration and services.
  * @returns {Promise<string>} A promise that resolves to the directory context string.
  */
 export async function getDirectoryContextString(
-  config: Config,
+  config: EnvironmentContextConfig,
 ): Promise<string> {
   const workspaceContext = config.getWorkspaceContext();
   const workspaceDirectories = workspaceContext.getDirectories();
@@ -48,11 +60,11 @@ ${folderStructure}`;
  * Retrieves environment-related information to be included in the chat context.
  * This includes the current working directory, date, operating system, and folder structure.
  * Optionally, it can also include the full file context if enabled.
- * @param {Config} config - The runtime configuration and services.
+ * @param {EnvironmentContextConfig} config - The runtime configuration and services.
  * @returns A promise that resolves to an array of text parts containing environment information.
  */
 export async function getEnvironmentContext(
-  config: Config,
+  config: EnvironmentContextConfig,
 ): Promise<Array<{ text: string }>> {
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',

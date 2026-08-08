@@ -20,6 +20,8 @@
  * Part of the #2615 Config decomposition.
  */
 
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { SubagentManager } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
@@ -116,4 +118,11 @@ export interface MessageStreamConfig extends ModelInfoConfig {
 export interface ModelInfoConfig {
   getSettingsService(): SettingsService;
   getContentGeneratorConfig(): ContentGeneratorConfig | undefined;
+}
+
+/** What tool-name governance reads when building the prompt tool list. */
+export interface ToolGovernanceAccess {
+  getEphemeralSetting(key: string): unknown;
+  getSubagentManager(): SubagentManager | undefined;
+  getToolRegistry(): ToolRegistry;
 }
