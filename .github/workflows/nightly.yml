@@ -7,7 +7,11 @@ on:
 
 concurrency:
   group: 'nightly-${{ github.ref }}'
-  cancel-in-progress: false
+  # cancel-in-progress ensures that a superseded run (manual dispatch on the
+  # same ref, or a new nightly cron trigger) does not hold runner capacity.
+  # With it off those runs serialize in the group and contend for the runner
+  # pool, which produced multi-hour queue-wait outliers (issue #3149).
+  cancel-in-progress: true
 
 permissions:
   checks: 'write'
@@ -22,6 +26,7 @@ jobs:
   windows_ci:
     name: 'Windows CI (Nightly)'
     runs-on: '${{ matrix.os }}'
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -114,12 +119,6 @@ jobs:
           LLXPRT_COVERAGE: 'false'
         run: 'npm run test'
 
-      - name: 'Run script harness tests (macOS)'
-        if: matrix.os == 'macos-latest'
-        env:
-          CI: true
-        run: npm run test:scripts
-
       - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
         run: './packages/cli/bin/llxprt --version'
 
@@ -210,6 +209,7 @@ jobs:
           echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
 
       - name: 'Run tests and generate reports'
+        id: macos_main_tests
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
@@ -231,11 +231,17 @@ jobs:
         run: 'npm run test'
 
       - name: 'Run script harness tests'
+        # Run when the main test step completed (success or failure) but NOT
+        # when the workflow was cancelled — so macOS platform coverage of the
+        # script harness still runs after a test failure, without burning
+        # runner minutes after cancellation (issue #3149).
+        if: ${{ !cancelled() && (steps.macos_main_tests.outcome == 'success' || steps.macos_main_tests.outcome == 'failure') }}
         env:
           CI: true
         run: 'npm run test:scripts'
 
       - name: 'Run shell-script behavioral tests (#2606)'
+        if: ${{ !cancelled() && (steps.macos_main_tests.outcome == 'success' || steps.macos_main_tests.outcome == 'failure') }}
         env:
           CI: true
         run: 'npm run test:shell'
@@ -316,6 +322,7 @@ jobs:
   e2e_full:
     name: 'E2E Full - ${{ matrix.os }} - ${{ matrix.sandbox }}'
     runs-on: '${{ matrix.os }}'
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -570,6 +577,7 @@ jobs:
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
       issues: 'write'
+      contents: 'read'
     steps:
       - name: 'Create Issue on Failure'
         env:
@@ -639,11 +647,48 @@ jobs:
             fi
           }
 
+          # Resolve the milestone for the version currently being worked on in
+          # main, so the auto-created nightly failure issue surfaces in the
+          # release view (issue #3149). Source of truth is the root package.json
+          # `version` on main — not the dispatched ref, which may have bumped
+          # it. Resolved by exact title match against open milestones (not
+          # nearest due date). Fails soft: an unresolvable milestone logs a
+          # warning and returns empty, so the notification still goes out.
+          resolve_milestone() {
+            local package_json
+            if ! package_json="$(gh api "repos/${GH_REPO}/contents/package.json?ref=main" -H 'Accept: application/vnd.github.raw' 2>/dev/null)"; then
+              echo "Warning: could not read package.json from main; skipping milestone resolution" >&2
+              return
+            fi
+            local current_version
+            current_version="$(printf '%s' "${package_json}" | jq -r '.version // empty' 2>/dev/null)"
+            if [[ -z "${current_version}" ]]; then
+              echo "Warning: package.json on main has no version field; skipping milestone resolution" >&2
+              return
+            fi
+            # gh issue --milestone accepts a milestone TITLE, not a number.
+            # Resolve the title by exact match across ALL open milestone
+            # pages (issue #3149), then return it for assignment.
+            local milestone_title
+            milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" --jq "[.[][] | select(.title == \"${current_version}\")] | .[0].title // empty" 2>/dev/null)"
+            if [[ -z "${milestone_title}" ]]; then
+              echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
+              return
+            fi
+            printf '%s' "${milestone_title}"
+          }
+
           LABEL_ARGS=()
           if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
             LABEL_ARGS+=(--label "ci/cd")
           else
             echo "Warning: continuing without ci/cd label" >&2
+          fi
+
+          MILESTONE_TITLE="$(resolve_milestone)"
+          MILESTONE_ARGS=()
+          if [[ -n "${MILESTONE_TITLE}" ]]; then
+            MILESTONE_ARGS+=(--milestone "${MILESTONE_TITLE}")
           fi
 
           retry_gh() {
@@ -701,11 +746,20 @@ jobs:
               echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
               exit 1
             }
+            # Keep a long-lived failure issue on the current release milestone
+            # too, not just on first creation (issue #3149).
+            if [[ -n "${MILESTONE_TITLE}" ]]; then
+              retry_gh gh issue edit "${EXISTING_ISSUE}" \
+                --repo "${GH_REPO}" \
+                --milestone "${MILESTONE_TITLE}" || \
+                echo "Warning: failed to set milestone '${MILESTONE_TITLE}' on existing issue #${EXISTING_ISSUE}" >&2
+            fi
           else
             INTRODUCTION="The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}."
             build_body_file "${BODY_FILE}" "${INTRODUCTION}"
             CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
             CREATE_ARGS+=("${LABEL_ARGS[@]}")
+            CREATE_ARGS+=("${MILESTONE_ARGS[@]}")
             retry_gh gh issue create "${CREATE_ARGS[@]}" || {
               echo "ERROR: Failed to create nightly failure issue" >&2
               exit 1

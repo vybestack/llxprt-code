@@ -76,6 +76,7 @@ function buildNormalizedOptions(
     invocation,
     userMemory: undefined,
     tools: undefined,
+    systemInstruction: 'test system prompt',
     metadata:
       overrides.metadataAbortSignal !== undefined
         ? { abortSignal: overrides.metadataAbortSignal }

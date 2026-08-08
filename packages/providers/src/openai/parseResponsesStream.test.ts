@@ -500,3 +500,184 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     expect(messages.find((m) => m.metadata?.id === 'r1')).toBeDefined();
   });
 });
+
+describe('parseErrorResponse quota-aware 429 and response attachment @issue:3140', () => {
+  it('uses quota-exhaustion wording for a 429 with insufficient_quota code', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"error":{"code":"insufficient_quota","message":"You exhausted your quota"}}',
+      'Responses',
+    );
+    expect(error.message).not.toContain('Rate limit exceeded');
+    expect(error.message.toLowerCase()).toContain('quota');
+    expect(error.message.toLowerCase()).toContain('exhaust');
+    expect(error.message.toLowerCase()).toContain('will not');
+  });
+
+  it('uses quota-exhaustion wording for a 429 with billing_hard_limit_reached', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"error":{"code":"billing_hard_limit_reached","message":"Billing hard limit reached"}}',
+      'Responses',
+    );
+    expect(error.message).not.toContain('Rate limit exceeded');
+    expect(error.message.toLowerCase()).toContain('billing');
+    expect(error.message.toLowerCase()).toContain('will not');
+  });
+
+  /**
+   * OpenAI reports the same condition under `type` on some payloads and `code`
+   * on others. Both the message and the classification-bearing fields must
+   * agree, otherwise a quota 429 reads as terminal but is still retried.
+   */
+  it('classifies and words a 429 carrying insufficient_quota only under type', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"error":{"type":"insufficient_quota","message":"You exhausted your quota"}}',
+      'Responses',
+    );
+    expect(error.message).not.toContain('Rate limit exceeded');
+    expect(error.message.toLowerCase()).toContain('quota');
+    expect((error as { providerErrorType?: string }).providerErrorType).toBe(
+      'insufficient_quota',
+    );
+  });
+
+  it('lifts a top-level code and type onto the thrown error', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"code":"insufficient_quota","type":"insufficient_quota","message":"exhausted"}',
+      'Responses',
+    );
+    expect((error as { code?: string }).code).toBe('insufficient_quota');
+    expect((error as { providerErrorType?: string }).providerErrorType).toBe(
+      'insufficient_quota',
+    );
+  });
+
+  /**
+   * `isOverloadError` in core reads a bare `type` key and treats `api_error`,
+   * `rate_limit_error`, and `overloaded_error` as retryable. Writing the
+   * provider's body-level type to that key would make a Responses 403 or 404
+   * retryable and reverse the "403 is never retried" invariant (issue #2917).
+   */
+  it('never writes the body error type to a bare `type` key', () => {
+    const error = parseErrorResponse(
+      403,
+      '{"error":{"type":"api_error","message":"Forbidden"}}',
+      'Responses',
+    );
+    expect((error as { type?: string }).type).toBeUndefined();
+    expect((error as { providerErrorType?: string }).providerErrorType).toBe(
+      'api_error',
+    );
+  });
+
+  it('reads the Codex detail envelope for code and type', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"detail":{"code":"insufficient_quota","type":"insufficient_quota","message":"exhausted"}}',
+      'Responses',
+    );
+    expect((error as { code?: string }).code).toBe('insufficient_quota');
+    expect(error.message).toContain('Quota or billing limit exhausted');
+  });
+
+  /**
+   * OpenAI returns billing_hard_limit_reached as an HTTP 400, not a 429. The
+   * retry decision is unchanged (400 was already terminal), but the user must
+   * still be told this is a billing problem rather than a bad request.
+   */
+  it('uses quota wording for a 400 billing_hard_limit_reached', () => {
+    const error = parseErrorResponse(
+      400,
+      '{"error":{"code":"billing_hard_limit_reached","message":"Billing hard limit has been reached"}}',
+      'Responses',
+    );
+    expect(error.message).not.toContain('Client error');
+    expect(error.message).toContain('Quota or billing limit exhausted');
+    expect(error.message.toLowerCase()).toContain('will not');
+  });
+
+  /**
+   * A 5xx is still retried by both retry layers, so it must never claim that
+   * retrying will not help — even if the body echoes a terminal quota code.
+   */
+  it('keeps server-error wording for a 5xx echoing a terminal quota code', () => {
+    const error = parseErrorResponse(
+      503,
+      '{"error":{"code":"insufficient_quota","message":"upstream said quota"}}',
+      'Responses',
+    );
+    expect(error.message).toBe('Server error: upstream said quota');
+    expect(error.message.toLowerCase()).not.toContain('will not help');
+  });
+
+  it('keeps the exact Rate limit exceeded wording for a throttling 429', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"error":{"code":"rate_limit_exceeded","message":"Too many requests"}}',
+      'Responses',
+    );
+    expect(error.message).toBe('Rate limit exceeded: Too many requests');
+  });
+
+  it('keeps the exact Rate limit exceeded wording for a bare 429 with no code', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"error":{"message":"Too many requests"}}',
+      'Responses',
+    );
+    expect(error.message).toBe('Rate limit exceeded: Too many requests');
+  });
+
+  it('attaches response.headers when headers are passed', () => {
+    const error = parseErrorResponse(
+      429,
+      '{"error":{"code":"insufficient_quota"}}',
+      'Responses',
+      { 'retry-after': '5' },
+    );
+    const response = (error as { response?: unknown }).response as {
+      status?: number;
+      headers?: Record<string, string>;
+      body?: string;
+    };
+    expect(response).toBeDefined();
+    expect(response.headers?.['retry-after']).toBe('5');
+    expect(response.status).toBe(429);
+    expect(response.body).toBe('{"error":{"code":"insufficient_quota"}}');
+  });
+
+  it('attaches response with undefined headers when no headers are passed', () => {
+    const error = parseErrorResponse(
+      500,
+      '{"error":{"message":"boom"}}',
+      'Responses',
+    );
+    const response = (error as { response?: unknown }).response as {
+      status?: number;
+      headers?: Record<string, string>;
+      body?: string;
+    };
+    expect(response).toBeDefined();
+    expect(response.headers).toBeUndefined();
+    expect(response.status).toBe(500);
+    expect(response.body).toBe('{"error":{"message":"boom"}}');
+  });
+
+  it('attaches response on the invalid-JSON catch branch so headers survive', () => {
+    const error = parseErrorResponse(429, 'Not JSON at all', 'Responses', {
+      'retry-after': '3',
+    });
+    const response = (error as { response?: unknown }).response as {
+      status?: number;
+      headers?: Record<string, string>;
+      body?: string;
+    };
+    expect(response).toBeDefined();
+    expect(response.headers?.['retry-after']).toBe('3');
+    expect(response.status).toBe(429);
+    expect(response.body).toBe('Not JSON at all');
+  });
+});

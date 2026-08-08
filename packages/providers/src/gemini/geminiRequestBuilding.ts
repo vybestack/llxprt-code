@@ -5,12 +5,8 @@
  */
 
 import { Type, type Schema, type Part } from '@google/genai';
-import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { isGemini3Model } from '@vybestack/llxprt-code-core/config/models.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
 import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
 import {
   ensureActiveLoopHasThoughtSignatures,
@@ -211,55 +207,4 @@ export function convertToGeminiContents(
     role: entry.role,
     parts: entry.parts,
   }));
-}
-
-/**
- * Resolve the subagent config object used for system instruction building.
- */
-function resolveSubagentConfig(
-  options: NormalizedGenerateChatOptions,
-  globalConfig: Config | undefined,
-): Config | undefined {
-  return options.config ?? options.runtime?.config ?? globalConfig;
-}
-
-/**
- * Build the system instruction prompt for a generation request.
- *
- * Accepts the provider's global config explicitly (since it is protected).
- */
-export async function buildSystemInstruction(
-  options: NormalizedGenerateChatOptions,
-  globalConfig: Config | undefined,
-  toolNamesForPrompt: string[] | undefined,
-  currentModel: string,
-): Promise<string> {
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const subagentConfig = resolveSubagentConfig(options, globalConfig);
-  const mcpInstructions =
-    typeof subagentConfig?.getMcpClientManager === 'function'
-      ? subagentConfig.getMcpClientManager()?.getMcpInstructions()
-      : undefined;
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNamesForPrompt ?? [],
-    () =>
-      typeof subagentConfig?.getSubagentManager === 'function'
-        ? subagentConfig.getSubagentManager()
-        : undefined,
-  );
-  return getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model: currentModel,
-    tools: toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode:
-      typeof subagentConfig?.isInteractive === 'function' &&
-      subagentConfig.isInteractive() === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
 }

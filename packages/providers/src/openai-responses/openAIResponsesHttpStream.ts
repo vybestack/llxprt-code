@@ -30,9 +30,20 @@ import {
   type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
+import {
+  getErrorStatus,
+  isNetworkTransientError,
+} from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
+import {
+  shouldDumpSDKContext,
+  dumpSDKResponseContext,
+  dumpSDKErrorRequestResponse,
+  bestEffortDump,
+} from '../utils/dumpSDKContext.js';
+import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
@@ -59,6 +70,8 @@ export interface StreamResponsesParams {
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
   normalizedOptions: NormalizedGenerateChatOptions;
+  dumpBaseId?: string;
+  dumpMode?: DumpMode;
 }
 
 interface FetchStreamParams {
@@ -94,16 +107,21 @@ export async function* streamOverHttp(
   deps.logger.debug(
     () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
-  yield* fetchStreamWithRetries(
-    {
-      ...params,
-      responsesURL: `${params.baseURL}/responses`,
-      headers,
-      bodyBlob,
-      onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-    },
-    deps,
-  );
+  try {
+    yield* fetchStreamWithRetries(
+      {
+        ...params,
+        responsesURL: `${params.baseURL}/responses`,
+        headers,
+        bodyBlob,
+        onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+      },
+      deps,
+    );
+  } catch (error) {
+    await dumpErrorOnFailure(error, params, deps);
+    throw error;
+  }
 }
 
 export async function buildResponsesHeaders(
@@ -189,6 +207,7 @@ async function* fetchStreamWithRetries(
           streamingAttempt,
           maxStreamingAttempts: params.maxStreamingAttempts,
           currentDelay,
+          initialDelay: params.streamRetryInitialDelayMs,
         },
         params.abortSignal,
         deps,
@@ -251,7 +270,21 @@ async function throwApiError(
   deps.logger.debug(
     () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
   );
-  throw parseErrorResponse(response.status, errorBody, deps.providerName);
+  const headers = lowercaseHeaders(response.headers);
+  throw parseErrorResponse(
+    response.status,
+    errorBody,
+    deps.providerName,
+    headers,
+  );
+}
+
+function lowercaseHeaders(headers: Headers): Record<string, string> {
+  const record: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    record[key.toLowerCase()] = value;
+  });
+  return record;
 }
 
 async function handleStreamRetry(
@@ -260,6 +293,7 @@ async function handleStreamRetry(
     streamingAttempt: number;
     maxStreamingAttempts: number;
     currentDelay: number;
+    initialDelay: number;
   },
   abortSignal: AbortSignal | undefined,
   deps: ResponsesExecutorDeps,
@@ -267,8 +301,14 @@ async function handleStreamRetry(
   if (error instanceof Error && error.name === 'AbortError') {
     throw error;
   }
+  // A definite HTTP status is authoritative. Falling back to message-substring
+  // heuristics would let provider prose ("account terminated for non-payment"
+  // matches the transient phrase "terminated") re-open a classification that
+  // was already made (issue #3140).
   const canRetryStream =
-    deps.shouldRetryOnError(error) || isNetworkTransientError(error);
+    getErrorStatus(error) !== undefined
+      ? deps.shouldRetryOnError(error)
+      : isNetworkTransientError(error);
   if (!canRetryStream || state.streamingAttempt >= state.maxStreamingAttempts) {
     deps.logger.debug(
       () =>
@@ -277,11 +317,72 @@ async function handleStreamRetry(
     throw error;
   }
 
+  const waitMs = getDelayDuration(error, state.currentDelay);
   deps.logger.debug(
     () =>
-      `Stream retry attempt ${state.streamingAttempt}/${state.maxStreamingAttempts}: Transient error detected, delay ${state.currentDelay}ms before retry. Error: ${String(error)}`,
+      `Stream retry attempt ${state.streamingAttempt}/${state.maxStreamingAttempts}: Transient error detected, delay ${waitMs}ms before retry. Error: ${String(error)}`,
   );
-  const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
-  await delay(Math.max(0, state.currentDelay + jitter), abortSignal);
-  return Math.min(30000, state.currentDelay * 2);
+  await delay(waitMs, abortSignal);
+  return hasRetryAfterHeader(error)
+    ? state.initialDelay
+    : Math.min(30000, state.currentDelay * 2);
+}
+
+interface ErrorResponsePayload {
+  status?: number;
+  headers?: Record<string, string>;
+  body?: string;
+  error?: string;
+}
+
+function buildErrorResponsePayload(error: unknown): ErrorResponsePayload {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (
+      error as {
+        response?: {
+          status?: number;
+          headers?: Record<string, string>;
+          body?: string;
+        };
+      }
+    ).response;
+    if (response !== undefined) {
+      return {
+        status: response.status,
+        headers: redactSensitiveHeaders(response.headers),
+        body: response.body,
+      };
+    }
+  }
+  return { error: String(error) };
+}
+
+async function dumpErrorOnFailure(
+  error: unknown,
+  params: StreamResponsesParams,
+  deps: ResponsesExecutorDeps,
+): Promise<void> {
+  // A user cancellation is not a request failure; dumping it would write a
+  // full-prompt request file on every abort without diagnostic value.
+  if (error instanceof Error && error.name === 'AbortError') return;
+  if (!shouldDumpSDKContext(params.dumpMode, true)) return;
+  const payload = buildErrorResponsePayload(error);
+  await bestEffortDump('error-response', deps.providerName, async () => {
+    if (params.dumpBaseId !== undefined) {
+      await dumpSDKResponseContext(
+        params.dumpBaseId,
+        deps.providerName,
+        payload,
+        true,
+      );
+    } else {
+      await dumpSDKErrorRequestResponse(
+        deps.providerName,
+        '/responses',
+        params.request,
+        payload,
+        params.baseURL,
+      );
+    }
+  });
 }

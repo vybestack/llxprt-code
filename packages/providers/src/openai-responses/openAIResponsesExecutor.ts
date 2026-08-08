@@ -34,10 +34,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
-import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
@@ -69,6 +66,7 @@ import {
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  bestEffortDump,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -216,6 +214,10 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
+  // Issue #3136: fail fast before any request preparation. Projection paths
+  // call buildResponsesRequestContextForProjection directly and are exempt.
+  requireAssembledSystemInstruction(options.systemInstruction);
+
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
   const prepared =
@@ -231,7 +233,11 @@ export async function* executeOpenAIResponsesRequest(
     deps,
   );
 
-  await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
+  const dumpResult = await dumpFinalizedRequest(
+    requestContext,
+    invocationEphemerals,
+    deps,
+  );
 
   const streamParams: StreamResponsesParams = {
     ...buildStreamParams(
@@ -239,6 +245,7 @@ export async function* executeOpenAIResponsesRequest(
       abortSignal,
       invocationEphemerals,
       options,
+      dumpResult,
     ),
     rebuildStateless: () =>
       buildStatelessTurn(options, deps, invocationEphemerals, abortSignal),
@@ -294,7 +301,11 @@ export async function* executeOpenAIResponsesRequest(
   );
   // The recovery request is the one that actually reaches the model, so it is
   // the one worth seeing under `dumpcontext`.
-  await dumpFinalizedRequest(recoveryContext, invocationEphemerals, deps);
+  const recoveryDump = await dumpFinalizedRequest(
+    recoveryContext,
+    invocationEphemerals,
+    deps,
+  );
   // Note: if both the initial and the recovery attempt fall back from the
   // WebSocket, `onWebSocketFallback` fires twice for a single turn. That is
   // accepted: the counter tracks CONSECUTIVE transport failures, and two real
@@ -305,6 +316,7 @@ export async function* executeOpenAIResponsesRequest(
       abortSignal,
       invocationEphemerals,
       options,
+      recoveryDump,
     ),
     deps,
   );
@@ -340,8 +352,18 @@ async function buildStatelessTurn(
     prepared,
     deps,
   );
-  await dumpFinalizedRequest(context, invocationEphemerals, deps);
-  return buildStreamParams(context, abortSignal, invocationEphemerals, options);
+  const dumpResult = await dumpFinalizedRequest(
+    context,
+    invocationEphemerals,
+    deps,
+  );
+  return buildStreamParams(
+    context,
+    abortSignal,
+    invocationEphemerals,
+    options,
+    dumpResult,
+  );
 }
 
 function buildStreamParams(
@@ -349,6 +371,7 @@ function buildStreamParams(
   abortSignal: AbortSignal | undefined,
   invocationEphemerals: Record<string, unknown>,
   options: NormalizedGenerateChatOptions,
+  dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>,
 ): StreamResponsesParams {
   return {
     ...requestContext,
@@ -358,6 +381,8 @@ function buildStreamParams(
     streamRetryInitialDelayMs:
       (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
     normalizedOptions: options,
+    dumpBaseId: dumpResult.baseId,
+    dumpMode: dumpResult.dumpMode,
   };
 }
 
@@ -370,11 +395,11 @@ export async function buildRequestContext(
 ): Promise<PreparedResponsesRequestContext> {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const systemPrompt = await buildSystemPrompt(options, userMemory, deps);
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim (empty for projection).
+  // options.userMemory is deliberately NOT read here: user memory is baked
+  // into the assembled instruction upstream.
+  const systemPrompt = options.systemInstruction ?? '';
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore =
     typeof requestOverrides['store'] === 'boolean'
@@ -478,61 +503,6 @@ async function resolveApiKey(
     isCodex
       ? 'Codex authentication required. Run /auth codex enable to authenticate.'
       : 'OpenAI API key is required',
-  );
-}
-
-async function buildSystemPrompt(
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const toolNames = getToolNamesForPrompt(options);
-  const configWithManagers = options.config as
-    | {
-        getMcpClientManager?: () =>
-          | { getMcpInstructions?: () => string | undefined }
-          | undefined;
-        getSubagentManager?: () => ReturnType<
-          NonNullable<typeof options.config>['getSubagentManager']
-        >;
-      }
-    | undefined;
-  const mcpClientManager = configWithManagers?.getMcpClientManager?.();
-  const mcpInstructions = mcpClientManager?.getMcpInstructions?.();
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNames ?? [],
-    () => configWithManagers?.getSubagentManager?.(),
-  );
-  const corePrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model:
-      options.resolved.model !== ''
-        ? options.resolved.model
-        : deps.getDefaultModel(),
-    tools: toolNames,
-    includeSubagentDelegation,
-    interactionMode:
-      options.config?.isInteractive() === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
-  return mergeSystemInstruction(corePrompt, options.systemInstruction);
-}
-
-function getToolNamesForPrompt(
-  options: NormalizedGenerateChatOptions,
-): string[] | undefined {
-  if (options.tools === undefined) return undefined;
-
-  return Array.from(
-    new Set(
-      options.tools.flatMap((group) =>
-        group.functionDeclarations
-          .map((declaration) => declaration.name)
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ),
   );
 }
 
@@ -904,30 +874,40 @@ function applyPromptCaching(
   if (!isCodex) request.prompt_cache_retention = '24h';
 }
 
+interface DumpFinalizedResult {
+  baseId?: string;
+  dumpMode?: DumpMode;
+}
+
 /**
  * Dumps the finalized Responses request at the common pre-transport seam when
  * context dumping is enabled, matching OpenAI Chat and Anthropic parity.
  * Best-effort: failures are logged and never block the request.
+ * Returns the dump base id and resolved mode so the transport can write a
+ * linked error-response dump on failure (issue #3140).
  */
 async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-): Promise<void> {
+): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
-  if (!shouldDumpSDKContext(dumpMode, false)) return;
-  try {
-    await dumpSDKRequestContext(
-      deps.providerName,
-      '/responses',
-      requestContext.request,
-      requestContext.baseURL,
-    );
-  } catch (error) {
-    deps.logger.debug(
-      () => `Best-effort Responses request dump failed: ${String(error)}`,
-    );
+  if (!shouldDumpSDKContext(dumpMode, false)) {
+    return { dumpMode };
   }
+  const result = await bestEffortDump(
+    'request',
+    deps.providerName,
+    () =>
+      dumpSDKRequestContext(
+        deps.providerName,
+        '/responses',
+        requestContext.request,
+        requestContext.baseURL,
+      ),
+    deps.logger,
+  );
+  return { baseId: result?.baseId, dumpMode };
 }
 
 async function* streamResponses(

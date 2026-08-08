@@ -49,7 +49,7 @@ interface BunSpawnGlobal {
  * Under Node.js, we use `node:child_process.spawn` with the `exit` event.
  */
 export interface SpawnedProcess {
-  readonly pid: number;
+  readonly pid: number | undefined;
   readonly child: ChildProcess;
   readonly exited: Promise<ProcessExitInfo>;
   readonly onError: (handler: (err: Error) => void) => void;
@@ -165,7 +165,10 @@ function spawnWithBun(
 function makeErrorSpawn(error: Error): SpawnedProcess {
   const fakeChild = new EventEmitter() as unknown as ChildProcess;
   return {
-    pid: -1,
+    // No real process was created, so there is no pid. Representing "no pid"
+    // explicitly avoids a sentinel number (e.g. -1) flowing into a kill
+    // primitive as process.kill(1).
+    pid: undefined,
     child: fakeChild,
     // Never resolves: the error is delivered via onError, which triggers
     // the terminal transition through handleError → finalizeJob.
@@ -203,7 +206,7 @@ function spawnWithNodeChildProcess(
   });
 
   return {
-    pid: child.pid ?? -1,
+    pid: child.pid,
     child,
     exited,
     onError: (handler) => {
@@ -330,7 +333,7 @@ export function spawnWindowsBackground(
   });
 
   return {
-    pid: child.pid ?? -1,
+    pid: child.pid,
     child,
     exited,
     onError: (handler) => {

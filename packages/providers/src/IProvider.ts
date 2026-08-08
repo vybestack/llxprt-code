@@ -23,6 +23,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -129,6 +130,21 @@ export interface IProvider {
   ): Promise<PromptEnvelopeProjection | undefined>;
   getCurrentModel?(): string;
   getDefaultModel(): string;
+  /**
+   * Declares WHERE this provider can accept the assembled system prompt for
+   * the given request (issue #3136).
+   *
+   * This is a declaration, not a decision: the shared placement policy in
+   * `utils/systemPromptPlacement.ts` consumes it. Providers must not re-derive
+   * placement from transport details.
+   *
+   * Omitting it means `system-field`. Anthropic returns `context-prefix` when
+   * OAuth is active, because its `system` field may carry only the Claude Code
+   * string and the real prompt must go at the top of the context instead.
+   */
+  getSystemPromptPlacement?(
+    options: GenerateChatOptions,
+  ): SystemPromptPlacement;
   // Methods for updating provider configuration
   getToolFormat?(): string;
   isPaidMode?(): boolean;

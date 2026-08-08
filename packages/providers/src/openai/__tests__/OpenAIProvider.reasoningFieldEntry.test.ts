@@ -30,6 +30,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 
@@ -140,7 +141,13 @@ describe('OpenAIProvider reasoning.fieldName entry wiring (#2524)', () => {
     ];
 
     const results = await collectResults(
-      provider.generateChatCompletion(messages),
+      provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings: settingsService,
+          contents: messages,
+        }),
+      ),
     );
 
     const thinking = findThinkingBlock(results);
@@ -168,7 +175,13 @@ describe('OpenAIProvider reasoning.fieldName entry wiring (#2524)', () => {
     ];
 
     const results = await collectResults(
-      provider.generateChatCompletion(messages),
+      provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings: settingsService,
+          contents: messages,
+        }),
+      ),
     );
 
     const thinking = findThinkingBlock(results);
@@ -191,7 +204,13 @@ describe('OpenAIProvider reasoning.fieldName entry wiring (#2524)', () => {
     ];
 
     const results = await collectResults(
-      provider.generateChatCompletion(messages),
+      provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings: settingsService,
+          contents: messages,
+        }),
+      ),
     );
 
     const thinking = findThinkingBlock(results);

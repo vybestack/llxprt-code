@@ -11,6 +11,7 @@ import type {
   TextDelta,
   InputJSONDelta,
 } from '@anthropic-ai/sdk/resources/messages/index.js';
+import { randomUUID } from 'node:crypto';
 import type {
   IContent,
   ThinkingBlock,
@@ -48,11 +49,28 @@ type ThinkingBlockIdentity = {
   nextStreamId: (sourceIndex: number) => string;
 };
 
+/**
+ * Creates a scoped thinking-block identity for a single Anthropic streaming
+ * response (one API call).
+ *
+ * The epoch is process-unique (generated fresh per call) so the stream ids
+ * produced here can never collide with ids from another API call in the same
+ * turn, nor with ids replayed from a resumed session's persisted history
+ * (legacy records literally contain `anthropic-thinking:0:block-0`). A bare
+ * counter from 0 would repeat those exact ids and let a later model iteration
+ * silently overwrite an earlier iteration's reasoning in the transcript
+ * (issue #3128).
+ *
+ * Within one call the lifecycle counter still differentiates distinct thinking
+ * blocks, and every delta plus the final complete emission for a single block
+ * share that block's id (the replace-by-id semantic the consumer relies on).
+ */
 function createThinkingBlockIdentity(): ThinkingBlockIdentity {
+  const epoch = randomUUID();
   let nextLifecycleId = 0;
   return {
     nextStreamId: (sourceIndex: number): string =>
-      `anthropic-thinking:${sourceIndex}:block-${nextLifecycleId++}`,
+      `anthropic-thinking:${epoch}:${sourceIndex}:block-${nextLifecycleId++}`,
   };
 }
 

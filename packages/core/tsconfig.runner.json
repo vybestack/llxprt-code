@@ -9,5 +9,9 @@
       "@vybestack/llxprt-code-core/*": ["./src/*"]
     }
   },
-  "include": ["run-bun-tests.ts", "test/run-bun-tests.test.ts"]
+  "include": [
+    "run-bun-tests.ts",
+    "test/run-bun-tests.test.ts",
+    "../../scripts/lib/bun-test-policy.ts"
+  ]
 }

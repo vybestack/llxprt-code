@@ -41,6 +41,7 @@ import {
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveBunTestFiles, type BunTestFile } from './bun-test-roots.js';
+import { DEFAULT_PER_TEST_TIMEOUT_MS } from './lib/bun-test-policy.js';
 import {
   buildVitestJsonReport,
   parseJUnitXml,
@@ -328,7 +329,10 @@ function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     workspace: null,
     tsconfig: null,
-    timeout: 30_000,
+    // Shared with the workspace runners (issue #3139): the two paths both run
+    // in CI, and a shard that used a tighter bound than the workspace runner
+    // failed work the workspace runner would have let finish.
+    timeout: DEFAULT_PER_TEST_TIMEOUT_MS,
     dryRun: false,
     junit: null,
     jsonReport: null,

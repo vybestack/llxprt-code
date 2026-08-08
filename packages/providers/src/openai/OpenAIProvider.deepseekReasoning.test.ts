@@ -16,6 +16,7 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   IContent,
@@ -174,30 +175,38 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     );
 
     const generator = provider.generateChatCompletion(
-      [
-        {
-          role: 'user' as const,
-          content: 'Search for deepseek reasoning info',
-        },
-      ],
-      [
-        {
-          functionDeclarations: [
-            {
-              name: 'search',
-              description: 'Search the web',
-              parametersJsonSchema: {
-                type: 'object' as const,
-                properties: {
-                  query: { type: 'string' as const, description: 'Query' },
-                },
-                required: ['query'],
+      createProviderCallOptions({
+        providerName: provider.name,
+        settings: settingsService,
+        contents: [
+          {
+            speaker: 'human' as const,
+            blocks: [
+              {
+                type: 'text' as const,
+                text: 'Search for deepseek reasoning info',
               },
-            },
-          ],
-        },
-      ],
-      { stream: true },
+            ],
+          },
+        ],
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'search',
+                description: 'Search the web',
+                parametersJsonSchema: {
+                  type: 'object' as const,
+                  properties: {
+                    query: { type: 'string' as const, description: 'Query' },
+                  },
+                  required: ['query'],
+                },
+              },
+            ],
+          },
+        ],
+      }),
     );
 
     const contents: IContent[] = [];
@@ -304,9 +313,17 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     );
 
     const generator = provider.generateChatCompletion(
-      [{ role: 'user' as const, content: 'What is the answer?' }],
-      [],
-      { stream: true },
+      createProviderCallOptions({
+        providerName: provider.name,
+        settings: settingsService,
+        contents: [
+          {
+            speaker: 'human' as const,
+            blocks: [{ type: 'text' as const, text: 'What is the answer?' }],
+          },
+        ],
+        tools: [],
+      }),
     );
 
     const contents: IContent[] = [];

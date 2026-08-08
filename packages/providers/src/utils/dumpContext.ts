@@ -43,25 +43,46 @@ export interface DumpData {
 }
 
 /**
+ * Header names whose values must never reach a dump file. Dumps are written to
+ * disk and routinely pasted into bug reports, and gateways and proxies echo
+ * request credentials back on responses, so the same set applies in both
+ * directions (issue #3140).
+ */
+const SENSITIVE_HEADER_NAMES = new Set([
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+  'x-goog-api-key',
+  'api-key',
+  'cookie',
+  'set-cookie',
+]);
+
+/**
+ * Redacts sensitive header values in place, preserving every header name so a
+ * dump still shows which headers were present (e.g. `retry-after`).
+ */
+export function redactSensitiveHeaders(
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (headers === undefined) return undefined;
+  const redacted: Record<string, string> = { ...headers };
+  for (const headerName of Object.keys(redacted)) {
+    if (SENSITIVE_HEADER_NAMES.has(headerName.toLowerCase())) {
+      redacted[headerName] = '[REDACTED]';
+    }
+  }
+  return redacted;
+}
+
+/**
  * Redacts sensitive information from request data
  */
 export function redactSensitiveData(request: DumpRequest): DumpRequest {
   const redacted: DumpRequest = {
     ...request,
-    headers: request.headers ? { ...request.headers } : undefined,
+    headers: redactSensitiveHeaders(request.headers),
   };
-
-  if (redacted.headers) {
-    for (const headerName of Object.keys(redacted.headers)) {
-      const normalizedHeaderName = headerName.toLowerCase();
-      if (
-        normalizedHeaderName === 'authorization' ||
-        normalizedHeaderName === 'x-api-key'
-      ) {
-        redacted.headers[headerName] = '[REDACTED]';
-      }
-    }
-  }
 
   // Redact key query parameter in URL
   if (redacted.url.includes('?')) {

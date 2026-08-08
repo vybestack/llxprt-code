@@ -125,6 +125,7 @@ function buildNormalizedOptions(
     invocation,
     userMemory: undefined,
     tools: undefined,
+    systemInstruction: 'test system prompt',
     metadata: {},
     resolved: {
       model: 'gpt-5',

@@ -16,6 +16,7 @@ import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
 import {
   ApprovalMode,
   type SchedulerCallbacks,
@@ -24,7 +25,11 @@ import {
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { ChatSession, type ChatSessionConfig } from './chatSession.js';
+import {
+  ChatSession,
+  type ChatSessionConfig,
+  type SystemPromptAssembler,
+} from './chatSession.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -770,6 +775,22 @@ export async function createChatObject(
     logger,
   );
 
+  // Per-turn assembler: reuses the EXISTING buildSystemInstruction with the
+  // provider-resolved model, preserving subagent interactionMode and persona
+  // ordering (issue #3136).
+  const systemPromptAssembler: SystemPromptAssembler = {
+    assemble: (turnModel: string) =>
+      buildSystemInstruction(
+        environmentContextLoader,
+        runtimeContext,
+        { ...modelConfig, model: turnModel },
+        combinedDeclarations,
+        config,
+        personaPrompt,
+        logger,
+      ),
+  };
+
   return instantiateChat(
     modelConfig,
     systemInstruction,
@@ -778,6 +799,7 @@ export async function createChatObject(
     runtimeContext,
     contentGenerator,
     logger,
+    systemPromptAssembler,
   );
 }
 
@@ -805,7 +827,14 @@ async function buildSystemInstruction(
   );
 
   const mcpInstructions = config.getMcpInstructions();
+  // Issue #3136: a subagent's user/core memory previously reached the model
+  // only because the provider layer rebuilt its own core prompt. Supply both
+  // here so collapsing to a single assembler cannot strip subagent memory.
+  // coreMemory is passed explicitly to avoid the per-call two-file disk read
+  // in getCoreSystemPromptAsync when it is undefined.
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
+    userMemory: config.getUserMemory(),
+    coreMemory: config.getCoreMemory(),
     mcpInstructions,
     model: modelConfig.model,
     tools: toolNames,
@@ -843,6 +872,7 @@ function instantiateChat(
   runtimeContext: AgentRuntimeContext,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
+  systemPromptAssembler?: SystemPromptAssembler,
 ): ChatSession | null {
   try {
     const generationConfig: ChatSessionConfig = {
@@ -860,6 +890,8 @@ function instantiateChat(
       contentGenerator,
       generationConfig,
       startHistory,
+      triggerPreCompressHook,
+      systemPromptAssembler,
     );
   } catch (error) {
     void reportError(

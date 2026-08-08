@@ -10,11 +10,29 @@ import type { ExitGuard } from './shellExitGuard.js';
 export const SIGKILL_TIMEOUT_MS = 200;
 
 /**
+ * The single chokepoint that keeps a non-killable pid away from every
+ * process-kill primitive. POSIX `kill(2)` overloads its pid argument:
+ * `0` signals the caller's own process group, negative values target a group
+ * (or, for `-1`, every signalable process), and `NaN`/`Infinity` are never
+ * valid. Rejecting those here turns a catastrophic `kill(0)` into a no-op.
+ *
+ * Integrality is required as well: a fractional value could be truncated by
+ * the runtime after the `-pid` negation and land on an unrelated process
+ * group, so only whole positive numbers are accepted.
+ */
+export function isKillablePid(pid: unknown): pid is number {
+  return typeof pid === 'number' && Number.isInteger(pid) && pid > 0;
+}
+
+/**
  * Fire-and-forget taskkill on Windows.  The arguments are explicit and
  * fully controlled; `sonarjs/no-os-command-from-path` is centrally
  * disabled for this codebase.
  */
-export function taskkillTree(pid: number): void {
+export function taskkillTree(pid: number | undefined): void {
+  if (!isKillablePid(pid)) {
+    return;
+  }
   cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
 }
 
@@ -34,7 +52,18 @@ export const TASKKILL_TIMEOUT_MS = 5000;
  * operation and is cleared on settle, guaranteeing forward progress even though
  * the taskkill child itself is unref'd.
  */
-export function boundedTaskkill(pid: number): Promise<TaskkillResult> {
+export function boundedTaskkill(
+  pid: number | undefined,
+): Promise<TaskkillResult> {
+  if (!isKillablePid(pid)) {
+    // Preserve the never-rejecting contract: an invalid pid is rejected here
+    // rather than handed to taskkill, which on Windows would either error or,
+    // worse, accept a misleading value.
+    return Promise.resolve({
+      ok: false,
+      error: new Error(`Refusing taskkill of non-killable pid: ${String(pid)}`),
+    });
+  }
   return new Promise((resolve) => {
     let settled = false;
     // Declared before the guarded cpSpawn so a synchronous spawn throw can
@@ -101,10 +130,15 @@ export function boundedTaskkill(pid: number): Promise<TaskkillResult> {
  * process that exits during the grace period is not killed again.
  */
 export async function escalateKillUnix(
-  pid: number,
+  pid: number | undefined,
   exitedGuard: ExitGuard,
   killFallback: () => void,
 ): Promise<void> {
+  if (!isKillablePid(pid)) {
+    // A non-killable pid must never reach process.kill(-pid): pid 0 would
+    // signal the caller's own process group. Treat it as already gone.
+    return;
+  }
   try {
     process.kill(-pid, 'SIGTERM');
     await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
@@ -123,11 +157,14 @@ export async function escalateKillUnix(
  * paths.  Windows uses taskkill; Unix uses SIGTERM → SIGKILL.
  */
 export async function killProcessWithEscalation(
-  pid: number,
+  pid: number | undefined,
   isWindows: boolean,
   killChildFallback: () => void,
   exitedGuard: ExitGuard,
 ): Promise<void> {
+  if (!isKillablePid(pid)) {
+    return;
+  }
   if (isWindows) {
     taskkillTree(pid);
     return;

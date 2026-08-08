@@ -37,6 +37,7 @@ import {
   getErrorStatus,
   isNetworkTransientError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
+import { isQuotaExhaustionError } from '../utils/quotaExhaustion.js';
 
 export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   protected logger: DebugLogger;
@@ -101,7 +102,11 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
    * @requirement REQ-RETRY-001: OpenAIResponsesProvider must use retryWithBackoff for all fetch calls
    *
    * Determines if an error should trigger a retry.
-   * - 429 (rate limit) errors are retried
+   * - 429 (rate limit) errors are retried, EXCEPT when the error body reports
+   *   quota or credit exhaustion, which no amount of retrying can clear. The
+   *   Responses path is stateless, so each retry resends the whole
+   *   conversation; retrying a terminal 429 burns the full prompt repeatedly
+   *   against a condition that cannot resolve (issue #3140).
    * - 5xx server errors are retried
    * - 400 (bad request) errors are NOT retried
    * - Network transient errors are retried
@@ -111,7 +116,8 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     const status = getErrorStatus(error);
     if (status !== undefined) {
       if (status === 400) return false;
-      return status === 429 || (status >= 500 && status < 600);
+      if (status === 429) return !isQuotaExhaustionError(error);
+      return status >= 500 && status < 600;
     }
 
     return isNetworkTransientError(error);

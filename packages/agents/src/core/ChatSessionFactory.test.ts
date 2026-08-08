@@ -606,6 +606,8 @@ describe('createChatSession', () => {
         reasoning: { includeInOutput: true },
       }),
       [],
+      expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -630,6 +632,8 @@ describe('createChatSession', () => {
       expect.anything(),
       expect.not.objectContaining({ reasoning: expect.anything() }),
       [],
+      expect.anything(),
+      expect.anything(),
     );
   });
 

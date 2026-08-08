@@ -57,6 +57,7 @@ import {
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
 import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
 const LAST_PROMPT_TOKEN_THRESHOLD = 500;
@@ -448,21 +449,18 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const blockTypeCounts: Record<string, number> = {};
 
     try {
-      const stream = provider.generateChatCompletion({
-        contents: request,
-        tools: undefined,
-        config: resolvedConfig ?? context.config ?? providerRuntime.config,
-        runtime: providerRuntime,
-        invocation,
-
-        settings:
-          providerRuntime.settingsService as RuntimeGenerateChatOptions['settings'],
-        resolved: resolvedOptions,
-        metadata: {
-          ...(providerRuntime.metadata ?? {}),
+      const stream = provider.generateChatCompletion(
+        await buildCompressionChatOptions({
+          contents: request,
+          providerRuntime,
+          resolvedConfig,
+          fallbackConfig: context.config,
+          resolvedOptions,
+          invocation,
+          fallbackModel: context.runtimeState.model,
           source: 'MiddleOutStrategy.callProvider',
-        },
-      });
+        }),
+      );
 
       for await (const chunk of stream) {
         for (const block of chunk.blocks) {
