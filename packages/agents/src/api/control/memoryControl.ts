@@ -80,7 +80,7 @@ export class MemoryControl implements AgentMemoryControl {
   }
 
   async refresh(): Promise<MemoryRefreshResult> {
-    let result: Awaited<ReturnType<Config['refreshMemory']>>;
+    let result: Awaited<ReturnType<MemoryAccess['refreshMemory']>>;
     try {
       result = await this.deps.config.refreshMemory();
     } catch (err) {

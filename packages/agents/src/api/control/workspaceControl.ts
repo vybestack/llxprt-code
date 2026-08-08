@@ -12,7 +12,7 @@
  * escape hatch.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { AgentWorkspaceControl } from '../agent.js';
 
 /**
@@ -21,7 +21,7 @@ import type { AgentWorkspaceControl } from '../agent.js';
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P04
  */
 export interface WorkspaceControlDeps {
-  readonly config: Config;
+  readonly config: WorkspacePaths;
 }
 
 export class WorkspaceControl implements AgentWorkspaceControl {
