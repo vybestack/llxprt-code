@@ -36,7 +36,8 @@ verification file exists and passes.
 | P03 | Boundary guard: TDD | `scripts/tests/check-config-boundary.test.ts` |
 | P04 | Boundary guard: implementation, wired to CI in report-only mode | `scripts/check-config-boundary.ts` |
 | P05 | Role interfaces in core + member-budget test | `packages/core/src/config/roles/` |
-| P06 | `RuntimeDependencies` + composition-root migration | 5 roots |
+| P06 | `RuntimeDependencies` + adapter; first root migrated | record + 1 root |
+| P06b | Gap resolution: setters, lifecycle, instanceof | `RuntimeMutations`, `RuntimeLifecycle` |
 | P07 | Migrate agents (53 files) | — |
 | P08 | Migrate providers (22 files) | — |
 | P09 | Migrate cli (14 files) | — |
@@ -44,15 +45,17 @@ verification file exists and passes.
 | P11 | Delete the 4 consumer capability modules | — |
 | P12 | Flip guard to enforcing; full verification; CI green | — |
 
-## Why this order finishes when previous attempts stalled
+## Migration direction — corrected after P06
 
-Previous attempts narrowed leaves and hit composition roots that legitimately
-need many members. This plan inverts that: **P06 removes `Config` from the
-composition roots first**, by giving them an explicit dependency record. Once a
-root takes `RuntimeDependencies`, every file beneath it is free to narrow,
-because nothing above is demanding a full `Config` any more.
+The original premise here was that migrating roots first would free the leaves.
+P06 disproved it: a root cannot drop `Config` while it still passes `Config`
+into a downstream function that demands one. `mcp-client-manager` migrated
+cleanly precisely because its downstream was already clear.
 
-That is the single structural change that makes the remainder mechanical.
+**Migration runs bottom-up.** Leaves first, intermediates next, roots last, per
+package. The `RuntimeDependencies` record is still the thing that makes roots
+migratable at all — it just cannot be applied until the cascade beneath a root
+is gone.
 
 ## Subagent assignment
 
