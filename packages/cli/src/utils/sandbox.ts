@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type {
+  Diagnostics,
+  WorkspacePaths,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { ConsolePatcher } from '../ui/utils/ConsolePatcher.js';
 import type { PortForwardingResult } from './sandbox-ssh.js';
 import {
@@ -42,7 +46,7 @@ export {
   setupSshAgentLinux,
 } from './sandbox-ssh.js';
 
-function createSandboxConsolePatcher(cliConfig?: Config): ConsolePatcher {
+function createSandboxConsolePatcher(cliConfig?: Diagnostics): ConsolePatcher {
   return new ConsolePatcher({
     debugMode: cliConfig?.getDebugMode() ?? !!process.env.DEBUG,
     stderr: true,
@@ -91,7 +95,7 @@ function runSandboxCleanup(
 export async function start_sandbox(
   config: SandboxConfig,
   nodeArgs: string[] = [],
-  cliConfig?: Config,
+  cliConfig?: Diagnostics & WorkspacePaths,
   cliArgs: string[] = [],
 ): Promise<number> {
   let credentialProxyBridgeCleanup: (() => void) | undefined;

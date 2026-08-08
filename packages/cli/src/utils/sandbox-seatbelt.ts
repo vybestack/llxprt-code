@@ -13,7 +13,12 @@ import { promisify } from 'node:util';
 import { quote } from 'shell-quote';
 import { exec } from 'node:child_process';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
-import type { SeatbeltConfig } from '../config/capabilities.js';
+import type {
+  Diagnostics,
+  WorkspacePaths,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+
+type SeatbeltConfig = Diagnostics & WorkspacePaths;
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';

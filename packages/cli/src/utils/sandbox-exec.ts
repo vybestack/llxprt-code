@@ -8,7 +8,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { Diagnostics } from '@vybestack/llxprt-code-core/config/roles.js';
 import {
   FatalSandboxError,
   getErrorMessage,
@@ -149,7 +150,7 @@ async function prepareContainerNetworkAndEnv(
 async function prepareContainerSandbox(
   config: SandboxConfig,
   nodeArgs: string[],
-  cliConfig: Config | undefined,
+  cliConfig: Diagnostics | undefined,
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
@@ -242,7 +243,7 @@ async function prepareContainerSandbox(
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
 async function executeContainerSandbox(
   config: SandboxConfig,
-  cliConfig: Config | undefined,
+  cliConfig: Diagnostics | undefined,
   prepared: Awaited<ReturnType<typeof prepareContainerSandbox>>,
 ): Promise<{
   exitCode: number;
@@ -317,7 +318,7 @@ async function executeContainerSandbox(
 export async function runContainerSandbox(
   config: SandboxConfig,
   nodeArgs: string[],
-  cliConfig?: Config,
+  cliConfig?: Diagnostics,
   cliArgs: string[] = [],
 ): Promise<{
   exitCode: number;

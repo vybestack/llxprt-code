@@ -8,9 +8,9 @@ import {
   getErrorMessage,
   isNodeError,
   isWithinRoot,
-  type Config,
   type ContentBlock,
 } from '@vybestack/llxprt-code-core';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   FileSystemService,
@@ -21,6 +21,15 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
 import { normalizeToParts } from './zed-content-utils.js';
+
+interface FileDiscoveryLike {
+  shouldIgnoreFile(filePath: string, options: FilterFilesOptions): boolean;
+}
+
+type ZedPathResolverConfig = WorkspacePaths & {
+  getFileService(): FileDiscoveryLike;
+  getFileSystemService(): FileSystemService;
+};
 
 interface DebugFn {
   (msg: string): void;
@@ -82,7 +91,7 @@ function resolverPartsToContentBlocks(parts: ResolverPart[]): ContentBlock[] {
 
 export class ZedPathResolver {
   constructor(
-    private readonly config: Config,
+    private readonly config: ZedPathResolverConfig,
     private readonly debug: DebugFn,
   ) {}
 
@@ -217,7 +226,7 @@ export class ZedPathResolver {
   private async resolvePathSpecs(
     atPathCommandParts: ResolverFilePart[],
     abortSignal: AbortSignal,
-    fileDiscovery: ReturnType<Config['getFileService']>,
+    fileDiscovery: FileDiscoveryLike,
     fileFilteringOptions: FilterFilesOptions,
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
@@ -246,7 +255,7 @@ export class ZedPathResolver {
   private appendResolvedPathSpec(
     currentPathSpec: string,
     pathName: string,
-    fileDiscovery: ReturnType<Config['getFileService']>,
+    fileDiscovery: FileDiscoveryLike,
     fileFilteringOptions: FilterFilesOptions,
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],

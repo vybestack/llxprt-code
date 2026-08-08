@@ -4,8 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ExitCodes } from '@vybestack/llxprt-code-core';
-import type { SandboxLaunchConfig } from './config/capabilities.js';
+import { ExitCodes, type SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { Diagnostics } from '@vybestack/llxprt-code-core/config/roles.js';
+
+type SandboxLaunchConfig = Diagnostics & {
+  getSandbox(): SandboxConfig | undefined;
+};
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadCliConfig } from './config/config.js';
 import { start_sandbox } from './utils/sandbox.js';

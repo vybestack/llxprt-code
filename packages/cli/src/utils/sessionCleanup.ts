@@ -6,9 +6,17 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { SessionCleanupConfig } from '../config/capabilities.js';
+import type {
+  Diagnostics,
+  SessionIdentity,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-storage';
+
+type SessionCleanupConfig = Diagnostics &
+  SessionIdentity & {
+    readonly storage: Storage;
+  };
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
 import { firstNonEmptyString } from './coalesce.js';

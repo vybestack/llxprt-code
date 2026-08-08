@@ -10,11 +10,16 @@ import {
   coreEvents,
   CoreEvent,
   DebugLogger,
-  type Config,
   type RuntimeModel,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { EphemeralSettings } from '@vybestack/llxprt-code-core/config/roles.js';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ClientCapabilitiesWithSession } from './acp-types.js';
+
+type ZedConfigOptionsConfig = EphemeralSettings & {
+  getProviderManager(): RuntimeProviderManager | undefined;
+};
 
 const REASONING_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh'];
 const EMOJI_VALUES = ['allowed', 'auto', 'warn', 'error'];
@@ -25,7 +30,7 @@ function selectOption(value: string): acp.SessionConfigSelectOption {
 }
 
 function settingOption(
-  config: Config,
+  config: ZedConfigOptionsConfig,
   id: string,
   name: string,
   category: acp.SessionConfigOptionCategory,
@@ -62,7 +67,7 @@ function modelOption(
 
 async function availableModels(
   agent: Pick<Agent, 'getProviderStatus'>,
-  config: Config,
+  config: ZedConfigOptionsConfig,
 ): Promise<RuntimeModel[] | undefined> {
   try {
     const provider = agent.getProviderStatus().provider;
@@ -75,7 +80,7 @@ async function availableModels(
 
 export async function buildZedConfigOptions(
   agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  config: ZedConfigOptionsConfig,
 ): Promise<acp.SessionConfigOption[]> {
   const currentModel = agent.getModel();
   const models = await availableModels(agent, config);
@@ -104,7 +109,7 @@ export async function buildZedConfigOptions(
 
 export async function applyZedConfigOption(
   agent: Agent,
-  config: Config,
+  config: ZedConfigOptionsConfig,
   configId: string,
   value: string,
 ): Promise<acp.SessionConfigOption[]> {
@@ -156,7 +161,7 @@ export async function applyZedConfigOption(
 export async function zedConfigOptionsForClient(
   capabilities: ClientCapabilitiesWithSession | undefined,
   agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  config: ZedConfigOptionsConfig,
 ): Promise<Pick<acp.NewSessionResponse, 'configOptions'>> {
   return capabilities?.session?.configOptions === true
     ? { configOptions: await buildZedConfigOptions(agent, config) }
@@ -165,7 +170,7 @@ export async function zedConfigOptionsForClient(
 
 export async function setZedConfigOption(
   agent: Agent,
-  config: Config,
+  config: ZedConfigOptionsConfig,
   configId: string,
   value: string,
 ): Promise<acp.SetSessionConfigOptionResponse> {
@@ -207,7 +212,7 @@ export function dispatchZedConfigOption(
 
 export function observeZedConfigOptions(
   agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  config: ZedConfigOptionsConfig,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
   onError: (error: unknown) => void,
 ): () => void {
@@ -262,7 +267,7 @@ export function zedSessionConfigOptions(
 
 async function sendConfigOptionUpdate(
   agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  config: ZedConfigOptionsConfig,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
   isStopped: () => boolean,
   onError: (error: unknown) => void,

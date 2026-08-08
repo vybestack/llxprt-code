@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
-
 export interface GitStats {
   linesAdded: number;
   linesRemoved: number;
@@ -36,11 +34,10 @@ export interface LogEntry {
   timestamp: string;
 }
 
-type GitStatsConfig =
-  | Pick<Config, 'getConversationLoggingEnabled' | 'getSessionId'>
-  | Partial<Pick<Config, 'getConversationLoggingEnabled' | 'getSessionId'>>
-  | null
-  | undefined;
+export interface GitStatsConfig {
+  getConversationLoggingEnabled?(): boolean;
+  getSessionId?(): string;
+}
 
 export class GitStatsTracker {
   private enabled: boolean;
@@ -149,7 +146,7 @@ export class GitStatsTracker {
 
   private readLoggingEnabled(): boolean {
     try {
-      return this.config?.getConversationLoggingEnabled?.() ?? false;
+      return this.config.getConversationLoggingEnabled?.() ?? false;
     } catch {
       return false;
     }
@@ -190,7 +187,7 @@ export class GitStatsTracker {
 
   private readSessionId(): string {
     try {
-      return this.config?.getSessionId?.() ?? '';
+      return this.config.getSessionId?.() ?? '';
     } catch {
       return '';
     }

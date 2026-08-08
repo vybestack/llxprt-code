@@ -12,7 +12,12 @@ import {
   SessionDiscovery,
   type ApprovalMode,
 } from '@vybestack/llxprt-code-core';
-import type { ProjectStorageSource } from '../config/capabilities.js';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { Storage } from '@vybestack/llxprt-code-storage';
+
+interface ProjectStorageSource extends WorkspacePaths {
+  readonly storage: Storage;
+}
 import { buildSessionModes } from './zed-helpers.js';
 import { listRecordedSessions } from './zed-session-listing.js';
 import type { LifecycleSession } from './zed-session-pagination.js';

@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProfileManagerSource } from '../config/capabilities.js';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+
+interface ProfileManagerSource {
+  getProfileManager(): ProfileManager | undefined;
+}
 import * as acp from '@agentclientprotocol/sdk';
 import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import { parseZedAuthMethodId } from './zed-helpers.js';

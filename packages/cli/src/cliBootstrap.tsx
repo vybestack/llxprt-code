@@ -10,6 +10,7 @@ import { coerceDebugFlag } from './config/yargsOptions.js';
 import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,
+  type DynamicToolSettingsSource,
 } from './utils/dynamicSettings.js';
 import type { SettingDefinition } from './config/settingsSchema.js';
 import { readStdin } from './utils/readStdin.js';
@@ -21,7 +22,6 @@ import {
   ExitCodes,
   writeToStderr,
   writeToStdout,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import {
   debugLogger,
@@ -122,7 +122,9 @@ export async function maybeRelaunchForMemory(
 }
 
 /** Register per-tool dynamic settings once Config is fully initialized. */
-export function registerDynamicToolSettings(config: Config): void {
+export function registerDynamicToolSettings(
+  config: DynamicToolSettingsSource,
+): void {
   try {
     const dynamicToolSettings = generateDynamicToolSettings(config);
     const fullDynamicSettings: Record<string, SettingDefinition> = {};

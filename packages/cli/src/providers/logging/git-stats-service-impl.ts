@@ -4,12 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  IGitStatsService,
-  GitStats,
-  Config,
-} from '@vybestack/llxprt-code-core';
-import { GitStatsTracker } from './git-stats.js';
+import type { IGitStatsService, GitStats } from '@vybestack/llxprt-code-core';
+import { GitStatsTracker, type GitStatsConfig } from './git-stats.js';
 
 /**
  * Implementation of IGitStatsService using GitStatsTracker
@@ -17,7 +13,7 @@ import { GitStatsTracker } from './git-stats.js';
 export class GitStatsServiceImpl implements IGitStatsService {
   private tracker: GitStatsTracker;
 
-  constructor(config: Config) {
+  constructor(config: GitStatsConfig) {
     this.tracker = new GitStatsTracker(config);
   }
 

@@ -5,14 +5,22 @@
  */
 
 import {
-  type Config,
   ExitCodes,
   OutputFormat,
   JsonFormatter,
   StreamJsonFormatter,
   JsonStreamEventType,
 } from '@vybestack/llxprt-code-core';
+import type {
+  SessionIdentity,
+  EphemeralSettings,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+
+type ProviderGuardConfig = SessionIdentity &
+  EphemeralSettings & {
+    getProviderManager(): { hasActiveProvider(): boolean } | undefined;
+  };
 
 export const UNCONFIGURED_PROVIDER_MESSAGE =
   'No provider is configured. ' +
@@ -26,7 +34,7 @@ export const UNCONFIGURED_PROVIDER_MESSAGE =
  * provider manager (the single source of truth for active-provider state).
  * Does NOT call process.exit, mutate state, or consult bare API-key env vars.
  */
-export function isProviderConfigured(config: Config): boolean {
+export function isProviderConfigured(config: ProviderGuardConfig): boolean {
   const manager = config.getProviderManager();
   return manager?.hasActiveProvider() ?? false;
 }
@@ -42,7 +50,7 @@ export function isProviderConfigured(config: Config): boolean {
  * debugLogger to avoid double-emission in structured output modes.
  */
 export function reportUnconfiguredProviderError(
-  config: Pick<Config, 'getOutputFormat'>,
+  config: Pick<EphemeralSettings, 'getOutputFormat'>,
 ): void {
   const outputFormat =
     typeof config.getOutputFormat === 'function'
@@ -86,7 +94,7 @@ export function reportUnconfiguredProviderError(
  *   does not resolve — it exits the process.
  */
 export async function guardUnconfiguredProvider(
-  config: Config,
+  config: ProviderGuardConfig,
   runCleanup: () => Promise<void>,
 ): Promise<void> {
   if (isProviderConfigured(config)) {

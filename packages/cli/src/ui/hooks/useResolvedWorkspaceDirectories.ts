@@ -6,6 +6,7 @@
 
 import { useMemo } from 'react';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 
 /**
  * Resolve the workspace directories for file-path linking.
@@ -28,8 +29,8 @@ export function useResolvedWorkspaceDirectories(
       return workspaceDirectories;
     }
     try {
-      return getCliRuntimeServices()
-        .config.getWorkspaceContext()
+      return (getCliRuntimeServices().config as WorkspacePaths)
+        .getWorkspaceContext()
         .getDirectories();
     } catch {
       return undefined;

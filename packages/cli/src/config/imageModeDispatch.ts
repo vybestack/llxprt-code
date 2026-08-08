@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import {
   ExitCodes,
   writeToStdout,
@@ -16,6 +15,17 @@ import {
   type ImageModeFlags,
 } from './imageMode.js';
 import type { ParsedCliArgs } from '../cliBootstrap.js';
+
+interface ImageOperationConfig {
+  getRunImageOperation():
+    | ((input: {
+        readonly prompt: string;
+        readonly outputPath: string;
+        readonly inputPaths?: readonly string[];
+        readonly signal?: AbortSignal;
+      }) => Promise<DirectImageResult>)
+    | undefined;
+}
 
 /**
  * The bounded image-operation result surfaced by the direct CLI image path.
@@ -116,7 +126,7 @@ Saved to: ${result.absoluteOutputPath}`;
  */
 export async function runDirectImageModeAndExit(
   argv: ParsedCliArgs,
-  config: Config,
+  config: ImageOperationConfig,
 ): Promise<number | null> {
   let request;
   try {
@@ -183,7 +193,7 @@ export async function runDirectImageModeAndExit(
  * configured (capability-specific error path).
  */
 function resolveRunImageOperation(
-  config: Config,
+  config: ImageOperationConfig,
 ):
   | ((input: {
       readonly prompt: string;

@@ -1,5 +1,4 @@
 import {
-  type Config,
   getSafeCategory,
   getSafeReason,
   getSafeStatus,
@@ -64,8 +63,12 @@ function normalizeErrorForJson(error: unknown): Error {
  * when JSON output is configured. Extracted so both the auth-validation catch
  * and the run-phase catch share a single error-reporting path.
  */
+interface OutputFormatSource {
+  getOutputFormat(): OutputFormat;
+}
+
 export function reportNonInteractiveError(
-  config: Pick<Config, 'getOutputFormat'>,
+  config: OutputFormatSource,
   error: unknown,
 ): void {
   if (wasMachineErrorReported(error)) return;

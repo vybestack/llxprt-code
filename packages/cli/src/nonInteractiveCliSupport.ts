@@ -5,13 +5,16 @@
  */
 
 import {
-  type Config,
   type JsonOutput,
   JsonStreamEventType,
   type StreamJsonFormatter,
   type EmojiFilter,
   FatalTurnLimitedError,
 } from '@vybestack/llxprt-code-core';
+import type {
+  SessionIdentity,
+  EphemeralSettings,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import {
   type SessionMetrics,
   debugLogger,
@@ -26,7 +29,7 @@ import { markMachineErrorReported } from './session/machineErrorReporting.js';
 import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 type StreamConsumerContext = {
-  config: Config;
+  config: SessionIdentity & EphemeralSettings;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
   quiet: boolean;

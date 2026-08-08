@@ -10,9 +10,18 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type {
+  SessionIdentity,
+  EphemeralSettings,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { LoadedSettings } from './config/settings.js';
 import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
+
+type ValidateAuthConfig = SessionIdentity &
+  EphemeralSettings & {
+    getProviderManager(): RuntimeProviderManager | undefined;
+  };
 
 /**
  * Gate-only validation for non-interactive mode. Delegates to the
@@ -33,12 +42,12 @@ import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
  *   unconfigured-provider exit (defaults to a no-op). When omitted, the guard
  *   is still called with a no-op cleanup so the defensive path still fires.
  */
-export async function validateNonInteractiveAuth(
+export async function validateNonInteractiveAuth<C extends ValidateAuthConfig>(
   useExternalAuth: boolean | undefined,
-  nonInteractiveConfig: Config,
+  nonInteractiveConfig: C,
   settings?: LoadedSettings,
   runCleanup: () => Promise<void> = () => Promise.resolve(),
-) {
+): Promise<C> {
   void useExternalAuth;
 
   // Defensive guard: if no provider is configured, delegate to the

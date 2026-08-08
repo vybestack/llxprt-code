@@ -1,7 +1,7 @@
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
-interface DynamicToolSettingsSource {
+export interface DynamicToolSettingsSource {
   getToolRegistryInfo(): {
     registered: Array<{ displayName: string }>;
     unregistered: Array<{ displayName: string; reason?: string }>;

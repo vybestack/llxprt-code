@@ -8,9 +8,9 @@ import { parseSlashCommand } from './utils/commands.js';
 import {
   FatalInputError,
   Logger,
-  type Config,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from './ui/cliUiRuntime.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { CommandService } from './services/CommandService.js';
@@ -32,7 +32,7 @@ import { firstNonEmptyString } from './utils/coalesce.js';
 export const handleSlashCommand = async (
   rawQuery: string,
   abortController: AbortController,
-  config: Config | null,
+  config: CliUiRuntime | null,
   settings: LoadedSettings,
 ): Promise<AgentRequestInput | undefined> => {
   const trimmed = rawQuery.trim();

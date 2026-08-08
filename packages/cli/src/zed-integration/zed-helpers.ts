@@ -12,7 +12,12 @@ import {
   resolveProviderReportedLimit,
   resolveUserContextLimit,
 } from '@vybestack/llxprt-code-core';
-import type { ZedHelperConfig } from '../config/capabilities.js';
+import type {
+  EphemeralSettings,
+  ModelSelection,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+
+type ZedHelperConfig = EphemeralSettings & ModelSelection;
 import type {
   AgentEvent,
   DoneReason,

@@ -10,11 +10,11 @@ import {
   FatalCancellationError,
   FatalToolExecutionError,
   isFatalToolError,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
+  type ApiErrorRuntimeInfo,
 } from './apiErrorFormatting.js';
 
 /**
@@ -69,7 +69,7 @@ function getNumericExitCode(errorCode: string | number): number {
  */
 export function handleError(
   error: unknown,
-  config: Config,
+  config: ApiErrorRuntimeInfo,
   customErrorCode?: string | number,
 ): never {
   const providerName = getActiveProviderNameForApiError(config);
@@ -108,7 +108,7 @@ export function handleError(
 export function handleToolError(
   toolName: string,
   toolError: Error,
-  config: Config,
+  config: ApiErrorRuntimeInfo,
   errorType?: string,
   resultDisplay?: string,
 ): void {
@@ -129,7 +129,7 @@ export function handleToolError(
 /**
  * Handles cancellation/abort signals consistently.
  */
-export function handleCancellationError(_config: Config): never {
+export function handleCancellationError(_config: ApiErrorRuntimeInfo): never {
   const cancellationError = new FatalCancellationError('Operation cancelled.');
   globalThis.console.error(cancellationError.message);
   process.exit(cancellationError.exitCode);
@@ -146,7 +146,9 @@ export const MAX_TURNS_MESSAGE =
 /**
  * Handles max session turns exceeded consistently.
  */
-export function handleMaxTurnsExceededError(_config: Config): never {
+export function handleMaxTurnsExceededError(
+  _config: ApiErrorRuntimeInfo,
+): never {
   const maxTurnsError = new FatalTurnLimitedError(MAX_TURNS_MESSAGE);
 
   globalThis.console.error(maxTurnsError.message);

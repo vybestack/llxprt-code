@@ -16,7 +16,11 @@
 import { readdir } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import type { StorageSource } from '../config/capabilities.js';
+import type { Storage } from '@vybestack/llxprt-code-storage';
+
+interface StorageSource {
+  readonly storage: Storage;
+}
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {

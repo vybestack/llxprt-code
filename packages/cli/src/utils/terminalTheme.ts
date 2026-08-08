@@ -13,7 +13,11 @@ import { pickDefaultThemeName } from '../ui/themes/theme.js';
 import { getThemeTypeFromBackgroundColor } from '../ui/themes/color-utils.js';
 import type { LoadedSettings } from '../config/settings.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
-import type { TerminalThemeAccess } from '../config/capabilities.js';
+import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+
+type TerminalThemeAccess = SessionIdentity & {
+  setTerminalBackground(terminalBackground: string | undefined): void;
+};
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**

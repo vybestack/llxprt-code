@@ -6,16 +6,24 @@
 
 import type * as acp from '@agentclientprotocol/sdk';
 import {
-  type Config,
   type DebugLogger,
   type MessageBus,
   CoreMessageBusAdapter,
-  CoreShellToolHostAdapter,
-  CoreToolRegistryHostAdapter,
+  type CoreToolRegistryHostAdapter,
 } from '@vybestack/llxprt-code-core';
-import { ShellTool, ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type {
+  EphemeralSettings,
+  WorkspacePaths,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import {
+  ShellTool,
+  ToolRegistry,
+  type IShellToolHost,
+} from '@vybestack/llxprt-code-tools';
 import { AcpTerminalShellHost } from './acp-terminal-shell-host.js';
 import { TerminalManager } from './zed-terminal-manager.js';
+
+type ZedTerminalSetupConfig = EphemeralSettings & WorkspacePaths;
 
 export interface ZedTerminalSetup {
   readonly registry: ToolRegistry;
@@ -24,11 +32,13 @@ export interface ZedTerminalSetup {
 
 export function buildZedTerminalSetup(
   sessionId: string,
-  config: Config,
+  config: ZedTerminalSetupConfig,
   baseRegistry: ToolRegistry,
   connection: acp.AgentSideConnection,
   logger: DebugLogger,
   messageBus: MessageBus,
+  toolRegistryHost: CoreToolRegistryHostAdapter,
+  shellToolHost: IShellToolHost,
 ): ZedTerminalSetup {
   const outputLimit = config.getEphemeralSetting('tool-output-max-tokens');
   const terminals = new TerminalManager(
@@ -44,10 +54,7 @@ export function buildZedTerminalSetup(
       : undefined,
   );
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
-  const registry = new ToolRegistry(
-    new CoreToolRegistryHostAdapter(config),
-    messageBusAdapter,
-  );
+  const registry = new ToolRegistry(toolRegistryHost, messageBusAdapter);
   const baseTools = baseRegistry.getAllTools();
   let hasShellTool = false;
   for (const tool of baseTools) {
@@ -60,10 +67,7 @@ export function buildZedTerminalSetup(
   if (hasShellTool) {
     registry.registerTool(
       new ShellTool(
-        new AcpTerminalShellHost(
-          new CoreShellToolHostAdapter(config),
-          terminals,
-        ),
+        new AcpTerminalShellHost(shellToolHost, terminals),
         messageBusAdapter,
       ),
     );

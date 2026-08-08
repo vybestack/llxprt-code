@@ -17,7 +17,6 @@
  */
 
 import {
-  type Config,
   type ToolCallRequestInfo,
   type CompletedToolCall,
   type OutputUpdateHandler,
@@ -31,6 +30,7 @@ import {
   type LiveOutputUpdate,
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
+import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useCallback, useEffect, useState } from 'react';
 import type React from 'react';
@@ -74,7 +74,7 @@ export interface ExplicitMessageBusScheduler {
  *
  * @plan:ISSUE-2376
  */
-export type SchedulerConfigWithExplicitMessageBus = Config &
+export type SchedulerConfigWithExplicitMessageBus = SessionIdentity &
   ExplicitMessageBusScheduler;
 
 /**
@@ -362,14 +362,10 @@ function useExternalSchedulerFactoryCreator(
   const factory = useCallback(
     async (args: Parameters<SubagentSchedulerFactory>[0]) => {
       const schedulerId = Symbol('subagent-scheduler');
-      const schedulerSessionId = args.schedulerConfig.getSessionId();
-      // args.schedulerConfig is the subagent's own Config (from core's
-      // SubagentSchedulerFactory), not the interactive runtime; narrow it to the
-      // explicit-message-bus getOrCreateScheduler shape the interactive path
-      // depends on (the public Config type keeps it intentionally loose).
-      const instance = await (
-        args.schedulerConfig as SchedulerConfigWithExplicitMessageBus
-      ).getOrCreateScheduler(
+      const schedulerConfig =
+        args.schedulerConfig as SchedulerConfigWithExplicitMessageBus;
+      const schedulerSessionId = schedulerConfig.getSessionId();
+      const instance = await schedulerConfig.getOrCreateScheduler(
         schedulerSessionId,
         createSubagentCallbacks(schedulerId, refs, args),
         undefined,
@@ -380,8 +376,7 @@ function useExternalSchedulerFactoryCreator(
           request: ToolCallRequestInfo | ToolCallRequestInfo[],
           signal: AbortSignal,
         ) => instance.schedule(request, signal),
-        dispose: () =>
-          args.schedulerConfig.disposeScheduler(schedulerSessionId),
+        dispose: () => schedulerConfig.disposeScheduler(schedulerSessionId),
       };
     },
     [refs, runtimeMessageBus],

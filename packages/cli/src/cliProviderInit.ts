@@ -5,7 +5,16 @@
  */
 
 import dns from 'node:dns';
-import { type Config, setGitStatsService } from '@vybestack/llxprt-code-core';
+import {
+  setGitStatsService,
+  type RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
+import type {
+  Diagnostics,
+  EphemeralSettings,
+  ModelSelection,
+  SessionIdentity,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -19,19 +28,26 @@ import { validateDnsResolutionOrder } from './cliBootstrap.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 
-export type CliProviderManager = NonNullable<
-  ReturnType<Config['getProviderManager']>
->;
+export type CliProviderManager = RuntimeProviderManager;
+
+type CliProviderInitConfig = ModelSelection &
+  EphemeralSettings &
+  Diagnostics &
+  SessionIdentity & {
+    getProviderManager(): RuntimeProviderManager | undefined;
+    getSettingsService(): SettingsService;
+    getIdeClient(): { connect(): Promise<void> } | undefined;
+  };
 
 /**
  * Compute the merged model params (profile + CLI) that should be applied
  * before the first request for the configured provider.
  */
 export function collectProviderModelParams(
-  config: Config,
+  config: CliProviderInitConfig,
   argv: ParsedCliArgs,
 ): Record<string, unknown> {
-  const configWithParams = config as Config & {
+  const configWithParams = config as CliProviderInitConfig & {
     _profileModelParams?: Record<string, unknown>;
     _cliModelParams?: Record<string, unknown>;
   };
@@ -64,10 +80,10 @@ interface BootstrapOverrideShape {
  * empty shape.
  */
 function buildActivationCliOverrides(
-  config: Config,
+  config: CliProviderInitConfig,
   argv: ParsedCliArgs,
 ): NonNullable<ProviderActivationIntent['cliOverrides']> {
-  const configWithBootstrapArgs = config as Config & {
+  const configWithBootstrapArgs = config as CliProviderInitConfig & {
     _bootstrapArgs?: BootstrapOverrideShape;
   };
   const bootstrap = configWithBootstrapArgs._bootstrapArgs;
@@ -135,13 +151,14 @@ export interface ConfiguredProviderActivationResult {
 }
 
 export async function activateConfiguredProvider(
-  config: Config,
+  config: CliProviderInitConfig,
   providerManager: CliProviderManager,
   argv: ParsedCliArgs,
 ): Promise<ConfiguredProviderActivationResult> {
   const configProvider = config.getProvider();
-  const cliModelOverride = (config as Config & { _cliModelOverride?: string })
-    ._cliModelOverride;
+  const cliModelOverride = (
+    config as CliProviderInitConfig & { _cliModelOverride?: string }
+  )._cliModelOverride;
   const intent: ProviderActivationIntent = {
     ...(configProvider !== undefined && configProvider !== ''
       ? { provider: configProvider }
@@ -215,7 +232,7 @@ export async function reapplyBootstrapProfile(
  */
 export function configureServerToolsProvider(
   providerManager: CliProviderManager,
-  config: Config,
+  config: CliProviderInitConfig,
 ): void {
   const serverToolsProvider = providerManager.getServerToolsProvider();
   if (
@@ -234,7 +251,7 @@ export function configureServerToolsProvider(
  * configure the server-tools provider, and set the DNS resolution order.
  */
 export async function configureProvidersAndServices(
-  config: Config,
+  config: CliProviderInitConfig,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   runtimeSettingsService: SettingsService,
@@ -263,7 +280,9 @@ export async function configureProvidersAndServices(
 }
 
 /** Connect the IDE companion client when IDE mode is enabled. */
-export async function connectIdeClientIfEnabled(config: Config): Promise<void> {
+export async function connectIdeClientIfEnabled(
+  config: CliProviderInitConfig,
+): Promise<void> {
   if (!config.getIdeMode()) {
     return;
   }
@@ -279,7 +298,9 @@ export async function connectIdeClientIfEnabled(config: Config): Promise<void> {
  * never throws or produces an unhandled rejection, but logs failures so they
  * are observable.
  */
-export function ensureAcpProviderActivated(config: Config): void {
+export function ensureAcpProviderActivated(
+  config: CliProviderInitConfig,
+): void {
   const providerManagerForAcp = config.getProviderManager();
   const configProvider = config.getProvider();
   if (!configProvider || !providerManagerForAcp) {
