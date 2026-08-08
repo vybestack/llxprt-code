@@ -35,7 +35,7 @@ import {
 import { loadConfig, loadEnvironment, setTargetDir } from '../config/config.js';
 import { loadSettings } from '../config/settings.js';
 import { loadExtensions } from '../config/extension.js';
-import type { SessionRuntime } from '@vybestack/llxprt-code-agents';
+import type { SessionRuntime } from '@vybestack/llxprt-code-agents/session.js';
 import { Task } from './task.js';
 import { requestStorage } from '../http/requestStorage.js';
 

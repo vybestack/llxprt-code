@@ -16,11 +16,6 @@
       "bun": "./index.ts",
       "import": "./dist/index.js"
     },
-    "./internals.js": {
-      "types": "./dist/src/internals.d.ts",
-      "bun": "./src/internals.ts",
-      "import": "./dist/src/internals.js"
-    },
     "./app-service.js": {
       "types": "./dist/src/app-service.d.ts",
       "bun": "./src/app-service.ts",
@@ -30,6 +25,16 @@
       "types": "./dist/src/constants.d.ts",
       "bun": "./src/constants.ts",
       "import": "./dist/src/constants.js"
+    },
+    "./internals.js": {
+      "types": "./dist/src/internals.d.ts",
+      "bun": "./src/internals.ts",
+      "import": "./dist/src/internals.js"
+    },
+    "./session.js": {
+      "types": "./dist/src/session/index.d.ts",
+      "bun": "./src/session/index.ts",
+      "import": "./dist/src/session/index.js"
     }
   },
   "scripts": {
