@@ -554,10 +554,7 @@ describe('oauth_poll handler', () => {
 
     // NOTE: Session expiry test requires oauthSessionTimeoutMs option
     // which will be added in Phase 05 implementation
-    it.skip('expired session returns SESSION_EXPIRED', async () => {
-      // This test requires oauthSessionTimeoutMs option in CredentialProxyServerOptions
-      // Will be enabled when Phase 05 adds that option
-    });
+    it.todo('expired session returns SESSION_EXPIRED');
   });
 
   // ─── Provider Integration Tests ──────────────────────────────────────────

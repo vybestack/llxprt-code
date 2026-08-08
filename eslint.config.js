@@ -10,7 +10,7 @@ import reactPlugin from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import prettierConfig from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
-import vitest from '@vitest/eslint-plugin';
+import jest from 'eslint-plugin-jest';
 import sonarjs from 'eslint-plugin-sonarjs';
 import eslintComments from 'eslint-plugin-eslint-comments';
 import globals from 'globals';
@@ -605,7 +605,7 @@ export default tseslint.config(
   },
   // Issue #2282: Test files use large setup/case blocks. max-lines-per-function
   // is turned off for scripts/tests to match the existing packages test-file
-  // policy (the vitest config block above sets the same off for packages).
+  // policy (the jest config block above sets the same off for packages).
   {
     files: ['scripts/tests/**/*.{ts,tsx,js,mjs,cjs}'],
     rules: {
@@ -749,21 +749,87 @@ export default tseslint.config(
       ],
     },
   },
+  // Bun test configuration (issue #2970: migrated from @vitest/eslint-plugin to
+  // eslint-plugin-jest configured for bun:test)
   {
     files: ['packages/*/src/**/*.{test,spec,bun}.{ts,tsx}'],
     plugins: {
-      vitest,
+      jest,
+    },
+    settings: {
+      jest: {
+        globalPackage: 'bun:test',
+        // version intentionally omitted: the runner is bun:test, not Jest,
+        // and bun:test has no Jest-style semver that the plugin could gate on.
+      },
     },
     rules: {
-      ...vitest.configs.recommended.rules,
-      'vitest/no-commented-out-tests': 'off',
-      'vitest/no-disabled-tests': 'off',
-      // @fast-check/vitest exports both `it` and `test`, each augmented with
-      // `.prop`. All four variants are real test-block functions. `itProp` is
-      // the common alias for fast-check's `it` (used across many test files);
-      // `itProp.prop` is the corresponding property variant.
-      'vitest/no-standalone-expect': [
+      // Issue #2970: eslint-plugin-jest replaces @vitest/eslint-plugin for
+      // bun:test. The vitest plugin worked correctly — it went silent because
+      // PR #2969 rewrote every test import away from the vitest package to
+      // 'bun:test', and @vitest/eslint-plugin does not recognise 'bun:test' as
+      // a test-framework source (verified by controlled experiment: same rules,
+      // same file, only the import source changed — the vitest import produced
+      // 3 errors, the bun:test import produced 0). eslint-plugin-jest with
+      // globalPackage: 'bun:test' restores enforcement.
+      //
+      // SEVEN rules are enabled at 'error': they produce 0 violations or had
+      // a small, fixed number of violations that were fixed in the test files.
+      //
+      // FIVE rules remain 'off': eslint-plugin-jest implements them MORE
+      // strictly than @vitest/eslint-plugin did, so enabling them is net-NEW
+      // enforcement rather than preservation of the previous level. The
+      // evidence: on the tree immediately before #2969 (commit a805a219f)
+      // every test still imported 'vitest', the vitest plugin was fully live
+      // at 'error', and `npm run lint` was green at 0 warnings (therefore 0
+      // vitest-plugin violations). Running eslint-plugin-jest with
+      // globalPackage: 'vitest' over the SAME files reported 728 violations in
+      // packages/core alone (~4,183 repo-wide). Burning those down is out of
+      // scope for #2970 and is tracked as #3129. Options are preserved so
+      // re-enabling is a one-word change. Do NOT spread
+      // jest.configs['flat/recommended'].rules — it contains additional rules
+      // vitest never had.
+
+      // ── Active rules (0 violations or violations fixed) ──
+      'jest/no-identical-title': 'error',
+      'jest/valid-describe-callback': 'error',
+      'jest/max-nested-describe': ['error', { max: 3 }],
+      'jest/valid-title': 'error',
+      'jest/require-to-throw-message': 'error',
+      // fast-check's `fc.assert` is a real assertion helper; tests using
+      // `fc.assert(fc.property(...))` do assert but use no literal `expect`.
+      // Project-level assertion wrappers are registered here so the rule
+      // recognises them as real assertions:
+      //   - expectFrameContains/expectFrameNotContains wrap Ink frame checks
+      //     that tolerate empty CI frames.
+      //   - expectRejection wraps promise-rejection assertions.
+      //   - expectStderrContaining wraps stderr-substring assertions.
+      'jest/expect-expect': [
         'error',
+        {
+          assertFunctionNames: [
+            'expect',
+            'fc.assert',
+            'expectFrameContains',
+            'expectFrameNotContains',
+            'expectRejection',
+            'expectStderrContaining',
+          ],
+        },
+      ],
+      'jest/no-conditional-expect': 'error',
+
+      // ── Rules kept at 'off' (jest is strictly stricter than vitest was;
+      //    enabling is net-NEW enforcement; burn-down tracked in #3129) ──
+      'jest/no-commented-out-tests': 'off', // eslint-policy-allow-off: #2970 unchanged from vitest config
+      'jest/no-disabled-tests': 'off', // eslint-policy-allow-off: #2970 unchanged from vitest config
+      // fast-check's property-based testing exports both `it` and `test`,
+      // each augmented with `.prop`. All four variants are real test-block
+      // functions. `itProp` is the common alias for fast-check's `it` (used
+      // across many test files); `itProp.prop` is the corresponding property
+      // variant.
+      'jest/no-standalone-expect': [
+        'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 617 violations tracked in #3129
         {
           additionalTestBlockFunctions: [
             'it',
@@ -775,36 +841,30 @@ export default tseslint.config(
           ],
         },
       ],
-
-      // Stricter vitest rules (warnings for now)
-      // fast-check's `fc.assert` is a real assertion helper; tests using
-      // `fc.assert(fc.property(...))` do assert but use no literal `expect`.
-      // Project-level assertion wrappers (see packages/cli/src/test-utils) are
-      // registered here so the rule recognises them as real assertions:
-      //   - expectFrameContains/expectFrameNotContains wrap Ink frame checks
-      //     that tolerate empty CI frames.
-      'vitest/expect-expect': [
+      'jest/no-conditional-in-test': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 3059 violations tracked in #3129
+      'jest/prefer-strict-equal': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 199 violations tracked in #3129
+      'jest/require-top-level-describe': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 154 violations tracked in #3129
+      'jest/valid-expect': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 154 violations tracked in #3129
+      // vitest/no-import-node-test → no-restricted-imports banning node:test
+      // (issue #2970: same invariant, different mechanism). bun:test is the
+      // only supported test module.
+      'no-restricted-imports': [
         'error',
         {
-          assertFunctionNames: [
-            'expect',
-            'fc.assert',
-            'expectFrameContains',
-            'expectFrameNotContains',
+          paths: [
+            {
+              name: 'node:test',
+              message:
+                'Use bun:test instead of node:test for tests. See dev-docs/bun.md.',
+            },
           ],
         },
       ],
-      'vitest/no-conditional-expect': 'error',
-      'vitest/no-conditional-in-test': 'error',
-      'vitest/require-to-throw-message': 'error',
-      'vitest/prefer-strict-equal': 'error',
-      'vitest/max-nested-describe': ['error', { max: 3 }],
-      'vitest/require-top-level-describe': 'error',
 
       // Relax complexity rules for test files
       'max-lines-per-function': 'off',
 
-      // Test files use `typeof import('pkg')` for vi mock typing; it's idiomatic.
+      // Test files use `typeof import('pkg')` for mock typing; it's idiomatic.
       '@typescript-eslint/consistent-type-imports': 'off',
 
     },
@@ -873,7 +933,7 @@ export default tseslint.config(
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
-  // max-lines-per-function: 'off' via the vitest block above).
+  // max-lines-per-function: 'off' via the jest block above).
   {
     files: [
       'packages/cli/src/ui/AppContainerRuntime.tsx',
@@ -1334,12 +1394,10 @@ export default tseslint.config(
       'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
     },
   },
-  {
-    files: ['packages/tools/src/**/*.{test,spec}.{ts,tsx}'],
-    rules: {
-      'vitest/no-conditional-expect': 'off',
-      'vitest/no-conditional-in-test': 'off',
-      'vitest/prefer-strict-equal': 'off',
-    },
-  },
+  // Issue #2970: The packages/tools override that previously turned off
+  // jest/no-conditional-expect, jest/no-conditional-in-test, and
+  // jest/prefer-strict-equal has been removed. jest/no-conditional-expect is
+  // now enabled globally and all tools violations were fixed in the test
+  // files. The other two rules remain off globally (see the deferred rules
+  // above), making a package-specific override redundant.
 );

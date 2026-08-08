@@ -673,7 +673,7 @@ fi
 # directly into `head` would lose the test command's exit code (the pipeline
 # would report head's status instead), so a failing test run could be
 # reported as a success.
-test_output=$(npx vitest run "$test_file" --silent 2>&1 | head -20)
+test_output=$(bun test "$test_file" 2>&1 | head -20)
 test_status=${PIPESTATUS[0]}
 
 if [ "$test_status" -eq 0 ]; then

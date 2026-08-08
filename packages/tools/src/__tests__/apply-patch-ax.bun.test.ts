@@ -224,9 +224,7 @@ describe('issue #3033 AC1 — delete patches delete', () => {
     );
     expect(result.llmContent).toContain('target.txt');
     expect(isFileDisplay(result.returnDisplay)).toBe(true);
-    if (isFileDisplay(result.returnDisplay)) {
-      expect(result.returnDisplay.newContent).toBe('');
-    }
+    expect(result.returnDisplay).toMatchObject({ newContent: '' });
   });
 
   it('rejects a delete patch that does not remove the whole file and leaves it untouched', async () => {
@@ -802,10 +800,10 @@ describe('F5 — confirmation matches execution', () => {
     expect(confirmation).not.toBe(false);
     if (confirmation === false) return;
     expect(isEditConfirmation(confirmation)).toBe(true);
-    if (isEditConfirmation(confirmation)) {
-      expect(confirmation.title.toLowerCase()).toContain('delete');
-      expect(confirmation.newContent).toBe('');
-    }
+    expect(confirmation).toMatchObject({
+      newContent: '',
+      title: expect.stringMatching(/delete/i),
+    });
     // The file is untouched — confirmation is a preview only.
     expect(existsSync(filePath)).toBe(true);
   });

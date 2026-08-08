@@ -115,13 +115,13 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
     );
 
-    // Coverage is uploaded only from cli and core shards (issue #2707).
-    const coverageArtifact = stepNamed(testShardJob, 'Upload coverage reports');
-    expect(coverageArtifact.if).toContain("matrix.shard == 'cli'");
-    expect(coverageArtifact.if).toContain("matrix.shard == 'core'");
-    expect(coverageArtifact.with?.['name']).toBe(
-      'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
+    // Issue #2970: the dead coverage pipeline (Upload coverage reports step)
+    // was removed — nothing ever produced coverage artifacts. Assert it stays
+    // absent so no one silently reintroduces it.
+    const testShardStepNames = (testShardJob?.steps ?? []).map(
+      (step: WorkflowStep) => step.name,
     );
+    expect(testShardStepNames).not.toContain('Upload coverage reports');
 
     const report = stepNamed(
       testShardJob,
@@ -131,30 +131,15 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(report.with?.['name']).toContain('${{ matrix.shard }}');
   });
 
-  it('keeps coverage comment downloads aligned to the per-shard artifact names', () => {
-    const postCoverage = jobs['post_coverage_comment'];
+  it('does NOT contain the dead post_coverage_comment job or coverage downloads (#2970)', () => {
+    // Issue #2970: post_coverage_comment job and its continue-on-error
+    // coverage downloads were removed (nothing ever produced coverage
+    // artifacts). Assert they stay absent so no one silently reintroduces a
+    // dead coverage pipeline.
     expect(
-      postCoverage,
-      'ci.yml must contain post_coverage_comment',
-    ).toBeTruthy();
-
-    // Issue #2707: coverage is now per-shard. post_coverage_comment downloads
-    // the cli and core shard artifacts separately.
-    const downloadCli = stepNamed(
-      postCoverage,
-      'Download CLI coverage (cli shard)',
-    );
-    expect(downloadCli.with?.['name']).toBe(
-      'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}',
-    );
-
-    const downloadCore = stepNamed(
-      postCoverage,
-      'Download core coverage (core shard)',
-    );
-    expect(downloadCore.with?.['name']).toBe(
-      'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}',
-    );
+      jobs,
+      'ci.yml must NOT contain post_coverage_comment',
+    ).not.toHaveProperty('post_coverage_comment');
   });
 
   it('defines a secure_store_backend job with keyring and fallback modes', () => {

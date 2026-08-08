@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/// <reference types="vitest/globals" />
-
 import * as osActual from 'os';
 import * as fs from 'fs';
 import * as path from 'path';

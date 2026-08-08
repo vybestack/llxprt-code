@@ -438,11 +438,12 @@ describe('Agent Client (client.ts)', () => {
           );
 
           // Assert expectations based on the test case
-          if (shouldSendContext === true) {
-            expect(summaryCall).toBeDefined();
-          } else {
-            expect(editorContextCall).toBeUndefined();
-          }
+          expect(shouldSendContext !== true || summaryCall !== undefined).toBe(
+            true,
+          );
+          expect(
+            shouldSendContext === true || editorContextCall === undefined,
+          ).toBe(true);
         },
       );
 

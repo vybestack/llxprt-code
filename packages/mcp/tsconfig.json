@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/mcp.tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
     "composite": false,
-    "types": ["node", "bun-types/test"],
+    "types": ["node", "bun-types/test", "bun-types/test-globals"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
