@@ -18,7 +18,6 @@ import {
   type IContent,
   type ToolCallBlock,
   type ToolResponseBlock,
-  invalidateResponsesStatefulChain,
 } from './IContent.js';
 import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
@@ -691,9 +690,6 @@ export class HistoryService
       }
     }
     applyDensityMutations(this.history, result);
-    // #3134 Fix 3: density mutations rewrite history behind the head,
-    // invalidating the Responses stateful chain.
-    this.history = invalidateResponsesStatefulChain(this.history);
 
     this.logger.debug('Density: applied result', {
       replacements: result.replacements.size,

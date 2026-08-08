@@ -48,14 +48,39 @@ function normalizeStatefulValue(value: unknown): boolean | undefined {
  * to send to. A MISSING `providerBaseURL` is treated as non-matching (fail
  * closed to full history — always safe). (#3134 Fix 2)
  */
-function isEligibleParent(entry: IContent, rawBaseURL: string): boolean {
+/**
+ * A stored response id is scoped to the endpoint that issued it, so a parent
+ * from a different endpoint can never resolve (#3134).
+ *
+ * We reject only when the recorded endpoint is KNOWN and DIFFERENT. An absent
+ * `providerBaseURL` is not evidence of a mismatch: `stampAiTurnModel` takes an
+ * optional baseURL and skips the stamp when it is unavailable, so treating
+ * "absent" as a mismatch would silently disable statefulness on any history
+ * that predates the stamp or was produced without a resolvable baseURL.
+ */
+function isSameEndpoint(recorded: unknown, rawBaseURL: string): boolean {
+  if (typeof recorded !== 'string' || recorded === '') return true;
+  return stripTrailingSlashes(recorded) === stripTrailingSlashes(rawBaseURL);
+}
+
+function stripTrailingSlashes(value: string): string {
+  let result = value;
+  while (result.endsWith('/')) result = result.slice(0, -1);
+  return result;
+}
+
+function hasStoredResponseId(metadata: IContent['metadata']): boolean {
   return (
-    entry.speaker === 'ai' &&
-    entry.metadata?.responsesStored === true &&
-    typeof entry.metadata.id === 'string' &&
-    entry.metadata.id !== '' &&
-    entry.metadata.providerBaseURL === rawBaseURL
+    metadata?.responsesStored === true &&
+    typeof metadata.id === 'string' &&
+    metadata.id !== ''
   );
+}
+
+function isEligibleParent(entry: IContent, rawBaseURL: string): boolean {
+  if (entry.speaker !== 'ai') return false;
+  if (!hasStoredResponseId(entry.metadata)) return false;
+  return isSameEndpoint(entry.metadata?.providerBaseURL, rawBaseURL);
 }
 
 /**

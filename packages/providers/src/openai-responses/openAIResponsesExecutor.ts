@@ -286,7 +286,12 @@ export async function* executeOpenAIResponsesRequest(
     deps,
   );
   yield* streamResponses(
-    buildStreamParams(recoveryContext, abortSignal, invocationEphemerals, options),
+    buildStreamParams(
+      recoveryContext,
+      abortSignal,
+      invocationEphemerals,
+      options,
+    ),
     deps,
   );
 }
