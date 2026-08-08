@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1740" height="1580" viewBox="0 0 1740 1580" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="rArrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#dc2626"/>
+    </marker>
+    <marker id="gArrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#0f766e"/>
+    </marker>
+    <marker id="bArrow" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto">
+      <path d="M0,0 L11,4.5 L0,9 z" fill="#334155"/>
+    </marker>
+  </defs>
+
+  <rect width="1740" height="1580" fill="#fbfbfd"/>
+
+  <!-- ============ TITLE ============ -->
+  <text x="60" y="56" font-size="30" font-weight="700" fill="#0f172a">Package API — how the boundary works</text>
+  <text x="60" y="84" font-size="16" fill="#64748b">A package is a sealed box with a few labelled doors. Everything else is machinery nobody outside may touch.</text>
+
+  <!-- ============ PANEL 1 ============ -->
+  <text x="60" y="140" font-size="20" font-weight="700" fill="#0f172a">1 — What a package is</text>
+
+  <!-- TODAY -->
+  <rect x="60" y="160" width="780" height="360" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="2"/>
+  <text x="84" y="192" font-size="16" font-weight="700" fill="#dc2626">TODAY — 127 doors, most open straight onto the machinery</text>
+
+  <rect x="330" y="212" width="470" height="284" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="3"/>
+  <text x="565" y="236" font-size="15" font-weight="700" fill="#475569" text-anchor="middle">core</text>
+
+  <!-- internal modules exposed -->
+  <rect x="360" y="252" width="180" height="30" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="450" y="272" font-size="12" fill="#7f1d1d" text-anchor="middle">config/config.js</text>
+  <rect x="360" y="292" width="180" height="30" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="450" y="312" font-size="12" fill="#7f1d1d" text-anchor="middle">services/history/IContent.js</text>
+  <rect x="360" y="332" width="180" height="30" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="450" y="352" font-size="12" fill="#7f1d1d" text-anchor="middle">config/schedulerSingleton.js</text>
+  <rect x="360" y="372" width="180" height="30" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="450" y="392" font-size="12" fill="#7f1d1d" text-anchor="middle">runtime/runtimeAdapters.js</text>
+  <rect x="360" y="412" width="180" height="30" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="450" y="432" font-size="12" fill="#7f1d1d" text-anchor="middle">core/turn.js</text>
+  <text x="450" y="466" font-size="12" fill="#94a3b8" text-anchor="middle">…122 more</text>
+
+  <rect x="576" y="252" width="196" height="190" rx="4" fill="#e2e8f0" stroke="#cbd5e1" stroke-dasharray="3 3"/>
+  <text x="674" y="345" font-size="12" fill="#94a3b8" text-anchor="middle">the rest of core</text>
+  <text x="674" y="363" font-size="12" fill="#94a3b8" text-anchor="middle">(also reachable)</text>
+
+  <!-- piercing arrows -->
+  <line x1="120" y1="267" x2="356" y2="267" stroke="#dc2626" stroke-width="2" marker-end="url(#rArrow)"/>
+  <line x1="120" y1="307" x2="356" y2="307" stroke="#dc2626" stroke-width="2" marker-end="url(#rArrow)"/>
+  <line x1="120" y1="347" x2="356" y2="347" stroke="#dc2626" stroke-width="2" marker-end="url(#rArrow)"/>
+  <line x1="120" y1="387" x2="356" y2="387" stroke="#dc2626" stroke-width="2" marker-end="url(#rArrow)"/>
+  <line x1="120" y1="427" x2="356" y2="427" stroke="#dc2626" stroke-width="2" marker-end="url(#rArrow)"/>
+  <text x="90" y="352" font-size="13" font-weight="700" fill="#dc2626" transform="rotate(-90 90 352)" text-anchor="middle">consumers</text>
+
+  <text x="84" y="505" font-size="13" fill="#64748b">Callers depend on core's folder layout. Moving a file breaks them. Nothing is private.</text>
+
+  <!-- TARGET -->
+  <rect x="900" y="160" width="780" height="360" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="2"/>
+  <text x="924" y="192" font-size="16" font-weight="700" fill="#0f766e">TARGET — ~12 named doors, machinery sealed behind the wall</text>
+
+  <rect x="1170" y="212" width="470" height="284" rx="8" fill="#f1f5f9" stroke="#0f766e" stroke-width="4"/>
+  <text x="1405" y="236" font-size="15" font-weight="700" fill="#0f766e" text-anchor="middle">core</text>
+
+  <!-- doors on the wall -->
+  <rect x="1152" y="252" width="120" height="28" rx="4" fill="#0f766e"/>
+  <text x="1212" y="271" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">./content</text>
+  <rect x="1152" y="292" width="120" height="28" rx="4" fill="#0f766e"/>
+  <text x="1212" y="311" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">./config</text>
+  <rect x="1152" y="332" width="120" height="28" rx="4" fill="#0f766e"/>
+  <text x="1212" y="351" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">./session</text>
+  <rect x="1152" y="372" width="120" height="28" rx="4" fill="#0f766e"/>
+  <text x="1212" y="391" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">./runtime</text>
+  <rect x="1152" y="412" width="120" height="28" rx="4" fill="#0f766e"/>
+  <text x="1212" y="431" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">./policy</text>
+  <text x="1212" y="462" font-size="11" fill="#0f766e" text-anchor="middle">+ 7 more</text>
+
+  <rect x="1300" y="252" width="320" height="200" rx="4" fill="#e2e8f0" stroke="#cbd5e1" stroke-dasharray="3 3"/>
+  <text x="1460" y="340" font-size="13" fill="#64748b" text-anchor="middle">internal machinery</text>
+  <text x="1460" y="360" font-size="13" fill="#64748b" text-anchor="middle">— free to move, rename, refactor —</text>
+  <text x="1460" y="380" font-size="13" fill="#64748b" text-anchor="middle">no caller can reach it</text>
+
+  <line x1="960" y1="266" x2="1148" y2="266" stroke="#0f766e" stroke-width="2" marker-end="url(#gArrow)"/>
+  <line x1="960" y1="306" x2="1148" y2="306" stroke="#0f766e" stroke-width="2" marker-end="url(#gArrow)"/>
+  <line x1="960" y1="346" x2="1148" y2="346" stroke="#0f766e" stroke-width="2" marker-end="url(#gArrow)"/>
+  <line x1="960" y1="386" x2="1148" y2="386" stroke="#0f766e" stroke-width="2" marker-end="url(#gArrow)"/>
+  <line x1="960" y1="426" x2="1148" y2="426" stroke="#0f766e" stroke-width="2" marker-end="url(#gArrow)"/>
+  <text x="930" y="352" font-size="13" font-weight="700" fill="#0f766e" transform="rotate(-90 930 352)" text-anchor="middle">consumers</text>
+
+  <text x="924" y="505" font-size="13" fill="#64748b">Callers depend on a contract. Internals move freely. The wall is the package.json exports map.</text>
+
+  <!-- ============ PANEL 2 ============ -->
+  <text x="60" y="580" font-size="20" font-weight="700" fill="#0f172a">2 — The stack: who may depend on whom</text>
+  <text x="60" y="604" font-size="14" fill="#64748b">Arrows point to the dependency. Nothing may point backwards — that is a cycle, and CI fails it.</text>
+
+  <rect x="60" y="624" width="1620" height="190" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="2"/>
+
+  <rect x="100" y="676" width="180" height="86" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+  <text x="190" y="712" font-size="16" font-weight="700" fill="#075985" text-anchor="middle">tools</text>
+  <text x="190" y="734" font-size="12" fill="#0369a1" text-anchor="middle">lowest layer</text>
+
+  <rect x="400" y="676" width="180" height="86" rx="8" fill="#ccfbf1" stroke="#0f766e" stroke-width="3"/>
+  <text x="490" y="712" font-size="16" font-weight="700" fill="#115e59" text-anchor="middle">core</text>
+  <text x="490" y="734" font-size="12" fill="#0f766e" text-anchor="middle">domain + contracts</text>
+
+  <rect x="700" y="676" width="180" height="86" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="790" y="712" font-size="16" font-weight="700" fill="#92400e" text-anchor="middle">providers</text>
+  <text x="790" y="734" font-size="12" fill="#b45309" text-anchor="middle">LLM adapters</text>
+
+  <rect x="1000" y="676" width="180" height="86" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="1090" y="712" font-size="16" font-weight="700" fill="#5b21b6" text-anchor="middle">agents</text>
+  <text x="1090" y="734" font-size="12" fill="#6d28d9" text-anchor="middle">orchestration</text>
+
+  <rect x="1300" y="676" width="180" height="86" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
+  <text x="1390" y="712" font-size="16" font-weight="700" fill="#9d174d" text-anchor="middle">cli</text>
+  <text x="1390" y="734" font-size="12" fill="#be185d" text-anchor="middle">app / a2a-server</text>
+
+  <line x1="284" y1="719" x2="394" y2="719" stroke="#334155" stroke-width="2.5" marker-end="url(#bArrow)"/>
+  <line x1="584" y1="719" x2="694" y2="719" stroke="#334155" stroke-width="2.5" marker-end="url(#bArrow)"/>
+  <line x1="884" y1="719" x2="994" y2="719" stroke="#334155" stroke-width="2.5" marker-end="url(#bArrow)"/>
+  <line x1="1184" y1="719" x2="1294" y2="719" stroke="#334155" stroke-width="2.5" marker-end="url(#bArrow)"/>
+
+  <text x="1520" y="700" font-size="13" fill="#475569">leaves (depend on</text>
+  <text x="1520" y="718" font-size="13" fill="#475569">nothing internal):</text>
+  <text x="1520" y="740" font-size="13" font-weight="700" fill="#334155">auth · settings · storage</text>
+  <text x="1520" y="758" font-size="13" font-weight="700" fill="#334155">policy · telemetry · mcp</text>
+
+  <!-- ============ PANEL 3 ============ -->
+  <text x="60" y="874" font-size="20" font-weight="700" fill="#0f172a">3 — Who calls which door</text>
+  <text x="60" y="898" font-size="14" fill="#64748b">Every door below is a real cluster from the import census. Numbers are production imports today.</text>
+
+  <rect x="60" y="918" width="1620" height="386" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="2"/>
+
+  <text x="96" y="952" font-size="13" font-weight="700" fill="#64748b">DOOR ON core</text>
+  <text x="470" y="952" font-size="13" font-weight="700" fill="#64748b">WHAT IT IS</text>
+  <text x="1090" y="952" font-size="13" font-weight="700" fill="#64748b">WHO GOES THROUGH IT</text>
+  <text x="1560" y="952" font-size="13" font-weight="700" fill="#64748b" text-anchor="end">IMPORTS</text>
+  <line x1="90" y1="962" x2="1650" y2="962" stroke="#e2e8f0" stroke-width="2"/>
+
+  <g font-size="13.5">
+    <rect x="90" y="974" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="992" font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">./content</text>
+    <text x="470" y="992" fill="#0f172a">IContent, ContentBlock, TextBlock, ToolCallBlock — the data model</text>
+    <text x="1090" y="992" fill="#475569">everyone</text>
+    <text x="1560" y="992" font-weight="700" fill="#0f172a" text-anchor="end">216</text>
+
+    <rect x="90" y="1010" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="1028" font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">./config</text>
+    <text x="470" y="1028" fill="#0f172a">8 role interfaces, not the god-object (Tools, Session, Model…)</text>
+    <text x="1090" y="1028" fill="#475569">providers, agents, mcp, cli</text>
+    <text x="1560" y="1028" font-weight="700" fill="#0f172a" text-anchor="end">156</text>
+
+    <rect x="90" y="1046" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="1064" font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">./session</text>
+    <text x="470" y="1064" fill="#0f172a">turn, chat session, compression, subagent types</text>
+    <text x="1090" y="1064" fill="#475569">agents, cli, providers</text>
+    <text x="1560" y="1064" font-weight="700" fill="#0f172a" text-anchor="end">114</text>
+
+    <rect x="90" y="1082" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="1100" font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">./runtime</text>
+    <text x="470" y="1100" fill="#0f172a">agent runtime context + state</text>
+    <text x="1090" y="1100" fill="#475569">agents, providers</text>
+    <text x="1560" y="1100" font-weight="700" fill="#0f172a" text-anchor="end">91</text>
+
+    <rect x="90" y="1118" width="150" height="26" rx="4" fill="#115e59"/>
+    <text x="165" y="1136" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">./runtime/contracts</text>
+    <text x="470" y="1136" fill="#0f172a">RuntimeProvider, RuntimeTokenizer — the provider seam <tspan fill="#0f766e" font-weight="700">(already exists, already correct)</tspan></text>
+    <text x="1090" y="1136" fill="#475569">providers, agents</text>
+    <text x="1560" y="1136" font-weight="700" fill="#0f172a" text-anchor="end">70</text>
+
+    <rect x="90" y="1154" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="1172" font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">./policy</text>
+    <text x="470" y="1172" fill="#0f172a">approval mode, message bus, policy decisions</text>
+    <text x="1090" y="1172" fill="#475569">agents, cli</text>
+    <text x="1560" y="1172" font-weight="700" fill="#0f172a" text-anchor="end">42</text>
+
+    <rect x="90" y="1190" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="1208" font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">./history</text>
+    <text x="470" y="1208" fill="#0f172a">HistoryService as an interface + factory</text>
+    <text x="1090" y="1208" fill="#475569">agents, cli</text>
+    <text x="1560" y="1208" font-weight="700" fill="#0f172a" text-anchor="end">35</text>
+
+    <rect x="90" y="1226" width="150" height="26" rx="4" fill="#0f766e"/>
+    <text x="165" y="1244" font-size="11.5" font-weight="700" fill="#fff" text-anchor="middle">./tool-scheduling</text>
+    <text x="470" y="1244" fill="#0f172a">scheduler types, tool host adapters</text>
+    <text x="1090" y="1244" fill="#475569">agents, cli</text>
+    <text x="1560" y="1244" font-weight="700" fill="#0f172a" text-anchor="end">28</text>
+
+    <text x="165" y="1282" font-size="12.5" fill="#94a3b8" text-anchor="middle">./prompts ./hooks ./models</text>
+    <text x="470" y="1282" fill="#94a3b8">smaller domains, same rule</text>
+    <text x="1090" y="1282" fill="#94a3b8">agents, providers</text>
+    <text x="1560" y="1282" font-weight="700" fill="#94a3b8" text-anchor="end">48</text>
+  </g>
+
+  <!-- ============ PANEL 4 ============ -->
+  <text x="60" y="1364" font-size="20" font-weight="700" fill="#0f172a">4 — What stops a bad import</text>
+  <text x="60" y="1388" font-size="14" fill="#64748b">Three gates, in order. The first two are free — they are already installed and currently switched off.</text>
+
+  <rect x="60" y="1408" width="390" height="140" rx="10" fill="#fff" stroke="#0f766e" stroke-width="2"/>
+  <text x="84" y="1440" font-size="15" font-weight="700" fill="#0f766e">GATE 1 · your editor</text>
+  <text x="84" y="1466" font-size="13.5" fill="#0f172a">TypeScript refuses to resolve it.</text>
+  <text x="84" y="1488" font-size="13" fill="#64748b">The exports map is the wall; nodenext</text>
+  <text x="84" y="1508" font-size="13" fill="#64748b">already enforces it. Today 11 wildcard</text>
+  <text x="84" y="1528" font-size="13" fill="#64748b">tsconfig aliases tunnel through it.</text>
+
+  <rect x="480" y="1408" width="390" height="140" rx="10" fill="#fff" stroke="#0f766e" stroke-width="2"/>
+  <text x="504" y="1440" font-size="15" font-weight="700" fill="#0f766e">GATE 2 · lint, in your PR</text>
+  <text x="504" y="1466" font-size="13.5" fill="#0f172a">eslint flags the exact line.</text>
+  <text x="504" y="1488" font-size="13" fill="#64748b">import/no-internal-modules is already</text>
+  <text x="504" y="1508" font-size="13" fill="#64748b">on at error — but its allow-mode fails</text>
+  <text x="504" y="1528" font-size="13" fill="#64748b">open. forbid-mode catches 5 of 5.</text>
+
+  <rect x="900" y="1408" width="390" height="140" rx="10" fill="#fff" stroke="#0f766e" stroke-width="2"/>
+  <text x="924" y="1440" font-size="15" font-weight="700" fill="#0f766e">GATE 3 · CI</text>
+  <text x="924" y="1466" font-size="13.5" fill="#0f172a">Cycle test + declared barrel.</text>
+  <text x="924" y="1488" font-size="13" fill="#64748b">No package may point backwards.</text>
+  <text x="924" y="1508" font-size="13" fill="#64748b">The barrel is hand-written, so widening</text>
+  <text x="924" y="1528" font-size="13" fill="#64748b">the API is a visible diff, not a side effect.</text>
+
+  <rect x="1320" y="1408" width="360" height="140" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+  <text x="1344" y="1440" font-size="15" font-weight="700" fill="#dc2626">THE RULE THAT MATTERS</text>
+  <text x="1344" y="1468" font-size="13.5" font-weight="700" fill="#0f172a">No `export *` in a public door.</text>
+  <text x="1344" y="1492" font-size="13" fill="#64748b">It makes the surface change whenever</text>
+  <text x="1344" y="1512" font-size="13" fill="#64748b">an internal file changes. That is how</text>
+  <text x="1344" y="1532" font-size="13" fill="#64748b">117 doors quietly became 127.</text>
+</svg>
