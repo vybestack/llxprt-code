@@ -31,6 +31,7 @@ import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import {
   useSubmitQuery,
+  type SubmissionDisposition,
   type SubmissionExecutor,
   type UseSubmitQueryDeps,
 } from '../useSubmitQuery.js';
@@ -526,7 +527,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
     expect(result.current.drainSuppressedRef.current).toBe(true);
 
     // Invoke the executor with fromQueue=true
-    let disposition: string | undefined;
+    let disposition: SubmissionDisposition | undefined;
     await act(async () => {
       const executor = handles.submitQueryRef.current;
       expect(executor).not.toBeNull();
