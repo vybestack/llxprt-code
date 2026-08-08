@@ -17,10 +17,12 @@ function makeTempLogPath(): string {
   );
 }
 
-function readJsonl(filePath: string): unknown[] {
+function readJsonl(filePath: string): Array<Record<string, unknown>> {
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
   if (raw.length === 0) return [];
-  return raw.split('\n').map((line) => JSON.parse(line));
+  return raw
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 describe('TokenUsageLogger', () => {
@@ -73,7 +75,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 50,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record).toHaveProperty('ts');
@@ -103,7 +105,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 200,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].effective_actual_tokens).toBe(300);
   });
 
@@ -121,7 +123,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 300,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].effective_actual_tokens).toBe(0);
   });
 
@@ -174,6 +176,7 @@ describe('TokenUsageLogger', () => {
       'provider',
       'model',
       'estimator',
+      'record_type',
     ]);
     const forbiddenTextKeys = [
       'text',
@@ -212,27 +215,148 @@ describe('TokenUsageLogger', () => {
     expect(fs.existsSync(badPath)).toBe(false);
   });
 
-  it('clears pending entry after recordActual completes', async () => {
+  it('preserves pending entry so multi-attempt recording works (issue #3130)', async () => {
     const logger = new TokenUsageLogger(true, logFile);
-    logger.recordEstimate('prompt-clear', {
+    logger.recordEstimate('prompt-multi', {
       provider: 'openai',
       model: 'gpt-4',
       estimatedTokens: 100,
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    await logger.recordActual('prompt-clear', {
+    await logger.recordActual('prompt-multi', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+      attemptOutcome: 'abandoned',
+    });
+
+    await logger.recordActual('prompt-multi', {
+      actualPromptTokens: 130,
+      cachedTokens: 0,
+      attemptIndex: 1,
+      attemptOutcome: 'success',
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(2);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+    expect(records[0].attempt_index).toBe(0);
+    expect(records[0].attempt_outcome).toBe('abandoned');
+    expect(records[1].actual_prompt_tokens).toBe(130);
+    expect(records[1].attempt_index).toBe(1);
+    expect(records[1].attempt_outcome).toBe('success');
+  });
+
+  it('drops a repeat recordActual for an attempt already written (issue #3130)', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-dedupe', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+
+    await logger.recordActual('prompt-dedupe', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+    });
+    await logger.recordActual('prompt-dedupe', {
+      actualPromptTokens: 999,
+      cachedTokens: 0,
+      attemptIndex: 0,
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+  });
+
+  it('treats an omitted attemptIndex as attempt 0 for duplicate protection', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-implicit', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+
+    await logger.recordActual('prompt-implicit', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
-
-    await logger.recordActual('prompt-clear', {
+    await logger.recordActual('prompt-implicit', {
       actualPromptTokens: 999,
       cachedTokens: 0,
     });
 
     const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+  });
+
+  it('preserves attempt dedupe memory across a retry re-estimate (issue #3130)', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    const estimate = {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken' as const,
+      tiktokenTokens: 90,
+    };
+    logger.recordEstimate('prompt-reestimate', estimate);
+    // A non-terminal outcome: another attempt for this prompt will follow.
+    await logger.recordActual('prompt-reestimate', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+      attemptOutcome: 'abandoned',
+    });
+
+    // The retry re-fires the send seam, which re-estimates the same promptId.
+    logger.recordEstimate('prompt-reestimate', estimate);
+    // A late duplicate completion for the attempt already written.
+    await logger.recordActual('prompt-reestimate', {
+      actualPromptTokens: 999,
+      cachedTokens: 0,
+      attemptIndex: 0,
+      attemptOutcome: 'abandoned',
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+  });
+
+  it('consumes the pending entry once the turn reaches a terminal outcome (issue #3130)', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-terminal', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+    await logger.recordActual('prompt-terminal', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+      attemptOutcome: 'success',
+    });
+    // No estimate remains, so a stray later completion writes nothing.
+    await logger.recordActual('prompt-terminal', {
+      actualPromptTokens: 999,
+      cachedTokens: 0,
+      attemptIndex: 1,
+      attemptOutcome: 'success',
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
   });
 
   it('evicts oldest pending entry when exceeding PENDING_CAP', async () => {
@@ -271,9 +395,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 0,
     });
 
-    const overflowRecords = readJsonl(logFile) as Array<
-      Record<string, unknown>
-    >;
+    const overflowRecords = readJsonl(logFile);
     expect(overflowRecords).toHaveLength(2);
     expect(overflowRecords.map((record) => record.prompt_id)).toStrictEqual([
       'prompt-overflow',
@@ -325,7 +447,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     const ts = records[0].ts as string;
     expect(() => new Date(ts).toISOString()).not.toThrow();
     expect(new Date(ts).toString()).not.toBe('Invalid Date');
@@ -364,7 +486,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(2);
     expect(records[0].estimated_tokens).toBe(200);
     expect(records[0].model).toBe('claude-3');
@@ -426,7 +548,7 @@ describe('refineEstimate (finding #8)', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].estimated_tokens).toBe(150);
     expect(records[0].tiktoken_tokens).toBe(95);
@@ -450,7 +572,7 @@ describe('refineEstimate (finding #8)', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].estimated_tokens).toBe(150);
     expect(records[0].tiktoken_tokens).toBeNull();

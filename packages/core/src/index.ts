@@ -526,6 +526,7 @@ export { ContentConverters } from './services/history/ContentConverters.js';
 // Chronology trace shape (#1721) is part of the public surface so consumers
 // (e.g. the CLI /dumpcontext command) can type the trace without deep-importing.
 export type { ChronologyTraceEntry } from './services/history/historyChronology.js';
+export type { CurrentTurnMarker } from './services/history/historyChronology.js';
 
 // @plan PLAN-20260702-LLMTYPES.P04
 // @requirement REQ-013.1

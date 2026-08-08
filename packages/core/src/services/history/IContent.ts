@@ -135,6 +135,18 @@ export interface ContentMetadata {
   /** Stable identifier for a conversation turn */
   turnId?: string;
 
+  /**
+   * The originating prompt identifier for this content's turn, providing the
+   * reciprocal join key to the per-session token-usage log. Stamped where
+   * `turnId` is stamped for the in-flight prompt send so a recorded content
+   * entry locates its cost record and vice-versa. Content created outside a
+   * prompt (synthetic, resumed, compression summary) has no `promptId` and the
+   * field is absent — not null, not empty string.
+   *
+   * @issue #3130
+   */
+  promptId?: string;
+
   /** Stop reason from provider (e.g., end_turn, max_tokens) */
   stopReason?: string;
 

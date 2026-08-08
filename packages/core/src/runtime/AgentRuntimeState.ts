@@ -42,6 +42,20 @@ export interface AgentRuntimeState {
   // Session metadata
   readonly sessionId: string;
   readonly updatedAt: number; // Unix timestamp
+
+  /**
+   * The parent agent's runtimeId when this runtime belongs to a subagent.
+   * `undefined` for the main agent so it serialises as `null` in token-usage
+   * records. @issue #3130
+   */
+  readonly parentRuntimeId?: string;
+
+  /**
+   * The subagent's display name when this runtime belongs to a subagent.
+   * `undefined` for the main agent so it serialises as `null` in token-usage
+   * records. @issue #3130
+   */
+  readonly subagentName?: string;
 }
 
 /**
@@ -72,6 +86,8 @@ export interface RuntimeStateParams {
   proxyUrl?: string;
   modelParams?: ModelParams;
   sessionId?: string;
+  parentRuntimeId?: string;
+  subagentName?: string;
 }
 
 /**
@@ -90,6 +106,8 @@ export interface RuntimeStateSnapshot {
   modelParams?: ModelParams;
   sessionId: string;
   updatedAt: number;
+  parentRuntimeId?: string;
+  subagentName?: string;
   version: number; // Schema version for future migrations
 }
 
@@ -249,6 +267,8 @@ export function createAgentRuntimeState(
       : undefined,
     sessionId,
     updatedAt: getTimestamp(),
+    parentRuntimeId: params.parentRuntimeId,
+    subagentName: params.subagentName,
   });
 
   // Register state in global registry (line 103)
@@ -408,6 +428,8 @@ export function getAgentRuntimeStateSnapshot(
     modelParams: state.modelParams ? { ...state.modelParams } : undefined,
     sessionId: state.sessionId,
     updatedAt: state.updatedAt,
+    parentRuntimeId: state.parentRuntimeId,
+    subagentName: state.subagentName,
     version: 1, // Schema version (line 341)
   });
 }

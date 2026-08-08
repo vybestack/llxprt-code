@@ -14,7 +14,10 @@
 
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  UsageStats,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { SendMessageParams } from './chatSession.js';
 import { logApiRequest } from './turnLogging.js';
@@ -358,6 +361,45 @@ function describeUnrecognizedPart(part: unknown): string {
 /**
  * Merge chunk-level usage into the content recorded for telemetry.
  */
+/**
+ * Attach the newest usage the provider reported during a stream to the
+ * assembled response. Same reason as
+ * {@link contentForTelemetryPreservingUsage}: usage may arrive mid-stream
+ * rather than on the final chunk (#3130).
+ */
+export function withReportedUsage(
+  response: IContent,
+  reportedUsage: UsageStats | undefined,
+): IContent {
+  if (reportedUsage === undefined) return response;
+  return {
+    ...response,
+    metadata: { ...response.metadata, usage: reportedUsage },
+  };
+}
+
+/**
+ * Telemetry content for the newest chunk, carrying forward the most recently
+ * reported usage when this chunk reports none.
+ *
+ * Providers do not all report usage on the final chunk; some report it once,
+ * mid-stream. Taking the last chunk verbatim would then record a billed
+ * request as having cost nothing (#3130).
+ */
+export function contentForTelemetryPreservingUsage(
+  chunk: ModelStreamChunk,
+  previous: IContent | undefined,
+): IContent {
+  const current = contentForTelemetry(chunk);
+  if (current.metadata?.usage !== undefined) return current;
+  const carried = previous?.metadata?.usage;
+  if (carried === undefined) return current;
+  return {
+    ...current,
+    metadata: { ...(current.metadata ?? {}), usage: carried },
+  };
+}
+
 export function contentForTelemetry(chunk: ModelStreamChunk): IContent {
   if (chunk.usage === undefined) {
     return chunk.content;

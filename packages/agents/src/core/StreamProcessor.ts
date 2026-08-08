@@ -28,7 +28,7 @@ import type {
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import {
   prepareAtSendSeam,
   preparePromptEnvelopeAfterEnforcement,
@@ -37,7 +37,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { logApiResponse, logApiError } from './turnLogging.js';
+import { logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
@@ -51,11 +51,11 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
-import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
+import { logStreamTelemetry } from './streamTelemetryLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
-  contentForTelemetry,
+  contentForTelemetryPreservingUsage,
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
@@ -86,7 +86,7 @@ import {
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
-import { safeJsonStringify } from './turnJsonUtils.js';
+import { stampTurnIdentityOnInput } from './turnIdentity.js';
 
 /**
  * Extract the allowedFunctionNames array from a tool-config object.
@@ -115,6 +115,20 @@ export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+
+  /**
+   * Canonical turn id for the send in flight, minted before the request goes
+   * out so the token-usage record and the persisted turn name the same turn
+   * (#3130). Null before the first send.
+   */
+  private currentTurnId: string | null = null;
+
+  /**
+   * The promptId `currentTurnId` was minted for, so a retry of the same logical
+   * turn reuses that turn's identity instead of minting a second one (#3130).
+   */
+  private currentTurnPromptId: string | null = null;
+  private currentAttemptIndex = 0;
 
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
     return this.currentPromptEnvelopeEstimate;
@@ -148,11 +162,28 @@ export class StreamProcessor {
     params: SendMessageParams,
     promptId: string,
     userContent: IContent | IContent[],
+    attemptIndex?: number,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
+    this.currentAttemptIndex = attemptIndex ?? 0;
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
+
+    // Mint the canonical turn identity before the send and stamp it on the
+    // user content, so the token-usage record and the persisted turn agree
+    // (AC-1/AC-2, issue #3130). Minted once per logical turn, not per attempt:
+    // a discard-restart re-enters this method with the same promptId, and
+    // re-minting would give the retry a different turn_id from the attempt it
+    // replaced even though both describe the same conversation turn.
+    if (this.currentTurnPromptId !== promptId) {
+      this.currentTurnPromptId = promptId;
+      this.currentTurnId = this.historyService.generateTurnKey();
+    }
+    const stampedUserContent = stampTurnIdentityOnInput(userContent, {
+      promptId,
+      turnId: this.currentTurnId ?? this.historyService.generateTurnKey(),
+    });
 
     this.logger.debug(
       () => '[StreamProcessor] Active provider snapshot before stream request',
@@ -174,11 +205,11 @@ export class StreamProcessor {
     const streamResponse = await this._executeStreamApiCall(
       params,
       promptId,
-      userContent,
+      stampedUserContent,
       provider,
     );
 
-    return this._createCancellableStream(streamResponse, userContent);
+    return this._createCancellableStream(streamResponse, stampedUserContent);
   }
 
   private _createCancellableStream(
@@ -502,11 +533,17 @@ export class StreamProcessor {
           ),
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordFinalizedPromptEnvelopeEstimate(
-        this.compressionHandler.tokenUsageLogger,
+      recordSendSeamTelemetry({
+        usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
-        prepared.estimate,
-      );
+        estimate: prepared.estimate,
+        runtimeState: this.runtimeContext.state,
+        historyService: this.historyService,
+        requestContents: requestPayload.contents,
+        tools: requestPayload.tools,
+        systemInstruction: this.generationConfig.systemInstruction,
+        turnId: this.currentTurnId,
+      });
 
       const streamResponse = provider.generateChatCompletion(prepared.options);
 
@@ -545,7 +582,7 @@ export class StreamProcessor {
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,
-      { promptId, startTime },
+      { promptId, startTime, attemptIndex: this.currentAttemptIndex },
       hookRestrictedAllowedTools,
     );
 
@@ -668,7 +705,11 @@ export class StreamProcessor {
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
     llmRequest?: Record<string, unknown>,
-    telemetryContext?: { promptId: string; startTime: number },
+    telemetryContext?: {
+      promptId: string;
+      startTime: number;
+      attemptIndex?: number;
+    },
     hookRestrictedAllowedTools?: string[],
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
@@ -692,7 +733,10 @@ export class StreamProcessor {
             chunk,
             hookRestrictedAllowedTools,
           )) ?? chunk;
-        lastIContent = contentForTelemetry(yieldedChunk);
+        lastIContent = contentForTelemetryPreservingUsage(
+          yieldedChunk,
+          lastIContent,
+        );
         yield yieldedChunk;
       }
     } catch (error) {
@@ -700,7 +744,12 @@ export class StreamProcessor {
       throw error;
     }
 
-    await this._logTelemetry(telemetryContext, lastIContent);
+    await logStreamTelemetry(
+      this.runtimeContext,
+      telemetryContext,
+      lastIContent,
+      this.compressionHandler.tokenUsageLogger,
+    );
   }
 
   private _trackPromptTokens(iContent: IContent): void {
@@ -796,37 +845,6 @@ export class StreamProcessor {
     }
 
     return undefined;
-  }
-
-  private async _logTelemetry(
-    telemetryContext: { promptId: string; startTime: number } | undefined,
-    lastIContent: IContent | undefined,
-  ): Promise<void> {
-    if (telemetryContext && lastIContent) {
-      const durationMs = Date.now() - telemetryContext.startTime;
-      const usage = lastIContent.metadata?.usage;
-      logApiResponse(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        this.runtimeContext.state.model,
-        telemetryContext.promptId,
-        durationMs,
-        usage ? { ...usage } : undefined,
-        safeJsonStringify(lastIContent),
-      );
-
-      await recordActualTokenUsage(
-        this.compressionHandler.tokenUsageLogger,
-        telemetryContext.promptId,
-        usage
-          ? {
-              promptTokens: usage.promptTokens,
-              cachedTokens: usage.cachedTokens,
-              cache_read_input_tokens: usage.cache_read_input_tokens,
-            }
-          : undefined,
-      );
-    }
   }
 
   /**
