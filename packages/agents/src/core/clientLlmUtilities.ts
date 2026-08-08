@@ -17,13 +17,21 @@ import type {
   ModelGenerationSettings,
   ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  MemoryAccess,
+  McpAccess,
+  SessionIdentity,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ToolGovernanceAccess } from '../config/capabilities.js';
+
+/** Narrow read surface: memory + mcp instructions + interactivity + tool governance. */
+type ClientLlmConfig = MemoryAccess & McpAccess & SessionIdentity & ToolGovernanceAccess;
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 async function buildLightweightSystemPrompt(
-  config: Config,
+  config: ClientLlmConfig,
   model: string,
 ): Promise<string> {
   const userMemory = config.getUserMemory();
@@ -48,7 +56,7 @@ async function buildLightweightSystemPrompt(
  * @requirement:REQ-005.2
  */
 export async function generateJson(
-  config: Config,
+  config: ClientLlmConfig,
   _contentGenerator: ContentGenerator,
   baseLlmClient: BaseLLMClient,
   contents: IContent[],
@@ -132,7 +140,7 @@ export async function generateJson(
  * at their boundary (migration in issue #2349).
  */
 export async function generateContent(
-  config: Config,
+  config: ClientLlmConfig,
   contentGenerator: ContentGenerator,
   contents: IContent[],
   generationConfig: ModelGenerationSettings,

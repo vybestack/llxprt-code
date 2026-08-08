@@ -46,7 +46,8 @@ import {
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type {
@@ -74,9 +75,21 @@ const logger = new DebugLogger('llxprt:agents:session-control');
  * @plan:PLAN-20260617-COREAPI.P20
  * @requirement:REQ-010
  */
+/**
+ * Narrow config surface for session control: workspace paths plus the Storage
+ * property and the session-recording-service setter, neither of which a core
+ * role provides yet.
+ */
+type SessionControlConfig = WorkspacePaths & {
+  readonly storage: Storage;
+  setSessionRecordingService(
+    service: SessionRecordingService | undefined,
+  ): void;
+};
+
 export interface SessionControlDeps {
   /** The live Config (storage, project root, workspace context). */
-  readonly config: Config;
+  readonly config: SessionControlConfig;
   /** The per-agent session id (AgentImpl uses deps.runtimeId). */
   readonly sessionId: () => string;
   /** Resolves the live AgentClient (the same contract restoreHistory uses). */

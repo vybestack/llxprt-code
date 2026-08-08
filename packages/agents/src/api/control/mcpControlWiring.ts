@@ -9,7 +9,10 @@
  * @requirement:REQ-006
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { McpAccess } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
+import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   MCPOAuthProvider,
@@ -27,8 +30,18 @@ import {
  * Config-backed discovery surface, the per-agent mcpAuth predicate, and the
  * active client (for tool re-publish after restart/authenticate).
  */
+/**
+ * Narrow config surface for MCP control wiring: MCP access plus the three
+ * registry accessors (service locators not on a core role).
+ */
+type McpControlConfig = McpAccess & {
+  getToolRegistry(): ToolRegistry;
+  getPromptRegistry(): PromptRegistry;
+  getResourceRegistry(): ResourceRegistry;
+};
+
 export interface McpControlWiringArgs {
-  readonly config: Config;
+  readonly config: McpControlConfig;
   readonly isMcpAuthenticated: (server: string) => boolean;
   readonly markAuthenticated: (server: string) => void;
   readonly resolveClient: () => AgentClientContract;

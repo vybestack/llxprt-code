@@ -19,7 +19,9 @@
  */
 
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ModelSelection } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 // @plan:ISSUE-2376 the real tool/invocation types the get() handle wraps.
 import type {
@@ -80,11 +82,20 @@ export class ToolControlError extends Error {
  * @plan:PLAN-20260617-COREAPI.P17
  * @requirement:REQ-006
  */
+/**
+ * Narrow config surface for tool control: model name plus the tool-registry and
+ * settings-service accessors (service locators not on a core role).
+ */
+type ToolControlConfig = ModelSelection & {
+  getToolRegistry(): ToolRegistry;
+  getSettingsService(): SettingsService;
+};
+
 export interface ToolControlDeps {
   /** The shared confirmation bus (respondToConfirmation publishes here). */
   readonly messageBus: MessageBus;
   /** The Config carrying the tool registry + settings service. */
-  readonly config: Config;
+  readonly config: ToolControlConfig;
   /**
    * The mutable editor-callbacks holder shared with the scheduler factory so
    * `setEditorCallbacks` is observable by the next turn's scheduler.

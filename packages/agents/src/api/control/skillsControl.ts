@@ -11,7 +11,7 @@
  * SkillManager so clients query/reload skills without a Config escape hatch.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SkillManager } from '@vybestack/llxprt-code-core/skills/skillManager.js';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core/skills/skillLoader.js';
 import type { AgentSkillsControl, SkillInfo } from '../agent.js';
 import { createControlError } from './errorUtils.js';
@@ -21,8 +21,17 @@ import { createControlError } from './errorUtils.js';
  * skill surface.
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
  */
+/**
+ * Narrow config surface for skills control: the skill manager service locator
+ * and the reload action, neither of which is on a core role yet.
+ */
+type SkillControlConfig = {
+  getSkillManager(): SkillManager;
+  reloadSkills(): Promise<void>;
+};
+
 export interface SkillsControlDeps {
-  readonly config: Config;
+  readonly config: SkillControlConfig;
 }
 
 /** Projects a raw SkillDefinition onto the public SkillInfo shape. */

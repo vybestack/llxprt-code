@@ -24,7 +24,7 @@
  *    observers.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   MessageBusType,
@@ -68,9 +68,18 @@ type HookObserver = (
  * @plan:PLAN-20260617-COREAPI.P23
  * @requirement:REQ-015
  */
+/**
+ * Narrow config surface for hook lifecycle control: the core hook trigger
+ * boundary plus the disabled-hook list members no role provides yet.
+ */
+type HookControlConfig = HookConfigBoundary & {
+  getDisabledHooks(): string[];
+  setDisabledHooks(names: string[]): void;
+};
+
 export interface HookControlDeps {
   /** The agent's live Config (carries the HookSystem + enable flag). */
-  readonly config: Config;
+  readonly config: HookControlConfig;
   /** The single shared MessageBus the runtime threads through every surface. */
   readonly messageBus: MessageBus;
   /**
