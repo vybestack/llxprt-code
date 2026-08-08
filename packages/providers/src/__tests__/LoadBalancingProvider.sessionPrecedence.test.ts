@@ -186,16 +186,13 @@ describe('LoadBalancingProvider session-scoped delegate precedence (#3151)', () 
   });
 
   describe('unrelated-setting isolation', () => {
-    it('member profile temperature wins over upstream snapshot', () => {
+    it('does not copy a foreground-only temperature into the delegate', () => {
       const foreground = new SettingsService();
       foreground.set('temperature', 0.9);
 
-      const invocation = buildDelegateInvocation(foreground, {
-        ephemeralSettings: { temperature: 0.3 },
-      });
+      const invocation = buildDelegateInvocation(foreground);
 
-      // temperature is NOT session-scoped, so member profile wins.
-      expect(invocation.getEphemeral('temperature')).toBe(0.3);
+      expect(invocation.getEphemeral('temperature')).toBeUndefined();
     });
   });
 
@@ -236,7 +233,7 @@ describe('LoadBalancingProvider session-scoped delegate precedence (#3151)', () 
   });
 
   describe('normalized options type safety', () => {
-    it('result is a valid NormalizedGenerateChatOptions with a frozen invocation', () => {
+    it('result is a valid NormalizedGenerateChatOptions with an immutable invocation', () => {
       const foreground = new SettingsService();
       foreground.setSessionScoped('dumpcontext', 'on');
 
@@ -250,8 +247,12 @@ describe('LoadBalancingProvider session-scoped delegate precedence (#3151)', () 
         options,
         makeCtx(),
       ) as NormalizedGenerateChatOptions;
+      const invocation = result.invocation;
 
-      expect(Object.isFrozen(result.invocation)).toBe(true);
+      expect(() => {
+        (invocation.ephemerals as Record<string, unknown>).dumpcontext = 'off';
+      }).toThrow();
+      expect(delegateDumpMode(invocation)).toBe('on');
       expect(result.metadata.loadBalancerDelegate).toBe(true);
     });
   });
