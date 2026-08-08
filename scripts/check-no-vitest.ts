@@ -16,6 +16,7 @@
  * the following appear outside the guard's own source and test fixtures:
  *
  *   - an import/require of the `vitest` specifier or a `vitest/*` subpath;
+ *   - a triple-slash `/// <reference types="vitest..." />` directive;
  *   - a `vitest`, `@vitest/*`, `@fast-check/vitest`, or
  *     `@stryker-mutator/vitest-runner` dependency entry in any manifest
  *     (including npm-aliased values like `"npm:vitest@..."`);
@@ -145,6 +146,20 @@ const LOCKFILE_FILENAMES: ReadonlySet<string> = new Set([
  */
 const VITEST_IMPORT_PATTERN =
   /\b(?:from|import|require)\W+['"]vitest(?:\/[^'"]*)?['"]/;
+
+/**
+ * Detects a triple-slash `/// <reference types="vitest..." />` directive
+ * referencing the `vitest` specifier or any `vitest/*` subpath. This is a
+ * genuine Vitest dependency (it loads Vitest's ambient type declarations)
+ * and must fail the guard even though it is neither an import/require nor a
+ * manifest entry. Issue #2970: nine files hid behind
+ * `/// <reference types="vitest/globals" />` that the import scan missed.
+ *
+ * Precise enough to NOT match the bare word "vitest" in prose: it requires
+ * the `///` triple-slash prefix and the `<reference types="..." />` shape.
+ */
+const VITEST_TRIPLE_SLASH_REFERENCE =
+  /^\/\/\/\s*<reference\s+types=["']vitest(?:\/[^"']*)?["']\s*\/?>/m;
 
 /**
  * Matches the `vitest` binary invoked anywhere in a package script value.
@@ -353,6 +368,23 @@ function scanCodeFile(filePath: string, content: string): Violation[] {
     });
     if (match.index === globalPattern.lastIndex) {
       globalPattern.lastIndex++;
+    }
+  }
+
+  // Triple-slash `/// <reference types="vitest..." />` directives (issue
+  // #2970). These load Vitest's ambient declarations and are a real
+  // dependency, but they are not import/require statements, so the scan
+  // above does not catch them.
+  const refPattern = new RegExp(VITEST_TRIPLE_SLASH_REFERENCE.source, 'gm');
+  while ((match = refPattern.exec(content)) !== null) {
+    violations.push({
+      file: relRepo(filePath),
+      line: lineOfOffset(content, match.index),
+      match: match[0].trim().replace(/\s+/g, ' '),
+      kind: 'triple-slash reference to vitest types',
+    });
+    if (match.index === refPattern.lastIndex) {
+      refPattern.lastIndex++;
     }
   }
   return violations;

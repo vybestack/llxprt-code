@@ -112,6 +112,59 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
     });
 
+    // ── Triple-slash reference detection (issue #2970 gap) ─────────────
+    describe('triple-slash reference detection', () => {
+      it('FAILS a /// <reference types="vitest/globals" /> directive', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/rogue-ref.ts',
+            '/// <reference types="vitest/globals" />\nexport const x = 1;\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('rogue-ref.ts');
+        expect(stdout).toContain('triple-slash reference');
+        expect(stdout).toContain('no-vitest guard FAILED');
+      });
+
+      it('FAILS a /// <reference types="vitest" /> directive', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/rogue-ref.ts',
+            '/// <reference types="vitest" />\nexport const x = 1;\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('rogue-ref.ts');
+      });
+
+      it('FAILS a single-quoted triple-slash vitest reference', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/rogue-ref.ts',
+            "/// <reference types='vitest/config' />\nexport const x = 1;\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('rogue-ref.ts');
+      });
+
+      it('does NOT flag a prose mention of vitest in a comment', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/explanation.ts',
+            '// This file used to have /// triple slash but now mentions vitest in prose only.\n' +
+              'export const note = "no vitest directive here";\n',
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+    });
+
     // ── Manifest dependency detection (#4–#7) ──────────────────────────
     describe('manifest dependency detection', () => {
       it('#4 FAILS "vitest" in devDependencies', () => {
