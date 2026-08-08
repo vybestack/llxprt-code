@@ -7,7 +7,12 @@ Issue: #3167
 Milestone: 0.11.0
 Requirements: REQ-3167-1 … REQ-3167-9
 
-Companion design with diagrams and measured evidence: [`design.html`](./design.html) — open in a browser.
+Companion documents:
+
+- [`specification.md`](./specification.md) — **the record schema, package placement, compatibility rules and
+  reuse decisions.** Read this before implementing anything; it is the contract between writer and reader.
+- [`decision.html`](./decision.html) — plain-language explainer of the one open decision, with diagrams.
+- [`design.html`](./design.html) — full design detail, measured evidence, and the rejected approaches.
 Reproducible benchmarks: [`benchmarks/`](./benchmarks) — every number quoted in this plan comes from one of
 these scripts. They are stored with a `.mjs.txt` suffix so the repo-wide
 `no-new-js` guard (issue #2745), which forbids new tracked `.js`/`.mjs` files,
@@ -323,9 +328,19 @@ No implementation until each of these is confirmed in the tree and written up in
 
 ### Phase 1 — Schema and writer contract
 
-REQ-3167-5, -7, -8. Record schema with `schema_version`; exclusive-create writer with run UUID; bounded queue;
-fail-open with self-disable; opt-in gate. Tests: run-id collision, reopen after restart, clock step backwards
-and forwards, EROFS/ENOSPC, abrupt exit leaving a partial line, disabled-by-default.
+REQ-3167-5, -7, -8. **The schema, placement, compatibility rules and reuse decisions are now written up in
+[`specification.md`](./specification.md)** — implement from there, not from this summary.
+
+Key points settled there: the record is declared once as a Zod schema from which both writer and reader derive
+their types; the sink is an extension of `packages/telemetry/src/debug/FileOutput.ts` rather than a parallel
+implementation (it already provides run-id filenames, size rolling, batching and drain-on-dispose, and needs
+four defects fixed — singleton-only construction, `fs.stat` per flush, unbounded `console.error`, and **zero
+eviction**, verified: no `unlink` call anywhere in the file); `IntervalUnion` is extracted from
+`sessionMetricsAggregator.ts` and its quadratic recompute fixed; and the live-writer rule needs no lock.
+
+Tests: run-id collision, reopen after restart, clock step backwards and forwards, EROFS/ENOSPC, abrupt exit
+leaving a partial line, disabled-by-default, and a round-trip test that asserts against a record produced by the
+**real writer** rather than a hand-authored fixture.
 
 ### Phase 2 — Operation lifecycle and identity
 
