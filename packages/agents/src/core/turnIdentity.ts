@@ -29,7 +29,10 @@ function stampOne(content: IContent, identity: TurnIdentity): IContent {
     ...content,
     metadata: {
       ...(content.metadata ?? {}),
-      promptId: identity.promptId,
+      // Both preserve an existing value: a caller that already established a
+      // turn identity (a paired tool call/response, for example) keeps it
+      // rather than having one logical turn split across two ids.
+      promptId: content.metadata?.promptId ?? identity.promptId,
       turnId: content.metadata?.turnId ?? identity.turnId,
     },
   };

@@ -122,6 +122,12 @@ export class StreamProcessor {
    * (#3130). Null before the first send.
    */
   private currentTurnId: string | null = null;
+
+  /**
+   * The promptId `currentTurnId` was minted for, so a retry of the same logical
+   * turn reuses that turn's identity instead of minting a second one (#3130).
+   */
+  private currentTurnPromptId: string | null = null;
   private currentAttemptIndex = 0;
 
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
@@ -166,11 +172,17 @@ export class StreamProcessor {
 
     // Mint the canonical turn identity before the send and stamp it on the
     // user content, so the token-usage record and the persisted turn agree
-    // (AC-1/AC-2, issue #3130).
-    this.currentTurnId = this.historyService.generateTurnKey();
+    // (AC-1/AC-2, issue #3130). Minted once per logical turn, not per attempt:
+    // a discard-restart re-enters this method with the same promptId, and
+    // re-minting would give the retry a different turn_id from the attempt it
+    // replaced even though both describe the same conversation turn.
+    if (this.currentTurnPromptId !== promptId) {
+      this.currentTurnPromptId = promptId;
+      this.currentTurnId = this.historyService.generateTurnKey();
+    }
     const stampedUserContent = stampTurnIdentityOnInput(userContent, {
       promptId,
-      turnId: this.currentTurnId,
+      turnId: this.currentTurnId ?? this.historyService.generateTurnKey(),
     });
 
     this.logger.debug(

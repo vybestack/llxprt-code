@@ -5,7 +5,6 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type {
   TokenUsageLogger,
   TokenEstimatorType,
@@ -16,6 +15,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
+import { approximateTokens } from './tokenUsageRequestShape.js';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
@@ -130,8 +130,10 @@ export function recordTurnJoinContext(
  * Cost discipline: the logger's `isEnabled()` gate is checked FIRST, so no
  * computation runs when telemetry is disabled.  The computation itself is
  * O(n) in the number of request contents — each content is token-counted
- * exactly once via the codebase's shared tiktoken-based {@link estimateTokens}
- * estimator (the same one used for prompt estimation), never re-tokenized.
+ * exactly once, counted with the cheap {@link approximateTokens} approximation
+ * rather than tiktoken: the seam already pays one full tokenization pass to
+ * produce `estimated_tokens`, and a second one cost ~31ms per send on a large
+ * request versus ~0.3ms for the approximation.
  *
  * `promptCacheKey` is deliberately NOT populated here: the actual key is
  * derived and sanitized inside the provider-specific executor
@@ -158,7 +160,7 @@ export function recordRequestShapeContext(
     requestContents,
     tools,
     instructionsText,
-    countTokens: estimateTokens,
+    countTokens: approximateTokens,
   });
 
   const context: TokenUsageTurnContext = {
@@ -230,7 +232,7 @@ export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
     recordProviderOrModelSwitch(
       input.usageLogger,
       input.runtimeState,
-      input.historyService,
+      input.turnId,
     ).catch((error: unknown) => {
       logger.error('Failed to record provider/model switch', error);
     });
@@ -262,7 +264,7 @@ export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
 export async function recordProviderOrModelSwitch(
   usageLogger: TokenUsageLogger | null | undefined,
   runtimeState: AgentRuntimeState,
-  historyService: HistoryService,
+  turnId: string | null,
 ): Promise<void> {
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
@@ -271,8 +273,10 @@ export async function recordProviderOrModelSwitch(
   const previous = usageLogger.observeServingProvider(provider, model);
   if (previous === null) return;
 
-  const turnId = findCurrentTurnMarker(historyService.getRawHistory())?.turnId;
-  const common = { sessionId, turnId: turnId ?? null };
+  // The caller's minted turn id, not one derived from history: the turn this
+  // switch affects is not persisted yet, so deriving it here would attribute
+  // the switch to the previous turn — the exact bug this PR fixes elsewhere.
+  const common = { sessionId, turnId };
 
   await usageLogger.recordLifecycleEvent(
     previous.fromProvider === provider

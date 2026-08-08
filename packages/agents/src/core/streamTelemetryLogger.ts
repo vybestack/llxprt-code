@@ -14,6 +14,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { logApiResponse } from './turnLogging.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { safeJsonStringify } from './turnJsonUtils.js';
 import {
   recordActualTokenUsage,
@@ -40,6 +41,29 @@ export async function logStreamTelemetry(
   tokenUsageLogger: TokenUsageLogger | null | undefined,
 ): Promise<void> {
   if (telemetry === undefined || lastIContent === undefined) return;
+  try {
+    await emitStreamTelemetry(
+      runtimeContext,
+      telemetry,
+      lastIContent,
+      tokenUsageLogger,
+    );
+  } catch (error) {
+    // Fail-open boundary: this runs on the completion path of a real turn, so
+    // a telemetry adapter that throws must not surface as a failed request.
+    new DebugLogger('llxprt:stream-telemetry').error(
+      `Failed to log stream telemetry for prompt ${telemetry.promptId}`,
+      error,
+    );
+  }
+}
+
+async function emitStreamTelemetry(
+  runtimeContext: AgentRuntimeContext,
+  telemetry: { promptId: string; startTime: number; attemptIndex?: number },
+  lastIContent: IContent,
+  tokenUsageLogger: TokenUsageLogger | null | undefined,
+): Promise<void> {
   const durationMs = Date.now() - telemetry.startTime;
   const usage = lastIContent.metadata?.usage;
   logApiResponse(

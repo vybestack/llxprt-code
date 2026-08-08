@@ -145,15 +145,24 @@ These fields attribute token cost to tool results present in the request.
 These fields describe the composition of the request prefix, measured at the
 agents-layer send seam.
 
-| Field                        | Type            | Description                                                                                                                                                |
-| ---------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions_tokens`        | number          | Token count of the system instruction.                                                                                                                     |
-| `tools_schema_tokens`        | number          | Token count of the tool schemas.                                                                                                                           |
-| `history_tokens`             | number          | Token count of the conversation history (excluding media and injected content).                                                                            |
-| `media_tokens`               | number          | Token count of media blocks (images, audio).                                                                                                               |
-| `injected_tokens`            | number          | Token count of synthetic/injected content (`metadata.synthetic === true`).                                                                                 |
-| `prefix_fingerprint`         | string          | First 16 hex characters of the SHA-256 of a stable serialization of the request prefix. See the privacy section for what this does and does not guarantee. |
-| `prefix_fingerprint_changed` | boolean \| null | Whether the fingerprint differs from the previous send in the same session. `null` on the first send.                                                      |
+> **These buckets are approximations, and deliberately so.** They are counted
+> from character length rather than by running a tokenizer. The send seam
+> already pays one full tokenization pass to produce `estimated_tokens`, and
+> adding a second one cost roughly 31 ms per request on a large prompt and grew
+> with the conversation. Use `estimated_tokens` or `actual_prompt_tokens` when
+> you need an authoritative total. Because every bucket — and every entry in
+> `tool_calls` — uses the same approximation, the **proportions** between them
+> are meaningful, which is what these fields exist for.
+
+| Field                        | Type            | Description                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `instructions_tokens`        | number          | Token count of the system instruction.                                                                                                                                                                                                                                                                                                                                   |
+| `tools_schema_tokens`        | number          | Token count of the tool schemas.                                                                                                                                                                                                                                                                                                                                         |
+| `history_tokens`             | number          | Token count of the conversation history (excluding media and injected content).                                                                                                                                                                                                                                                                                          |
+| `media_tokens`               | number          | Token count of media blocks (images, audio).                                                                                                                                                                                                                                                                                                                             |
+| `injected_tokens`            | number          | Token count of synthetic/injected content (`metadata.synthetic === true`).                                                                                                                                                                                                                                                                                               |
+| `prefix_fingerprint`         | string          | First 16 hex characters of the SHA-256 of a stable serialization of the request prefix — the instructions, the tool schemas, and the leading ~8 KB of history. Bounded on purpose: the prefix is the part a provider can cache, so a change there breaks the cache while a change at the tail cannot. See the privacy section for what this does and does not guarantee. |
+| `prefix_fingerprint_changed` | boolean \| null | Whether the fingerprint differs from the previous send in the same session. `null` on the first send.                                                                                                                                                                                                                                                                    |
 
 ## Lifecycle records
 

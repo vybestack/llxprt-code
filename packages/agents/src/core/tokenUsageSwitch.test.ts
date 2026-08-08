@@ -20,11 +20,11 @@ import * as os from 'node:os';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import { recordProviderOrModelSwitch } from './tokenUsageEstimateLogger.js';
 import { parseTokenUsageLogRecord } from './tokenUsageRecords.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 
 const SESSION_ID = 'switch-session';
+const TURN_ID = 'turn-under-test';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -51,11 +51,9 @@ function stateFor(provider: string, model: string): AgentRuntimeState {
 
 describe('token-usage provider/model switch records (issue #3130)', () => {
   let logFile: string;
-  let history: HistoryService;
 
   beforeEach(() => {
     logFile = makeTempLogPath();
-    history = new HistoryService();
   });
 
   afterEach(() => {
@@ -67,7 +65,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
-      history,
+      TURN_ID,
     );
     expect(readRecords(logFile)).toHaveLength(0);
   });
@@ -75,8 +73,8 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   it('writes nothing when the same provider and model serve again', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     const state = stateFor('anthropic', 'claude-opus-5');
-    await recordProviderOrModelSwitch(logger, state, history);
-    await recordProviderOrModelSwitch(logger, state, history);
+    await recordProviderOrModelSwitch(logger, state, TURN_ID);
+    await recordProviderOrModelSwitch(logger, state, TURN_ID);
     expect(readRecords(logFile)).toHaveLength(0);
   });
 
@@ -85,12 +83,12 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
-      history,
+      TURN_ID,
     );
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-fable-5'),
-      history,
+      TURN_ID,
     );
 
     const records = readRecords(logFile);
@@ -102,6 +100,9 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
       expect(parsed.to_model).toBe('claude-fable-5');
       expect(parsed.provider).toBe('anthropic');
       expect(parsed.session_id).toBe(SESSION_ID);
+      // The switch belongs to the turn being sent, which is the caller's
+      // minted id — not a turn derived from already-persisted history.
+      expect(parsed.turn_id).toBe(TURN_ID);
     }
   });
 
@@ -110,12 +111,12 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
-      history,
+      TURN_ID,
     );
     await recordProviderOrModelSwitch(
       logger,
       stateFor('codex', 'gpt-5.6-sol'),
-      history,
+      TURN_ID,
     );
 
     const records = readRecords(logFile);
@@ -134,10 +135,10 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
     const logger = new TokenUsageLogger(true, logFile);
     const anthropic = stateFor('anthropic', 'claude-opus-5');
     const codex = stateFor('codex', 'gpt-5.6-sol');
-    await recordProviderOrModelSwitch(logger, anthropic, history);
-    await recordProviderOrModelSwitch(logger, codex, history);
-    await recordProviderOrModelSwitch(logger, codex, history);
-    await recordProviderOrModelSwitch(logger, codex, history);
+    await recordProviderOrModelSwitch(logger, anthropic, TURN_ID);
+    await recordProviderOrModelSwitch(logger, codex, TURN_ID);
+    await recordProviderOrModelSwitch(logger, codex, TURN_ID);
+    await recordProviderOrModelSwitch(logger, codex, TURN_ID);
 
     expect(readRecords(logFile)).toHaveLength(1);
   });
@@ -147,12 +148,12 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
-      history,
+      TURN_ID,
     );
     await recordProviderOrModelSwitch(
       logger,
       stateFor('codex', 'gpt-5.6-sol'),
-      history,
+      TURN_ID,
     );
     expect(readRecords(logFile)).toHaveLength(0);
   });

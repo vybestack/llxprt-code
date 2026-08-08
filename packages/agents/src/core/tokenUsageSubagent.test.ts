@@ -228,6 +228,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
       'disabled-prompt',
       state,
       historyService,
+      'disabled-turn',
     );
 
     // When the logger is disabled, nothing is written — the file does not
