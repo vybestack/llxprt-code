@@ -20,7 +20,8 @@ const TEST_DIR_SEGMENTS = new Set([
   'test-scripts',
 ]);
 
-const TEST_FILE_RE = /\.(test|spec)\.[cm]?tsx?$|\.bun\.ts$/;
+const TEST_FILE_RE =
+  /\.(test|spec)\.[cm]?tsx?$|\.bun\.ts$|[-.]test-helpers\.[cm]?tsx?$/;
 
 /** Returns true when a repo-relative path is a test file. */
 export function isTestPath(rel: string): boolean {

@@ -61,6 +61,9 @@ export function formatReport(result: BoundaryResult): string {
       `config-boundary: package ${pkg.packageName} ${pkg.files} files, ${pkg.members} members`,
     );
   }
+  for (const holder of result.holders) {
+    lines.push(`config-boundary: holder ${holder.file}`);
+  }
 
   lines.push(
     `config-boundary: config-type import findings ${result.findings.length}`,

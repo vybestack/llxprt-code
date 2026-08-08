@@ -17,6 +17,7 @@ import {
   collectConfigMemberReads,
   importsConfigType,
   constructsNewConfig,
+  collectConfigTypeReferences,
 } from './analysis.js';
 import { findRoleViolations } from './role-guard.js';
 import { rollupByPackage } from './report.js';
@@ -32,17 +33,19 @@ interface FileSignals {
   readonly finding: ImportFinding | undefined;
 }
 
-/** Builds the holder (if any Config members are read) for a file. */
+/** Builds the holder (if any Config signals exist) for a file. */
 function buildHolder(
   rel: string,
   packageName: string,
-  reads: ReadonlyArray<{ readonly name: string; readonly line: number }>,
+  signals: readonly string[],
+  isFactory: boolean,
 ): ConfigHolder | undefined {
-  if (reads.length === 0) return undefined;
+  if (signals.length === 0) return undefined;
+  if (isFactory || isPermittedConfigUse(rel)) return undefined;
   return {
     file: rel,
     packageName,
-    members: new Set(reads.map((read) => read.name)),
+    members: new Set(signals),
   };
 }
 
@@ -54,6 +57,11 @@ function buildFinding(
   isFactory: boolean,
 ): ImportFinding | undefined {
   return importsType && !isFactory ? { file: rel, packageName } : undefined;
+}
+
+/** Returns true when a repo-relative path is a permitted Config use. */
+function isPermittedConfigUse(_rel: string): boolean {
+  return false;
 }
 
 /** Analyses one consumer source file for member reads, imports, and factories. */
@@ -75,7 +83,15 @@ function analyseFile(
     sourceFile,
     identity,
   );
-  const holder = buildHolder(rel, packageName, reads);
+  const typeRefs = collectConfigTypeReferences(
+    checker,
+    sourceFile,
+    identity.classSymbol,
+  );
+  const allSignals = [
+    ...reads.map((r) => r.name),
+    ...typeRefs.map((r) => `type:${r.form}`),
+  ];
   const importsType = importsConfigType(
     checker,
     sourceFile,
@@ -86,7 +102,9 @@ function analyseFile(
     sourceFile,
     identity.classSymbol,
   );
-  const finding = buildFinding(rel, packageName, importsType, isFactory);
+  const holder = buildHolder(rel, packageName, allSignals, isFactory);
+  const exempt = isFactory || isPermittedConfigUse(rel);
+  const finding = buildFinding(rel, packageName, importsType, exempt);
   return { holder, finding };
 }
 

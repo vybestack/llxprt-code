@@ -353,4 +353,192 @@ export function use(c: Config {   // <- syntax error: missing )
 
     expect(result.code).not.toBe(0);
   });
+
+  // ── P07b: type-level Config reference detection ──────────────────────
+
+  it("flags indexed access Config['member'] as a type-level reference", () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'indexedAccess.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export interface View { getId: Config['getSessionId']; }
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags typeof Config as a type-level reference', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'typeofRef.ts',
+      `import { Config } from '${CORE_SPEC}';
+export type T = typeof Config;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags keyof Config as a type-level reference', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'keyofRef.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export type Keys = keyof Config;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags Config used as a generic argument', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'genericArg.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export type Box<T> = { value: T };
+export type CfgBox = Box<Config>;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags a heritage clause (extends Config)', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'extendsRef.ts',
+      `import { Config } from '${CORE_SPEC}';
+export class Sub extends Config {}
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags a heritage clause (implements Config)', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'implementsRef.ts',
+      `import { Config } from '${CORE_SPEC}';
+export class Impl implements Config {
+  constructor() { super(); }
+}
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags a type alias right-hand side referencing Config', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'aliasRef.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export type Alias = Config;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags Pick<Config, ...> mapped/utility usage', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'pickRef.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export type Narrow = Pick<Config, 'getSessionId' | 'getModel'>;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('flags Omit<Config, ...> mapped/utility usage', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'omitRef.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export type Wide = Omit<Config, 'getToolRegistry'>;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it("flags ReturnType<Config['method']> nested usage", () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const file = writeConsumer(
+      root,
+      'agents',
+      'returnTypeRef.ts',
+      `import type { Config } from '${CORE_SPEC}';
+export type Registry = ReturnType<Config['getToolRegistry']>;
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
+
+  it('counts fromConfig.ts as the sole permitted holder', () => {
+    const root = getDir();
+    scaffoldCore(root);
+    const fromConfigDir = join(root, 'packages/agents/src/api');
+    mkdirSync(fromConfigDir, { recursive: true });
+    writePackageJson(
+      join(root, 'packages/agents'),
+      '@vybestack/llxprt-code-agents',
+    );
+    const file = 'packages/agents/src/api/fromConfig.ts';
+    writeFileSync(
+      join(root, file),
+      `import type { Config } from '${CORE_SPEC}';
+export function fromConfig(config: Config): string {
+  return config.getSessionId();
+}
+`,
+    );
+
+    const result = runGuard(root);
+    expect(result.stdout).toContain(`holder ${file}`);
+  });
 });

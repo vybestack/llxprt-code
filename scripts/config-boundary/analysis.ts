@@ -187,6 +187,84 @@ export function constructsNewConfig(
   return found;
 }
 
+/** Extracts the symbol for a type-level entity (identifier or qualified name). */
+function symbolOfTypeEntity(
+  checker: ts.TypeChecker,
+  node: ts.EntityName,
+): ts.Symbol | undefined {
+  return checker.getSymbolAtLocation(node);
+}
+
+/** True when a symbol resolves (through aliases) to the Config class symbol. */
+function symbolIsConfig(
+  checker: ts.TypeChecker,
+  symbol: ts.Symbol | undefined,
+  configSymbol: ts.Symbol,
+): boolean {
+  if (!symbol) return false;
+  return followAliases(checker, symbol) === configSymbol;
+}
+
+export interface TypeLevelReference {
+  readonly form: string;
+  readonly line: number;
+}
+
+/**
+ * Detects type-level references to Config that the member-read walker misses.
+ *
+ * Catches every form listed in P07b: indexed access (`Config['x']`), `typeof
+ * Config`, `keyof Config`, generic arguments (`Foo<Config>`), heritage clauses
+ * (`extends Config` / `implements Config`), type alias RHS (`type T = Config`),
+ * and mapped/utility types (`Pick<Config, ...>`, `Omit<Config, ...>`,
+ * `Partial<Config>`).
+ *
+ * The implementation walks the full AST. A `TypeReferenceNode` whose
+ * `typeName` resolves to Config covers direct annotations, indexed-access
+ * objects, nested generic arguments, and utility-type arguments in one pass.
+ * `TypeQueryNode` catches `typeof Config`. `ExpressionWithTypeArguments`
+ * catches heritage-clause references.
+ */
+export function collectConfigTypeReferences(
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+  configSymbol: ts.Symbol,
+): TypeLevelReference[] {
+  const refs: TypeLevelReference[] = [];
+  const seen = new Set<number>();
+  const record = (node: ts.Node, form: string): void => {
+    const line =
+      sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+    if (!seen.has(line)) {
+      seen.add(line);
+      refs.push({ form, line });
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypeReferenceNode(node)) {
+      const symbol = symbolOfTypeEntity(checker, node.typeName);
+      if (symbolIsConfig(checker, symbol, configSymbol)) {
+        record(node, 'type-reference');
+      }
+    }
+    if (ts.isTypeQueryNode(node)) {
+      const symbol = symbolOfTypeEntity(checker, node.exprName);
+      if (symbolIsConfig(checker, symbol, configSymbol)) {
+        record(node, 'typeof');
+      }
+    }
+    if (ts.isExpressionWithTypeArguments(node)) {
+      const symbol = checker.getSymbolAtLocation(node.expression);
+      if (symbolIsConfig(checker, symbol, configSymbol)) {
+        record(node, 'heritage');
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sourceFile, visit);
+  return refs;
+}
+
 function resolveExpressionSymbol(
   checker: ts.TypeChecker,
   expression: ts.LeftHandSideExpression,
