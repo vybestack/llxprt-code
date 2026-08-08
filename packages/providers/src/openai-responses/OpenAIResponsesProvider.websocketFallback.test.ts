@@ -333,8 +333,9 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
       expect(body['store']).toBe(true);
 
       const users = userTextsOf(body['input']);
-      expect(users).toContain('second question');
-      expect(users).not.toContain('first question');
+      // Exact equality: an empty array would satisfy a toContain/not.toContain
+      // pair, hiding a total trimming failure.
+      expect(users).toEqual(['second question']);
     });
   });
 });

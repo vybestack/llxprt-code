@@ -203,6 +203,7 @@ function appendReasoningItems(
     input.push(reasoningItem);
   }
 }
+
 function appendAssistantInput(
   input: ResponsesInputItem[],
   content: IContent,

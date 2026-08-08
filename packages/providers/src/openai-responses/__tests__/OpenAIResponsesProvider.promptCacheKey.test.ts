@@ -35,7 +35,7 @@ function buildCodexCallOptions(
   const { contents = [], codexToken, invocation, ...rest } = overrides;
 
   const invocationWithToken =
-    invocation && codexToken
+    invocation !== undefined && codexToken !== undefined
       ? {
           ...invocation,
           metadata: {

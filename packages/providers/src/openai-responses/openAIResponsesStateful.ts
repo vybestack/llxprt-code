@@ -43,12 +43,6 @@ function normalizeStatefulValue(value: unknown): boolean | undefined {
 }
 
 /**
- * Predicate for the parent scan: an AI entry that was stored server-side,
- * carries a non-empty id, and was issued by the same endpoint we are about
- * to send to. A MISSING `providerBaseURL` is treated as non-matching (fail
- * closed to full history — always safe). (#3134 Fix 2)
- */
-/**
  * A stored response id is scoped to the endpoint that issued it, so a parent
  * from a different endpoint can never resolve (#3134).
  *

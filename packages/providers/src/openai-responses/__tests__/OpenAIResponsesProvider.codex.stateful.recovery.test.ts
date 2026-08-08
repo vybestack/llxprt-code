@@ -85,7 +85,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
             "Previous response with id 'resp_dead' not found",
           );
         }
-        return sseResponse('resp_recovered', 'recovered text', true);
+        return sseResponse('resp_recovered', 'recovered text');
       };
       try {
         const contents: IContent[] = [
@@ -148,7 +148,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
             "previous_response_id 'resp_dead' does not exist",
           );
         }
-        return sseResponse('resp_new', 'ok', true);
+        return sseResponse('resp_new', 'ok');
       };
       try {
         let statefulFailed = false;
@@ -190,7 +190,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           const blob = init?.body;
           turn2Body =
             blob instanceof Blob ? await blob.text() : String(blob ?? '');
-          return sseResponse('resp_new2', 'ok2', true);
+          return sseResponse('resp_new2', 'ok2');
         };
 
         const historyAfterRecovery: IContent[] = [
@@ -295,9 +295,9 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           unknown
         >;
         expect(sent['previous_response_id']).toBe('resp_match');
-        const users = userTextsOf(sent['input']);
-        expect(users).not.toContain('q1');
-        expect(users).toContain('q2');
+        // Exact equality: an empty array would satisfy a toContain/
+        // not.toContain pair, hiding a total trimming failure.
+        expect(userTextsOf(sent['input'])).toEqual(['q2']);
       } finally {
         transport.close();
       }
@@ -337,9 +337,9 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           unknown
         >;
         expect(sent['previous_response_id']).toBe('resp_unstamped');
-        const users = userTextsOf(sent['input']);
-        expect(users).not.toContain('q1');
-        expect(users).toContain('q2');
+        // Exact equality: an empty array would satisfy a toContain/
+        // not.toContain pair, hiding a total trimming failure.
+        expect(userTextsOf(sent['input'])).toEqual(['q2']);
       } finally {
         transport.close();
       }

@@ -369,8 +369,9 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     expect(sent['previous_response_id']).toBe('resp_parent');
 
     const userTexts = userTextsOf(sent['input']);
-    expect(userTexts).toContain('second question');
-    expect(userTexts).not.toContain('first question');
+    // Exact equality, not toContain: an empty array would satisfy both a
+    // toContain-absent and a not.toContain assertion, hiding a total failure.
+    expect(userTexts).toEqual(['second question']);
 
     transport.close();
   });

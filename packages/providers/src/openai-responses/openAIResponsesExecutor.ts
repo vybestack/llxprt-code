@@ -285,6 +285,13 @@ export async function* executeOpenAIResponsesRequest(
     recoveryPrepared,
     deps,
   );
+  // The recovery request is the one that actually reaches the model, so it is
+  // the one worth seeing under `dumpcontext`.
+  await dumpFinalizedRequest(recoveryContext, invocationEphemerals, deps);
+  // Note: if both the initial and the recovery attempt fall back from the
+  // WebSocket, `onWebSocketFallback` fires twice for a single turn. That is
+  // accepted: the counter tracks CONSECUTIVE transport failures, and two real
+  // failed WebSocket attempts did occur.
   yield* streamResponses(
     buildStreamParams(
       recoveryContext,

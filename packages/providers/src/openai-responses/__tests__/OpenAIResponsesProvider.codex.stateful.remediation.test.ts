@@ -39,6 +39,11 @@ import {
   userTextsOf,
 } from '../openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
+import type {
+  StreamResponseOptions,
+  WebSocketTransport,
+} from '../openAIResponsesWebSocketTransport.js';
+import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -597,7 +602,7 @@ describe('OpenAIResponsesProvider Codex stateful provider-level remediation @iss
       runtime,
       invocation,
       contents,
-      ephemeralSettings: { 'responses-stateful': false },
+      ephemerals: { 'responses-stateful': false },
     });
 
     for await (const _c of provider.generateChatCompletion(options)) {

@@ -50,11 +50,15 @@ export function buildCodexOAuthManager(): object {
   };
 }
 
-export function sseResponse(
-  id: string,
-  text: string,
-  responsesStored: boolean,
-): Response {
+/**
+ * Builds a real Responses SSE byte stream so tests exercise
+ * `parseResponsesStream` rather than hand-constructing its output.
+ *
+ * There is deliberately no `responsesStored` parameter: the flag is stamped
+ * from the request-side `responsesStored` option, not from the wire payload,
+ * so accepting one here would imply control this stream does not have.
+ */
+export function sseResponse(id: string, text: string): Response {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -65,8 +69,6 @@ export function sseResponse(
           ),
         );
       }
-      const stored = responsesStored ? ',"responsesStored":true' : '';
-      void stored;
       controller.enqueue(
         encoder.encode(
           `data: {"type":"response.completed","response":{"id":${JSON.stringify(id)},"status":"completed"}}\n\n`,
