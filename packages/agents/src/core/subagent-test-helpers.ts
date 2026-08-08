@@ -15,6 +15,7 @@
  */
 
 import type { Mock } from '../testApi.js';
+import type { ModelSelection } from '@vybestack/llxprt-code-core/config/roles.js';
 import { vi } from '../testApi.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -94,7 +95,7 @@ export async function createMockConfig(
   const config = new Config(configParams);
   await initializeTestConfig(config);
 
-  await (config as RuntimeLifecycle).refreshAuth();
+  await (config as ModelSelection).refreshAuth();
 
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
     model: DEFAULT_GEMINI_MODEL,
