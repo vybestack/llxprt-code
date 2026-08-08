@@ -91,9 +91,19 @@ function isEligibleParent(entry: IContent, rawBaseURL: string): boolean {
  * - `rawBaseURL` — the resolved endpoint URL; an AI entry's
  *   `metadata.providerBaseURL` must equal this to qualify as a parent, so a
  *   parent issued by one endpoint is never sent to another (#3134 Fix 2).
- * - `responsesStatefulFailed` — a session-scoped flag set when the API
- *   rejects a `previous_response_id`. Once set, statefulness is suppressed
- *   for the remainder of the session (graceful degradation) (#3134 Fix 1).
+ * - `isRejectedParent` — reports whether a specific response id has already
+ *   been refused by the backend. Such an id is skipped so the scan falls
+ *   through to an older parent, or to none at all (#3134 Fix 1).
+ *
+ *   This is deliberately per-id rather than a session-wide switch. Codex
+ *   parents are scoped to the WebSocket connection that produced them, so a
+ *   resumed session (`--continue`) loads history whose stored markers are
+ *   already dead. Suppressing statefulness for the whole session on the first
+ *   rejection meant such a session replayed the full history on every
+ *   subsequent turn and never started a new chain. Skipping only the dead id
+ *   lets the retry send full history once; that response becomes the newest
+ *   stored turn, and because the scan takes the NEWEST eligible parent the
+ *   very next turn chains from it. The chain re-establishes itself.
  */
 export function computeStatefulConversation(
   options: NormalizedGenerateChatOptions,
@@ -102,7 +112,7 @@ export function computeStatefulConversation(
   explicitUserStore: boolean | undefined,
   isCodex: boolean,
   rawBaseURL: string,
-  responsesStatefulFailed: boolean,
+  isRejectedParent: (responseId: string) => boolean,
   statefulTransportSupported: boolean,
   logger: DebugLogger,
 ): StatefulConversation {
@@ -114,14 +124,6 @@ export function computeStatefulConversation(
     logger.debug(
       () =>
         'responses-stateful skipped: the active transport cannot resolve a previous_response_id.',
-    );
-    return { enabled: false, parentId: undefined, content };
-  }
-
-  if (responsesStatefulFailed) {
-    logger.debug(
-      () =>
-        'responses-stateful suppressed: a prior previous_response_id was rejected by the API; using full history for the rest of this session.',
     );
     return { enabled: false, parentId: undefined, content };
   }
@@ -150,11 +152,20 @@ export function computeStatefulConversation(
   let parentIndex = -1;
   for (let index = content.length - 1; index >= 0; index -= 1) {
     const entry = content[index];
-    if (isEligibleParent(entry, rawBaseURL)) {
-      parentId = entry.metadata!.id;
-      parentIndex = index;
-      break;
+    if (!isEligibleParent(entry, rawBaseURL)) continue;
+    const candidate = entry.metadata!.id as string;
+    // A parent the backend already refused is dead; skip it so a resumed
+    // session cannot keep re-sending it (#3134 Fix 1).
+    if (isRejectedParent(candidate)) {
+      logger.debug(
+        () =>
+          `responses-stateful skipping previously rejected parent ${candidate}.`,
+      );
+      continue;
     }
+    parentId = candidate;
+    parentIndex = index;
+    break;
   }
 
   if (parentIndex === -1) {

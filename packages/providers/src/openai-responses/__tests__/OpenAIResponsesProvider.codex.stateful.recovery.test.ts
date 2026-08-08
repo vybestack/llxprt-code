@@ -102,11 +102,11 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'second q' }] },
         ];
 
-        let statefulFailed = false;
+        const rejected = new Set<string>();
         const deps = buildDeps({
-          isResponsesStatefulFailed: () => statefulFailed,
-          markResponsesStatefulFailed: () => {
-            statefulFailed = true;
+          isRejectedStatefulParent: (id) => rejected.has(id),
+          markStatefulParentRejected: (id) => {
+            rejected.add(id);
           },
         });
         const messages = await drain(
@@ -114,7 +114,8 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         );
 
         expect(fetchCalls).toBe(2);
-        expect(statefulFailed).toBe(true);
+        // Only the dead id is retired — statefulness itself stays available.
+        expect([...rejected]).toStrictEqual(['resp_dead']);
 
         const firstReq = JSON.parse(firstBody!) as Record<string, unknown>;
         expect(firstReq['previous_response_id']).toBe('resp_dead');
@@ -137,7 +138,15 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
       }
     });
 
-    it('after recovery, subsequent turns suppress statefulness (session-scoped flag)', async () => {
+    /**
+     * Regression for the `--continue` failure: resumed history carries parents
+     * scoped to a WebSocket connection that no longer exists. A session-wide
+     * suppression switch made the first rejection permanent, so every later
+     * turn replayed the full conversation and no new chain was ever started.
+     * Retiring only the dead id lets the next turn chain from the response the
+     * recovery produced.
+     */
+    it('re-establishes a new chain on the next turn instead of degrading for the session', async () => {
       let fetchCalls = 0;
       const originalFetch = globalThis.fetch;
       (globalThis as { fetch: unknown }).fetch = async () => {
@@ -151,11 +160,11 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         return sseResponse('resp_new', 'ok');
       };
       try {
-        let statefulFailed = false;
+        const rejected = new Set<string>();
         const deps = buildDeps({
-          isResponsesStatefulFailed: () => statefulFailed,
-          markResponsesStatefulFailed: () => {
-            statefulFailed = true;
+          isRejectedStatefulParent: (id) => rejected.has(id),
+          markStatefulParentRejected: (id) => {
+            rejected.add(id);
           },
         });
 
@@ -179,8 +188,9 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           ),
         );
 
-        // Turn 2: even though history now has resp_new with responsesStored,
-        // the session flag suppresses statefulness.
+        // Turn 2: history now ends with resp_new, which is live. The scan takes
+        // the NEWEST eligible parent, so it must chain from resp_new and skip
+        // the retired resp_dead — not fall back to full history.
         fetchCalls = 0;
         let turn2Body: string | undefined;
         (globalThis as { fetch: unknown }).fetch = async (
@@ -214,10 +224,14 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         );
 
         const req = JSON.parse(turn2Body!) as Record<string, unknown>;
-        expect(req['previous_response_id']).toBeUndefined();
+        // Chained again from the fresh parent produced by the recovery turn.
+        expect(req['previous_response_id']).toBe('resp_new');
+        // And therefore trimmed: only the turn after resp_new is resent.
         const users = userTextsOf(req['input']);
-        expect(users).toContain('q1');
-        expect(users).toContain('q3');
+        expect(users).toStrictEqual(['q3']);
+        expect(users).not.toContain('q1');
+        // The dead id is never sent again.
+        expect(req['previous_response_id']).not.toBe('resp_dead');
       } finally {
         (globalThis as { fetch: unknown }).fetch = originalFetch;
       }

@@ -47,9 +47,11 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   private webSocketTransport: WebSocketTransport | undefined;
   private webSocketStickToHttp = false;
   private webSocketConsecutiveFallbacks = 0;
-  // #3134 Fix 1: session-scoped flag — once a previous_response_id is rejected
-  // by the API, all subsequent turns suppress statefulness (full history).
-  private responsesStatefulFailed = false;
+  // #3134 Fix 1: response ids the backend has refused as a parent. Tracked
+  // per id rather than as a session-wide switch so a resumed session, whose
+  // loaded history carries parents scoped to a socket that no longer exists,
+  // recovers instead of replaying the full history for the rest of the run.
+  private readonly rejectedStatefulParents = new Set<string>();
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
@@ -88,9 +90,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       onWebSocketSuccess: () => {
         this.webSocketConsecutiveFallbacks = 0;
       },
-      isResponsesStatefulFailed: () => this.responsesStatefulFailed,
-      markResponsesStatefulFailed: () => {
-        this.responsesStatefulFailed = true;
+      isRejectedStatefulParent: (responseId) =>
+        this.rejectedStatefulParents.has(responseId),
+      markStatefulParentRejected: (responseId) => {
+        this.rejectedStatefulParents.add(responseId);
       },
     };
   }
@@ -122,7 +125,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.webSocketTransport = undefined;
     this.webSocketStickToHttp = false;
     this.webSocketConsecutiveFallbacks = 0;
-    this.responsesStatefulFailed = false;
+    this.rejectedStatefulParents.clear();
   }
 
   protected override async *generateChatCompletionWithOptions(

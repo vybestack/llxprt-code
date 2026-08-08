@@ -129,18 +129,19 @@ export interface ResponsesExecutorDeps {
    */
   readonly onWebSocketSuccess?: () => void;
   /**
-   * Returns true when the session has permanently suppressed Responses
-   * statefulness because a previous_response_id was rejected by the API.
-   * Once set, computeStatefulConversation stops selecting a parent so
-   * every subsequent turn sends full history (#3134 Fix 1).
+   * Reports whether the backend has already refused this response id as a
+   * parent, so the parent scan can skip it (#3134 Fix 1).
    */
-  readonly isResponsesStatefulFailed?: () => boolean;
+  readonly isRejectedStatefulParent?: (responseId: string) => boolean;
   /**
-   * Marks the session as having permanently suppressed Responses
-   * statefulness. Called exactly once, when a previous-response-not-found
-   * error is detected before any content has been yielded (#3134 Fix 1).
+   * Records a response id the backend refused as a parent. Scoped to the one
+   * dead id rather than disabling statefulness for the session: Codex parents
+   * belong to a single WebSocket connection, so a resumed session starts with
+   * parents that are already dead, and a session-wide switch would make such a
+   * session replay full history forever instead of starting a new chain
+   * (#3134 Fix 1).
    */
-  readonly markResponsesStatefulFailed?: () => void;
+  readonly markStatefulParentRejected?: (responseId: string) => void;
   /**
    * Whether this request will go over the Codex Responses WebSocket.
    *
@@ -255,6 +256,7 @@ export async function* executeOpenAIResponsesRequest(
   // The safe replay boundary is "no IContent has been yielded to the consumer"
   // — if even one chunk escaped we cannot retry without duplicating output.
   let contentYielded = false;
+  let rejectedParentId: string;
   try {
     for await (const content of streamResponses(streamParams, deps)) {
       contentYielded = true;
@@ -264,31 +266,55 @@ export async function* executeOpenAIResponsesRequest(
   } catch (error) {
     // Guard on the request the transport actually sent, not on `prepared`,
     // so a future divergence between the two cannot skip recovery.
+    const sentParentId = requestContext.request.previous_response_id;
     if (
       contentYielded ||
-      requestContext.request.previous_response_id === undefined ||
+      sentParentId === undefined ||
       !isPreviousResponseNotFoundError(error)
     ) {
       throw error;
     }
+    rejectedParentId = sentParentId;
     deps.logger.debug(
       () =>
-        `responses-stateful: previous_response_id was rejected by the API; retrying once with full history. Error: ${String(error)}`,
+        `responses-stateful: parent ${sentParentId} was rejected by the API; retiring it and retrying once with full history. Error: ${String(error)}`,
     );
   }
 
-  // Mark the session so all future turns suppress statefulness, then rebuild
-  // the request context. computeStatefulConversation will now return full
-  // history with no parent because deps.isResponsesStatefulFailed() is true.
+  yield* retryWithoutStatefulness(
+    options,
+    deps,
+    invocationEphemerals,
+    abortSignal,
+    rejectedParentId,
+  );
+}
+
+/**
+ * Second and final attempt for a turn whose `previous_response_id` the backend
+ * refused (#3134 Fix 1). Only reachable before any IContent has been yielded,
+ * so replaying the turn cannot duplicate output.
+ *
+ * Extracted from executeOpenAIResponsesRequest to keep it within the project
+ * max-lines-per-function budget.
+ */
+async function* retryWithoutStatefulness(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals: Record<string, unknown>,
+  abortSignal: AbortSignal | undefined,
+  rejectedParentId: string,
+): AsyncIterableIterator<IContent> {
+  // Retire only the dead id, then rebuild. The retry therefore sends full
+  // history with no parent, and — because the parent scan takes the NEWEST
+  // eligible turn — the response it produces becomes the parent for the very
+  // next turn. The chain re-establishes itself instead of the session
+  // degrading to permanent full-history replay.
   //
-  // This is deliberately session-wide rather than per-parent. The trigger is a
-  // narrow signature (400/404 naming previous_response_id), which means the
-  // backend did not resolve a parent we believed was stored — evidence about
-  // the endpoint, not just about this one id. Suppressing for the session
-  // trades the delta optimization for guaranteed correctness, which is the
-  // right side to err on while backend `store: true` support is unconfirmed.
-  // `clearState()` resets it.
-  deps.markResponsesStatefulFailed?.();
+  // This matters most on `--continue`: resumed history carries parents scoped
+  // to a WebSocket connection that no longer exists, so the first turn of a
+  // resumed session always spends one rejected request here.
+  deps.markStatefulParentRejected?.(rejectedParentId);
   const recoveryPrepared = await buildResponsesRequestContextForProjection(
     options,
     deps,
@@ -418,7 +444,7 @@ export async function buildRequestContext(
     explicitUserStore,
     isCodex,
     rawBaseURL,
-    deps.isResponsesStatefulFailed?.() ?? false,
+    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
     statefulTransportSupported,
     deps.logger,
   );
