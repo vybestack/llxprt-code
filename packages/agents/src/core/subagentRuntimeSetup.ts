@@ -827,7 +827,14 @@ async function buildSystemInstruction(
   );
 
   const mcpInstructions = config.getMcpInstructions();
+  // Issue #3136: a subagent's user/core memory previously reached the model
+  // only because the provider layer rebuilt its own core prompt. Supply both
+  // here so collapsing to a single assembler cannot strip subagent memory.
+  // coreMemory is passed explicitly to avoid the per-call two-file disk read
+  // in getCoreSystemPromptAsync when it is undefined.
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
+    userMemory: config.getUserMemory(),
+    coreMemory: config.getCoreMemory(),
     mcpInstructions,
     model: modelConfig.model,
     tools: toolNames,
