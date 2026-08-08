@@ -23,7 +23,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { availableParallelism } from 'node:os';
+import {
+  DEFAULT_PER_FILE_TIMEOUT_MS,
+  DEFAULT_PER_TEST_TIMEOUT_MS,
+  resolveTestConcurrency,
+} from '../../scripts/lib/bun-test-policy.js';
 
 /**
  * Every path this runner touches — discovery, the child's working directory,
@@ -38,9 +42,12 @@ const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 // children overlap. POSIX retains bounded parallelism without saturating shared
 // CI runners, where event-loop starvation can trip otherwise healthy test files.
 const MAX_CONCURRENCY = process.platform === 'win32' ? 1 : 2;
-const CONCURRENCY = Math.min(MAX_CONCURRENCY, availableParallelism());
-const PER_TEST_TIMEOUT_MS = 30_000;
-const PER_FILE_TIMEOUT_MS = process.platform === 'win32' ? 180_000 : 60_000;
+const CONCURRENCY = resolveTestConcurrency({
+  envVar: 'LLXPRT_CORE_TEST_CONCURRENCY',
+  maxConcurrency: MAX_CONCURRENCY,
+});
+const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
+const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 
 const TEST_ROOTS = ['src', 'test'] as const;
 

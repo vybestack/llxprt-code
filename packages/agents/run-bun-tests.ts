@@ -39,7 +39,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, relative } from 'node:path';
-import { availableParallelism, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
+import {
+  DEFAULT_PER_FILE_TIMEOUT_MS,
+  DEFAULT_PER_TEST_TIMEOUT_MS,
+  MAX_TEST_CONCURRENCY,
+  resolveTestConcurrency,
+} from '../../scripts/lib/bun-test-policy.js';
 
 /**
  * Every path this runner touches — discovery, the child's working directory
@@ -51,46 +57,24 @@ const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 
 const TEST_ROOTS = ['src'] as const;
 
-/** Upper bound on file concurrency, regardless of how many cores are present. */
-const MAX_CONCURRENCY = 4;
-
-/** Lower bound: small CI runners need one free core for each Bun child. */
-const MIN_CONCURRENCY = 1;
+/**
+ * Upper bound on file concurrency, regardless of how many cores are present.
+ *
+ * Kept as a named constant because the JUnit summary reports it.
+ */
+const MAX_CONCURRENCY = MAX_TEST_CONCURRENCY;
 
 /**
  * Number of test files executed at once.
  *
- * Deliberately half the core count, clamped to [1, 4]. Each file is a fresh
- * `bun test` process that re-executes the whole agents module graph, and many
- * suites under `src/api/__tests__/` additionally build a real Agent (tool
- * registry, provider bootstrap, settings) per test. Saturating every core with
- * that work starves individual tests past the 30s budget, which surfaces as a
- * different file failing on each run rather than as an honestly slow run.
- * Leaving headroom matters most on small CI runners, where the core count is
- * roughly the concurrency an unclamped default would pick. macOS CI runs one
- * file at a time because its virtual cores repeatedly starve one process past
- * the test budget even at half-concurrency.
- *
- * `LLXPRT_AGENTS_TEST_CONCURRENCY` overrides this.
+ * The half-the-cores policy this workspace arrived at by measurement now lives
+ * in scripts/lib/bun-test-policy.ts, so the other runners inherit it instead of
+ * rediscovering it (issue #3139). `LLXPRT_AGENTS_TEST_CONCURRENCY` overrides.
  */
-function resolveConcurrency(): number {
-  const override = process.env.LLXPRT_AGENTS_TEST_CONCURRENCY;
-  if (override !== undefined) {
-    if (!/^[1-9][0-9]*$/.test(override.trim())) {
-      throw new Error(
-        `LLXPRT_AGENTS_TEST_CONCURRENCY must be a positive integer, got: ${override}`,
-      );
-    }
-    return Number.parseInt(override.trim(), 10);
-  }
-  if (process.platform === 'darwin' && process.env.CI === 'true') {
-    return MIN_CONCURRENCY;
-  }
-  const half = Math.floor(availableParallelism() / 2);
-  return Math.min(MAX_CONCURRENCY, Math.max(MIN_CONCURRENCY, half));
-}
-
-const CONCURRENCY = resolveConcurrency();
+const CONCURRENCY = resolveTestConcurrency({
+  envVar: 'LLXPRT_AGENTS_TEST_CONCURRENCY',
+  maxConcurrency: MAX_CONCURRENCY,
+});
 
 /**
  * Per-test timeout, mirroring the `testTimeout: 30000` this workspace ran under
@@ -112,7 +96,7 @@ const CONCURRENCY = resolveConcurrency();
  * by PER_FILE_TIMEOUT_MS below, which is what should happen - a raised
  * per-test bound must not turn a hang into a longer hang.
  */
-const PER_TEST_TIMEOUT_MS = 180_000;
+const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
 
 /**
  * Per-file wall-clock budget. The slowest agents files (streaming chat-session
@@ -123,7 +107,7 @@ const PER_TEST_TIMEOUT_MS = 180_000;
 // subagentOrchestrator-loadBalancer was measured at 99.4s under load, leaving
 // almost no headroom under the previous 120s cap. This remains the backstop
 // for a suite that genuinely hangs.
-const PER_FILE_TIMEOUT_MS = 300_000;
+const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 
 /**
  * Directories that are pruned during discovery.

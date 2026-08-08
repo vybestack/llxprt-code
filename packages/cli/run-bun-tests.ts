@@ -24,25 +24,38 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { availableParallelism } from 'node:os';
+import {
+  DEFAULT_PER_FILE_TIMEOUT_MS,
+  DEFAULT_PER_TEST_TIMEOUT_MS,
+  resolveTestConcurrency,
+} from '../../scripts/lib/bun-test-policy.js';
 
-const PER_FILE_TIMEOUT_MS = 120_000;
+const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**
- * Per-test timeout, matching the testTimeout the removed vitest.config.ts set.
- * Bun defaults to 5s, which the tests that spawn the real CLI exceed once the
- * suite runs with concurrency. Passed as a flag because the bunfig.toml key is
- * not picked up for a single-file invocation.
+ * Per-test timeout. Bun defaults to 5s, which the tests that spawn the real
+ * CLI exceed once the suite runs with concurrency. Passed as a flag because
+ * the bunfig.toml key is not picked up for a single-file invocation.
+ *
+ * Raised from 30s to the shared budget for issue #3139: this workspace was the
+ * worst-failing CI shard (5/15 first attempts) because it combined the tight
+ * bound with a pool that saturated every core.
  */
-const PER_TEST_TIMEOUT_MS = 30_000;
+const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
 
 /**
  * Integration tests spawn the built CLI, which cold-starts from TypeScript
  * source and is far slower than an in-process test — especially on a loaded CI
  * runner. They get a larger per-test budget so a slow boot is not reported as a
  * failure.
+ *
+ * Expressed as a multiple of the shared budget rather than a fixed 120s: once
+ * the unit budget rose to 180s for issue #3139 a fixed value silently became
+ * the *smaller* of the two, which would have given the slowest tests in the
+ * workspace the tightest bound. It stays well inside
+ * PER_INTEGRATION_FILE_TIMEOUT_MS, which remains the hang backstop.
  */
-const PER_INTEGRATION_TEST_TIMEOUT_MS = 120_000;
+const PER_INTEGRATION_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS * 2;
 
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -104,7 +117,7 @@ function parseConcurrency(): number {
       return parsed;
     }
   }
-  return Math.max(1, Math.min(8, availableParallelism()));
+  return resolveTestConcurrency({ envVar: 'LLXPRT_CLI_TEST_CONCURRENCY' });
 }
 
 export function isTestFile(fileName: string): boolean {
