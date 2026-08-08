@@ -23,7 +23,7 @@ import {
   escapePowerShellSingleQuoted,
   spawnWindowsBackground,
 } from './shellJobSpawn.js';
-import { taskkillTree } from './shellProcessKill.js';
+import { boundedTaskkill } from './shellProcessKill.js';
 
 /**
  * Timeout for probing whether a PowerShell executable (pwsh / powershell.exe)
@@ -255,26 +255,19 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
         spawned.exited,
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
-            // child.kill() only terminates the outer PowerShell; the inner
-            // process started via Start-Process survives and holds redirected
-            // log handles. Use taskkill /T /F to reap the entire tree.
-            try {
+            // taskkill /T /F reaps the entire process tree (outer PowerShell
+            // wrapper and inner Start-Process child). Await its completion so
+            // the tree is fully terminated before rejecting (issue #3149).
+            void (async () => {
               if (spawned.pid > 0) {
-                taskkillTree(spawned.pid);
+                await boundedTaskkill(spawned.pid);
               }
-            } catch {
-              // Process may already be gone.
-            }
-            try {
-              spawned.child.kill();
-            } catch {
-              // Process may already be gone.
-            }
-            reject(
-              new Error(
-                `Background process (pid ${spawned.pid}) did not exit within ${timeoutMs}ms`,
-              ),
-            );
+              reject(
+                new Error(
+                  `Background process (pid ${spawned.pid}) did not exit within ${timeoutMs}ms`,
+                ),
+              );
+            })();
           }, timeoutMs);
         }),
       ]).finally(() => {

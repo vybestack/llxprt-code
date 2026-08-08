@@ -360,35 +360,27 @@ function collapseActWarnings(output: string): {
   let skipLineCount = 0;
   const MAX_WARNING_BODY_LINES = 15;
   for (const line of output.split(NEWLINE)) {
-    if (skipping) {
-      skipLineCount++;
-      if (ACT_WARNING_END.test(line)) {
-        skipping = false;
-        continue;
-      }
-      // A truncated warning's body never reaches the end marker; recover at
-      // the next warning start so subsequent assertions are not swallowed.
+    if (!skipping) {
       if (ACT_WARNING_START.test(line)) {
         elided += 1;
         skipLineCount = 1;
         skipping = !ACT_WARNING_END.test(line);
-        continue;
+      } else {
+        kept.push(line);
       }
-      // Bail out if we have skipped well past the standard block — the
-      // warning was truncated and the remaining lines may contain assertions.
-      if (skipLineCount > MAX_WARNING_BODY_LINES) {
+    } else {
+      skipLineCount++;
+      if (ACT_WARNING_END.test(line)) {
+        skipping = false;
+      } else if (ACT_WARNING_START.test(line)) {
+        elided += 1;
+        skipLineCount = 1;
+        skipping = !ACT_WARNING_END.test(line);
+      } else if (skipLineCount > MAX_WARNING_BODY_LINES) {
         skipping = false;
         kept.push(line);
       }
-      continue;
     }
-    if (ACT_WARNING_START.test(line)) {
-      elided += 1;
-      skipLineCount = 1;
-      skipping = !ACT_WARNING_END.test(line);
-      continue;
-    }
-    kept.push(line);
   }
   return { body: kept.join(NEWLINE), elidedWarnings: elided };
 }

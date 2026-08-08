@@ -209,6 +209,7 @@ jobs:
           echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
 
       - name: 'Run tests and generate reports'
+        id: macos_main_tests
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
@@ -230,16 +231,17 @@ jobs:
         run: 'npm run test'
 
       - name: 'Run script harness tests'
-        # `always()` so the macOS platform coverage of the script harness
-        # (which nightly exists to provide) still runs when the main test step
-        # fails, instead of being aborted by it (issue #3149).
-        if: always()
+        # Run when the main test step completed (success or failure) but NOT
+        # when the workflow was cancelled — so macOS platform coverage of the
+        # script harness still runs after a test failure, without burning
+        # runner minutes after cancellation (issue #3149).
+        if: ${{ !cancelled() && (steps.macos_main_tests.outcome == 'success' || steps.macos_main_tests.outcome == 'failure') }}
         env:
           CI: true
         run: 'npm run test:scripts'
 
       - name: 'Run shell-script behavioral tests (#2606)'
-        if: always()
+        if: ${{ !cancelled() && (steps.macos_main_tests.outcome == 'success' || steps.macos_main_tests.outcome == 'failure') }}
         env:
           CI: true
         run: 'npm run test:shell'
@@ -665,9 +667,10 @@ jobs:
               return
             fi
             # gh issue --milestone accepts a milestone TITLE, not a number.
-            # Resolve the title by exact match, then return it for assignment.
+            # Resolve the title by exact match across ALL open milestone
+            # pages (issue #3149), then return it for assignment.
             local milestone_title
-            milestone_title="$(gh api "repos/${GH_REPO}/milestones?state=open&per_page=100" --jq "[.[] | select(.title == \"${current_version}\")] | .[0].title // empty" 2>/dev/null)"
+            milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" --jq "[.[][] | select(.title == \"${current_version}\")] | .[0].title // empty" 2>/dev/null)"
             if [[ -z "${milestone_title}" ]]; then
               echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
               return
