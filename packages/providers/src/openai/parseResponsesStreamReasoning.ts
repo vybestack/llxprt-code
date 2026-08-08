@@ -41,7 +41,11 @@ export function allocateReasoningStreamId(state: DispatchState): {
     return { state, streamId: state.currentReasoningStreamId };
   }
 
-  const streamId = `${OPENAI_REASONING_STREAM_ID_PREFIX}:${state.nextReasoningStreamIndex}`;
+  // The per-stream epoch makes the id unique across API calls within one turn
+  // (and across resumed sessions); the index differentiates lifecycles within
+  // a single stream. Without the epoch every call restarts at index 0 and a
+  // later model iteration silently overwrites an earlier one (issue #3128).
+  const streamId = `${OPENAI_REASONING_STREAM_ID_PREFIX}:${state.reasoningStreamEpoch}:${state.nextReasoningStreamIndex}`;
   return {
     state: {
       ...state,
