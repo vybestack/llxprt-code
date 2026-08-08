@@ -281,6 +281,48 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
   // --- No assembler → unchanged behavior ---
 
+  it("does not let a concurrent send overwrite an in-flight turn's system prompt", async () => {
+    // Resolution mutates shared state and runs before TurnProcessor's own
+    // send barrier, so two overlapping sends could otherwise both resolve and
+    // the second clobber the first — the first turn then transmits the
+    // second turn's prompt.
+    const events: string[] = [];
+    let turn = 0;
+
+    const fx = buildFixture(
+      {
+        assemble: async (model: string) => {
+          const id = ++turn;
+          events.push(`resolve:start:${id}`);
+          // Yield inside assembly to widen the interleaving window.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          events.push(`resolve:end:${id}`);
+          return `[model=${model}:turn${id}]`;
+        },
+      },
+      'model-a',
+    );
+
+    const first = fx.chat.sendMessage({ message: 'first' }, 'p1');
+    const second = fx.chat.sendMessage({ message: 'second' }, 'p2');
+    await Promise.all([first, second]);
+
+    // Turn 2 must not begin resolving until turn 1's send has been handed
+    // off. Interleaved resolution is what lets one turn transmit another
+    // turn's prompt.
+    expect(events).toEqual([
+      'resolve:start:1',
+      'resolve:end:1',
+      'resolve:start:2',
+      'resolve:end:2',
+    ]);
+
+    // And each request carries the prompt built for its own turn.
+    expect(fx.capturedCalls).toHaveLength(2);
+    expect(fx.capturedCalls[0].systemInstruction).toContain('turn1');
+    expect(fx.capturedCalls[1].systemInstruction).toContain('turn2');
+  });
+
   it('leaves generationConfig.systemInstruction untouched when no assembler is injected', async () => {
     // buildFixture always injects an assembler; construct ChatSession manually
     // without one to verify backward-compatible behavior.

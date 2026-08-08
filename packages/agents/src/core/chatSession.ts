@@ -206,6 +206,8 @@ export class ChatSession {
     number
   >();
   private readonly systemPromptAssembler?: SystemPromptAssembler;
+  /** Serializes per-turn system-prompt resolution against send hand-off. */
+  private systemPromptTurnChain: Promise<void> = Promise.resolve();
 
   constructor(
     view: AgentRuntimeContext,
@@ -568,12 +570,29 @@ export class ChatSession {
    * Wraps a send entry point so the system prompt is always resolved first.
    * Every public send path must go through this: a path that forgets would
    * silently transmit a stale prompt, which is the class of bug #3136 fixed.
+   *
+   * Resolution and hand-off are serialized against each other. Resolution
+   * mutates shared state (`generationConfig.systemInstruction` and the history
+   * base token offset), and it runs BEFORE `TurnProcessor`'s own `sendPromise`
+   * barrier. Without this chain two concurrent sends could both resolve, the
+   * second overwriting the first, and the first turn would then transmit the
+   * second turn's prompt — defeating the per-turn model guarantee this exists
+   * to provide.
    */
   private async _withResolvedSystemPrompt<T>(
     send: () => Promise<T>,
   ): Promise<T> {
-    await this._resolveSystemPromptForTurn();
-    return send();
+    const run = this.systemPromptTurnChain.then(async () => {
+      await this._resolveSystemPromptForTurn();
+      return send();
+    });
+    // Keep the chain alive after a failed turn; a rejection here must not
+    // permanently wedge every later send.
+    this.systemPromptTurnChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   async sendMessage(

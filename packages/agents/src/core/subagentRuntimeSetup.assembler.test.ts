@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { createChatObject } from './subagentRuntimeSetup.js';
+import type { ChatSession } from './chatSession.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
