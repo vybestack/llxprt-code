@@ -6,6 +6,7 @@
 
 export * from './src/index.js';
 export type { HistoryService } from './src/services/history/HistoryService.js';
+export type { WorkspaceContext } from './src/utils/workspaceContext.js';
 export {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GEMINI_FLASH_MODEL,

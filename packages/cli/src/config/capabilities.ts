@@ -20,10 +20,12 @@
  * Part of the #2615 Config decomposition.
  */
 
+import type {
+  SandboxConfig,
+  WorkspaceContext,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
-import type { SandboxConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import type { Storage } from '@vybestack/llxprt-code-storage';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 
