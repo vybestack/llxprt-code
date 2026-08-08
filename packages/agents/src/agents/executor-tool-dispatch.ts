@@ -20,7 +20,8 @@ import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ImageBudgetSource } from '../config/capabilities.js';
+import type { ToolExecutionConfig } from '../core/nonInteractiveToolExecutor.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
@@ -121,7 +122,7 @@ export function buildCompleteTaskDeclaration(
 export async function processFunctionCalls(
   functionCalls: FunctionCall[],
   toolRegistry: ToolRegistry,
-  runtimeContext: Config,
+  runtimeContext: ToolExecutionConfig & ImageBudgetSource,
   messageBus: MessageBus,
   definition: AgentDefinition<z.ZodTypeAny>,
   emitActivity: EmitActivityFn,
@@ -199,7 +200,7 @@ function dispatchSingleFunctionCall(
   index: number,
   promptId: string,
   allowedToolNames: Set<string>,
-  runtimeContext: Config,
+  runtimeContext: ToolExecutionConfig & ImageBudgetSource,
   messageBus: MessageBus,
   definition: AgentDefinition<z.ZodTypeAny>,
   emitActivity: EmitActivityFn,
@@ -420,7 +421,7 @@ function createToolExecutionPromise(
   args: Record<string, unknown>,
   signal: AbortSignal,
   promptId: string,
-  runtimeContext: Config,
+  runtimeContext: ToolExecutionConfig & ImageBudgetSource,
   messageBus: MessageBus,
   emitActivity: EmitActivityFn,
 ): Promise<ToolExecutionResult | void> {
