@@ -111,6 +111,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getWorkingDir: vi.fn().mockReturnValue('/workspace'),
     getSettingsService: vi.fn().mockReturnValue({}),
     getContentGeneratorConfig: vi.fn().mockReturnValue({}),
+    getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     getToolRegistry: vi.fn().mockReturnValue(undefined),
     getProviderManager: vi.fn().mockReturnValue(undefined),
     ...overrides,
@@ -175,9 +176,11 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
   });
 
   it('resets token accounting and re-estimates tokens when reusing HistoryService', async () => {
-    const config = makeConfig();
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue('claude-3-5-sonnet-20241022'),
+    });
     const runtimeState = makeRuntimeState({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'stale-model-snapshot',
       provider: 'anthropic',
     });
     const todoContinuationService = makeTodoContinuationService();
