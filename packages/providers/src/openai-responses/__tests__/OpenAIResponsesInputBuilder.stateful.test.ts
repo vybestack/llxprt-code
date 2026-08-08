@@ -151,3 +151,79 @@ describe('OpenAIResponsesInputBuilder stateful tool output preservation @issue:2
     expect(capturedMessages.some((m) => m.includes('call_orphan'))).toBe(true);
   });
 });
+
+/**
+ * Issue #3134: with a server-side parent active the API validates reasoning
+ * item ids against the stored chain, so a client-synthesized `rs_<ts>_<n>` id
+ * (which exists nowhere on the server) must not be sent. Upstream
+ * `openai/codex` strips non-server-prefixed ids the same way.
+ */
+describe('reasoning item ids under a server-side parent @issue:3134', () => {
+  function reasoningItems(
+    input: ResponsesInputItem[],
+  ): Array<Record<string, unknown>> {
+    return input.filter(
+      (item): item is ResponsesInputItem & Record<string, unknown> =>
+        'type' in item && item.type === 'reasoning',
+    ) as Array<Record<string, unknown>>;
+  }
+
+  const thinkingTurn = [
+    {
+      speaker: 'ai' as const,
+      blocks: [
+        {
+          type: 'thinking' as const,
+          thought: 'pondering',
+          encryptedContent: 'ENC',
+        },
+      ],
+    },
+  ];
+
+  it('omits id entirely when no server-issued reasoning id exists', () => {
+    const input = buildOpenAIResponsesInput(
+      thinkingTurn,
+      buildContext({ serverSideParentActive: true }),
+    );
+
+    const items = reasoningItems(input);
+    expect(items).toHaveLength(1);
+    expect('id' in items[0]).toBe(false);
+    expect(items[0]['encrypted_content']).toBe('ENC');
+  });
+
+  it('preserves a genuine server-issued reasoning id', () => {
+    const input = buildOpenAIResponsesInput(
+      [
+        {
+          speaker: 'ai' as const,
+          blocks: [
+            {
+              type: 'thinking' as const,
+              thought: 'pondering',
+              encryptedContent: 'ENC',
+              providerMetadata: {
+                'openai.responses.reasoningId': 'rs_server_123',
+              },
+            },
+          ],
+        },
+      ],
+      buildContext({ serverSideParentActive: true }),
+    );
+
+    expect(reasoningItems(input)[0]['id']).toBe('rs_server_123');
+  });
+
+  it('still synthesizes an id when no parent is active (stateless turn)', () => {
+    const input = buildOpenAIResponsesInput(
+      thinkingTurn,
+      buildContext({ serverSideParentActive: false }),
+    );
+
+    const id = reasoningItems(input)[0]['id'];
+    expect(typeof id).toBe('string');
+    expect(String(id).startsWith('rs')).toBe(true);
+  });
+});

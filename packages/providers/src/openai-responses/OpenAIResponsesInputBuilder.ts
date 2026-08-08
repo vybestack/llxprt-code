@@ -157,6 +157,53 @@ function appendHumanInput(
   if (text) input.push({ role: 'user', content: text });
 }
 
+/**
+ * Build and append reasoning items from thinking blocks with encrypted
+ * content. Extracted from appendAssistantInput so the nesting stays within
+ * the sonarjs/nested-control-flow limit (#3134 Fix 5).
+ *
+ * Fix 5: when `context.serverSideParentActive` is true, a reasoning item
+ * that lacks a genuine server-issued id (from
+ * `providerMetadata['openai.responses.reasoningId']`) has its `id` field
+ * OMITTED entirely instead of being synthesized. The API validates item ids
+ * against the stored chain, and an unknown `rs_...` is a plausible 400.
+ * Upstream strips non-server-prefixed ids the same way.
+ */
+function appendReasoningItems(
+  input: ResponsesInputItem[],
+  content: IContent,
+  context: ResponsesInputBuildContext,
+  nextReasoningId: () => string,
+): void {
+  const thinkingBlocks = content.blocks.filter(
+    (block) => block.type === 'thinking',
+  );
+  for (const thinkingBlock of thinkingBlocks) {
+    if (!thinkingBlock.encryptedContent) continue;
+    const providerReasoningId =
+      thinkingBlock.providerMetadata?.[OPENAI_RESPONSES_REASONING_ID_KEY];
+    const reasoningItem: ResponsesInputItem = {
+      type: 'reasoning',
+      summary: [
+        {
+          type: 'summary_text',
+          text: (thinkingBlock.thought as string | undefined) ?? '',
+        },
+      ],
+      encrypted_content: thinkingBlock.encryptedContent,
+    };
+    const hasGenuineServerId =
+      typeof providerReasoningId === 'string' &&
+      providerReasoningId.startsWith('rs');
+    if (hasGenuineServerId) {
+      reasoningItem.id = providerReasoningId;
+    } else if (context.serverSideParentActive !== true) {
+      reasoningItem.id = nextReasoningId();
+    }
+    input.push(reasoningItem);
+  }
+}
+
 function appendAssistantInput(
   input: ResponsesInputItem[],
   content: IContent,
@@ -170,29 +217,7 @@ function appendAssistantInput(
   );
 
   if (context.includeReasoningInContext) {
-    for (const thinkingBlock of content.blocks.filter(
-      (block) => block.type === 'thinking',
-    )) {
-      if (thinkingBlock.encryptedContent) {
-        const providerReasoningId =
-          thinkingBlock.providerMetadata?.[OPENAI_RESPONSES_REASONING_ID_KEY];
-        input.push({
-          type: 'reasoning',
-          id:
-            typeof providerReasoningId === 'string' &&
-            providerReasoningId.startsWith('rs')
-              ? providerReasoningId
-              : nextReasoningId(),
-          summary: [
-            {
-              type: 'summary_text',
-              text: (thinkingBlock.thought as string | undefined) ?? '',
-            },
-          ],
-          encrypted_content: thinkingBlock.encryptedContent,
-        });
-      }
-    }
+    appendReasoningItems(input, content, context, nextReasoningId);
   }
 
   const contentText = textBlocks.map((block) => block.text).join('');
