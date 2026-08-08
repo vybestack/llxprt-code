@@ -87,9 +87,15 @@ function pgidOf(pid: number): number | null {
  * would reinterpret. `pgidOf` returns null on failure and `Number(null)` is 0,
  * so an unguarded `process.kill(-pgid)` would become `process.kill(0)` and
  * signal the TEST RUNNER's own process group.
+ *
+ * It also refuses the runner's OWN pgid. A child spawned without
+ * `detached: true` inherits that group, so `reapGroupSafe(pgidOf(childPid))`
+ * would resolve to a perfectly valid, positive pgid that nonetheless kills the
+ * whole test process. Only reap a group whose leader we deliberately created.
  */
 function reapGroupSafe(pgid: number | null | undefined): void {
   if (typeof pgid !== 'number' || !Number.isInteger(pgid) || pgid <= 0) return;
+  if (pgid === pgidOf(process.pid)) return;
   try {
     process.kill(-pgid, 'SIGKILL');
   } catch {
@@ -244,7 +250,10 @@ describe.skipIf(os.platform() === 'win32')('ShellJobManager', () => {
         expect(siblingPgid).not.toBeNull();
         expect(() => process.kill(siblingPid, 0)).not.toThrow();
       } finally {
-        reapGroupSafe(pgidOf(siblingPid));
+        // The sibling is NOT detached, so it lives in this test process's own
+        // group; reaping that group would kill the test runner. Signal the
+        // single child through its handle instead.
+        sibling.kill('SIGKILL');
       }
     });
   });
