@@ -106,7 +106,9 @@ const REVIEWED_UNTRUSTED_INSTALL_SCRIPTS: readonly string[] = [
   'node-pty', // legacy fallback; runtime prefers prebuilt @lydell/node-pty
   // Transitive deps that ship a lifecycle script we deliberately do not run.
   '@vscode/vsce-sign', // release/VSCE signing tooling, not a CLI runtime need
-  'fsevents', // optional macOS file-watcher; prebuilt binary, build not required
+  // 'fsevents' was removed by #2970: it entered the tree only as an optional
+  // dependency of vite/rollup, which were pulled in by vitest. With Vitest
+  // gone, no package depends on it and this guard fails on a stale entry.
   'keytar', // transitive release tooling; credential-store binary not needed here
 ];
 

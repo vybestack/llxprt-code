@@ -216,6 +216,28 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(code).toBe(1);
         expect(stdout).toContain('vitest');
       });
+
+      it('reports the real line number for a manifest dependency', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          // The "vitest" key is on line 5 (0-indexed JSON.stringify below).
+          const pkg = [
+            '{',
+            '  "name": "rogue",',
+            '  "devDependencies": {',
+            '    "lodash": "^4.0.0",',
+            '    "vitest": "^3.2.6"',
+            '  }',
+            '}',
+            '',
+          ].join('\n');
+          write('packages/rogue/package.json', pkg);
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        // Line 5 is where "vitest" lives — NOT line 1.
+        expect(stdout).toContain('rogue/package.json:5:');
+      });
     });
 
     // ── Config file detection (#8, #9) ─────────────────────────────────
@@ -417,12 +439,50 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('bunfig.toml');
       });
 
+      it('FAILS a bare vitest command (no subcommand) in a Makefile', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write('Makefile', 'test:\n\tvitest\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('Makefile');
+      });
+
+      it('FAILS a bare vitest command (no subcommand) in a workflow YAML', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            '.github/workflows/ci.yml',
+            'jobs:\n  test:\n    runs-on: ubuntu-latest\n' +
+              '    steps:\n' +
+              '      - run: vitest\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('ci.yml');
+      });
+
       it('does NOT flag a prose mention of vitest in a YAML comment', () => {
         const { code } = withFixture(({ root, write }) => {
           write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
           write(
             '.github/workflows/ci.yml',
             '# This workflow used vitest but now uses bun:test\n' +
+              'jobs:\n  test:\n    runs-on: ubuntu-latest\n',
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it('does NOT flag a YAML comment containing "vitest run"', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            '.github/workflows/ci.yml',
+            '# Run vitest run for local testing (migrated to bun:test)\n' +
               'jobs:\n  test:\n    runs-on: ubuntu-latest\n',
           );
           return runScript(root, 0);

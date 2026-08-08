@@ -205,9 +205,8 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       expect(storageMasked).toBe(pureMasked);
       // Also verify fixture match
       const fixtureEntry = MASK_KEY_FIXTURES.find((f) => f.input === testKey);
-      expect(
-        fixtureEntry === undefined || fixtureEntry.output === storageMasked,
-      ).toBe(true);
+      expect(fixtureEntry).toBeDefined();
+      expect(storageMasked).toBe(fixtureEntry?.output);
     });
   });
 

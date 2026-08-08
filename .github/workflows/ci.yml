@@ -843,7 +843,7 @@ jobs:
   # workspace test suites. This catches regressions in the orchestrator itself
   # without the cost of a full test matrix. The actual workspace tests still
   # run under Bun's native runner via the existing `test` job; this job only
-  # Bun-backed orchestration script.
+  # validates the Bun-backed orchestration script.
   bun_test_orchestrator_smoke:
     name: 'Bun Test Orchestrator Smoke'
     runs-on: 'ubuntu-latest'

@@ -42,7 +42,7 @@
  * For test fixtures, set NO_VITEST_ROOT=<dir> to scan a temp tree.
  */
 
-import { readFileSync, readdirSync, type Dirent } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, type Dirent } from 'node:fs';
 import { join, relative, resolve, dirname, basename, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -164,6 +164,14 @@ const VITEST_BINARY_INVOCATION_PATTERNS: readonly RegExp[] = [
   /(?:npx|pnpm|yarn|bunx)\s+vitest\b/,
   // vitest as a direct command with a subcommand: `vitest run`, `vitest watch`
   /(?<![.-])\bvitest\s+(?:run|watch|dev|ui|bench|report|list|--)/,
+  // vitest as a standalone command without a known subcommand: bare
+  // `vitest` at line start, after a shell separator (|, &, ;, >), after a
+  // Makefile tab, or after `run:` in YAML. Catches forms like `\tvitest`
+  // in a Makefile or `- run: vitest` in a workflow that the subcommand
+  // pattern above misses. The lookahead requires whitespace or end-of-line
+  // after `vitest` so file-path references like `vitest.config.ts` are not
+  // matched. Comment lines are skipped beforehand by scanShellLikeFile.
+  /(?:^|[|&;>]|\brun:)\s*vitest(?=\s|$)/,
   // Path-qualified binary: `.bin/vitest`
   /\.bin\/vitest\b/,
 ];
@@ -320,6 +328,18 @@ function lineOfOffset(content: string, offset: number): number {
   return content.slice(0, offset).split('\n').length;
 }
 
+/**
+ * Find the 1-based line number of a JSON manifest key (`"key":`) in the raw
+ * text. Falls back to line 1 if the key cannot be located (e.g. unusual
+ * formatting). This preserves the doc-promised `file:line:match` precision
+ * that JSON.parse discards.
+ */
+function findManifestKeyLine(content: string, key: string): number {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`"${escaped}"\\s*:`).exec(content);
+  return match?.index !== undefined ? lineOfOffset(content, match.index) : 1;
+}
+
 function scanCodeFile(filePath: string, content: string): Violation[] {
   const violations: Violation[] = [];
   const globalPattern = new RegExp(VITEST_IMPORT_PATTERN.source, 'g');
@@ -343,6 +363,10 @@ function scanShellLikeFile(filePath: string, content: string): Violation[] {
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // Skip comment lines whose first non-whitespace character is `#` (YAML,
+    // shell). This prevents false positives on prose mentions like
+    // `# Run vitest run for local testing`, mirroring scanTomlFile's behaviour.
+    if (line.trimStart().startsWith('#')) continue;
     if (VITEST_BINARY_INVOCATION_PATTERNS.some((re) => re.test(line))) {
       violations.push({
         file: relRepo(filePath),
@@ -445,7 +469,7 @@ function scanManifest(filePath: string, content: string): Violation[] {
       if (isForbiddenKey || isAliasedVitest) {
         violations.push({
           file: rel,
-          line: 1,
+          line: findManifestKeyLine(content, key),
           match: isAliasedVitest
             ? `"${key}": "${value}" (npm alias) in ${section}`
             : `"${key}" in ${section}`,
@@ -466,7 +490,7 @@ function scanManifest(filePath: string, content: string): Violation[] {
       if (typeof value === 'string' && VITEST_BINARY_IN_SCRIPT.test(value)) {
         violations.push({
           file: rel,
-          line: 1,
+          line: findManifestKeyLine(content, name),
           match: `script "${name}": ${value}`,
           kind: 'package script invokes vitest binary',
         });
@@ -483,25 +507,31 @@ function formatViolation(v: Violation): string {
   return `  ${v.file}:${v.line}: ${v.kind}\n    ${v.match}`;
 }
 
-function reportResults(violations: Violation[], errors: string[]): void {
+/**
+ * Build the violation/error report as a string. Separated from output so
+ * the caller can write to both stdout and an output file.
+ */
+function buildReport(violations: Violation[], errors: string[]): string {
+  const lines: string[] = [];
   if (errors.length > 0) {
-    console.log(
+    lines.push(
       `\nno-vitest guard: ${errors.length} operational error(s) (fail-closed):`,
     );
-    for (const error of errors) console.log(`  ${error}`);
+    for (const error of errors) lines.push(`  ${error}`);
   }
   if (violations.length > 0) {
-    console.log(
+    lines.push(
       `\nno-vitest guard FAILED: ${violations.length} violation(s):\n`,
     );
-    for (const v of violations) console.log(formatViolation(v));
-    console.log(
+    for (const v of violations) lines.push(formatViolation(v));
+    lines.push(
       '\nTo fix: remove the Vitest reference. The repository uses bun:test\n' +
         'exclusively. See dev-docs/bun.md for the canonical test command.\n' +
         'If you genuinely need this reference, it must NOT be reintroduced —\n' +
         'file a follow-up issue instead.',
     );
   }
+  return lines.join('\n');
 }
 
 // ─── Per-file scanning ──────────────────────────────────────────────────────
@@ -572,7 +602,8 @@ function main(): void {
     errors.push('no-vitest guard: no files found. Refusing to pass.');
   }
 
-  console.log(`no-vitest guard: scanning ${files.length} files...`);
+  const header = `no-vitest guard: scanning ${files.length} files...`;
+  console.log(header);
 
   const violations: Violation[] = [];
 
@@ -580,13 +611,34 @@ function main(): void {
     violations.push(...scanFileEntry(filePath, errors));
   }
 
-  reportResults(violations, errors);
+  const report = buildReport(violations, errors);
+  if (report) console.log(report);
 
-  if (errors.length > 0 || violations.length > 0) {
-    console.log('\nno-vitest guard FAILED.');
+  const failed = errors.length > 0 || violations.length > 0;
+  const footer = failed
+    ? '\nno-vitest guard FAILED.'
+    : '\nno-vitest guard PASSED.';
+  console.log(footer);
+
+  // Issue #2970: write complete output to a file for the test harness.
+  // Bun's spawnSync/execFile cannot reliably capture child stdout under
+  // bun:test, so the harness sets NO_VITEST_OUTPUT_FILE and reads from it
+  // instead. writeFileSync is synchronous, so the data is committed to disk
+  // before process.exit() runs.
+  const outputFile = process.env.NO_VITEST_OUTPUT_FILE;
+  if (outputFile) {
+    const fullOutput =
+      [header, report, footer].filter(Boolean).join('\n') + '\n';
+    try {
+      writeFileSync(outputFile, fullOutput);
+    } catch {
+      // Best-effort — stdout is the primary output channel.
+    }
+  }
+
+  if (failed) {
     process.exit(EXIT_FAIL);
   }
-  console.log('\nno-vitest guard PASSED.');
   process.exit(EXIT_PASS);
 }
 

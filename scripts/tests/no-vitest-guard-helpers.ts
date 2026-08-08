@@ -11,11 +11,14 @@
  * (no mock theater) and manage temp-fixture creation/cleanup, mirroring the
  * fixture-tree style of scripts/tests/legacy-paths-guard-helpers.ts.
  *
- * Implementation note: Bun's test runner does not reliably capture child
- * process stdout when using execFile/spawnSync pipes (console.log output is
- * lost on non-zero exits). We work around this by redirecting the child's
- * stdout/stderr to temp files via a shell, then reading them back. This
- * captures output reliably regardless of exit code.
+ * Output capture (issue #2970): Bun's spawnSync/execFile cannot reliably
+ * capture child process stdout under bun:test — the pipe/FD data is lost
+ * regardless of exit code. Instead of a shell redirect (command-injection
+ * risk, Windows incompatibility), the guard writes its report to a temp
+ * file via the NO_VITEST_OUTPUT_FILE env var (synchronous writeFileSync,
+ * committed before process.exit). The helper passes that file path, runs
+ * the guard with stdio: 'ignore' (no shell, no pipes), and reads the file
+ * back. This is portable, injection-free, and reliable.
  */
 
 import { spawnSync, execFileSync } from 'node:child_process';
@@ -38,6 +41,9 @@ export const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
 
 /** Root-override env var understood by scripts/check-no-vitest.ts. */
 export const ROOT_ENV_VAR = 'NO_VITEST_ROOT';
+
+/** Output-file env var understood by scripts/check-no-vitest.ts. */
+const OUTPUT_FILE_ENV_VAR = 'NO_VITEST_OUTPUT_FILE';
 
 let cachedBunAvailable: boolean | undefined;
 
@@ -73,9 +79,14 @@ export interface ScriptResult {
 let captureCounter = 0;
 
 /**
- * Run the guard script, capturing stdout/stderr via shell redirect to temp
- * files (works around Bun test-runner pipe capture limitations). Returns
- * exit code, stdout, stderr.
+ * Run the guard script with direct argument passing (no shell). The guard
+ * writes its report to a temp file via NO_VITEST_OUTPUT_FILE (synchronous
+ * writeFileSync, committed before process.exit). Returns exit code, stdout
+ * (read from the output file), stderr (always empty — the guard does not
+ * write to stderr).
+ *
+ * Spawn errors and signal kills always throw so a broken harness never looks
+ * like a passing test (issue #2970 item E).
  */
 function runGuardSync(
   env: NodeJS.ProcessEnv,
@@ -84,30 +95,25 @@ function runGuardSync(
 ): ScriptResult {
   const id = `${process.pid}-${Date.now()}-${captureCounter++}`;
   const tmpOut = join(tmpdir(), `nvtest-out-${id}.txt`);
-  const tmpErr = join(tmpdir(), `nvtest-err-${id}.txt`);
 
   let code = 0;
   let stdout = '';
-  let stderr = '';
 
-  const escapeForShell = (s: string): string => s.replace(/'/g, "'\\''");
   try {
-    const escapedRuntime = escapeForShell(RUNTIME);
-    const escapedScript = escapeForShell(SCRIPT);
-    const escapedOut = escapeForShell(tmpOut);
-    const escapedErr = escapeForShell(tmpErr);
-    const shellCmd = `'${escapedRuntime}' '${escapedScript}' > '${escapedOut}' 2> '${escapedErr}'`;
+    const childEnv = { ...env, [OUTPUT_FILE_ENV_VAR]: tmpOut };
 
-    const result = spawnSync('bash', ['-c', shellCmd], {
+    const result = spawnSync(RUNTIME, [SCRIPT], {
       cwd: REPO_ROOT,
-      env,
+      env: childEnv,
       encoding: 'utf8',
       timeout,
+      stdio: 'ignore',
     });
 
-    code = result.status ?? 1;
-
-    if (result.error !== undefined && code === 0) {
+    // A spawn error (ENOENT, EACCES, etc.) must always throw — never silently
+    // fall through to code 1 which would look like a legitimate guard failure
+    // (issue #2970 item E).
+    if (result.error !== undefined) {
       const msg =
         result.error instanceof Error
           ? result.error.message
@@ -115,20 +121,24 @@ function runGuardSync(
       throw new Error(`Guard script failed to spawn: ${msg}`);
     }
 
-    if (result.signal === 'SIGTERM') {
-      throw new Error(`Guard script timed out after ${timeout / 1000}s.`);
+    // A kill by any signal must throw naming the signal so a broken harness
+    // is never mistaken for a guard failure (issue #2970 item E). SIGTERM is
+    // the spawnSync timeout signal.
+    if (result.signal !== null && result.signal !== undefined) {
+      if (result.signal === 'SIGTERM') {
+        throw new Error(`Guard script timed out after ${timeout / 1000}s.`);
+      }
+      throw new Error(`Guard script was killed by signal ${result.signal}.`);
     }
 
+    code = result.status ?? 1;
+
+    // Read the guard's output from the file (written synchronously before
+    // process.exit, bypassing Bun's unreliable pipe capture under bun:test).
     stdout = existsSync(tmpOut) ? readFileSync(tmpOut, 'utf8') : '';
-    stderr = existsSync(tmpErr) ? readFileSync(tmpErr, 'utf8') : '';
   } finally {
     try {
       rmSync(tmpOut, { force: true });
-    } catch {
-      // Best-effort cleanup.
-    }
-    try {
-      rmSync(tmpErr, { force: true });
     } catch {
       // Best-effort cleanup.
     }
@@ -137,12 +147,11 @@ function runGuardSync(
   if (expectedCode !== undefined && code !== expectedCode) {
     throw new Error(
       `Guard script exited with code ${code}, expected ${expectedCode}.` +
-        (stderr ? `\nstderr:\n${stderr}` : '') +
         (stdout ? `\nstdout:\n${stdout}` : ''),
     );
   }
 
-  return { code, stdout, stderr };
+  return { code, stdout, stderr: '' };
 }
 
 /**

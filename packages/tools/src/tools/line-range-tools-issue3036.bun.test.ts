@@ -231,8 +231,8 @@ describe('AB1: delete_line_range preserves trailing-newline state', () => {
     },
   ];
 
-  it.each(cases)('$name', async (c: (typeof cases)[number]) => {
-    const filePath = join(tempDir(), `ab1-${c.name}.txt`);
+  it.each(cases.map((c, index) => ({ ...c, index })))('$name', async (c) => {
+    const filePath = join(tempDir(), `ab1-${c.index}.txt`);
     writeFileSync(filePath, c.file, 'utf-8');
 
     await runDelete(tempDir(), {
@@ -660,8 +660,8 @@ describe('regression: insert_at_line preserves newline state across content/file
     },
   ];
 
-  it.each(cases)('$name', async (c: (typeof cases)[number]) => {
-    const filePath = join(tempDir(), `regress-newline-${c.name}.txt`);
+  it.each(cases.map((c, index) => ({ ...c, index })))('$name', async (c) => {
+    const filePath = join(tempDir(), `regress-newline-${c.index}.txt`);
     const fileContent =
       joinLines('aaa', 'bbb', 'ccc') + (c.fileTrailingNewline ? NEWLINE : '');
     writeFileSync(filePath, fileContent, 'utf-8');

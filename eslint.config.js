@@ -723,6 +723,32 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  // Vitest test configuration
+  {
+    // Prevent self-imports in packages
+    files: ['packages/core/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          name: '@google/gemini-cli-core',
+          message: 'Please use relative imports within the @google/gemini-cli-core package.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['packages/cli/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          name: '@google/gemini-cli',
+          message: 'Please use relative imports within the @google/gemini-cli package.',
+        },
+      ],
+    },
+  },
   // Bun test configuration (issue #2970: migrated from @vitest/eslint-plugin to
   // eslint-plugin-jest configured for bun:test)
   {
@@ -733,7 +759,8 @@ export default tseslint.config(
     settings: {
       jest: {
         globalPackage: 'bun:test',
-        version: '29',
+        // version intentionally omitted: the runner is bun:test, not Jest,
+        // and bun:test has no Jest-style semver that the plugin could gate on.
       },
     },
     rules: {
