@@ -13,6 +13,7 @@
 
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { McpAccess, RuntimeLifecycle, PolicyAccess, EphemeralSettings, SessionIdentity, WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -129,7 +130,7 @@ import { AggregateDisposeError } from './disposeErrors.js';
  * @pseudocode createAgent.md steps 150-160
  */
 export interface AgentDeps {
-  readonly config: Config;
+  readonly config: AgentImplConfigView;
   readonly providerManager: RuntimeProviderManager;
   readonly oauthManager: OAuthManager;
   readonly settingsService: SettingsService;
@@ -203,6 +204,23 @@ export interface AgentProviderState {
  * @requirement:REQ-001
  * @requirement:REQ-003
  */
+/** Narrow config surface for AgentImpl member reads. */
+type AgentImplConfigView = McpAccess &
+  RuntimeLifecycle &
+  PolicyAccess &
+  EphemeralSettings &
+  SessionIdentity &
+  WorkspacePaths & {
+    getAgentClient(): import('../core/agentClient.js').AgentClientContract;
+    getAsyncTaskManager(): import('@vybestack/llxprt-code-core').AsyncTaskManager | undefined;
+    getExtensionLoader(): import('@vybestack/llxprt-code-core').ExtensionLoader;
+    getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
+    getShellJobManager(): import('@vybestack/llxprt-code-core').ShellJobManager | undefined;
+    getToolRegistry(): import('@vybestack/llxprt-code-tools').ToolRegistry;
+    initializeContentGeneratorConfig(): Promise<void>;
+  };
+
+
 export class AgentImpl implements Agent {
   readonly profiles: ProfilesControl;
   readonly tools: ToolControl;
@@ -405,7 +423,7 @@ export class AgentImpl implements Agent {
       config: this.deps.config,
       messageBus: this.deps.messageBus,
       sessionId: () => this.deps.runtimeId,
-      cwd: () => this.deps.config.getTargetDir(),
+      cwd: () => this.cfg.getTargetDir(),
     };
     return new HookControl(hookDeps);
   }
@@ -513,7 +531,7 @@ export class AgentImpl implements Agent {
    */
   private buildIdeControl(): IdeControl {
     const ideDeps: IdeControlDeps = {
-      ideModeEnabled: () => this.deps.config.getIdeMode(),
+      ideModeEnabled: () => this.cfg.getIdeMode(),
       getEditorCallbacks: () => this.editorCallbacksHolder.editorCallbacks,
     };
     return new IdeControl(ideDeps);
@@ -525,7 +543,7 @@ export class AgentImpl implements Agent {
    */
   private buildPolicyControl(): PolicyControl {
     const policyDeps: PolicyControlDeps = {
-      getEngine: () => this.deps.config.getPolicyEngine(),
+      getEngine: () => this.cfg.getPolicyEngine(),
     };
     return new PolicyControl(policyDeps);
   }
@@ -536,8 +554,8 @@ export class AgentImpl implements Agent {
    */
   private buildTasksControl(): TasksControl {
     const tasksDeps: TasksControlDeps = {
-      getManager: () => this.deps.config.getAsyncTaskManager(),
-      getShellJobManager: () => this.deps.config.getShellJobManager(),
+      getManager: () => this.cfg.getAsyncTaskManager(),
+      getShellJobManager: () => this.cfg.getShellJobManager(),
     };
     return new TasksControl(tasksDeps);
   }
@@ -561,7 +579,7 @@ export class AgentImpl implements Agent {
     if (opts?.mcpDiscovery === 'skip') {
       return new Map();
     }
-    return this.deps.config.awaitMcpDiscoveryGate();
+    return this.cfg.awaitMcpDiscoveryGate();
   }
 
   /**
@@ -755,7 +773,7 @@ export class AgentImpl implements Agent {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
     await setActiveModel(model);
-    await this.deps.config.initializeContentGeneratorConfig();
+    await this.cfg.initializeContentGeneratorConfig();
     await this.restoreChatVisibility();
     this.rebuild();
     this.providerState.model = model;
@@ -804,17 +822,17 @@ export class AgentImpl implements Agent {
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
   getEphemeralSetting(key: string): unknown {
-    return this.deps.config.getEphemeralSetting(key);
+    return this.cfg.getEphemeralSetting(key);
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 30-33 */
   setEphemeralSetting(key: string, value: unknown): void {
-    this.deps.config.setEphemeralSetting(key, value);
+    this.cfg.setEphemeralSetting(key, value);
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
   getEphemeralSettings(): Readonly<Record<string, unknown>> {
-    return this.deps.config.getEphemeralSettings();
+    return this.cfg.getEphemeralSettings();
   }
 
   /**
@@ -823,7 +841,7 @@ export class AgentImpl implements Agent {
    * @pseudocode lines 1-4
    */
   getApprovalMode(): ApprovalMode {
-    return this.deps.config.getApprovalMode();
+    return this.cfg.getApprovalMode();
   }
 
   /**
@@ -832,7 +850,7 @@ export class AgentImpl implements Agent {
    * @pseudocode lines 10-17
    */
   setApprovalMode(mode: ApprovalMode): void {
-    this.deps.config.setApprovalMode(mode);
+    this.cfg.setApprovalMode(mode);
   }
 
   /**
@@ -1103,7 +1121,7 @@ export class AgentImpl implements Agent {
 
   /** Projects the enriched ToolInfo[] from the registry (added by #2376). */
   listTools(): readonly ToolInfo[] {
-    const registry = this.deps.config.getToolRegistry();
+    const registry = this.cfg.getToolRegistry();
     return buildToolInfosFromRegistry(
       registry.getAllTools(),
       new Set(registry.getEnabledTools().map((t) => t.name)),
@@ -1185,7 +1203,7 @@ export class AgentImpl implements Agent {
       // setActiveModel + the explicit model-only rebuild.
       if (model !== undefined && model !== this.providerState.model) {
         await setActiveModel(model);
-        await this.deps.config.initializeContentGeneratorConfig();
+        await this.cfg.initializeContentGeneratorConfig();
       }
       await this.restoreChatVisibility();
     } else if (model !== undefined && model !== this.providerState.model) {
@@ -1376,7 +1394,7 @@ export class AgentImpl implements Agent {
     // Config lifecycle and disposes it. An agent-owned Config (createAgent) is
     // torn down here as before.
     if (ownership.configOwnership !== 'caller') {
-      await this.safe(errors, () => this.deps.config.dispose());
+      await this.safe(errors, () => this.cfg.dispose());
     }
 
     // @pseudocode dispose.md 70: NET-NEW LSP shutdown wiring. shutdownLspService
@@ -1386,7 +1404,7 @@ export class AgentImpl implements Agent {
     // SKIP the caller-owned Config's LSP service too (the caller owns it).
     if (ownership.configOwnership !== 'caller') {
       await this.safe(errors, async () => {
-        await this.deps.config.shutdownLspService();
+        await this.cfg.shutdownLspService();
         ownership.lspShutDown = true;
       });
     }
@@ -1401,11 +1419,11 @@ export class AgentImpl implements Agent {
     // (T13 observable). Headless agents have zero active extensions, so the loop
     // is vacuously empty while remaining a genuine awaited teardown call-path.
     const activeExtensions = collectActiveExtensions(
-      ownership.config.getExtensionLoader(),
+      (ownership.config as AgentImplConfigView).getExtensionLoader(),
     );
     for (const extension of activeExtensions) {
       await this.safe(errors, () =>
-        unloadExtensionSafely(ownership.config.getExtensionLoader(), extension),
+        unloadExtensionSafely((ownership.config as AgentImplConfigView).getExtensionLoader(), extension),
       );
     }
     ownership.extensionsDisposed = true;

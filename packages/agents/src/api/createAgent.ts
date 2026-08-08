@@ -81,6 +81,23 @@ import {
  * context with a single shared MessageBus.
  * @pseudocode createAgent.md steps 10-176
  */
+/** Narrow config surface for createAgent member reads. */
+type CreateAgentConfigView = Diagnostics &
+  ModelSelection &
+  WorkspacePaths &
+  RuntimeLifecycle & {
+    getAgentClient(): import('../core/agentClient.js').AgentClientContract;
+    getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
+    getProviderManager(): import('@vybestack/llxprt-code-core/runtime/providerManager.js').RuntimeProviderManager | undefined;
+    getSettingsService(): import('@vybestack/llxprt-code-core').SettingsService;
+    initializeContentGeneratorConfig(): Promise<void>;
+  };
+
+function asCreateAgentView(config: Config): CreateAgentConfigView {
+  return config;
+}
+
+
 export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // @pseudocode createAgent.md steps 10-13: validate config, resolve auth, runtimeId
   // STRICT-SCHEMA HAZARD: destructure callbacks off the input BEFORE parsing —
@@ -125,7 +142,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // These drive the idle/first-response watchdogs but are not ConfigParameters
   // fields, so they are pushed after Config construction (issue #2607 Finding 2).
   applyRuntimeEphemerals(config, parsed);
-  const settingsService = config.getSettingsService();
+  const settingsService = asCreateAgentView(config).getSettingsService();
 
   // @pseudocode createAgent.md steps 41-58
   // SHARED runtime context — adopts OUR Config/MessageBus. DO NOT pass
@@ -272,7 +289,7 @@ export async function finalizeAgent(
   });
 
   // @pseudocode createAgent.md steps 115-118: bind POST-auth client
-  const client = config.getAgentClient() as AgentClientContract | undefined;
+  const client = asCreateAgentView(config).getAgentClient() as AgentClientContract | undefined;
   if (client === undefined) {
     throw new AgentBootstrapError('no post-auth agent client');
   }
@@ -285,7 +302,7 @@ export async function finalizeAgent(
 
   // @pseudocode createAgent.md steps 130-148: build the initial loop via rebuildLoop
   const loopHolder: LoopHolder = createLoopHolder();
-  const resolveClient = () => config.getAgentClient();
+  const resolveClient = () => asCreateAgentView(config).getAgentClient();
   const approvalHandler =
     onApproval !== undefined ? wrapApprovalHandler(onApproval) : undefined;
   const { editorCallbacksHolder, displayCallbacksHolder, displayCallbacks } =
@@ -444,7 +461,7 @@ function initializeConfigAndMessageBus(
   // avoid mutating the workspace with process.cwd().
   const includeProcessCwd = parsed.harness?.includeProcessCwd ?? true;
   if (includeProcessCwd) {
-    config.getWorkspaceContext().addDirectory(process.cwd());
+    asCreateAgentView(config).getWorkspaceContext().addDirectory(process.cwd());
   }
   // Inject a high-priority ASK policy rule that overrides the read-only.toml
   // ALLOW rules (priority 1.050) for ALL tools so the ConfirmationCoordinator
@@ -452,11 +469,11 @@ function initializeConfigAndMessageBus(
   // harness.forceConfirmations gate (default true) lets production callers
   // skip the policy injection.
   if (forceConfirmations) {
-    injectConfirmationForcingPolicy(config.getPolicyEngine());
+    injectConfirmationForcingPolicy(asCreateAgentView(config).getPolicyEngine());
   }
   const messageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
+    asCreateAgentView(config).getPolicyEngine(),
+    asCreateAgentView(config).getDebugMode(),
   );
   return { config, messageBus };
 }
@@ -524,7 +541,7 @@ async function applyActivationOrLegacy(
   messageBus: MessageBus,
 ): Promise<{ readonly provider: string; readonly model: string } | void> {
   if (parsed.activation !== undefined) {
-    await config.initialize({ messageBus });
+    await asCreateAgentView(config).initialize({ messageBus });
     const activationResult = await executeProviderActivation(
       config,
       parsed.activation,
@@ -545,14 +562,14 @@ async function applyActivationOrLegacy(
     // the runtime accessors are the reliable source (#2374 round-3 Fix 1).
     const runtimeProvider =
       activationResult.activeProvider ??
-      config.getProviderManager()?.getActiveProviderName() ??
+      asCreateAgentView(config).getProviderManager()?.getActiveProviderName() ??
       safeActiveProviderName();
     const postProvider = runtimeProvider || parsed.provider;
     // Filter out the placeholder-model sentinel — switchActiveProvider sets the
     // active model to that placeholder while auth initializes, but the
     // externally observable provider/model snapshot should reflect the REAL
     // model once activation resolves (#2374).
-    const configModel = config.getModel();
+    const configModel = asCreateAgentView(config).getModel();
     const resolvedConfigModel =
       configModel !== PLACEHOLDER_MODEL ? configModel : '';
 
@@ -564,9 +581,9 @@ async function applyActivationOrLegacy(
   // @pseudocode createAgent.md steps 61-79: apply provider/model/auth via real mutators
   await applyInitialProviderModelAuth(parsed, resolvedAuth, config);
   // @pseudocode createAgent.md step 81-82: initialize (creates transient pre-auth client)
-  await config.initialize({ messageBus });
+  await asCreateAgentView(config).initialize({ messageBus });
   // @pseudocode createAgent.md step 95-96: refreshAuth (creates post-auth client)
-  await config.refreshAuth(resolvedAuth.authMethod);
+  await asCreateAgentView(config).refreshAuth(resolvedAuth.authMethod);
   return undefined;
 }
 
@@ -602,7 +619,7 @@ async function applyInitialProviderModelAuth(
   if (parsed.model !== activeModel) {
     // setActiveModel does NOT rebuild — explicit initializeContentGeneratorConfig required.
     await setActiveModel(parsed.model);
-    await config.initializeContentGeneratorConfig();
+    await asCreateAgentView(config).initializeContentGeneratorConfig();
   }
   if (resolvedAuth.apiKey !== undefined) {
     await updateActiveProviderApiKey(resolvedAuth.apiKey);

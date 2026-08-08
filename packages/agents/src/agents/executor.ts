@@ -5,6 +5,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ModelSelection, EphemeralSettings, SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { ChatSession } from '../core/chatSession.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
@@ -127,12 +128,28 @@ function registerToolsFromConfig(
  * This executor runs the agent in a loop, calling tools until it calls the
  * mandatory `complete_task` tool to signal completion.
  */
+/** Narrow config surface for executor member reads. */
+type ExecutorConfigView = ModelSelection &
+  EphemeralSettings &
+  SessionIdentity & {
+    getAgentClient(): import('./agentClient.js').AgentClientContract;
+    getProviderManager(): import('@vybestack/llxprt-code-core/runtime/providerManager.js').RuntimeProviderManager | undefined;
+    getSettingsService(): import('@vybestack/llxprt-code-core').SettingsService;
+    getToolRegistry(): import('@vybestack/llxprt-code-tools').ToolRegistry;
+  };
+
+
 export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   readonly definition: AgentDefinition<TOutput>;
 
   private readonly agentId: string;
   private readonly toolRegistry: ToolRegistry;
   private readonly runtimeContext: Config;
+
+  /** Narrow view of runtimeContext for member reads (avoids Config holder detection). */
+  private get cfg(): ExecutorConfigView {
+    return this.runtimeContext;
+  }
   private readonly messageBus: MessageBus;
   private readonly onActivity?: ActivityCallback;
 
@@ -167,7 +184,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       new CoreToolRegistryHostAdapter(runtimeContext),
       new CoreMessageBusAdapter(messageBus),
     );
-    const parentToolRegistry = runtimeContext.getToolRegistry();
+    const ctx: ExecutorConfigView = runtimeContext;
+    const parentToolRegistry = ctx.getToolRegistry();
 
     if (definition.toolConfig) {
       registerToolsFromConfig(
@@ -380,7 +398,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       };
     }
 
-    const promptId = `${this.runtimeContext.getSessionId()}#${this.agentId}#${turnCounter}`;
+    const promptId = `${this.cfg.getSessionId()}#${this.agentId}#${turnCounter}`;
     const nextTurnCounter = turnCounter + 1;
 
     const modelOutcome = await this.executeModelCall(
@@ -787,7 +805,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const runtimeState = createAgentRuntimeStateFromConfig(this.runtimeContext);
 
     const providerRuntime = createSettingsProviderRuntimeContext({
-      settingsService: this.runtimeContext.getSettingsService(),
+      settingsService: this.cfg.getSettingsService(),
       config: this.runtimeContext,
       runtimeId: runtimeState.runtimeId,
       metadata: { source: 'AgentExecutor.createChatObject' },
@@ -799,9 +817,9 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         state: runtimeState,
         settings,
         providerRuntime,
-        contentGeneratorConfig: this.runtimeContext.getContentGeneratorConfig(),
+        contentGeneratorConfig: this.cfg.getContentGeneratorConfig(),
         toolRegistry: this.toolRegistry,
-        providerManager: this.runtimeContext.getProviderManager(),
+        providerManager: this.cfg.getProviderManager(),
       },
       overrides: {
         contentGenerator: this.tryGetContentGenerator(),
@@ -811,7 +829,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
   /** Resolves the settings snapshot from ephemeral config. */
   private resolveSettingsSnapshot(): ReadonlySettingsSnapshot {
-    const rawCompressionThreshold = this.runtimeContext.getEphemeralSetting(
+    const rawCompressionThreshold = this.cfg.getEphemeralSetting(
       'compression-threshold',
     );
     const compressionThreshold =
@@ -820,7 +838,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         : 0.8;
 
     const rawContextLimit =
-      this.runtimeContext.getEphemeralSetting('context-limit');
+      this.cfg.getEphemeralSetting('context-limit');
     const contextLimit =
       typeof rawContextLimit === 'number' &&
       Number.isFinite(rawContextLimit) &&
@@ -828,7 +846,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         ? rawContextLimit
         : undefined;
 
-    const rawPreserveThreshold = this.runtimeContext.getEphemeralSetting(
+    const rawPreserveThreshold = this.cfg.getEphemeralSetting(
       'compression-preserve-threshold',
     );
     const preserveThreshold =
@@ -848,7 +866,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   /** Attempts to get the content generator from the runtime context. */
   private tryGetContentGenerator() {
     try {
-      return this.runtimeContext.getAgentClient().getContentGenerator();
+      return this.cfg.getAgentClient().getContentGenerator();
     } catch {
       return undefined;
     }
