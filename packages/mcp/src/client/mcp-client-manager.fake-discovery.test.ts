@@ -14,6 +14,7 @@ import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClientManager } from './mcp-client-manager.js';
+import { wrapFlatConfigAsRuntimeDeps } from './testRuntimeDeps.js';
 import {
   getMCPServerStatus,
   MCPServerStatus,
@@ -70,7 +71,11 @@ describe('McpClientManager fake discovery lifecycle', () => {
       requestConfirmation: async () => false,
     });
     return {
-      manager: new McpClientManager('0.0.1', toolRegistry, config),
+      manager: new McpClientManager(
+        '0.0.1',
+        toolRegistry,
+        wrapFlatConfigAsRuntimeDeps(config),
+      ),
       toolRegistry,
     };
   }

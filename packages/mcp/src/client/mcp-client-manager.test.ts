@@ -9,6 +9,7 @@ import {
   McpClientManager,
   DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
 } from './mcp-client-manager.js';
+import { wrapFlatConfigAsRuntimeDeps } from './testRuntimeDeps.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -67,7 +68,7 @@ describe('McpClientManager', () => {
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
-      mockConfig,
+      wrapFlatConfigAsRuntimeDeps(mockConfig),
     );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
@@ -111,7 +112,7 @@ describe('McpClientManager', () => {
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
-      mockConfig,
+      wrapFlatConfigAsRuntimeDeps(mockConfig),
     );
     await manager.startConfiguredMcpServers();
 
@@ -169,7 +170,11 @@ describe('McpClientManager', () => {
       const toolRegistry = {
         removeMcpToolsByServer: vi.fn(),
       } as unknown as ToolRegistry;
-      const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
+      const manager = new McpClientManager(
+        '0.0.1',
+        toolRegistry,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
+      );
       await manager.startConfiguredMcpServers();
       refreshMcpContext.mockClear();
 
@@ -233,7 +238,7 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager(
         '0.0.1',
         { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
-        mockConfig,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
       );
       await manager.startConfiguredMcpServers();
       refreshMcpContext.mockClear();
@@ -298,7 +303,7 @@ describe('McpClientManager', () => {
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
-      mockConfig,
+      wrapFlatConfigAsRuntimeDeps(mockConfig),
     );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
@@ -339,7 +344,7 @@ describe('McpClientManager', () => {
     const manager = new McpClientManager(
       '0.0.1',
       {} as ToolRegistry,
-      mockConfig,
+      wrapFlatConfigAsRuntimeDeps(mockConfig),
     );
 
     // This must resolve, not hang forever
@@ -399,7 +404,7 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
-        mockConfig,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
       );
       await manager.startConfiguredMcpServers();
 
@@ -453,7 +458,7 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
-        mockConfig,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
       );
       await manager.startConfiguredMcpServers();
 
@@ -512,7 +517,7 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
-        mockConfig,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
       );
       await manager.startConfiguredMcpServers();
 
@@ -563,7 +568,7 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
-        mockConfig,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
         eventEmitter,
       );
       return { manager, eventEmitter, mockedMcpClient, mockConfig };
@@ -654,7 +659,7 @@ describe('McpClientManager', () => {
       const manager = new McpClientManager(
         '0.0.1',
         {} as ToolRegistry,
-        mockConfig,
+        wrapFlatConfigAsRuntimeDeps(mockConfig),
       );
 
       await manager.startConfiguredMcpServers();
@@ -701,7 +706,11 @@ describe('McpClientManager', () => {
       }),
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
+    const manager = new McpClientManager(
+      '0.0.1',
+      toolRegistry,
+      wrapFlatConfigAsRuntimeDeps(mockConfig),
+    );
     return {
       manager,
       mockConfig,

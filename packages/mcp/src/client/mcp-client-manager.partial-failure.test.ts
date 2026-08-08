@@ -11,6 +11,7 @@ import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource
 import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClientManager } from './mcp-client-manager.js';
+import { wrapFlatConfigAsRuntimeDeps } from './testRuntimeDeps.js';
 import type { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
 
@@ -73,7 +74,11 @@ describe('McpClientManager partial discovery failure', () => {
       resourceRegistry,
       'removeResourcesByServer',
     );
-    const manager = new McpClientManager('0.0.1', toolRegistry, config);
+    const manager = new McpClientManager(
+      '0.0.1',
+      toolRegistry,
+      wrapFlatConfigAsRuntimeDeps(config),
+    );
 
     await manager.startConfiguredMcpServers();
     await manager.whenDiscoverySettled();

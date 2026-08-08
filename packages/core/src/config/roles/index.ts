@@ -27,3 +27,6 @@ export type { PolicyAccess } from './policyAccess.js';
 export type { McpAccess } from './mcpAccess.js';
 export type { TelemetryAccess } from './telemetryAccess.js';
 export type { Diagnostics } from './diagnostics.js';
+
+export type { RuntimeDependencies } from '../runtimeDependencies.js';
+export { runtimeDependenciesFromConfig } from '../runtimeDependencies.js';

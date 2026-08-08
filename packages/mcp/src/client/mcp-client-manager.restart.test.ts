@@ -6,6 +6,7 @@
 
 import { vi, describe, it, expect, afterEach } from 'vitest';
 import { McpClientManager } from './mcp-client-manager.js';
+import { wrapFlatConfigAsRuntimeDeps } from './testRuntimeDeps.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -118,7 +119,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();
@@ -171,7 +172,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();
@@ -209,7 +210,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();
@@ -249,7 +250,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
       eventEmitter,
     );
 
@@ -282,7 +283,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();
@@ -312,7 +313,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
       eventEmitter,
     );
 
@@ -363,7 +364,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();
@@ -409,7 +410,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
     configuredServers = {
       good: { command: 'good' },
@@ -436,7 +437,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.reconcileConfiguredMcpServers();
@@ -463,7 +464,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();
@@ -502,7 +503,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     void manager.startConfiguredMcpServers();
@@ -537,7 +538,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startExtension({
@@ -576,7 +577,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const manager = new McpClientManager(
       '0.0.1',
       registries.toolRegistry,
-      config,
+      wrapFlatConfigAsRuntimeDeps(config),
     );
 
     await manager.startConfiguredMcpServers();

@@ -6,6 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { McpClientManager } from './mcp-client-manager.js';
+import { wrapFlatConfigAsRuntimeDeps } from './testRuntimeDeps.js';
 import { McpClient, MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -100,7 +101,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.onFolderTrustGained();
@@ -118,7 +119,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.stop();
 
@@ -139,7 +140,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.onFolderTrustGained();
@@ -169,7 +170,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.startConfiguredMcpServers();
@@ -199,7 +200,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
 
@@ -255,7 +256,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
 
@@ -287,7 +288,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.startConfiguredMcpServers();
@@ -306,7 +307,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.onFolderTrustRevoked();
@@ -340,7 +341,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
       failRefresh = true;
@@ -370,7 +371,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
 
@@ -414,7 +415,7 @@ describe('McpClientManager trust transitions', () => {
         const manager = new McpClientManager(
           CLIENT_VERSION,
           toolRegistry,
-          config,
+          wrapFlatConfigAsRuntimeDeps(config),
         );
         await manager.startConfiguredMcpServers();
 
@@ -438,7 +439,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
 
@@ -461,7 +462,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
       removeTools.mockClear();
@@ -486,7 +487,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       void manager.startConfiguredMcpServers();
@@ -532,7 +533,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       void manager.startConfiguredMcpServers();
@@ -584,7 +585,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.startConfiguredMcpServers();
@@ -608,7 +609,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.startConfiguredMcpServers();
@@ -635,7 +636,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       // Start discovery (in-flight, stuck at connect)
@@ -677,7 +678,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       // Start discovery (in-flight, stuck at connect)
@@ -727,7 +728,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
       await manager.startConfiguredMcpServers();
       expect(manager.getMcpServerCount()).toBe(1);
@@ -768,7 +769,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       await manager.startConfiguredMcpServers();
@@ -809,7 +810,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       // Start discovery — stuck at connect
@@ -859,7 +860,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         toolRegistry,
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       void manager.startConfiguredMcpServers();
@@ -896,7 +897,7 @@ describe('McpClientManager trust transitions', () => {
       const manager = new McpClientManager(
         CLIENT_VERSION,
         createToolRegistry(config),
-        config,
+        wrapFlatConfigAsRuntimeDeps(config),
       );
 
       void manager.startConfiguredMcpServers();

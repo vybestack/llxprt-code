@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RuntimeDependencies } from '@vybestack/llxprt-code-core/config/roles.js';
 import type {
   LlxprtExtension,
   MCPServerConfig,
@@ -100,7 +100,7 @@ export class McpClientManager {
   constructor(
     private readonly clientVersion: string,
     private readonly toolRegistry: ToolRegistry,
-    private readonly cliConfig: Config,
+    private readonly cliConfig: RuntimeDependencies,
     private readonly eventEmitter?: EventEmitter,
     private readonly settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
   ) {}
@@ -118,7 +118,7 @@ export class McpClientManager {
     await stopMcpExtension({
       extension,
       disconnect: (name) => this.disconnectClient(name, true),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.cliConfig.mcp.refreshMcpContext(),
     });
   }
 
@@ -144,7 +144,7 @@ export class McpClientManager {
     // refreshMcpContext here sees pre-discovery tool state, but connectAndDiscover
     // emits McpClientUpdate + calls scheduleMcpContextRefresh once each server
     // connects, so the context converges as servers come online.
-    await this.cliConfig.refreshMcpContext();
+    await this.cliConfig.mcp.refreshMcpContext();
   }
 
   private async disconnectClient(name: string, skipRefresh = false) {
@@ -164,7 +164,7 @@ export class McpClientManager {
         if (!skipRefresh) {
           // This is required to update the content generator configuration with the
           // new tool configuration and system instructions.
-          await this.cliConfig.refreshMcpContext();
+          await this.cliConfig.mcp.refreshMcpContext();
         }
       }
     }
@@ -177,8 +177,8 @@ export class McpClientManager {
     if (
       !isAllowedMcpServer(
         name,
-        this.cliConfig.getAllowedMcpServers(),
-        this.cliConfig.getBlockedMcpServers(),
+        this.cliConfig.mcp.getAllowedMcpServers(),
+        this.cliConfig.mcp.getBlockedMcpServers(),
       )
     ) {
       if (!this.blockedMcpServers.find((s) => s.name === name)) {
@@ -189,7 +189,7 @@ export class McpClientManager {
       }
       return;
     }
-    if (!this.cliConfig.isTrustedFolder() || this.stopped) {
+    if (!this.cliConfig.policy.isTrustedFolder() || this.stopped) {
       return;
     }
     if (config.extension && !config.extension.isActive) {
@@ -198,7 +198,7 @@ export class McpClientManager {
     if (
       config.extension &&
       Object.prototype.hasOwnProperty.call(
-        this.cliConfig.getMcpServers() ?? {},
+        this.cliConfig.mcp.getMcpServers() ?? {},
         name,
       )
     ) {
@@ -245,7 +245,7 @@ export class McpClientManager {
     this.queuedDiscoveryConfigs.delete(name);
     if (
       queuedConfig !== undefined &&
-      this.cliConfig.isTrustedFolder() &&
+      this.cliConfig.policy.isTrustedFolder() &&
       !this.stopped
     ) {
       await this.maybeDiscoverMcpServer(name, queuedConfig);
@@ -287,8 +287,8 @@ export class McpClientManager {
     removeMcpServerArtifacts(
       name,
       this.toolRegistry,
-      this.cliConfig.getPromptRegistry(),
-      this.cliConfig.getResourceRegistry(),
+      this.cliConfig.promptRegistry,
+      this.cliConfig.resourceRegistry,
     );
   }
 
@@ -297,11 +297,11 @@ export class McpClientManager {
       name,
       config,
       this.toolRegistry,
-      this.cliConfig.getPromptRegistry(),
-      this.cliConfig.getResourceRegistry(),
-      this.cliConfig.getWorkspaceContext(),
-      this.cliConfig,
-      this.cliConfig.getDebugMode(),
+      this.cliConfig.promptRegistry,
+      this.cliConfig.resourceRegistry,
+      this.cliConfig.paths.getWorkspaceContext(),
+      this.cliConfig.policy,
+      this.cliConfig.diagnostics.getDebugMode(),
       this.clientVersion,
       async () => {
         debugLogger.log('Tools changed, updating agent context...');
@@ -314,7 +314,7 @@ export class McpClientManager {
 
   private isDiscoveryInvalid(generation: number): boolean {
     return (
-      !this.cliConfig.isTrustedFolder() ||
+      !this.cliConfig.policy.isTrustedFolder() ||
       this.trustGeneration !== generation ||
       this.stopped
     );
@@ -380,7 +380,7 @@ export class McpClientManager {
         clients: new Map(this.clients),
       });
       await client.discover(
-        this.cliConfig,
+        this.cliConfig.policy,
         () => !this.isDiscoveryInvalid(generationBeforeConnect),
       );
 
@@ -579,18 +579,18 @@ export class McpClientManager {
         clients: new Map(this.clients),
       });
     await startConfiguredMcpClients({
-      trusted: this.cliConfig.isTrustedFolder(),
+      trusted: this.cliConfig.policy.isTrustedFolder(),
       resolveServers: () =>
         populateMcpServerCommand(
-          this.cliConfig.getMcpServers() ?? {},
-          this.cliConfig.getMcpServerCommand(),
+          this.cliConfig.mcp.getMcpServers() ?? {},
+          this.cliConfig.mcp.getMcpServerCommand(),
         ),
       completeEmpty: () => {
         this.discoveryState = MCPDiscoveryState.COMPLETED;
       },
       emitUpdate,
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.cliConfig.mcp.refreshMcpContext(),
     });
   }
 
@@ -604,8 +604,8 @@ export class McpClientManager {
       return;
     }
     const servers = populateMcpServerCommand(
-      this.cliConfig.getMcpServers() ?? {},
-      this.cliConfig.getMcpServerCommand(),
+      this.cliConfig.mcp.getMcpServers() ?? {},
+      this.cliConfig.mcp.getMcpServerCommand(),
     );
     const discoverPromises: Array<Promise<void>> = [];
     for (const [name, config] of Object.entries(servers)) {
@@ -627,7 +627,7 @@ export class McpClientManager {
 
     // Configured servers have precedence. Extension servers retry only after
     // configured discovery has either succeeded or released its reservation.
-    for (const extension of this.cliConfig.getExtensions()) {
+    for (const extension of this.cliConfig.extensionLoader.getExtensions()) {
       if (!extension.isActive) {
         continue;
       }
@@ -654,12 +654,12 @@ export class McpClientManager {
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
         clients: new Map(this.clients),
       });
-      await this.cliConfig.refreshMcpContext();
+      await this.cliConfig.mcp.refreshMcpContext();
       return;
     }
 
     await Promise.all(discoverPromises);
-    await this.cliConfig.refreshMcpContext();
+    await this.cliConfig.mcp.refreshMcpContext();
   }
 
   /**
@@ -741,7 +741,7 @@ export class McpClientManager {
       }),
     );
     try {
-      await this.cliConfig.refreshMcpContext();
+      await this.cliConfig.mcp.refreshMcpContext();
     } catch (error) {
       appendFailures(failures, error);
       debugLogger.error(
@@ -752,13 +752,13 @@ export class McpClientManager {
   }
 
   async reconcileConfiguredMcpServers(): Promise<void> {
-    if (!this.cliConfig.isTrustedFolder() || this.stopped) return;
+    if (!this.cliConfig.policy.isTrustedFolder() || this.stopped) return;
     this.trustGeneration++;
     const reconciliation = getConfiguredMcpReconciliation(
       this.clients,
       populateMcpServerCommand(
-        this.cliConfig.getMcpServers() ?? {},
-        this.cliConfig.getMcpServerCommand(),
+        this.cliConfig.mcp.getMcpServers() ?? {},
+        this.cliConfig.mcp.getMcpServerCommand(),
       ),
     );
     await reconcileConfiguredMcpClients({
@@ -767,7 +767,7 @@ export class McpClientManager {
       remove: (name, client) => this.removeAndDisconnectClient(name, client),
       deleteFailure: (name) => this.discoveryFailures.delete(name),
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.cliConfig.mcp.refreshMcpContext(),
     });
   }
 
@@ -778,7 +778,7 @@ export class McpClientManager {
     await restartMcpClients({
       clients: this.clients,
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.cliConfig.mcp.refreshMcpContext(),
       reportError: (name, error) => {
         logger.error(
           `Error restarting client '${name}': ${getErrorMessage(error)}`,
@@ -796,7 +796,7 @@ export class McpClientManager {
       throw new Error(`No MCP server registered with the name "${name}"`);
     }
     await this.maybeDiscoverMcpServer(name, client.getServerConfig());
-    await this.cliConfig.refreshMcpContext();
+    await this.cliConfig.mcp.refreshMcpContext();
   }
 
   /**
@@ -940,7 +940,7 @@ export class McpClientManager {
               this.pendingRefreshTimerResolve = resolve;
             },
           ),
-        refresh: () => this.cliConfig.refreshMcpContext(),
+        refresh: () => this.cliConfig.mcp.refreshMcpContext(),
         reportError: (error) =>
           debugLogger.error(
             `Error refreshing MCP context: ${getErrorMessage(error)}`,

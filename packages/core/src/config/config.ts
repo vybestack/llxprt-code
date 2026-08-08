@@ -34,6 +34,7 @@ import {
   type SchedulerOptions,
 } from './schedulerSingleton.js';
 import { initializeLsp } from './lspIntegration.js';
+import { runtimeDependenciesFromConfig } from './runtimeDependencies.js';
 import {
   applyConfigParams,
   type ConfigConstructorTarget,
@@ -217,7 +218,7 @@ export class Config extends ConfigBase {
     this.mcpClientManager = new McpClientManager(
       await getCoreVersion(),
       this.toolRegistry,
-      this,
+      runtimeDependenciesFromConfig(this),
       this.eventEmitter,
     );
     this.registerIdeTrustListener();

@@ -12,6 +12,7 @@ import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceCon
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { McpClient } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';
+import { wrapFlatConfigAsRuntimeDeps } from './testRuntimeDeps.js';
 import {
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
@@ -68,7 +69,11 @@ function createHarness(): {
   const toolRegistry = new ToolRegistry(config);
   const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
   return {
-    manager: new McpClientManager('0.0.1', toolRegistry, config),
+    manager: new McpClientManager(
+      '0.0.1',
+      toolRegistry,
+      wrapFlatConfigAsRuntimeDeps(config),
+    ),
     clientA,
     clientB,
     removeTools,
