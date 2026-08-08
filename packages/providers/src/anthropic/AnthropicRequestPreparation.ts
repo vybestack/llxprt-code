@@ -313,7 +313,7 @@ async function buildOAuthSystemContext(params: {
           } as {
             type: 'text';
             text: string;
-            cache_control: { type: 'ephemeral', ttl: '5m' | '1h' };
+            cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
           },
         ],
       });

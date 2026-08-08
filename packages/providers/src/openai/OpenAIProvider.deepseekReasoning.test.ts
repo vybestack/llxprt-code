@@ -182,7 +182,10 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
           {
             speaker: 'human' as const,
             blocks: [
-              { type: 'text' as const, text: 'Search for deepseek reasoning info' },
+              {
+                type: 'text' as const,
+                text: 'Search for deepseek reasoning info',
+              },
             ],
           },
         ],
@@ -316,9 +319,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
         contents: [
           {
             speaker: 'human' as const,
-            blocks: [
-              { type: 'text' as const, text: 'What is the answer?' },
-            ],
+            blocks: [{ type: 'text' as const, text: 'What is the answer?' }],
           },
         ],
         tools: [],

@@ -37,7 +37,8 @@ const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
-}));function buildNormalizedOptions(
+}));
+function buildNormalizedOptions(
   overrides: Partial<NormalizedGenerateChatOptions> & {
     ephemerals?: Record<string, unknown>;
   } = {},

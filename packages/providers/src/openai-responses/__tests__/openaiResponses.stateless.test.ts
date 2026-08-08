@@ -2,14 +2,7 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import {
@@ -213,9 +206,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     const Fake = OpenAI as unknown as typeof import('openai').default & {
       requests: Array<{ request: Record<string, unknown> }>;
     };
-    expect(Fake.requests.at(-1)?.request['instructions']).toBe(
-      'INSTRUCTION-A',
-    );
+    expect(Fake.requests.at(-1)?.request['instructions']).toBe('INSTRUCTION-A');
 
     const settingsB = createSettings('conversation-B', 'parent-B');
     const configB = createRuntimeConfigStub(settingsB, {
@@ -239,9 +230,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       )
       .next();
 
-    expect(Fake.requests.at(-1)?.request['instructions']).toBe(
-      'INSTRUCTION-B',
-    );
+    expect(Fake.requests.at(-1)?.request['instructions']).toBe('INSTRUCTION-B');
   });
 
   it('applies call-scoped config parameters to responses request payloads @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @pseudocode provider-cache-elimination.md lines 10-12', async () => {
