@@ -80,6 +80,7 @@ jobs:
   e2e_doc_change_filter:
     name: 'Detect doc-only changes for E2E'
     runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
     needs:
       - 'skip_check'
     if: >-
@@ -96,6 +97,11 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
 
       - name: 'Determine documentation-only PR'
         id: 'detect'
@@ -115,56 +121,36 @@ jobs:
             exit 0
           fi
 
-          files="$(gh api \
+          # Fetch the full structured PR file list as NDJSON (one entry per line
+          # across all pages, including status/previous_filename/patch so renames
+          # and the .gitignore carve-out are handled) and the authoritative
+          # changed_files count. || true keeps an API blip from failing this
+          # job: the shared classifier then resolves to docs_only=false (run
+          # full CI) rather than skipping E2E and wedging the PR.
+          files_json="${RUNNER_TEMP}/pr-files.ndjson"
+          : >"$files_json"
+          gh api \
             --paginate \
             -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' || true)"
+            --jq '.[]' >"$files_json" || true
 
-          if [[ -z "$files" ]]; then
-            echo "docs_only=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
+          changed_files="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq '.changed_files' || true)"
 
-          gitignore_patch=''
-          if grep -Fxq '.gitignore' <<<"$files"; then
-            gitignore_patch="$(gh api \
-              --paginate \
-              -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-              --jq '.[] | select(.filename == ".gitignore") | .patch' || true)"
-          fi
-
-          docs_only=true
-          while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-            case "$file" in
-              docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
-                ;;
-              CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
-                ;;
-              *.md|*.mdx|*.rst|*.txt|*.adoc)
-                ;;
-              .gitignore)
-                if [[ -z "$gitignore_patch" ]]; then
-                  docs_only=false
-                  break
-                fi
-                if printf '%s\n' "$gitignore_patch" \
-                  | grep -E '^[+-][^+-]' \
-                  | grep -Ev '^[+-](!docs/reference/|#.*docs/reference)' >/dev/null; then
-                  docs_only=false
-                  break
-                fi
-                ;;
-              *)
-                docs_only=false
-                break
-                ;;
-            esac
-          done <<<"$files"
-
-          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
+          # The shared classifier (scripts/docs-only-filter.ts) is the
+          # authoritative docs-only policy (issue #342, reused for E2E by
+          # issue #2693): runtime .md/.txt under packages/ are CODE, renames
+          # require both sides to be docs, scripts/, .github/, integration-tests/
+          # are CODE, and the changed_files count guards against the 3000-file
+          # API ceiling. It writes docs_only to GITHUB_OUTPUT and a summary to
+          # GITHUB_STEP_SUMMARY, always exiting 0.
+          node scripts/docs-only-filter.ts \
+            --files-json "$files_json" \
+            --changed-files "$changed_files" \
+            --output github-actions || true
 
   e2e_linux:
     name: 'E2E Test (Linux) - ${{ matrix.sandbox }}'
@@ -182,8 +168,7 @@ jobs:
     if: |
       !cancelled() &&
       needs.skip_check.result == 'success' &&
-      needs.e2e_doc_change_filter.result == 'success' &&
-      needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
+      !(needs.e2e_doc_change_filter.result == 'success' && needs.e2e_doc_change_filter.outputs.docs_only == 'true') &&
       needs.skip_check.outputs.should_skip != 'true' &&
       (
         (
@@ -363,8 +348,7 @@ jobs:
     if: |
       !cancelled() &&
       needs.skip_check.result == 'success' &&
-      needs.e2e_doc_change_filter.result == 'success' &&
-      needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
+      !(needs.e2e_doc_change_filter.result == 'success' && needs.e2e_doc_change_filter.outputs.docs_only == 'true') &&
       needs.skip_check.outputs.should_skip != 'true' &&
       (
         (
