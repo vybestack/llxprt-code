@@ -147,6 +147,11 @@ export function resolveTestConcurrency(
     return MIN_TEST_CONCURRENCY;
   }
 
+  // availableParallelism() reports the machine's cores, not this process's
+  // share of them. On a CI runner — which is dedicated — those are the same
+  // thing. On a development machine running several checkouts at once they are
+  // not, and half of the cores is still more than the runner actually has; the
+  // env override above is the escape hatch for that case.
   const cores = options.cores ?? availableParallelism();
   const half = Math.floor(cores / 2);
   return Math.min(ceiling, Math.max(MIN_TEST_CONCURRENCY, half));
