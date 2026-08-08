@@ -216,7 +216,9 @@ export async function prepareAtSendSeam(
   if (projection === undefined) {
     return { estimate: null, options };
   }
-  const config = options.config ?? options.runtime?.config;
+  const config = (options.config ?? options.runtime?.config) as
+    | { getTokenizerFactory(): unknown }
+    | undefined;
   const getTokenizerFactory = config?.getTokenizerFactory;
   const tokenizerFactory =
     typeof getTokenizerFactory === 'function'

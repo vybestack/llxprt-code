@@ -269,7 +269,7 @@ export class StreamProcessor {
     const { contents: requestContents, pending: pendingUserIContents } =
       this._buildRequestContents(userContent);
 
-    const configForHooks = this.runtimeContext.providerRuntime.config;
+    const configForHooks = (this.runtimeContext.providerRuntime.config as HookRuntimeConfig) | undefined;
     const toolSelection = await this._applyToolSelectionHook(
       configForHooks,
       this._selectRequestTools(params),
@@ -634,7 +634,7 @@ export class StreamProcessor {
     signal: AbortSignal | undefined,
   ): Promise<boolean | null> {
     const failoverHandler =
-      this.runtimeContext.providerRuntime.config?.getBucketFailoverHandler();
+      (this.runtimeContext.providerRuntime.config as HookRuntimeConfig | undefined)?.getBucketFailoverHandler?.();
     if (!failoverHandler) return null;
 
     this.logger.debug(() => 'Attempting bucket failover on persistent 429');
@@ -725,7 +725,7 @@ export class StreamProcessor {
     chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<ModelStreamChunk | undefined> {
-    const hookConfig = this.runtimeContext.providerRuntime.config;
+    const hookConfig = (this.runtimeContext.providerRuntime.config as HookRuntimeConfig) | undefined;
     if (
       hookConfig === undefined ||
       typeof hookConfig.getEnableHooks !== 'function' ||
