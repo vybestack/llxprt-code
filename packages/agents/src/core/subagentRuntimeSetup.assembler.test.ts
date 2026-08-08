@@ -51,6 +51,12 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     vi.clearAllMocks();
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
+    // Per-turn assembly resolves the model via config.getModel() (issue
+    // #3138); drive it so a settings change simulates a real `/model`.
+    Object.defineProperty(config, 'getModel', {
+      value: () => settingsService.get('model') as string,
+      configurable: true,
+    });
     settingsService.set('providers.stub.base-url', 'https://stub.example.com');
     settingsService.set('providers.stub.auth-key', 'stub-api-key');
     settingsService.set('model', 'sub-model-v1');

@@ -34,7 +34,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
@@ -236,12 +235,10 @@ export async function buildRequestContext(
 ): Promise<PreparedResponsesRequestContext> {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
   // Issue #3136: the agent layer owns system-prompt assembly. The provider
   // transports options.systemInstruction verbatim (empty for projection).
+  // options.userMemory is deliberately NOT read here: user memory is baked
+  // into the assembled instruction upstream.
   const systemPrompt = options.systemInstruction ?? '';
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore =

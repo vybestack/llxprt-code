@@ -108,6 +108,7 @@ import type {
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { resolveModelForSystemPrompt } from './systemPromptModel.js';
 
 /**
  * Assembles the complete system prompt for a turn, given the freshly-resolved
@@ -546,10 +547,14 @@ export class ChatSession {
     if (!this.systemPromptAssembler) {
       return;
     }
-    const provider = this.resolveProviderForRuntime(
-      'ChatSession.resolveSystemPromptForTurn',
-    );
-    const model = provider.getCurrentModel?.() ?? this.runtimeState.model;
+    // Use the SAME resolver ChatSessionFactory uses at session start
+    // (issue #3138). Introducing a second mechanism here — e.g. asking the
+    // provider directly — would recreate the two-sources-disagree defect this
+    // issue exists to remove.
+    const config = this.runtimeContext.providerRuntime.config;
+    const model = config
+      ? resolveModelForSystemPrompt(config)
+      : this.runtimeState.model;
     const systemInstruction = await this.systemPromptAssembler.assemble(model);
     this.generationConfig.systemInstruction = systemInstruction;
     const tokens = await this.historyService.estimateTokensForText(

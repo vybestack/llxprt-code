@@ -66,6 +66,12 @@ function buildFixture(
 ): AssemblyFixture {
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
+  // The system prompt resolves its model through config.getModel()
+  // (issue #3138), so drive that -- it is what a real `/model` change moves.
+  Object.defineProperty(config, 'getModel', {
+    value: () => settingsService.get('model') as string,
+    configurable: true,
+  });
 
   settingsService.set('providers.stub.base-url', 'https://stub.example.com');
   settingsService.set('providers.stub.auth-key', 'stub-api-key');
@@ -280,6 +286,10 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     // without one to verify backward-compatible behavior.
     const settingsService = new SettingsService();
     const config = new Config(createConfigParams(settingsService));
+    Object.defineProperty(config, 'getModel', {
+      value: () => settingsService.get('model') as string,
+      configurable: true,
+    });
     settingsService.set('providers.stub.base-url', 'https://stub.example.com');
     settingsService.set('providers.stub.auth-key', 'stub-api-key');
     settingsService.set('model', 'whatever');
