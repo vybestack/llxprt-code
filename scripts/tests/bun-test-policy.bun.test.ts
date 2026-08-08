@@ -27,12 +27,17 @@ import {
 
 const REPO_ROOT = join(import.meta.dir, '..', '..');
 
-/** Every workspace runner that spawns `bun test` children. */
+/**
+ * Every runner that spawns `bun test` children — the workspace runners and the
+ * shard runner CI invokes alongside them. Both paths run in CI, and it was the
+ * disagreement between them that gave the same test two different budgets.
+ */
 const RUNNERS: string[] = [
   'packages/agents/run-bun-tests.ts',
   'packages/cli/run-bun-tests.ts',
   'packages/core/run-bun-tests.ts',
   'packages/auth/run-bun-tests.ts',
+  'scripts/run_bun_tests.ts',
 ];
 
 function readRunner(runner: string): string {
