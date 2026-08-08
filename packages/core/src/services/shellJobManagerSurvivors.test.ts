@@ -140,7 +140,7 @@ describe.skipIf(os.platform() !== 'win32')(
           command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
-        survivorPid = job.pid;
+        survivorPid = job.pid ?? 0;
         innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -187,7 +187,7 @@ describe.skipIf(os.platform() !== 'win32')(
           command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
-        survivorPid = job.pid;
+        survivorPid = job.pid ?? 0;
         innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -208,6 +208,55 @@ describe.skipIf(os.platform() !== 'win32')(
         await reapAndRemoveWindowsTestDir(h3Dir, h3Manager, [
           survivorPid,
           innerPid,
+        ]);
+      }
+    }, 30000);
+
+    // --- Defense-in-depth: the taskkill boundary must only ever see valid pids
+    // ---
+    //
+    // The injected taskkillImpl is the exact observable boundary where a bad
+    // pid would be visible. Every pid it receives must be strictly positive:
+    // a 0 / negative / non-finite pid reaching taskkill is the regression this
+    // issue (#3126) guards against at the primitive chokepoints. This asserts
+    // the invariant survives the full manager cancel/dispose flow.
+
+    it('never passes a non-positive pid to taskkillImpl across cancel and dispose', async () => {
+      const guardDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pid-guard-'));
+      const receivedPids: number[] = [];
+      const guardManager = new ShellJobManager({
+        baseDir: guardDir,
+        taskkillImpl: (pid: number): Promise<TaskkillResult> => {
+          receivedPids.push(pid);
+          return boundedTaskkill(pid);
+        },
+      });
+      let survivorPid = 0;
+      try {
+        const job = guardManager.launch({
+          command: 'Start-Sleep -Seconds 300',
+          cwd: os.tmpdir(),
+        });
+        // A successful Windows launch must yield a real pid; assert rather
+        // than coerce, so an absent pid fails the test instead of silently
+        // becoming 0 (the very value this issue exists to keep out of kills).
+        expect(job.pid).toBeGreaterThan(0);
+        survivorPid = job.pid as number;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        await guardManager.cancel(job.id);
+        await guardManager.dispose();
+        await waitForPidGoneWindows(survivorPid, 10000);
+        survivorPid = 0;
+
+        // Every pid the manager asked taskkill to reap must be a real process.
+        expect(receivedPids.length).toBeGreaterThan(0);
+        for (const pid of receivedPids) {
+          expect(pid).toBeGreaterThan(0);
+        }
+      } finally {
+        await reapAndRemoveWindowsTestDir(guardDir, guardManager, [
+          survivorPid,
         ]);
       }
     }, 30000);
@@ -236,7 +285,7 @@ describe.skipIf(os.platform() !== 'win32')(
             command: buildInnerPidMarkerCommand(marker),
             cwd: os.tmpdir(),
           });
-          survivorPids.push(job.pid);
+          survivorPids.push(job.pid ?? 0);
         }
         for (const marker of innerMarkers) {
           innerPids.push(await readInnerPidFromMarker(marker, 10000));
@@ -290,7 +339,7 @@ describe.skipIf(os.platform() !== 'win32')(
           command: buildInnerPidMarkerCommand(innerMarker),
           cwd: os.tmpdir(),
         });
-        survivorPid = job.pid;
+        survivorPid = job.pid ?? 0;
         survivorLogPath = path.join(i2Dir, `${job.id}.log`);
         innerPid = await readInnerPidFromMarker(innerMarker, 10000);
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -342,7 +391,7 @@ describe.skipIf(os.platform() !== 'win32')(
           command: 'Start-Sleep -Seconds 300',
           cwd: os.tmpdir(),
         });
-        survivorPid = job.pid;
+        survivorPid = job.pid ?? 0;
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Start disposal WITHOUT awaiting. The public dispose() sets the
@@ -402,7 +451,7 @@ describe.skipIf(os.platform() !== 'win32')(
           command: 'Start-Sleep -Seconds 300',
           cwd: os.tmpdir(),
         });
-        survivorPid = job.pid;
+        survivorPid = job.pid ?? 0;
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         const disposalPromise = microManager.dispose();

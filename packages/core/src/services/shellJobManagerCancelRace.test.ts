@@ -84,7 +84,7 @@ describe.skipIf(os.platform() !== 'win32')(
           command: buildInnerPidMarkerCommand(innerMarker, 60),
           cwd: os.tmpdir(),
         });
-        outerPid = job.pid;
+        outerPid = job.pid ?? 0;
         innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
 
         const firstCancellation = manager.cancel(job.id);
@@ -119,7 +119,7 @@ describe.skipIf(os.platform() !== 'win32')(
           ),
           cwd: os.tmpdir(),
         });
-        outerPid = job.pid;
+        outerPid = job.pid ?? 0;
         innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
 
         const cancellation = manager.cancel(job.id);
@@ -154,7 +154,7 @@ describe.skipIf(os.platform() !== 'win32')(
           ),
           cwd: os.tmpdir(),
         });
-        outerPid = job.pid;
+        outerPid = job.pid ?? 0;
         innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
 
         await taskkillStarted;

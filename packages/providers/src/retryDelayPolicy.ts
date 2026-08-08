@@ -11,6 +11,7 @@ import {
   isRetryableError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { isStreamTimeoutError } from './providerErrorObservation.js';
+import { isQuotaExhaustionError } from './utils/quotaExhaustion.js';
 
 /**
  * Determines if an error should trigger a retry.
@@ -30,6 +31,7 @@ export function shouldRetryError(error: unknown): boolean {
     return false;
   }
   if (status === 429 || isOverloadError(error)) {
+    if (isQuotaExhaustionError(error)) return false;
     return true;
   }
   if (status !== undefined && status >= 500 && status < 600) {

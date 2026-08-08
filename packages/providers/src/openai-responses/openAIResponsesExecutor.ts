@@ -34,10 +34,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
-import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -68,6 +65,7 @@ import {
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  bestEffortDump,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -103,8 +101,6 @@ export interface ResponsesExecutorDeps {
    * Codex). This is the single auth contract for the executor.
    */
   readonly resolveAuthTokenForPrompt: () => Promise<string>;
-  /** Provide a fresh synthetic call ID generator for tool-call injection. */
-  readonly generateSyntheticCallId: () => string;
   /** Determine whether a streaming error is retryable (status-based). */
   readonly shouldRetryOnError: (error: Error | unknown) => boolean;
   /** Return the provider's default model ID for fallback when resolved model is empty. */
@@ -190,6 +186,10 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
+  // Issue #3136: fail fast before any request preparation. Projection paths
+  // call buildResponsesRequestContextForProjection directly and are exempt.
+  requireAssembledSystemInstruction(options.systemInstruction);
+
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
   const prepared =
@@ -205,7 +205,11 @@ export async function* executeOpenAIResponsesRequest(
     deps,
   );
 
-  await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
+  const dumpResult = await dumpFinalizedRequest(
+    requestContext,
+    invocationEphemerals,
+    deps,
+  );
 
   yield* streamResponses(
     {
@@ -216,6 +220,8 @@ export async function* executeOpenAIResponsesRequest(
       streamRetryInitialDelayMs:
         (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
       normalizedOptions: options,
+      dumpBaseId: dumpResult.baseId,
+      dumpMode: dumpResult.dumpMode,
     },
     deps,
   );
@@ -229,11 +235,11 @@ export async function buildRequestContext(
 ): Promise<PreparedResponsesRequestContext> {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const systemPrompt = await buildSystemPrompt(options, userMemory, deps);
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim (empty for projection).
+  // options.userMemory is deliberately NOT read here: user memory is baked
+  // into the assembled instruction upstream.
+  const systemPrompt = options.systemInstruction ?? '';
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore =
     typeof requestOverrides['store'] === 'boolean'
@@ -254,14 +260,7 @@ export async function buildRequestContext(
     deps,
     stateful.parentId !== undefined,
   );
-  const requestInput = buildRequestInput(
-    input,
-    isCodex,
-    options,
-    userMemory,
-    deps,
-  );
-  const request = createRequest(options, requestInput, requestOverrides, deps);
+  const request = createRequest(options, input, requestOverrides, deps);
   applyInstructionsAndTools(request, systemPrompt, options);
   const reasoning = applyReasoningSettings(
     request,
@@ -332,61 +331,6 @@ async function resolveApiKey(
     isCodex
       ? 'Codex authentication required. Run /auth codex enable to authenticate.'
       : 'OpenAI API key is required',
-  );
-}
-
-async function buildSystemPrompt(
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const toolNames = getToolNamesForPrompt(options);
-  const configWithManagers = options.config as
-    | {
-        getMcpClientManager?: () =>
-          | { getMcpInstructions?: () => string | undefined }
-          | undefined;
-        getSubagentManager?: () => ReturnType<
-          NonNullable<typeof options.config>['getSubagentManager']
-        >;
-      }
-    | undefined;
-  const mcpClientManager = configWithManagers?.getMcpClientManager?.();
-  const mcpInstructions = mcpClientManager?.getMcpInstructions?.();
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNames ?? [],
-    () => configWithManagers?.getSubagentManager?.(),
-  );
-  const corePrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model:
-      options.resolved.model !== ''
-        ? options.resolved.model
-        : deps.getDefaultModel(),
-    tools: toolNames,
-    includeSubagentDelegation,
-    interactionMode:
-      options.config?.isInteractive() === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
-  return mergeSystemInstruction(corePrompt, options.systemInstruction);
-}
-
-function getToolNamesForPrompt(
-  options: NormalizedGenerateChatOptions,
-): string[] | undefined {
-  if (options.tools === undefined) return undefined;
-
-  return Array.from(
-    new Set(
-      options.tools.flatMap((group) =>
-        group.functionDeclarations
-          .map((declaration) => declaration.name)
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ),
   );
 }
 
@@ -542,34 +486,6 @@ function normalizeBaseURL(baseURLCandidate: string): string {
   let baseURL = baseURLCandidate;
   while (baseURL.endsWith('/')) baseURL = baseURL.slice(0, -1);
   return baseURL;
-}
-
-function buildRequestInput(
-  input: ResponsesInputItem[],
-  isCodex: boolean,
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): ResponsesInputItem[] {
-  if (!isCodex) return input;
-
-  const requestInput = input.filter(
-    (message) => !('role' in message) || (message.role as string) !== 'system',
-  );
-  const itemsForInjection = requestInput.filter(
-    (item) => !('type' in item && item.type === 'reasoning'),
-  );
-  injectSyntheticConfigFileRead(itemsForInjection, options, userMemory, deps);
-  const injectedItems = itemsForInjection.filter(
-    (item) => !requestInput.includes(item),
-  );
-  const reasoningItems = requestInput.filter(
-    (item) => 'type' in item && item.type === 'reasoning',
-  );
-  const nonReasoningItems = requestInput.filter(
-    (item) => !('type' in item && item.type === 'reasoning'),
-  );
-  return [...injectedItems, ...reasoningItems, ...nonReasoningItems];
 }
 
 function createRequest(
@@ -782,30 +698,40 @@ function applyPromptCaching(
   if (!isCodex) request.prompt_cache_retention = '24h';
 }
 
+interface DumpFinalizedResult {
+  baseId?: string;
+  dumpMode?: DumpMode;
+}
+
 /**
  * Dumps the finalized Responses request at the common pre-transport seam when
  * context dumping is enabled, matching OpenAI Chat and Anthropic parity.
  * Best-effort: failures are logged and never block the request.
+ * Returns the dump base id and resolved mode so the transport can write a
+ * linked error-response dump on failure (issue #3140).
  */
 async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-): Promise<void> {
+): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
-  if (!shouldDumpSDKContext(dumpMode, false)) return;
-  try {
-    await dumpSDKRequestContext(
-      deps.providerName,
-      '/responses',
-      requestContext.request,
-      requestContext.baseURL,
-    );
-  } catch (error) {
-    deps.logger.debug(
-      () => `Best-effort Responses request dump failed: ${String(error)}`,
-    );
+  if (!shouldDumpSDKContext(dumpMode, false)) {
+    return { dumpMode };
   }
+  const result = await bestEffortDump(
+    'request',
+    deps.providerName,
+    () =>
+      dumpSDKRequestContext(
+        deps.providerName,
+        '/responses',
+        requestContext.request,
+        requestContext.baseURL,
+      ),
+    deps.logger,
+  );
+  return { baseId: result?.baseId, dumpMode };
 }
 
 async function* streamResponses(
@@ -858,40 +784,4 @@ async function buildWebSocketHandshakeHeaders(
   }
   headers['OpenAI-Beta'] = CODEX_WEBSOCKET_BETA_HEADER;
   return headers;
-}
-
-function injectSyntheticConfigFileRead(
-  requestInput: ResponsesInputItem[],
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): void {
-  const syntheticCallId = deps.generateSyntheticCallId();
-
-  let output: string;
-  const targetFile = 'AGENTS.md';
-
-  if (userMemory && userMemory.trim().length > 0) {
-    output = JSON.stringify({
-      content: userMemory,
-    });
-  } else {
-    output = JSON.stringify({
-      error: 'File not found: AGENTS.md',
-    });
-  }
-
-  requestInput.unshift(
-    {
-      type: 'function_call',
-      call_id: syntheticCallId,
-      name: 'read_file',
-      arguments: JSON.stringify({ absolute_path: targetFile }),
-    },
-    {
-      type: 'function_call_output',
-      call_id: syntheticCallId,
-      output,
-    },
-  );
 }

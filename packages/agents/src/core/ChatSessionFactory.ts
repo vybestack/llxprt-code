@@ -16,6 +16,9 @@ import {
 } from './clientToolGovernance.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { ChatSession } from './chatSession.js';
+import { resolveModelForSystemPrompt } from './systemPromptModel.js';
+export { resolveModelForSystemPrompt } from './systemPromptModel.js';
+import type { SystemPromptAssembler } from './chatSession.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -24,6 +27,7 @@ import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-cor
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -268,6 +272,7 @@ async function buildChatFromRuntime(
   todoContinuationService: TodoContinuationService,
   toolRegistry: ToolRegistry | undefined,
   systemInstruction: string,
+  systemPromptAssembler: SystemPromptAssembler,
   createChatSessionInstance: (
     ...args: ConstructorParameters<typeof ChatSession>
   ) => ChatSession,
@@ -314,6 +319,8 @@ async function buildChatFromRuntime(
     runtimeBundle.contentGenerator,
     { systemInstruction, ...generationConfigWithThinking, tools },
     [],
+    triggerPreCompressHook,
+    systemPromptAssembler,
   );
 
   chat.setActiveTodosProvider(async () => {
@@ -370,7 +377,7 @@ export async function createChatSession(
 
   const enabledToolNames = getEnabledToolNamesForPrompt(config);
   const envParts = await getEnvironmentContext(config);
-  const model = runtimeState.model;
+  const model = resolveModelForSystemPrompt(config);
 
   logger.debug(() => `DEBUG [client.startChat]: Model from config: ${model}`);
 
@@ -380,6 +387,15 @@ export async function createChatSession(
     envParts,
     model,
   );
+
+  // Per-turn assembler: reuses the EXISTING buildSystemInstruction with a
+  // model sourced from the provider at request time (issue #3136). This
+  // keeps coreMemory explicit (already passed inside buildSystemInstruction)
+  // so no two-file disk read happens per turn.
+  const systemPromptAssembler: SystemPromptAssembler = {
+    assemble: (turnModel: string) =>
+      buildSystemInstruction(config, enabledToolNames, envParts, turnModel),
+  };
 
   historyService.setActiveTokenizationTarget(model, runtimeState.provider);
   if (reused) {
@@ -405,6 +421,7 @@ export async function createChatSession(
     todoContinuationService,
     toolRegistry,
     systemInstruction,
+    systemPromptAssembler,
     createChatSessionInstance,
     loadRuntime,
   );

@@ -72,6 +72,13 @@ export type DispatchState = {
   hasEmittedVisibleThinking: boolean;
   reasoningText: string;
   reasoningSummaryText: string;
+  /**
+   * Per-stream epoch so reasoning stream ids stay unique across API calls
+   * within one user turn (and across resumed sessions). Generated fresh for
+   * each stream so the index below can restart at 0 without colliding with
+   * ids from another call (issue #3128).
+   */
+  reasoningStreamEpoch: string;
   nextReasoningStreamIndex: number;
   currentReasoningStreamId?: string;
   visibleReasoningSource?: ReasoningDeltaSource;

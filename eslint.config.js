@@ -1205,6 +1205,42 @@ export default tseslint.config(
   // ============================================================================
 
   // ============================================================================
+  // Issue #3136 — single owner for system-prompt assembly
+  //
+  // The agent layer assembles the complete system prompt and passes it to
+  // providers as options.systemInstruction. Providers TRANSPORT it; they must
+  // never rebuild a core prompt. Two independent assemblers is what caused the
+  // prompt to be doubled on every request, and every parameter added to
+  // getCoreSystemPromptAsync was another chance for the two call sites to
+  // disagree (they already disagreed on model, coreMemory and interactionMode).
+  //
+  // This makes a second call site a lint error rather than a latent bug.
+  // vi.mock('...prompts.js') is a call argument, not an import, so provider
+  // tests need no carve-out and none is granted.
+  // ============================================================================
+  {
+    files: ['packages/providers/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@vybestack/llxprt-code-core/core/prompts.js',
+              importNames: ['getCoreSystemPromptAsync'],
+              message:
+                'Providers TRANSPORT the assembled system prompt (options.systemInstruction). Assembly is owned by packages/agents. See issue #3136.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #3136
+  // ============================================================================
+
+  // ============================================================================
   // Issue #1581: subagent.ts decomposition - Size enforcement
   // ============================================================================
   //

@@ -961,9 +961,11 @@ memory limits, and all three must be sized correctly:
    per-container limit passed to the container runtime. You can set this higher
    than the VM memory, but the process will be OOM-killed when the VM runs out
    of memory first.
-3. **Node.js heap limit** (`--max-old-space-size`) — automatically derived from
+3. **Node.js heap limit** (`--max-old-space-size`) — derived from
    the container memory limit when `ui.autoConfigureMaxOldSpaceSize` is enabled
-   (the default).
+   (the default). This applies only when the sandbox CLI runs under Node.js;
+   under Bun, `--max-old-space-size` is not set because Bun does not honour the
+   V8 flag.
 
 If you set the container memory higher than the Podman VM memory, the container
 starts but the process gets OOM-killed (exit code 137) as soon as it tries to

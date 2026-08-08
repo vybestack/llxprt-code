@@ -38,7 +38,6 @@ const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
 }));
-
 function buildNormalizedOptions(
   overrides: Partial<NormalizedGenerateChatOptions> & {
     ephemerals?: Record<string, unknown>;
@@ -73,6 +72,7 @@ function buildNormalizedOptions(
     userMemory: undefined,
     tools: undefined,
     metadata: {},
+    systemInstruction: 'test system prompt',
     resolved: {
       model: 'gpt-5',
       baseURL: 'https://api.openai.com/v1',
@@ -94,7 +94,6 @@ function buildDeps(
     isCodexBaseURL: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
-    generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5',
     getGlobalConfig: () => undefined,
@@ -260,7 +259,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     const dumpedBody = await readDumpedRequest();
     expect(dumpedBody.model).toBe('gpt-5.6-sol');
     expect(Array.isArray(dumpedBody.input)).toBe(true);
-    expect(dumpedBody.instructions).toBe('system prompt');
+    expect(dumpedBody.instructions).toBe('test system prompt');
   });
 
   it('A3: emits finalized request dump when Codex WebSocket path is selected', async () => {

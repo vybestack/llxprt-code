@@ -95,6 +95,7 @@ import {
   buildSystemInstruction,
   createChatSession,
   createChatSessionSafe,
+  resolveModelForSystemPrompt,
 } from './ChatSessionFactory.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
@@ -119,6 +120,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getWorkingDir: vi.fn().mockReturnValue('/workspace'),
     getSettingsService: vi.fn().mockReturnValue({}),
     getContentGeneratorConfig: vi.fn().mockReturnValue({}),
+    getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     getToolRegistry: vi.fn().mockReturnValue(undefined),
     getProviderManager: vi.fn().mockReturnValue(undefined),
     ...overrides,
@@ -604,6 +606,8 @@ describe('createChatSession', () => {
         reasoning: { includeInOutput: true },
       }),
       [],
+      expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -628,6 +632,8 @@ describe('createChatSession', () => {
       expect.anything(),
       expect.not.objectContaining({ reasoning: expect.anything() }),
       [],
+      expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -723,5 +729,170 @@ describe('createChatSessionSafe', () => {
         toolRegistry: undefined,
       }),
     ).rejects.toThrow('Failed to initialize chat');
+  });
+});
+
+describe('resolveModelForSystemPrompt (issue #3138)', () => {
+  it('returns config.getModel() when it is non-blank', () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue('glm-5.2'),
+    });
+    expect(resolveModelForSystemPrompt(config)).toBe('glm-5.2');
+  });
+
+  it('throws when config.getModel() returns an empty string', () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue(''),
+    });
+    expect(() => resolveModelForSystemPrompt(config)).toThrow(
+      /no model identity/i,
+    );
+  });
+
+  it('throws when config.getModel() returns undefined', () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue(undefined),
+    });
+    expect(() => resolveModelForSystemPrompt(config)).toThrow(
+      /no model identity/i,
+    );
+  });
+
+  it('throws when config.getModel() returns only whitespace', () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue('   '),
+    });
+    expect(() => resolveModelForSystemPrompt(config)).toThrow(
+      /no model identity/i,
+    );
+  });
+});
+
+describe('createChatSession: model identity in system prompt (issue #3138)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockResolvedValue('core system prompt');
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([]);
+  });
+
+  it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot', async () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue('glm-5.2'),
+    });
+    const runtimeState = makeRuntimeState({
+      model: 'gpt-5.5',
+      provider: 'openai',
+    });
+    const todoContinuationService = makeTodoContinuationService();
+
+    await createChatSession({
+      config,
+      runtimeState,
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService: undefined,
+      clearStoredHistoryService: vi.fn(),
+      generateContentConfig: {},
+      todoContinuationService,
+      toolRegistry: undefined,
+    });
+
+    expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'glm-5.2' }),
+    );
+  });
+
+  it('uses config.getModel() for tokenization target, not runtimeState snapshot', async () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue('profile-model'),
+    });
+    const runtimeState = makeRuntimeState({
+      model: 'stale-default',
+      provider: 'openai',
+    });
+    const todoContinuationService = makeTodoContinuationService();
+
+    const mockHistoryInstance = {
+      add: vi.fn(),
+      generateTurnKey: vi.fn().mockReturnValue('turn-1'),
+      setBaseTokenOffset: vi.fn(),
+      estimateTokensForText: vi.fn().mockResolvedValue(42),
+      resetTokenAccounting: vi.fn(),
+      setActiveTokenizationTarget: vi.fn(),
+      recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
+      isEmpty: vi.fn().mockReturnValue(true),
+      getAll: vi.fn().mockReturnValue([]),
+    };
+    (
+      HistoryService as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => mockHistoryInstance);
+
+    await createChatSession({
+      config,
+      runtimeState,
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService: undefined,
+      clearStoredHistoryService: vi.fn(),
+      generateContentConfig: {},
+      todoContinuationService,
+      toolRegistry: undefined,
+    });
+
+    expect(
+      mockHistoryInstance.setActiveTokenizationTarget,
+    ).toHaveBeenCalledWith('profile-model', 'openai');
+  });
+
+  it('reflects a provider switch in the prompt model on the next chat creation', async () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue('claude-opus-4'),
+    });
+    const runtimeState = makeRuntimeState({
+      model: 'gpt-5.5',
+      provider: 'openai',
+    });
+    const todoContinuationService = makeTodoContinuationService();
+
+    await createChatSession({
+      config,
+      runtimeState,
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService: undefined,
+      clearStoredHistoryService: vi.fn(),
+      generateContentConfig: {},
+      todoContinuationService,
+      toolRegistry: undefined,
+    });
+
+    expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'claude-opus-4' }),
+    );
+  });
+
+  it('throws when config has no model rather than substituting a vendor default', async () => {
+    const config = makeConfig({
+      getModel: vi.fn().mockReturnValue(''),
+    });
+    const runtimeState = makeRuntimeState({
+      model: 'gpt-5.5',
+      provider: 'openai',
+    });
+    const todoContinuationService = makeTodoContinuationService();
+
+    await expect(
+      createChatSession({
+        config,
+        runtimeState,
+        contentGenerator: makeContentGenerator(),
+        storedHistoryService: undefined,
+        clearStoredHistoryService: vi.fn(),
+        generateContentConfig: {},
+        todoContinuationService,
+        toolRegistry: undefined,
+      }),
+    ).rejects.toThrow(/no model identity/i);
   });
 });

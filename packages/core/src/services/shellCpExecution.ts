@@ -11,7 +11,10 @@ import type {
 } from './shellExecutionTypes.js';
 import { createExitGuard } from './shellExitGuard.js';
 import { makeInactivityTimer } from './shellOutputUtils.js';
-import { killProcessWithEscalation } from './shellProcessKill.js';
+import {
+  isKillablePid,
+  killProcessWithEscalation,
+} from './shellProcessKill.js';
 import {
   type CpExecState,
   handleCpOutput,
@@ -107,12 +110,10 @@ function setupCpAbortHandler(state: CpExecState): () => void {
 
 /** Kill the child process group on abort or inactivity timeout. */
 async function cpKillOnAbort(state: CpExecState): Promise<void> {
-  // Preserve old truthiness semantics: skip pid 0 and undefined
-  if (
-    state.child.pid !== undefined &&
-    state.child.pid !== 0 &&
-    !state.exitedGuard.isExited()
-  ) {
+  // Guard the pid before it can reach process.kill(-pid): pid 0 would signal
+  // the caller's own process group. isKillablePid also rejects negative and
+  // non-finite pids, which the previous `!== 0` check let through.
+  if (isKillablePid(state.child.pid) && !state.exitedGuard.isExited()) {
     await killProcessWithEscalation(
       state.child.pid,
       state.isWindows,

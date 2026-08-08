@@ -77,6 +77,7 @@
     "scripts/bun-test-roots.ts",
     "scripts/run_bun_tests.ts",
     "scripts/bun-junit-to-json-report.ts",
+    "scripts/tests/bun-test-policy.bun.test.ts",
     "scripts/tests/bun-test-roots.bun.test.ts",
     "scripts/tests/bun-test-root-ownership.bun.test.ts",
     "scripts/tests/test-file-coverage.bun.test.ts",

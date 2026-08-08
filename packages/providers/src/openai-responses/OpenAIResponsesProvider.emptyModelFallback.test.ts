@@ -6,15 +6,13 @@
 
 /**
  * Behavioral regression: when the normalized resolved model is empty,
- * the system-prompt builder must fall back to the provider's default
- * model (deps.getDefaultModel) — the same source createRequest uses —
- * never the provider base URL.
+ * the request body model must fall back to the provider's default
+ * model (deps.getDefaultModel) — never the provider base URL.
  *
  * Exercises the real executor function with a real NormalizedGenerateChatOptions
- * and a real ResponsesExecutorDeps. Only the fetch boundary and the prompt-
- * service boundary are intercepted (both are legitimate I/O edges).
+ * and a real ResponsesExecutorDeps. Only the fetch boundary is intercepted.
  *
- * @issue #2483
+ * @issue #2483, #3136
  */
 
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
@@ -29,11 +27,9 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
-const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
+const SYSTEM_INSTRUCTION = 'test system instruction';
 
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
-}));
+let capturedRequest: Record<string, unknown> | undefined;
 
 function buildNormalizedOptions(
   overrides: Partial<NormalizedGenerateChatOptions> = {},
@@ -66,18 +62,12 @@ function buildNormalizedOptions(
     userMemory: undefined,
     tools: undefined,
     metadata: {},
+    systemInstruction: SYSTEM_INSTRUCTION,
     resolved: {
       model: '',
       baseURL: 'https://api.openai.com/v1',
       authToken: 'test-token',
     },
-    // The double assertion is required because `config` here is a
-    // lightweight `createRuntimeConfigStub`, which intentionally does NOT
-    // implement the full core `Config` surface that
-    // `NormalizedGenerateChatOptions.config` demands. The executor only
-    // touches the narrow subset exercised below, so constructing a real
-    // `Config` would add large, irrelevant setup. This matches the
-    // established stub convention used across the providers test suite.
   } as unknown as NormalizedGenerateChatOptions;
 
   return { ...base, ...overrides };
@@ -94,7 +84,6 @@ function buildDeps(
     isCodexBaseURL: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
-    generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'o3-mini',
     getGlobalConfig: () => undefined,
@@ -102,15 +91,59 @@ function buildDeps(
   };
 }
 
+/** The executor sends the body as a Blob, so extract+parse it accordingly. */
+async function readRequestBodyText(body: BodyInit): Promise<string> {
+  if (body instanceof Blob) return body.text();
+  if (typeof body === 'string') return body;
+  return new Response(body).text();
+}
+
+async function captureRequestModel(): Promise<
+  Record<string, unknown> | undefined
+> {
+  const calls = (
+    globalThis as unknown as { fetch: { mock: { calls: unknown[][] } } }
+  ).fetch.mock.calls;
+  if (calls.length === 0) {
+    throw new Error(
+      'Expected fetch to have been called, but it never was — the executor threw before reaching the network boundary.',
+    );
+  }
+  const init = calls[0][1] as { body?: BodyInit } | undefined;
+  if (init?.body == null) return undefined;
+  const bodyText = await readRequestBodyText(init.body);
+  return bodyText ? JSON.parse(bodyText) : undefined;
+}
+
 describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:2483', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+    capturedRequest = undefined;
     setGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        body: undefined,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(
+              encoder.encode(
+                'data: ' +
+                  JSON.stringify({
+                    type: 'response.completed',
+                    response: {
+                      output: [
+                        {
+                          content: [{ type: 'output_text', text: 'response' }],
+                        },
+                      ],
+                    },
+                  }) +
+                  '\n\n',
+              ),
+            );
+            controller.close();
+          },
+        }),
       }),
     );
   });
@@ -120,8 +153,11 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     vi.restoreAllMocks();
   });
 
-  it('passes deps.getDefaultModel() to getCoreSystemPromptAsync when resolved model is empty', async () => {
-    const deps = buildDeps({ getDefaultModel: () => 'o3-mini' });
+  it('uses deps.getDefaultModel() as the request model when resolved model is empty', async () => {
+    const deps = buildDeps({
+      getDefaultModel: () => 'o3-mini',
+      resolveAuthTokenForPrompt: async () => 'test-token',
+    });
     const options = buildNormalizedOptions({
       resolved: {
         model: '',
@@ -133,11 +169,9 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     const iterator = executeOpenAIResponsesRequest(options, deps);
     await iterator.next();
 
-    expect(getCoreSystemPromptAsyncSpy).toHaveBeenCalledTimes(1);
-    const promptArg = getCoreSystemPromptAsyncSpy.mock.calls[0][0] as {
-      model: string;
-    };
-    expect(promptArg.model).toBe('o3-mini');
+    // The fetch mock captures the serialized request body
+    capturedRequest = await captureRequestModel();
+    expect(capturedRequest?.model).toBe('o3-mini');
   });
 
   it('does NOT pass the provider base URL as the model when resolved model is empty', async () => {
@@ -145,6 +179,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     const deps = buildDeps({
       getDefaultModel: () => 'o3-mini',
       getProviderBaseURL: () => baseURL,
+      resolveAuthTokenForPrompt: async () => 'test-token',
     });
     const options = buildNormalizedOptions({
       resolved: {
@@ -157,20 +192,16 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     const iterator = executeOpenAIResponsesRequest(options, deps);
     await iterator.next();
 
-    expect(getCoreSystemPromptAsyncSpy).toHaveBeenCalledTimes(1);
-    const promptArg = getCoreSystemPromptAsyncSpy.mock.calls[0][0] as {
-      model: string;
-    };
-    // Positive assertion: the fallback must be the provider default, not
-    // merely "anything other than the base URL" (which undefined/null would
-    // also satisfy). This makes the regression test fail if the fallback
-    // logic breaks in any way.
-    expect(promptArg.model).toBe('o3-mini');
-    expect(promptArg.model).not.toBe(baseURL);
+    capturedRequest = await captureRequestModel();
+    expect(capturedRequest?.model).toBe('o3-mini');
+    expect(capturedRequest?.model).not.toBe(baseURL);
   });
 
   it('passes the resolved model when it is non-empty', async () => {
-    const deps = buildDeps({ getDefaultModel: () => 'o3-mini' });
+    const deps = buildDeps({
+      getDefaultModel: () => 'o3-mini',
+      resolveAuthTokenForPrompt: async () => 'test-token',
+    });
     const options = buildNormalizedOptions({
       resolved: {
         model: 'gpt-5.6-sol',
@@ -182,10 +213,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     const iterator = executeOpenAIResponsesRequest(options, deps);
     await iterator.next();
 
-    expect(getCoreSystemPromptAsyncSpy).toHaveBeenCalledTimes(1);
-    const promptArg = getCoreSystemPromptAsyncSpy.mock.calls[0][0] as {
-      model: string;
-    };
-    expect(promptArg.model).toBe('gpt-5.6-sol');
+    capturedRequest = await captureRequestModel();
+    expect(capturedRequest?.model).toBe('gpt-5.6-sol');
   });
 });

@@ -43,6 +43,7 @@ export interface ProviderCallOptionsInit {
   tools?: ProviderToolset;
   metadata?: Record<string, unknown>;
   userMemory?: GenerateChatOptions['userMemory'];
+  systemInstruction?: string;
   resolved?: GenerateChatOptions['resolved'];
   settings?: SettingsService;
   settingsOverrides?: SettingsOverrides;
@@ -262,5 +263,18 @@ export function createProviderCallOptions(
     invocation,
     resolved: init.resolved,
     userMemory: init.userMemory,
+    // Issue #3136: providers require a non-empty systemInstruction on real
+    // chat completions. Defaulting here lets existing tests that previously
+    // relied on the dead getCoreSystemPromptAsync mock keep working without
+    // per-file edits.
+    //
+    // Presence of the key -- not its value -- selects the behavior, so an
+    // explicit `systemInstruction: undefined` genuinely means "absent" and can
+    // exercise the fail-fast path. A `??` default would swallow that and make
+    // the missing case untestable through this helper.
+    systemInstruction:
+      'systemInstruction' in init
+        ? init.systemInstruction
+        : 'test system prompt',
   };
 }

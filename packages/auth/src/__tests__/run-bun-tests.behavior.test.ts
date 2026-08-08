@@ -12,6 +12,14 @@ import {
   runTestFile,
   type TestResult,
 } from '../../run-bun-tests.js';
+import { DEFAULT_PER_FILE_TIMEOUT_MS } from '../../../../scripts/lib/bun-test-policy.js';
+
+/**
+ * Derived from the shared policy rather than hardcoded: the assertion is that
+ * the reason names the budget that was actually applied, not that the budget
+ * has one particular value (issue #3139).
+ */
+const EXPECTED_TIMEOUT_REASON = `Timed out after ${DEFAULT_PER_FILE_TIMEOUT_MS / 1000}s`;
 
 describe('auth run-bun-tests JUnit failure reporting', () => {
   const baseResult: TestResult = {
@@ -38,7 +46,7 @@ describe('auth run-bun-tests JUnit failure reporting', () => {
 
   it('reports a timeout', () => {
     const xml = generateJUnit([{ ...baseResult, timedOut: true }], 1, 1);
-    expect(xml).toContain('Timed out after 60s');
+    expect(xml).toContain(EXPECTED_TIMEOUT_REASON);
   });
 
   it('falls back to an exit code when neither signal nor timeout is present', () => {
@@ -67,7 +75,7 @@ describe('auth run-bun-tests failure reason formatting', () => {
       signal: 'SIGTERM',
       exitCode: 1,
     });
-    expect(reason).toBe('Timed out after 60s');
+    expect(reason).toBe(EXPECTED_TIMEOUT_REASON);
   });
 
   it('reports a signal before an exit code', () => {

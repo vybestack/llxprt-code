@@ -47,6 +47,7 @@ import {
   type GeminiGenerationResult,
   type NonOAuthContentGenerator,
 } from './geminiGenerationExecution.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 
 /**
  * Represents the default Gemini provider.
@@ -378,6 +379,11 @@ export class GeminiProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
+    // before any request preparation so a missing instruction is never
+    // silently transported as an empty prompt.
+    requireAssembledSystemInstruction(options.systemInstruction);
+
     const streamingEnabled = this.getStreamingPreference(options);
     const setup = await buildGenerationSetup(
       options,

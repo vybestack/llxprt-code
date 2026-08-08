@@ -690,7 +690,6 @@ export class Turn {
           watchdog,
           timeoutController,
           streamIterator,
-          timeoutSignal,
           signal,
           onParentAbort,
         );
@@ -707,22 +706,27 @@ export class Turn {
   }
 
   /**
-   * Tears down watchdog, timeout controller, and stream iterator without
+   * Tears down watchdog, stream iterator, and timeout controller without
    * letting a cleanup failure mask the original stream result. Iterator
    * cleanup rejections are logged as warnings but never rethrown.
+   *
+   * Iterator closure is awaited before the timeout controller is aborted so
+   * that a cooperative iterator's asynchronous cleanup (return()'s promise or
+   * a generator's finally block) completes before the turn finishes —
+   * including when the consumer exits early. The cleanup signal is omitted so
+   * the turn's own abort cannot short-circuit the wait; a noncooperative
+   * iterator is still bounded by closeIteratorBounded's internal timeout.
    */
   private async cleanupStreamResources(
     watchdog: StreamWatchdog,
     timeoutController: AbortController,
     streamIterator: AsyncIterator<StreamEvent> | undefined,
-    timeoutSignal: AbortSignal,
     signal: AbortSignal,
     onParentAbort: () => void,
   ): Promise<void> {
     watchdog.cancel();
-    timeoutController.abort();
     try {
-      await closeIteratorBounded(streamIterator, timeoutSignal);
+      await closeIteratorBounded(streamIterator);
     } catch (cleanupError) {
       this.logger.warn(
         () =>
@@ -733,6 +737,7 @@ export class Turn {
           }`,
       );
     }
+    timeoutController.abort();
     signal.removeEventListener('abort', onParentAbort);
   }
 

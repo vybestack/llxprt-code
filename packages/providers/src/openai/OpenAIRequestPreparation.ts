@@ -18,10 +18,6 @@ import type OpenAI from 'openai';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
-import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
@@ -84,61 +80,6 @@ function convertAndGuardTools(
   }
 
   return formattedTools;
-}
-
-/**
- * Resolve the system prompt from user memory, MCP instructions, and config.
- */
-async function resolveSystemPrompt(
-  options: NormalizedGenerateChatOptions,
-  tools: NormalizedGenerateChatOptions['tools'],
-  model: string,
-  config: Config | undefined,
-): Promise<string> {
-  const flattenedToolNames =
-    tools?.flatMap((group) =>
-      group.functionDeclarations
-        .map((decl) => decl.name)
-        .filter((name): name is string => !!name),
-    ) ?? [];
-  const toolNamesArg =
-    tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
-
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const mcpClientManager =
-    typeof config?.getMcpClientManager === 'function'
-      ? config.getMcpClientManager()
-      : undefined;
-  const mcpInstructions = mcpClientManager
-    ? mcpClientManager.getMcpInstructions()
-    : undefined;
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNamesArg ?? [],
-    () =>
-      typeof config?.getSubagentManager === 'function'
-        ? config.getSubagentManager()
-        : undefined,
-  );
-  const corePrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model,
-    tools: toolNamesArg,
-    includeSubagentDelegation,
-    interactionMode:
-      config != null &&
-      typeof config.isInteractive === 'function' &&
-      config.isInteractive() === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
-  // Issue #2410: Merge the caller-supplied system instruction (e.g. a
-  // subagent persona/task prompt) with the core system prompt so the
-  // instruction reaches the Chat Completions API as the system message.
-  return mergeSystemInstruction(corePrompt, options.systemInstruction);
 }
 
 type OpenAIInvocationRuntime = {
@@ -329,8 +270,11 @@ export async function prepareRequest(
   const streamingSetting = ephemeralSettings['streaming'];
   const streamingEnabled = streamingSetting !== 'disabled';
 
-  // Resolve and build system prompt
-  const systemPrompt = await resolveSystemPrompt(options, tools, model, config);
+  // Issue #3136: The agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim — it never rebuilds a core
+  // prompt. Projection paths may call this without an instruction; in that
+  // case an empty system message is used so the estimate still resolves.
+  const systemPrompt = options.systemInstruction ?? '';
 
   // Add system prompt as the first message
   const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [

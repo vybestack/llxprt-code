@@ -304,4 +304,43 @@ describe('applyThoughtToState identity-aware streaming updates', () => {
     expect(args.thinkingBlocksRef.current).toStrictEqual([]);
     expect(args.setPendingHistoryItem).not.toHaveBeenCalled();
   });
+
+  it('appends a new block when a different stream id follows a complete block (issue #3128)', () => {
+    // Models iterate within one user turn. Iteration 1 completes its reasoning
+    // (streamId A); iteration 2 begins reasoning under a distinct streamId B.
+    // The ref must hold BOTH blocks in order and preserve A verbatim — the bug
+    // was that providers reused the same id, so B replaced A.
+    const args = createArgs({
+      getContentPrefixIdentity: () => null,
+    });
+
+    applyThought(args, {
+      subject: '',
+      description: 'Why I called the first tool',
+      streamId: 'anthropic-thinking:aaa:0:block-0',
+      streamStatus: 'complete',
+    });
+    applyThought(args, {
+      subject: '',
+      description: 'Now reasoning about the result',
+      streamId: 'anthropic-thinking:bbb:0:block-0',
+      streamStatus: 'delta',
+    });
+
+    expect(args.thinkingBlocksRef.current).toHaveLength(2);
+    expect(
+      args.thinkingBlocksRef.current.map((block) => block.thought),
+    ).toStrictEqual([
+      'Why I called the first tool',
+      'Now reasoning about the result',
+    ]);
+    expect(
+      args.thinkingBlocksRef.current.map((block) => block.streamId),
+    ).toStrictEqual([
+      'anthropic-thinking:aaa:0:block-0',
+      'anthropic-thinking:bbb:0:block-0',
+    ]);
+    expect(args.thinkingBlocksRef.current[0]?.streamStatus).toBe('complete');
+    expect(args.thinkingBlocksRef.current[1]?.streamStatus).toBe('delta');
+  });
 });

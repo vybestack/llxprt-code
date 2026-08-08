@@ -18,6 +18,10 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import {
+  type SystemPromptPlacement,
+  requireAssembledSystemInstruction,
+} from '../utils/systemPromptPlacement.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -368,6 +372,33 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * Issue #3136: declare where the assembled system prompt may go.
+   *
+   * Under OAuth (`claudecode`) Anthropic REJECTS any request whose `system`
+   * field carries content other than the Claude Code string, so the prompt
+   * must be placed at the top of the context instead. This is a declaration
+   * consumed by the shared placement policy, not a placement decision made
+   * here.
+   */
+  getSystemPromptPlacement(
+    options: GenerateChatOptions,
+  ): SystemPromptPlacement {
+    const authToken = options.resolved?.authToken;
+    if (typeof authToken === 'string') {
+      return this.classifyOAuthToken(authToken)
+        ? 'context-prefix'
+        : 'system-field';
+    }
+    // A RuntimeAuthTokenProvider is this provider's OAuth refresh mechanism
+    // (see resolveClientAuthToken), so it resolves to an sk-ant-oat token at
+    // request time. Treating it as system-field would put our prompt in the
+    // reserved OAuth `system` field and Anthropic would reject the request.
+    return isRuntimeAuthTokenProvider(authToken)
+      ? 'context-prefix'
+      : 'system-field';
+  }
+
+  /**
    * Returns default model list when no authentication is available
    */
   private getDefaultModels(): IModel[] {
@@ -580,6 +611,11 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
+    // before any request preparation so a missing instruction is never
+    // silently transported as an empty prompt.
+    requireAssembledSystemInstruction(options.systemInstruction);
+
     const prepared =
       options.promptEnvelopeTransportToken === undefined
         ? undefined

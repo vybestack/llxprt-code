@@ -13,7 +13,7 @@
  * would leak mocks between files.
  *
  * Discovery is purely structural: there is no manifest, allow-list or exclude
- * list. The former Vitest setup this replaced carried both a large `baseExclude` glob
+ * list. The Vitest setup this replaced carried both a large `baseExclude` glob
  * list and a separate integration-only command, and files matching either were
  * silently never run — they drifted out of sync with the product without any
  * signal. Every test file in the workspace runs here.
@@ -24,25 +24,38 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { availableParallelism } from 'node:os';
+import {
+  DEFAULT_PER_FILE_TIMEOUT_MS,
+  DEFAULT_PER_TEST_TIMEOUT_MS,
+  resolveTestConcurrency,
+} from '../../scripts/lib/bun-test-policy.js';
 
-const PER_FILE_TIMEOUT_MS = 120_000;
+const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**
- * Per-test timeout, matching the testTimeout the removed vitest config set.
- * Bun defaults to 5s, which the tests that spawn the real CLI exceed once the
- * suite runs with concurrency. Passed as a flag because the bunfig.toml key is
- * not picked up for a single-file invocation.
+ * Per-test timeout. Bun defaults to 5s, which the tests that spawn the real
+ * CLI exceed once the suite runs with concurrency. Passed as a flag because
+ * the bunfig.toml key is not picked up for a single-file invocation.
+ *
+ * Raised from 30s to the shared budget for issue #3139: this workspace was the
+ * worst-failing CI shard (5/15 first attempts) because it combined the tight
+ * bound with a pool that saturated every core.
  */
-const PER_TEST_TIMEOUT_MS = 30_000;
+const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
 
 /**
  * Integration tests spawn the built CLI, which cold-starts from TypeScript
  * source and is far slower than an in-process test — especially on a loaded CI
  * runner. They get a larger per-test budget so a slow boot is not reported as a
  * failure.
+ *
+ * Expressed as a multiple of the shared budget rather than a fixed 120s: once
+ * the unit budget rose to 180s for issue #3139 a fixed value silently became
+ * the *smaller* of the two, which would have given the slowest tests in the
+ * workspace the tightest bound. It stays well inside
+ * PER_INTEGRATION_FILE_TIMEOUT_MS, which remains the hang backstop.
  */
-const PER_INTEGRATION_TEST_TIMEOUT_MS = 120_000;
+const PER_INTEGRATION_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS * 2;
 
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -55,7 +68,7 @@ const TEST_ROOTS = ['src', 'test', 'test-bun', 'test-utils'];
 /**
  * Test files use three naming conventions in this workspace: `*.test.*`,
  * `*.spec.*`, and `*.bun.*` for suites that import `bun:test` directly rather
- * than through a third-party runner. All three must be discovered — the `.bun.*`
+ * than through the Vitest shim. All three must be discovered — the `.bun.*`
  * suites were previously reachable only through the shared manifest, so
  * matching just `.test`/`.spec` would silently stop running eleven files.
  */
@@ -104,7 +117,7 @@ function parseConcurrency(): number {
       return parsed;
     }
   }
-  return Math.max(1, Math.min(8, availableParallelism()));
+  return resolveTestConcurrency({ envVar: 'LLXPRT_CLI_TEST_CONCURRENCY' });
 }
 
 export function isTestFile(fileName: string): boolean {
@@ -186,11 +199,17 @@ function runTestFile(file: string): Promise<TestResult> {
       output += chunk.toString();
     });
 
+    // Set by the timer so the exit handler can report the real reason. The
+    // result is only produced once the process has actually exited: killing a
+    // tree only signals it, so resolving from the timer would free this worker
+    // slot while the tree was still winding down. The pool would then exceed
+    // its concurrency cap exactly when the machine is already struggling —
+    // which is how a timeout on one file turns into timeouts on others.
+    let killedByTimeout = false;
+
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+      killedByTimeout = true;
       killProcessTree(child);
-      resolve({ file, passed: false, exitCode: null, timedOut: true, output });
     }, fileTimeoutForFile(file));
 
     child.on('exit', (code) => {
@@ -199,9 +218,9 @@ function runTestFile(file: string): Promise<TestResult> {
       clearTimeout(timer);
       resolve({
         file,
-        passed: code === 0,
-        exitCode: code,
-        timedOut: false,
+        passed: !killedByTimeout && code === 0,
+        exitCode: killedByTimeout ? null : code,
+        timedOut: killedByTimeout,
         output,
       });
     });
@@ -278,7 +297,7 @@ export function escapeXml(value: string): string {
 /**
  * Reads the per-file case tallies out of Bun's summary lines, e.g.
  * " 12 pass", " 1 fail", " 2 skip". Reported so the migration's test-count
- * parity with the former Vitest runner can be checked mechanically rather than by eye.
+ * parity with Vitest can be checked mechanically rather than by eye.
  */
 /**
  * Removes CSI escape sequences so summary parsing does not depend on whether
@@ -315,6 +334,94 @@ export function parseCaseCounts(output: string): {
   };
 }
 
+/**
+ * React's "not wrapped in act(...)" warning is a fixed ~10-line block that can
+ * repeat dozens of times in a single React/Ink test file. A naive tail of the
+ * output is then entirely warning text, and the assertion failures that
+ * actually failed the file are unrecoverable from the log. This collapses each
+ * warning block to a one-line count before taking the excerpt, so the failures
+ * stay visible within the budget. (issue #3149)
+ */
+const ACT_WARNING_START =
+  /^An update to .* inside a test was not wrapped in act\(\.\.\.\)/;
+const ACT_WARNING_END =
+  /Learn more at https:\/\/react\.dev\/link\/wrap-tests-with-act/;
+const NEWLINE = String.fromCharCode(10);
+
+function collapseActWarnings(output: string): {
+  body: string;
+  elidedWarnings: number;
+} {
+  const kept: string[] = [];
+  let elided = 0;
+  let skipping = false;
+  // Cap lines consumed after a warning start whose end marker never arrives
+  // (truncated at the source). The standard block is ~10 lines.
+  let skipLineCount = 0;
+  const MAX_WARNING_BODY_LINES = 15;
+  for (const line of output.split(NEWLINE)) {
+    if (!skipping) {
+      if (ACT_WARNING_START.test(line)) {
+        elided += 1;
+        skipLineCount = 1;
+        skipping = !ACT_WARNING_END.test(line);
+      } else {
+        kept.push(line);
+      }
+    } else {
+      skipLineCount++;
+      if (ACT_WARNING_END.test(line)) {
+        skipping = false;
+      } else if (ACT_WARNING_START.test(line)) {
+        elided += 1;
+        skipLineCount = 1;
+        skipping = !ACT_WARNING_END.test(line);
+      } else if (skipLineCount > MAX_WARNING_BODY_LINES) {
+        skipping = false;
+        kept.push(line);
+      }
+    }
+  }
+  return { body: kept.join(NEWLINE), elidedWarnings: elided };
+}
+
+/**
+ * Keeps an initial run and a final run of `text` so both the first failures
+ * and the trailing summary stay visible when the content exceeds the budget.
+ */
+function headTail(text: string, maxChars: number): string {
+  if (maxChars <= 0) return '';
+  if (text.length <= maxChars) return text;
+  const marker = `
+[... output elided ...]
+`;
+  const budget = Math.max(0, maxChars - marker.length);
+  const head = Math.ceil(budget / 2);
+  const tail = budget - head;
+  // Guard tail === 0: String.prototype.slice(-0) returns the whole string.
+  const tailSlice = tail > 0 ? text.slice(-tail) : '';
+  return `${text.slice(0, head)}${marker}${tailSlice}`;
+}
+
+/**
+ * Returns a bounded excerpt of a failing file's output that keeps assertion
+ * failures visible even when repetitive diagnostic noise would otherwise crowd
+ * them out of a fixed-size slice.
+ */
+export function failureExcerpt(output: string, maxChars: number): string {
+  if (output.length <= maxChars) {
+    return output;
+  }
+  const { body, elidedWarnings } = collapseActWarnings(output);
+  const banner =
+    elidedWarnings > 0
+      ? `[${elidedWarnings} React "not wrapped in act(...)" warning block(s) elided]
+`
+      : '';
+  const excerpt = headTail(body, maxChars - banner.length);
+  return (banner + excerpt).slice(0, maxChars);
+}
+
 export function generateJUnit(results: readonly TestResult[]): string {
   const failedCount = results.filter((result) => !result.passed).length;
   const testCases = results
@@ -330,7 +437,7 @@ export function generateJUnit(results: readonly TestResult[]): string {
             }s">TIMEOUT</failure>`
           : `<failure message="Exit code ${
               result.exitCode ?? -1
-            }">${escapeXml(result.output.slice(-4000))}</failure>`;
+            }">${escapeXml(failureExcerpt(stripAnsi(result.output), 4000))}</failure>`;
       return `    <testcase classname="${className}" name="${className}">${failure}</testcase>`;
     })
     .join('\n');
@@ -395,7 +502,7 @@ async function main(): Promise<void> {
 
   for (const result of failed) {
     console.error(`\n----- ${result.file} -----`);
-    console.error(result.output.slice(-6000));
+    console.error(failureExcerpt(stripAnsi(result.output), 6000));
   }
 
   const cases = results.reduce(

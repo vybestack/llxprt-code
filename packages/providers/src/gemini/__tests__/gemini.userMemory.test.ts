@@ -24,22 +24,6 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { GeminiProvider } from '../GeminiProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import type { CoreSystemPromptOptions } from '@vybestack/llxprt-code-core/core/prompts.js';
-
-// Track what system prompts were generated
-let capturedSystemPrompts: string[] = [];
-
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(
-    async (options: CoreSystemPromptOptions | undefined) => {
-      const prompt = options?.userMemory
-        ? `SYSTEM[${options.userMemory}]`
-        : 'SYSTEM[empty]';
-      capturedSystemPrompts.push(prompt);
-      return prompt;
-    },
-  ),
-}));
 
 const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,
@@ -97,10 +81,16 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
   let config: Config;
   const TEST_USER_MEMORY =
     'Test context from AGENTS.md: Create commit.bat when asked';
+  // Simulates the COMPLETE prompt the agent layer assembles (issue #3136):
+  // core prompt + user memory baked in. Providers transport this verbatim
+  // and never rebuild a core prompt from userMemory.
+  const ASSEMBLED_PROMPT = `You are a helpful assistant.
+
+# LLxprt Code Added Memories
+${TEST_USER_MEMORY}`;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    capturedSystemPrompts = [];
     googleGenAIState.instances = [];
     googleGenAIState.streamCalls = [];
     googleGenAIState.nonStreamCalls = [];
@@ -166,6 +156,7 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       runtime,
       invocation,
       userMemory: TEST_USER_MEMORY,
+      systemInstruction: ASSEMBLED_PROMPT,
     });
 
     // Queue a response
@@ -187,16 +178,13 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       chunks.push(chunk);
     }
 
-    // Verify system prompt was called with userMemory
-    expect(capturedSystemPrompts.length).toBeGreaterThan(0);
-    expect(capturedSystemPrompts[0]).toContain(TEST_USER_MEMORY);
-    expect(capturedSystemPrompts[0]).not.toBe('SYSTEM[empty]');
-
-    // Verify the request included systemInstruction
+    // Issue #3136: providers transport options.systemInstruction verbatim.
+    // The user memory now lives in the agent-assembled instruction, so verify
+    // it reaches the Gemini request systemInstruction field exactly once.
     expect(googleGenAIState.streamCalls.length).toBe(1);
     const request = googleGenAIState.streamCalls[0].request;
     expect(request).toHaveProperty('systemInstruction');
-    expect(request.systemInstruction).toContain(TEST_USER_MEMORY);
+    expect(request.systemInstruction).toBe(ASSEMBLED_PROMPT);
   });
 
   it('should preserve userMemory after simulated profile switch', async () => {
@@ -235,6 +223,7 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       runtime: runtime1,
       invocation: invocation1,
       userMemory: TEST_USER_MEMORY,
+      systemInstruction: ASSEMBLED_PROMPT,
     });
 
     queueGoogleStream([
@@ -255,9 +244,11 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       chunks1.push(chunk);
     }
 
-    // Verify first call had userMemory
-    expect(capturedSystemPrompts.length).toBe(1);
-    expect(capturedSystemPrompts[0]).toContain(TEST_USER_MEMORY);
+    // Verify first call transported the agent-assembled instruction verbatim
+    expect(googleGenAIState.streamCalls.length).toBe(1);
+    expect(googleGenAIState.streamCalls[0].request.systemInstruction).toBe(
+      ASSEMBLED_PROMPT,
+    );
 
     // Simulate profile switch - create new provider instance with different auth
     // but same config (which should still have userMemory)
@@ -297,6 +288,7 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       runtime: runtime2,
       invocation: invocation2,
       userMemory: TEST_USER_MEMORY,
+      systemInstruction: ASSEMBLED_PROMPT,
     });
 
     queueGoogleStream([
@@ -317,15 +309,12 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       chunks2.push(chunk);
     }
 
-    // Verify second call ALSO had userMemory (this is the bug - it would be empty)
-    expect(capturedSystemPrompts.length).toBe(2);
-    expect(capturedSystemPrompts[1]).toContain(TEST_USER_MEMORY);
-    expect(capturedSystemPrompts[1]).not.toBe('SYSTEM[empty]');
-
-    // Verify both requests included systemInstruction with userMemory
+    // Issue #409: the agent-assembled instruction (which carries user memory)
+    // must NOT be lost across a profile switch. The second request must carry
+    // the identical instruction verbatim.
     expect(googleGenAIState.streamCalls.length).toBe(2);
     const request2 = googleGenAIState.streamCalls[1].request;
     expect(request2).toHaveProperty('systemInstruction');
-    expect(request2.systemInstruction).toContain(TEST_USER_MEMORY);
+    expect(request2.systemInstruction).toBe(ASSEMBLED_PROMPT);
   });
 });

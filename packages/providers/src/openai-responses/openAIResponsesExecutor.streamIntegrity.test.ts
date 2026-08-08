@@ -125,6 +125,7 @@ function buildNormalizedOptions(
     invocation,
     userMemory: undefined,
     tools: undefined,
+    systemInstruction: 'test system prompt',
     metadata: {},
     resolved: {
       model: 'gpt-5',
@@ -148,7 +149,6 @@ function buildDeps(
     isCodexBaseURL: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
-    generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => true,
     getDefaultModel: () => 'gpt-5',
     getGlobalConfig: () => undefined,

@@ -216,9 +216,10 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       'Let me think',
     ]);
     const streamIds = thinkingBlocks.map((block) => block.streamId);
-    expect(new Set(streamIds)).toStrictEqual(
-      new Set(['openai-responses-reasoning:0']),
-    );
+    // Within one reasoning lifecycle every delta plus the final complete
+    // emission must collapse onto ONE stream id.
+    expect(new Set(streamIds).size).toBe(1);
+    expect(streamIds[0]?.startsWith('openai-responses-reasoning:')).toBe(true);
     expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
       'delta',
       'delta',
@@ -245,10 +246,9 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       'Checking',
       'Checking',
     ]);
-    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
-      'openai-responses-reasoning:0',
-      'openai-responses-reasoning:0',
-    ]);
+    const streamIds = thinkingBlocks.map((block) => block.streamId);
+    expect(new Set(streamIds).size).toBe(1);
+    expect(streamIds[0]?.startsWith('openai-responses-reasoning:')).toBe(true);
     expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
       'delta',
       'complete',
@@ -277,12 +277,17 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       'Second',
       'Second',
     ]);
-    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
-      'openai-responses-reasoning:0',
-      'openai-responses-reasoning:0',
-      'openai-responses-reasoning:1',
-      'openai-responses-reasoning:1',
-    ]);
+    const streamIds = thinkingBlocks.map((block) => block.streamId);
+    // First lifecycle (delta + complete) shares one id; second lifecycle a
+    // different id; the two never collide.
+    expect(streamIds[0]).toBe(streamIds[1]);
+    expect(streamIds[2]).toBe(streamIds[3]);
+    expect(streamIds[0]).not.toBe(streamIds[2]);
+    expect(
+      streamIds.every(
+        (id) => id?.startsWith('openai-responses-reasoning:') === true,
+      ),
+    ).toBe(true);
     expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
       'delta',
       'complete',
@@ -539,8 +544,10 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       'delta',
       'complete',
     ]);
-    expect(thinkingBlocks[1]?.streamId).toBe('openai-responses-reasoning:0');
-    expect(thinkingBlocks[2]?.streamId).toBe('openai-responses-reasoning:0');
+    expect(thinkingBlocks[1]?.streamId).toBe(thinkingBlocks[2]?.streamId);
+    expect(
+      thinkingBlocks[1]?.streamId?.startsWith('openai-responses-reasoning:'),
+    ).toBe(true);
   });
 
   it('should re-emit hidden ThinkingBlock with encrypted_content after visible emission', async () => {
@@ -600,5 +607,43 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       'delta',
       'complete',
     ]);
+  });
+
+  it('produces distinct reasoning stream ids across consecutive streams (issue #3128)', async () => {
+    // Each parseResponsesStream call drives one OpenAI Responses API call. A
+    // user turn spans many such calls, and the UI ref that consumes these ids
+    // lives for the whole turn, so ids must be unique across calls.
+    const nl = String.fromCharCode(10);
+    const buildChunks = (thought: string): string[] => [
+      `data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"${thought}"}${nl}${nl}`,
+      `data: {"type":"response.reasoning_text.done","sequence_number":2}${nl}${nl}`,
+    ];
+
+    const collectStreamIds = async (thought: string): Promise<string[]> => {
+      const stream = createSSEStream(buildChunks(thought));
+      let messages: IContent[] = [];
+      for await (const message of parseResponsesStream(stream)) {
+        messages = [...messages, message];
+      }
+      return collectThinkingBlocks(messages).map((block) => block.streamId);
+    };
+
+    const firstIds = await collectStreamIds('First iteration reasoning');
+    const secondIds = await collectStreamIds('Second iteration reasoning');
+
+    // Within each stream, the delta + complete share one id.
+    expect(new Set(firstIds).size).toBe(1);
+    expect(new Set(secondIds).size).toBe(1);
+
+    // Cross-stream: the two iterations must NOT reuse the same id.
+    expect(firstIds[0]).not.toBe(secondIds[0]);
+
+    // Cross-session safety: freshly generated ids must never equal the legacy
+    // format (`openai-responses-reasoning:0`) carried by a resumed session's
+    // persisted history.
+    for (const id of [...firstIds, ...secondIds]) {
+      expect(id).not.toBe('openai-responses-reasoning:0');
+      expect(id.startsWith('openai-responses-reasoning:')).toBe(true);
+    }
   });
 });

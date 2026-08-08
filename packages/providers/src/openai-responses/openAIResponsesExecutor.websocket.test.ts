@@ -57,6 +57,7 @@ function buildNormalizedOptions(
     userMemory: undefined,
     tools: undefined,
     metadata: {},
+    systemInstruction: 'test system prompt',
     resolved: {
       model: 'gpt-5.6-sol',
       baseURL: CODEX_BASE_URL,
@@ -78,7 +79,6 @@ function buildDeps(
     isCodexBaseURL: (url) => (url ?? '').includes('backend-api/codex'),
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'codex-token',
-    generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,

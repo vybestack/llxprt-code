@@ -10,10 +10,43 @@ import type {
   IContent,
   TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentInputs } from './types.js';
+import type { AgentInputs, FunctionDeclaration, ToolConfig } from './types.js';
 import { templateString } from './utils.js';
 
 const TASK_COMPLETE_TOOL_NAME = 'complete_task';
+
+/**
+ * Extracts declared tool-name strings from an agent's tool config.
+ *
+ * `ToolConfig.tools` is `Array<string | FunctionDeclaration | AnyDeclarativeTool>`,
+ * narrowed here without assertions: string entries are names directly, tool
+ * instances expose their declaration through `schema`, and raw
+ * `FunctionDeclaration` objects carry an optional `name`.
+ *
+ * Used to tell `getCoreSystemPromptAsync` which tools the agent actually has,
+ * so the assembled prompt matches the agent's real capabilities (issue #3136).
+ */
+export function extractDeclaredToolNames(
+  tools: ToolConfig['tools'] | FunctionDeclaration[] | undefined,
+): string[] {
+  if (!tools) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const toolRef of tools) {
+    if (typeof toolRef === 'string') {
+      names.push(toolRef);
+    } else if ('schema' in toolRef) {
+      const schemaName = toolRef.schema.name;
+      if (typeof schemaName === 'string' && schemaName.length > 0) {
+        names.push(schemaName);
+      }
+    } else if (typeof toolRef.name === 'string') {
+      names.push(toolRef.name);
+    }
+  }
+  return names;
+}
 
 /**
  * Build the system prompt for an agent execution.

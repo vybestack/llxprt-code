@@ -33,7 +33,7 @@ export interface ShellJob {
   state: ShellJobState;
   startedAt: number;
   endedAt?: number;
-  pid: number;
+  pid: number | undefined;
   exitCode?: number;
   signal?: string;
   failureReason?: string;
@@ -70,7 +70,7 @@ export interface ShellJobRecord {
   phase: ShellJobPhase;
   startedAt: number;
   endedAt?: number;
-  pid: number;
+  pid: number | undefined;
   exitCode?: number;
   signal?: string;
   failureReason?: string;
