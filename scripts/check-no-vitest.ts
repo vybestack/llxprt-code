@@ -175,8 +175,12 @@ const VITEST_BINARY_IN_SCRIPT = /(?<![.-])vitest\b/;
  * invocation form so prose mentions like "# uses vitest" are NOT matched.
  */
 const VITEST_BINARY_INVOCATION_PATTERNS: readonly RegExp[] = [
-  // Package runner + vitest: `npx vitest`, `pnpm vitest`, `yarn vitest`, `bunx vitest`
-  /(?:npx|pnpm|yarn|bunx)\s+vitest\b/,
+  // Package runner + vitest, including `run`/`exec`/`--bun` subcommands:
+  //   `npx vitest`, `pnpm vitest`, `yarn vitest`, `bunx vitest`,
+  //   `npm run vitest`, `pnpm exec vitest`, `yarn exec vitest`,
+  //   `yarn run vitest`, `bun run vitest`, `bunx --bun vitest`
+  // (issue #2970, finding B).
+  /(?:npx|pnpm|yarn|bunx|bun|npm)\s+(?:(?:run|exec|--bun)\s+)?vitest\b/,
   // vitest as a direct command with a subcommand: `vitest run`, `vitest watch`
   /(?<![.-])\bvitest\s+(?:run|watch|dev|ui|bench|report|list|--)/,
   // vitest as a standalone command without a known subcommand: bare
@@ -192,10 +196,15 @@ const VITEST_BINARY_INVOCATION_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
- * Detects vitest-related file references in TOML configuration files
- * (e.g. `preload = ["./vitest-shim.ts"]`).
+ * Detects vitest-related file references in TOML configuration files.
+ * Matches a `vitest`-prefixed filename with a code extension
+ * (e.g. `preload = ["./vitest-shim.ts"]`) OR a bare path reference with no
+ * extension (e.g. `preload = ["./vitest"]`). The leading word boundary and
+ * path-character lookbehind avoid flagging unrelated names like
+ * `avitest-shim.ts` or `myvitest-helper.ts` (issue #2970, findings C1 & C2).
  */
-const VITEST_TOML_PATTERN = /vitest[\w.-]*\.(?:ts|mts|cts|js|mjs|cjs)/;
+const VITEST_TOML_PATTERN =
+  /\bvitest[\w.-]*\.(?:ts|mts|cts|js|mjs|cjs)\b|(?<=[/.])vitest\b/;
 
 /**
  * Detects forbidden vitest package entries in lockfiles.
@@ -355,17 +364,211 @@ function findManifestKeyLine(content: string, key: string): number {
   return match?.index !== undefined ? lineOfOffset(content, match.index) : 1;
 }
 
+// ─── Lexical masking (issue #2970, finding A) ───────────────────────────────
+//
+// VITEST_IMPORT_PATTERN is applied to raw file content, so the literal text
+// `import { it } from 'vitest'` inside a comment or string literal would be a
+// false positive. To suppress those without losing accurate `file:line:match`
+// precision, we compute the character spans occupied by comments and
+// string/template-literal *text* (excluding the real code inside `${...}`
+// template interpolations), then skip any import match whose start offset
+// falls inside such a span. The triple-slash reference scan deliberately does
+// NOT use this masking — that directive is a comment by syntax but is a real
+// dependency and must keep failing.
+
+interface MaskedSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+type LexFrame =
+  | { readonly kind: 'code' }
+  | { readonly kind: 'lineComment' }
+  | { readonly kind: 'blockComment' }
+  | { readonly kind: 'string'; readonly quote: string }
+  | { readonly kind: 'template' }
+  | { kind: 'templateExpr'; depth: number };
+
+/**
+ * Single-pass lexical scanner that records the spans of comments and
+ * string/template text so import/require matches inside them can be skipped.
+ * Implemented as a class so each per-context step is a small, low-complexity
+ * method (the lint rules cap per-function complexity).
+ */
+class CodeMasker {
+  private readonly content: string;
+  private readonly len: number;
+  private readonly spans: MaskedSpan[] = [];
+  private readonly stack: LexFrame[] = [{ kind: 'code' }];
+  private i = 0;
+  private maskStart = -1;
+
+  constructor(content: string) {
+    this.content = content;
+    this.len = content.length;
+  }
+
+  compute(): MaskedSpan[] {
+    while (this.i < this.len) {
+      const frame = this.stack[this.stack.length - 1];
+      if (frame.kind === 'code' || frame.kind === 'templateExpr') {
+        this.scanCodeLike(frame);
+      } else if (frame.kind === 'lineComment') {
+        this.scanLineComment();
+      } else if (frame.kind === 'blockComment') {
+        this.scanBlockComment();
+      } else if (frame.kind === 'string') {
+        this.scanString(frame);
+      } else if (frame.kind === 'template') {
+        this.scanTemplate();
+      } else {
+        this.i += 1;
+      }
+    }
+    return this.spans;
+  }
+
+  private scanCodeLike(frame: LexFrame): void {
+    const ch = this.content[this.i];
+    const next = this.i + 1 < this.len ? this.content[this.i + 1] : '';
+
+    if (frame.kind === 'templateExpr') {
+      if (ch === '{') {
+        frame.depth += 1;
+        this.i += 1;
+        return;
+      }
+      if (ch === '}') {
+        this.closeTemplateExpr(frame);
+        return;
+      }
+    }
+
+    if (ch === '/' && next === '/') {
+      this.maskStart = this.i;
+      this.stack.push({ kind: 'lineComment' });
+      this.i += 2;
+    } else if (ch === '/' && next === '*') {
+      this.maskStart = this.i;
+      this.stack.push({ kind: 'blockComment' });
+      this.i += 2;
+    } else if (ch === '"' || ch === "'") {
+      this.maskStart = this.i;
+      this.stack.push({ kind: 'string', quote: ch });
+      this.i += 1;
+    } else if (ch === '`') {
+      this.maskStart = this.i;
+      this.stack.push({ kind: 'template' });
+      this.i += 1;
+    } else {
+      this.i += 1;
+    }
+  }
+
+  private closeTemplateExpr(frame: {
+    kind: 'templateExpr';
+    depth: number;
+  }): void {
+    this.i += 1;
+    if (frame.depth === 0) {
+      // Closing brace of `${...}`: resume masking the template's static text.
+      this.stack.pop();
+      this.maskStart = this.i;
+    } else {
+      frame.depth -= 1;
+    }
+  }
+
+  private scanLineComment(): void {
+    if (this.content[this.i] === '\n') {
+      this.flushMask();
+      this.stack.pop();
+    }
+    this.i += 1;
+  }
+
+  private scanBlockComment(): void {
+    const ch = this.content[this.i];
+    const next = this.i + 1 < this.len ? this.content[this.i + 1] : '';
+    if (ch === '*' && next === '/') {
+      this.i += 2;
+      this.flushMask();
+      this.stack.pop();
+    } else {
+      this.i += 1;
+    }
+  }
+
+  private scanString(frame: LexFrame): void {
+    const ch = this.content[this.i];
+    if (ch === '\\') {
+      this.i += 2;
+    } else if (frame.kind === 'string' && ch === frame.quote) {
+      this.i += 1;
+      this.flushMask();
+      this.stack.pop();
+    } else {
+      this.i += 1;
+    }
+  }
+
+  private scanTemplate(): void {
+    const ch = this.content[this.i];
+    const next = this.i + 1 < this.len ? this.content[this.i + 1] : '';
+    if (ch === '\\') {
+      this.i += 2;
+    } else if (ch === '`') {
+      this.i += 1;
+      this.flushMask();
+      this.stack.pop();
+    } else if (ch === '$' && next === '{') {
+      // End the static-text mask; the interpolation is real code.
+      this.flushMask();
+      this.i += 2;
+      this.stack.push({ kind: 'templateExpr', depth: 0 });
+    } else {
+      this.i += 1;
+    }
+  }
+
+  private flushMask(): void {
+    if (this.maskStart >= 0 && this.i > this.maskStart) {
+      this.spans.push({ start: this.maskStart, end: this.i });
+    }
+    this.maskStart = -1;
+  }
+}
+
+function computeMaskedSpans(content: string): MaskedSpan[] {
+  return new CodeMasker(content).compute();
+}
+
+/** True when `offset` lies inside a comment or string/template span. */
+function isOffsetMasked(offset: number, spans: readonly MaskedSpan[]): boolean {
+  for (const span of spans) {
+    if (offset >= span.start && offset < span.end) return true;
+  }
+  return false;
+}
+
 function scanCodeFile(filePath: string, content: string): Violation[] {
   const violations: Violation[] = [];
+  // Compute comment/string spans once so import matches that fall inside a
+  // comment or string/template literal are treated as prose, not real
+  // dependencies (issue #2970, finding A). Triple-slash references below are
+  // intentionally NOT masked.
+  const maskedSpans = computeMaskedSpans(content);
   const globalPattern = new RegExp(VITEST_IMPORT_PATTERN.source, 'g');
   let match: RegExpExecArray | null;
   while ((match = globalPattern.exec(content)) !== null) {
-    violations.push({
-      file: relRepo(filePath),
-      line: lineOfOffset(content, match.index),
-      match: match[0].trim().replace(/\s+/g, ' '),
-      kind: 'import/require of vitest specifier',
-    });
+    if (!isOffsetMasked(match.index, maskedSpans)) {
+      violations.push({
+        file: relRepo(filePath),
+        line: lineOfOffset(content, match.index),
+        match: match[0].trim().replace(/\s+/g, ' '),
+        kind: 'import/require of vitest specifier',
+      });
+    }
     if (match.index === globalPattern.lastIndex) {
       globalPattern.lastIndex++;
     }
@@ -471,20 +674,30 @@ interface ManifestData {
 }
 
 function parseManifest(content: string): ManifestData | undefined {
-  try {
-    const parsed: unknown = JSON.parse(content);
-    if (typeof parsed === 'object' && parsed !== null) {
-      return parsed as ManifestData;
-    }
-  } catch {
-    // Malformed package.json — skip; not our concern.
+  // JSON.parse throws on syntactically invalid manifests; scanManifest routes
+  // that through the operational-error path so the guard fails closed rather
+  // than silently skipping a malformed manifest (issue #2970, finding D).
+  const parsed: unknown = JSON.parse(content);
+  if (typeof parsed === 'object' && parsed !== null) {
+    return parsed as ManifestData;
   }
   return undefined;
 }
 
-function scanManifest(filePath: string, content: string): Violation[] {
+function scanManifest(
+  filePath: string,
+  content: string,
+  errors: string[],
+): Violation[] {
   const violations: Violation[] = [];
-  const manifest = parseManifest(content);
+  let manifest: ManifestData | undefined;
+  try {
+    manifest = parseManifest(content);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`Cannot parse manifest ${relRepo(filePath)}: ${msg}`);
+    return violations;
+  }
   if (manifest === undefined) return violations;
   const rel = relRepo(filePath);
 
@@ -590,7 +803,7 @@ function scanFileEntry(filePath: string, errors: string[]): Violation[] {
   // Manifest detection (dependencies + scripts).
   if (isManifest(filePath)) {
     const content = readFileSyncSafe(filePath, errors);
-    return content !== undefined ? scanManifest(filePath, content) : [];
+    return content !== undefined ? scanManifest(filePath, content, errors) : [];
   }
 
   // Lockfile detection.

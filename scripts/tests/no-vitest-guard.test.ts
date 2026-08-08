@@ -726,6 +726,172 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
     });
 
+    // ── Finding A: vitest import syntax in comments/strings ───────────
+    describe('finding A: vitest import syntax in comments/strings is NOT a violation', () => {
+      it("passes when `import ... from 'vitest'` is inside a line comment", () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            'packages/cli/src/note.ts',
+            "// import { it } from 'vitest'\nexport const x = 1;\n",
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it("passes when `import 'vitest'` is inside a block comment", () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            'packages/cli/src/note.ts',
+            "/* import 'vitest' for debugging */\nexport const x = 1;\n",
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it('passes when vitest import syntax is inside a string literal', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            'packages/cli/src/note.ts',
+            'export const msg = "from \'vitest\' to bun:test";\n',
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it('passes when vitest import syntax is inside a template literal', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            'packages/cli/src/note.ts',
+            "export const note = `migrating import 'vitest' away`;\n",
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it('FAILS a real import of vitest (control)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write(
+            'packages/cli/src/rogue.ts',
+            "import { it } from 'vitest';\nexport const x = 1;\n",
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('rogue.ts');
+      });
+    });
+
+    // ── Finding B: additional binary invocation forms ─────────────────
+    describe('finding B: additional vitest binary invocation forms in non-code files', () => {
+      const forms: ReadonlyArray<readonly [string, string]> = [
+        ['npm run vitest', 'npm run vitest'],
+        ['pnpm exec vitest', 'pnpm exec vitest'],
+        ['yarn exec vitest', 'yarn exec vitest'],
+        ['yarn run vitest', 'yarn run vitest'],
+        ['bun run vitest', 'bun run vitest'],
+        ['bunx --bun vitest', 'bunx --bun vitest'],
+      ];
+      for (const [label, invocation] of forms) {
+        it(`FAILS ${label} in a workflow YAML file`, () => {
+          const { code, stdout } = withFixture(({ root, write }) => {
+            write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+            write(
+              '.github/workflows/ci.yml',
+              'jobs:\n  test:\n    runs-on: ubuntu-latest\n' +
+                '    steps:\n' +
+                `      - run: ${invocation}\n`,
+            );
+            return runScript(root, 1);
+          });
+          expect(code).toBe(1);
+          expect(stdout).toContain('ci.yml');
+        });
+      }
+
+      it('does NOT flag npm run vitest inside a YAML comment', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write(
+            '.github/workflows/ci.yml',
+            '# migrated: npm run vitest is gone\n' +
+              'jobs:\n  test:\n    runs-on: ubuntu-latest\n',
+          );
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+    });
+
+    // ── Finding C1: TOML pattern word boundary ─────────────────────────
+    describe('finding C1: TOML pattern word boundary', () => {
+      it('does NOT flag avitest-shim.ts in a TOML preload', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write('bunfig.toml', 'preload = ["./avitest-shim.ts"]\n');
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it('does NOT flag myvitest-helper.ts in a TOML preload', () => {
+        const { code } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write('bunfig.toml', 'preload = ["./myvitest-helper.ts"]\n');
+          return runScript(root, 0);
+        });
+        expect(code).toBe(0);
+      });
+
+      it('FAILS vitest-shim.ts in a TOML preload (still detected)', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write('bunfig.toml', 'preload = ["./vitest-shim.ts"]\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('bunfig.toml');
+      });
+    });
+
+    // ── Finding C2: bare TOML reference without extension ──────────────
+    describe('finding C2: bare vitest reference in TOML', () => {
+      it('FAILS a bare preload = ["./vitest"] with no extension', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          write('bunfig.toml', 'preload = ["./vitest"]\n');
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('bunfig.toml');
+      });
+    });
+
+    // ── Finding D: malformed manifest is fail-closed ──────────────────
+    describe('finding D: malformed package.json is fail-closed', () => {
+      it('FAILS (non-zero) and explains why on a syntactically invalid package.json', () => {
+        const { code, stdout } = withFixture(({ root, write }) => {
+          write('packages/cli/src/clean.ts', 'export const ok = 1;\n');
+          // Valid JSON object opening, then broken — JSON.parse throws.
+          write(
+            'packages/rogue/package.json',
+            '{\n  "name": "rogue"\n oops not json\n',
+          );
+          return runScript(root, 1);
+        });
+        expect(code).toBe(1);
+        expect(stdout).toContain('rogue/package.json');
+        expect(stdout).toContain('Cannot parse manifest');
+      });
+    });
+
     // ── Self-exclusion ─────────────────────────────────────────────────
     describe('self-exclusion', () => {
       it('does not flag its own source or test fixtures', () => {
