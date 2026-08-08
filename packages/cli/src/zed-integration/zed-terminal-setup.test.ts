@@ -101,8 +101,6 @@ describe('buildZedTerminalSetup', () => {
         messageBus,
         mockToolRegistryHost(),
         mockShellToolHost(),
-        mockToolRegistryHost(),
-        mockShellToolHost(),
       );
 
       await setup.terminals.executeShellCommand(
@@ -131,6 +129,8 @@ describe('buildZedTerminalSetup', () => {
       connection as unknown as acp.AgentSideConnection,
       new DebugLogger('llxprt:zed-terminal-setup-test'),
       messageBus,
+      mockToolRegistryHost(),
+      mockShellToolHost(),
     );
 
     await setup.terminals.executeShellCommand(
