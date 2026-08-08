@@ -110,15 +110,15 @@ export interface SubagentLaunchResult {
   runtime: AgentRuntimeLoaderResult;
 }
 
-export interface SubagentOrchestratorOptions {
-  subagentManager: SubagentManager;
-  profileManager: ProfileManager;
 /** Narrow config surface for subagent orchestration. */
 type SubagentOrchestratorConfig = SessionIdentity &
   EphemeralSettings & {
     getToolRegistry(): ToolRegistry;
   };
 
+export interface SubagentOrchestratorOptions {
+  subagentManager: SubagentManager;
+  profileManager: ProfileManager;
   foregroundConfig: SubagentOrchestratorConfig;
   runtimeLoader?: RuntimeLoader;
   scopeFactory?: ScopeFactory;
