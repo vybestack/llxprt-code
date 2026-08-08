@@ -199,11 +199,17 @@ function runTestFile(file: string): Promise<TestResult> {
       output += chunk.toString();
     });
 
+    // Set by the timer so the exit handler can report the real reason. The
+    // result is only produced once the process has actually exited: killing a
+    // tree only signals it, so resolving from the timer would free this worker
+    // slot while the tree was still winding down. The pool would then exceed
+    // its concurrency cap exactly when the machine is already struggling —
+    // which is how a timeout on one file turns into timeouts on others.
+    let killedByTimeout = false;
+
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+      killedByTimeout = true;
       killProcessTree(child);
-      resolve({ file, passed: false, exitCode: null, timedOut: true, output });
     }, fileTimeoutForFile(file));
 
     child.on('exit', (code) => {
@@ -212,9 +218,9 @@ function runTestFile(file: string): Promise<TestResult> {
       clearTimeout(timer);
       resolve({
         file,
-        passed: code === 0,
-        exitCode: code,
-        timedOut: false,
+        passed: !killedByTimeout && code === 0,
+        exitCode: killedByTimeout ? null : code,
+        timedOut: killedByTimeout,
         output,
       });
     });

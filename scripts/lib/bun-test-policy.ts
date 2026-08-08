@@ -42,6 +42,15 @@ export const DEFAULT_PER_TEST_TIMEOUT_MS = 180_000;
  * Whole-file budget, and the backstop that keeps a raised per-test bound from
  * turning a genuine hang into a longer hang. Sized to admit a slow but
  * progressing file rather than to bound total runtime.
+ *
+ * A runner enforcing this must not report the file's result from inside the
+ * timeout callback. Killing a process — or a process tree — only signals it;
+ * resolving straight away frees the worker slot while the child is still
+ * winding down, so the pool exceeds its concurrency cap exactly when the
+ * machine is already struggling, and a timeout on one file becomes timeouts on
+ * others. Wait for the child to be reaped first, either by settling from the
+ * `exit` handler (see the agents, cli and auth runners) or by awaiting the kill
+ * (see the core runner).
  */
 export const DEFAULT_PER_FILE_TIMEOUT_MS = 300_000;
 
@@ -116,14 +125,21 @@ export function resolveTestConcurrency(
   if (options.envVar !== undefined) {
     const override = env[options.envVar];
     if (override !== undefined && override.trim() !== '') {
-      if (!/^[1-9][0-9]*$/.test(override.trim())) {
+      const parsed = Number.parseInt(override.trim(), 10);
+      // The digit-shape check alone would accept an arbitrarily long run of
+      // digits, which parseInt rounds to an imprecise Number or to Infinity;
+      // that would silently become the size of the worker pool.
+      if (
+        !/^[1-9][0-9]*$/.test(override.trim()) ||
+        !Number.isSafeInteger(parsed)
+      ) {
         throw new Error(
           `${options.envVar} must be a positive integer, got: ${override}`,
         );
       }
       // Deliberately not clamped: an override exists so a human can exceed the
       // default, most often to pin a run to 1 while chasing a flake.
-      return Number.parseInt(override.trim(), 10);
+      return parsed;
     }
   }
 

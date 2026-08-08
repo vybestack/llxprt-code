@@ -111,17 +111,18 @@ export function runTestFile(file: string): Promise<TestResult> {
       },
     );
 
+    // Set by the timer so the exit handler can report the real reason. The
+    // result is only produced once the process has actually been reaped:
+    // `kill()` only sends a signal and returns, so resolving from the timer
+    // would free the worker slot while the killed process was still running,
+    // letting the pool exceed its concurrency cap exactly when the machine is
+    // already struggling. This mattered less under the old fixed batches; with
+    // a worker pool the freed slot is filled immediately.
+    let killedByTimeout = false;
+
     const timer = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
+      killedByTimeout = true;
       child.kill('SIGKILL');
-      resolve({
-        file,
-        passed: false,
-        exitCode: null,
-        timedOut: true,
-        signal: null,
-      });
     }, PER_FILE_TIMEOUT_MS);
 
     child.on('exit', (code, signal) => {
@@ -130,10 +131,10 @@ export function runTestFile(file: string): Promise<TestResult> {
       clearTimeout(timer);
       resolve({
         file,
-        passed: code === 0,
-        exitCode: code,
-        timedOut: false,
-        signal: signal ?? null,
+        passed: !killedByTimeout && code === 0,
+        exitCode: killedByTimeout ? null : code,
+        timedOut: killedByTimeout,
+        signal: killedByTimeout ? null : (signal ?? null),
       });
     });
 

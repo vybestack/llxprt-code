@@ -139,6 +139,30 @@ describe('resolveTestConcurrency (issue #3139)', () => {
     ).toThrow('must be a positive integer');
   });
 
+  it('rejects an override too large to be an exact integer', () => {
+    // All digits, so the shape check alone accepts it, but parseInt rounds it
+    // to an imprecise Number — which would then size the worker pool.
+    expect(() =>
+      resolveTestConcurrency({
+        cores: 8,
+        platform: linux,
+        env: { LLXPRT_TEST_CONCURRENCY: '99999999999999999999999' },
+        envVar: 'LLXPRT_TEST_CONCURRENCY',
+      }),
+    ).toThrow('must be a positive integer');
+  });
+
+  it('accepts the largest exactly representable override', () => {
+    expect(
+      resolveTestConcurrency({
+        cores: 8,
+        platform: linux,
+        env: { LLXPRT_TEST_CONCURRENCY: String(Number.MAX_SAFE_INTEGER) },
+        envVar: 'LLXPRT_TEST_CONCURRENCY',
+      }),
+    ).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
   it('rejects a zero override, which would run nothing', () => {
     expect(() =>
       resolveTestConcurrency({
