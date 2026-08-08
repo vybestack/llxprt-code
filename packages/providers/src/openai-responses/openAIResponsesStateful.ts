@@ -148,24 +148,21 @@ export function computeStatefulConversation(
   // from the SAME endpoint. Capturing `parentId` inside the loop guarantees
   // it is a non-empty string, removing the need for a `!== undefined`
   // re-check on the trimmed return (#3134 Fix 8b).
+  // A parent the backend already refused is dead, so it is not a candidate;
+  // skipping it lets the scan fall through to an older parent, or to none, and
+  // keeps a resumed session from re-sending it forever (#3134 Fix 1).
+  const isUsableParent = (entry: IContent): boolean =>
+    isEligibleParent(entry, rawBaseURL) &&
+    !isRejectedParent(entry.metadata!.id as string);
+
   let parentId: string | undefined = undefined;
   let parentIndex = -1;
   for (let index = content.length - 1; index >= 0; index -= 1) {
-    const entry = content[index];
-    if (!isEligibleParent(entry, rawBaseURL)) continue;
-    const candidate = entry.metadata!.id as string;
-    // A parent the backend already refused is dead; skip it so a resumed
-    // session cannot keep re-sending it (#3134 Fix 1).
-    if (isRejectedParent(candidate)) {
-      logger.debug(
-        () =>
-          `responses-stateful skipping previously rejected parent ${candidate}.`,
-      );
-      continue;
+    if (isUsableParent(content[index])) {
+      parentId = content[index].metadata!.id;
+      parentIndex = index;
+      break;
     }
-    parentId = candidate;
-    parentIndex = index;
-    break;
   }
 
   if (parentIndex === -1) {
