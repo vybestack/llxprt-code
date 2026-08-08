@@ -43,7 +43,6 @@ import { classifyMediaBlock } from '@vybestack/llxprt-code-tools/utils/mediaUtil
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -253,7 +252,7 @@ export async function runVerificationPass(
   initialSummary: string,
   context: CompressionContext,
   resolvedRuntime?: ProviderRuntimeContext,
-  resolvedConfig?: Config,
+  resolvedConfig?: ProviderRuntimeContext['config'],
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
   invocation?: RuntimeGenerateChatOptions['invocation'],
 ): Promise<string> {

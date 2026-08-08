@@ -28,7 +28,6 @@ import type {
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   CompressionContext,
   CompressionProviderResult,
@@ -69,7 +68,7 @@ const LAST_PROMPT_CONTEXT_MAX_LENGTH = 200;
 function destructureProviderResult(result: CompressionProviderResult): {
   provider: IProvider;
   resolvedRuntime: ProviderRuntimeContext;
-  resolvedConfig?: Config;
+  resolvedConfig?: ProviderRuntimeContext['config'];
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'];
   invocation?: RuntimeGenerateChatOptions['invocation'];
 } {
@@ -191,7 +190,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     provider: IProvider,
     summary: string,
     resolvedRuntime: ProviderRuntimeContext,
-    resolvedConfig: Config | undefined,
+    resolvedConfig: ProviderRuntimeContext['config'],
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
     invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
   ): Promise<string> {
@@ -425,7 +424,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     request: IContent[],
     context: CompressionContext,
     resolvedRuntime: ProviderRuntimeContext,
-    resolvedConfig: Config | undefined,
+    resolvedConfig: ProviderRuntimeContext['config'],
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
     invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
   ): Promise<{

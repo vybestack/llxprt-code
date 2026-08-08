@@ -234,7 +234,7 @@ export function applyRequestModifications(
  * mock Config without it, so boundary-validate `typeof === 'function'`.
  */
 export function resolveUserMemory(
-  config: Config | undefined,
+  config: MemoryAccess | undefined,
 ): string | undefined {
   if (config && typeof config.getUserMemory === 'function') {
     return config.getUserMemory();
