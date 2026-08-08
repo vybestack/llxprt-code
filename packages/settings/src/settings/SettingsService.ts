@@ -19,7 +19,11 @@ import {
   redactSensitiveValues,
   isSensitiveSettingKey,
   REDACTED_VALUE,
+  isSessionScopedSettingKey,
+  resolveAlias,
+  assertSessionScopedKey,
 } from './settingsRegistry.js';
+import { SessionSettingsOverlay } from './SessionSettingsOverlay.js';
 
 function redactEventValue(key: string, value: unknown): unknown {
   return isSensitiveSettingKey(key) ? REDACTED_VALUE : value;
@@ -70,25 +74,60 @@ export interface DiagnosticsData {
   };
 }
 
+/**
+ * Options for constructing a {@link SettingsService}. When `sessionSource` is
+ * provided, the new service **shares the source's {@link SessionSettingsOverlay}
+ * by reference** (not the source's full settings), so session-scoped overrides
+ * (e.g. `/dumpcontext`) stay in sync across foreground and child instances.
+ *
+ * A service constructed without a source gets a fresh overlay and is its
+ * **owner**: only the owner may write or clear session-scoped overrides via
+ * {@link SettingsService.setSessionScoped} /
+ * {@link SettingsService.clearSessionScoped}. A child constructed with a
+ * source is a read-only consumer; attempts to mutate the shared overlay fail
+ * fast so a subagent can never alter foreground session state. Chained
+ * children (child-of-child) share the same overlay read-only.
+ */
+export interface SettingsServiceInit {
+  sessionSource?: SettingsService | null;
+}
+
 function copyStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((name) => String(name)) : [];
 }
 
 export class SettingsService extends EventEmitter {
   private settings: EphemeralSettings;
+  private readonly sessionOverlay: SessionSettingsOverlay;
+  private readonly isSessionOverlayOwner: boolean;
   private eventEmitter: EventEmitter;
 
-  constructor() {
+  constructor(options: SettingsServiceInit = {}) {
     super();
     this.settings = {
       providers: {},
       global: {},
       activeProvider: null,
     };
+    this.isSessionOverlayOwner =
+      options.sessionSource === undefined || options.sessionSource === null;
+    this.sessionOverlay =
+      options.sessionSource?.sessionOverlay ?? new SessionSettingsOverlay();
     this.eventEmitter = new EventEmitter();
   }
 
   get(key: string): unknown {
+    // Resolve canonical before dotted dispatch: a session-scoped key must be
+    // checked against the overlay first. Registry validation guarantees
+    // session-scoped specs never use dotted keys, so a genuine dotted path
+    // always falls through to nested/local storage.
+    const canonicalKey = resolveAlias(key);
+    if (
+      isSessionScopedSettingKey(canonicalKey) &&
+      this.sessionOverlay.has(canonicalKey)
+    ) {
+      return this.sessionOverlay.get(canonicalKey);
+    }
     if (key.includes('.')) {
       return this.getNestedValue(key);
     }
@@ -104,11 +143,97 @@ export class SettingsService extends EventEmitter {
       this.settings.global[key] = value;
     }
 
+    // Preserve historical emission for ordinary/local writes. A local write
+    // shadowed by an explicit session override cannot change the effective
+    // value, so it must not emit a phantom transition.
+    const canonicalKey = resolveAlias(key);
+    if (
+      isSessionScopedSettingKey(canonicalKey) &&
+      this.sessionOverlay.has(canonicalKey)
+    ) {
+      return;
+    }
+
     this.eventEmitter.emit('change', {
       key,
       oldValue: redactEventValue(key, oldValue),
       newValue: redactEventValue(key, value),
     });
+  }
+
+  /**
+   * Writes a session-scoped override that survives profile application and is
+   * shared by reference with child services constructed from this service.
+   *
+   * Only the overlay **owner** (the foreground service) may call this; a
+   * child constructed with `sessionSource` is a read-only consumer and will
+   * get a fail-fast error.
+   *
+   * The key is validated by {@link assertSessionScopedKey}: only
+   * registry-classified session-scoped keys are accepted (canonicalised
+   * first), so arbitrary keys like `auth-key` or `model` can never enter the
+   * shared overlay.
+   */
+  setSessionScoped(key: string, value: unknown): void {
+    this.assertSessionOverlayOwner(key);
+    const canonicalKey = assertSessionScopedKey(key);
+    const oldValue = this.get(key);
+    this.sessionOverlay.set(canonicalKey, value);
+    const effectiveNewValue = this.get(key);
+    if (oldValue === effectiveNewValue) {
+      return;
+    }
+    this.eventEmitter.emit('change', {
+      key,
+      oldValue: redactEventValue(key, oldValue),
+      newValue: redactEventValue(key, effectiveNewValue),
+    });
+  }
+
+  /**
+   * Reads a session-scoped override, bypassing the local/profile store.
+   * Returns `undefined` when no explicit session override exists.
+   *
+   * The key is validated by {@link assertSessionScopedKey} to fail fast for
+   * non-session keys.
+   */
+  getSessionScoped(key: string): unknown {
+    const canonicalKey = assertSessionScopedKey(key);
+    return this.sessionOverlay.get(canonicalKey);
+  }
+
+  /**
+   * Removes a session-scoped override so subsequent reads fall back to the
+   * local/profile value.
+   *
+   * Only the overlay **owner** (the foreground service) may call this; a
+   * child constructed with `sessionSource` is a read-only consumer and will
+   * get a fail-fast error.
+   */
+  clearSessionScoped(key: string): void {
+    this.assertSessionOverlayOwner(key);
+    const canonicalKey = assertSessionScopedKey(key);
+    const oldValue = this.get(key);
+    this.sessionOverlay.delete(canonicalKey);
+    const effectiveNewValue = this.get(key);
+    if (oldValue === effectiveNewValue) {
+      return;
+    }
+    this.eventEmitter.emit('change', {
+      key,
+      oldValue: redactEventValue(key, oldValue),
+      newValue: redactEventValue(key, effectiveNewValue),
+    });
+  }
+
+  private assertSessionOverlayOwner(key: string): void {
+    if (!this.isSessionOverlayOwner) {
+      throw new Error(
+        `Cannot mutate session-scoped setting "${key}": this SettingsService ` +
+          'is a read-only consumer of a shared session overlay. Only the ' +
+          'foreground owner may write or clear session-scoped settings.',
+      );
+    }
   }
 
   getProviderSettings(provider: string): Record<string, unknown> {
@@ -158,6 +283,13 @@ export class SettingsService extends EventEmitter {
       if (Array.isArray(tools.disabled)) {
         snapshot['tools.disabled'] = [...tools.disabled];
       }
+    }
+
+    // Overlay session-scoped overrides last so they take precedence over
+    // profile/local values while preserving the snapshot immutability.
+    const sessionValues = this.sessionOverlay.toObject();
+    for (const [key, value] of Object.entries(sessionValues)) {
+      snapshot[key] = value;
     }
 
     return snapshot;
@@ -438,7 +570,8 @@ export class SettingsService extends EventEmitter {
   }
 
   getDiagnosticsData(): Promise<DiagnosticsData> {
-    const globalActiveProvider = this.settings.global.activeProvider;
+    const globalSettings = this.getAllGlobalSettings();
+    const globalActiveProvider = globalSettings.activeProvider;
     const fallbackActiveProvider =
       typeof this.settings.activeProvider === 'string' &&
       this.settings.activeProvider !== ''
@@ -473,7 +606,7 @@ export class SettingsService extends EventEmitter {
       model,
       profile: this.getCurrentProfileName(),
       providerSettings: redactSensitiveValues(providerSettings),
-      ephemeralSettings: redactSensitiveValues(this.settings.global),
+      ephemeralSettings: redactSensitiveValues(globalSettings),
       modelParams: redactSensitiveValues(modelParams),
       allSettings: {
         providers: redactedProviders,

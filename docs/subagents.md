@@ -378,6 +378,20 @@ A value of `-1` at the task, profile, or foreground layer means **unlimited** (n
 
 ## Related commands
 
+### Session Diagnostics: `/dumpcontext`
+
+The `/dumpcontext on|error|off` transport modes are **session-wide** and apply to
+subagent provider requests as well as foreground ones. After `/dumpcontext on`,
+subagent requests are dumped just like foreground requests, which is useful for
+debugging subagent prompts, provider behavior, and tool calls. See
+[Context Dumping](cli/context-dumping.md) for details.
+
+- The session value takes precedence over a subagent profile's own `dumpcontext`
+  setting (including session `off` overriding profile `on`).
+- Only `dumpcontext` is inherited; each subagent's provider, model, endpoint,
+  authentication, reasoning, and tool settings remain fully isolated.
+- Subagent dumps may contain sensitive subagent prompts, history, and tool data.
+
 - `/profile list` to see available profiles.
 - `/profile save model ...` or `/profile save loadbalancer ...` to create profiles.
 - `/task` to invoke subagents programmatically.

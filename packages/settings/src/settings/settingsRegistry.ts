@@ -135,6 +135,61 @@ export function getInternalSettingKeys(): string[] {
   return [...INTERNAL_SETTINGS_KEYS];
 }
 
+const SESSION_SCOPED_SETTING_KEYS: ReadonlySet<string> = new Set(
+  SETTINGS_REGISTRY.filter((s) => s.sessionScope === true).map((s) => s.key),
+);
+
+// Validate at module load: session-scoped specs must not use dotted keys or
+// aliases. If this invariant is violated, the session overlay cannot
+// correctly canonicalize or dispatch such keys. Fail fast rather than
+// silently accept unsupported specs.
+for (const spec of SETTINGS_REGISTRY) {
+  if (spec.sessionScope === true) {
+    if (spec.key.includes('.')) {
+      throw new Error(
+        `Session-scoped setting "${spec.key}" must not use a dotted key — ` +
+          'dotted session-scoped keys are not yet supported.',
+      );
+    }
+    if (spec.aliases !== undefined && spec.aliases.length > 0) {
+      throw new Error(
+        `Session-scoped setting "${spec.key}" must not declare aliases — ` +
+          'aliased session-scoped keys are not yet supported.',
+      );
+    }
+  }
+}
+
+export function isSessionScopedSettingKey(key: string): boolean {
+  return SESSION_SCOPED_SETTING_KEYS.has(key);
+}
+
+export function getSessionScopedSettingKeys(): readonly string[] {
+  return [...SESSION_SCOPED_SETTING_KEYS];
+}
+
+/**
+ * Canonicalises a key via {@link resolveAlias} and asserts that the result is
+ * a registry-classified session-scoped setting. Returns the canonical key on
+ * success; throws for unknown or non-session keys.
+ *
+ * This is the single authority that determines which keys may enter the
+ * {@link SessionSettingsOverlay}. All session get/set/clear paths funnel
+ * through here so the overlay can never hold an arbitrary key.
+ */
+export function assertSessionScopedKey(key: string): string {
+  const canonicalKey = resolveAlias(key);
+  if (!SESSION_SCOPED_SETTING_KEYS.has(canonicalKey)) {
+    const allowed = [...SESSION_SCOPED_SETTING_KEYS].join(', ');
+    throw new Error(
+      `"${key}" is not a registry-classified session-scoped setting ` +
+        `(allowed: ${allowed}). Only session-scoped settings may be written ` +
+        'to the session overlay.',
+    );
+  }
+  return canonicalKey;
+}
+
 /** Extract custom headers from both global and provider-level settings. */
 function extractCustomHeaders(
   mixed: Record<string, unknown>,
