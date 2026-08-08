@@ -47,6 +47,11 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   private webSocketTransport: WebSocketTransport | undefined;
   private webSocketStickToHttp = false;
   private webSocketConsecutiveFallbacks = 0;
+  // #3134 Fix 1: response ids the backend has refused as a parent. Tracked
+  // per id rather than as a session-wide switch so a resumed session, whose
+  // loaded history carries parents scoped to a socket that no longer exists,
+  // recovers instead of replaying the full history for the rest of the run.
+  private readonly rejectedStatefulParents = new Set<string>();
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
@@ -65,6 +70,12 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       getDefaultModel: () => this.getDefaultModel(),
       getGlobalConfig: () => this.globalConfig,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
+      // Codex statefulness is only valid over the WebSocket transport, so the
+      // request builder needs to know the transport BEFORE it decides whether
+      // to trim history. Mirrors resolveWebSocketTransport's predicate without
+      // constructing a socket.
+      isWebSocketTransportActive: () =>
+        this.isCodexMode(this.getBaseURL()) && !this.webSocketStickToHttp,
       onWebSocketFallback: () => {
         // One pre-output failure still serves THIS request over HTTP (an
         // invisible in-turn recovery); only a sustained run of them sticks.
@@ -78,6 +89,11 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       },
       onWebSocketSuccess: () => {
         this.webSocketConsecutiveFallbacks = 0;
+      },
+      isRejectedStatefulParent: (responseId) =>
+        this.rejectedStatefulParents.has(responseId),
+      markStatefulParentRejected: (responseId) => {
+        this.rejectedStatefulParents.add(responseId);
       },
     };
   }
@@ -109,6 +125,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.webSocketTransport = undefined;
     this.webSocketStickToHttp = false;
     this.webSocketConsecutiveFallbacks = 0;
+    this.rejectedStatefulParents.clear();
   }
 
   protected override async *generateChatCompletionWithOptions(
