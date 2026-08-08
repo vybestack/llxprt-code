@@ -210,9 +210,16 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
     const helperPid = helper.pid ?? 0;
     try {
       const result = await waitForMarker(outMarker, 8000);
-      // With the guard the kill fallback is never invoked for bad pids.
+      // With the guard the kill fallback is never invoked for bad pids. This
+      // is the assertion that fails without the fix: pre-guard, -1 reaches
+      // process.kill(1) (EPERM) and NaN/Infinity throw, so all three land in
+      // the fallback and the marker reads "3".
+      //
+      // Deliberately no liveness assertion on the helper: it calls
+      // process.exit(0) immediately after writing the marker, so by the time
+      // the parent observes the marker the helper has already exited on
+      // purpose. Asserting it is alive races its own normal exit.
       expect(result).toBe('0');
-      expect(isPidAlive(helperPid)).toBe(true);
     } finally {
       reapGroup(helperPid);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -246,7 +253,12 @@ describe.skipIf(isWindows)('escalateKillUnix pid validation (POSIX)', () => {
         ),
       ]);
       // The guard must not have suppressed the kill for a legitimate pid.
-      expect(signal).toBe('SIGKILL');
+      // escalateKillUnix sends SIGTERM first and only escalates to SIGKILL
+      // after SIGKILL_TIMEOUT_MS, so a well-behaved `sleep` dies on SIGTERM.
+      // Asserting SIGKILL specifically would assert the escalation timer
+      // rather than the guard; what matters here is that a signal was
+      // delivered at all.
+      expect(signal === 'SIGTERM' || signal === 'SIGKILL').toBe(true);
     } finally {
       reapGroup(childPid);
     }
