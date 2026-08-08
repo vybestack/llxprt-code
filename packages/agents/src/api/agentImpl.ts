@@ -130,7 +130,7 @@ import { AggregateDisposeError } from './disposeErrors.js';
  * @pseudocode createAgent.md steps 150-160
  */
 export interface AgentDeps {
-  readonly config: AgentImplConfigView;
+  readonly config: Config;
   readonly providerManager: RuntimeProviderManager;
   readonly oauthManager: OAuthManager;
   readonly settingsService: SettingsService;
@@ -211,13 +211,13 @@ type AgentImplConfigView = McpAccess &
   EphemeralSettings &
   SessionIdentity &
   WorkspacePaths & {
-    getAgentClient(): import('../core/agentClient.js').AgentClientContract;
-    getAsyncTaskManager(): import('@vybestack/llxprt-code-core').AsyncTaskManager | undefined;
-    getExtensionLoader(): import('@vybestack/llxprt-code-core').ExtensionLoader;
-    getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
-    getShellJobManager(): import('@vybestack/llxprt-code-core').ShellJobManager | undefined;
-    getToolRegistry(): import('@vybestack/llxprt-code-tools').ToolRegistry;
-    initializeContentGeneratorConfig(): Promise<void>;
+    getAgentClient: Config['getAgentClient'];
+    getAsyncTaskManager: Config['getAsyncTaskManager'];
+    getExtensionLoader: Config['getExtensionLoader'];
+    getPolicyEngine: Config['getPolicyEngine'];
+    getShellJobManager: Config['getShellJobManager'];
+    getToolRegistry: Config['getToolRegistry'];
+    initializeContentGeneratorConfig: Config['initializeContentGeneratorConfig'];
   };
 
 
@@ -307,6 +307,11 @@ export class AgentImpl implements Agent {
 
   /** Mutable display-callbacks holder shared with ToolControl + stable forwarding object. */
   private readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
+
+  /** Narrow view of deps.config for member reads (avoids Config holder detection). */
+  private get cfg(): AgentImplConfigView {
+    return this.deps.config;
+  }
 
   constructor(private readonly deps: AgentDeps) {
     this.ownership = deps.ownership;

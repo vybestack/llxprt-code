@@ -12,6 +12,7 @@
  */
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Diagnostics, ModelSelection, WorkspacePaths, RuntimeLifecycle } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -86,11 +87,11 @@ type CreateAgentConfigView = Diagnostics &
   ModelSelection &
   WorkspacePaths &
   RuntimeLifecycle & {
-    getAgentClient(): import('../core/agentClient.js').AgentClientContract;
-    getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
-    getProviderManager(): import('@vybestack/llxprt-code-core/runtime/providerManager.js').RuntimeProviderManager | undefined;
-    getSettingsService(): import('@vybestack/llxprt-code-core').SettingsService;
-    initializeContentGeneratorConfig(): Promise<void>;
+    getAgentClient: Config['getAgentClient'];
+    getPolicyEngine: Config['getPolicyEngine'];
+    getProviderManager: Config['getProviderManager'];
+    getSettingsService: Config['getSettingsService'];
+    initializeContentGeneratorConfig: Config['initializeContentGeneratorConfig'];
   };
 
 function asCreateAgentView(config: Config): CreateAgentConfigView {

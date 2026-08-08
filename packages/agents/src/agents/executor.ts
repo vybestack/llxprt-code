@@ -132,10 +132,10 @@ function registerToolsFromConfig(
 type ExecutorConfigView = ModelSelection &
   EphemeralSettings &
   SessionIdentity & {
-    getAgentClient(): import('./agentClient.js').AgentClientContract;
-    getProviderManager(): import('@vybestack/llxprt-code-core/runtime/providerManager.js').RuntimeProviderManager | undefined;
-    getSettingsService(): import('@vybestack/llxprt-code-core').SettingsService;
-    getToolRegistry(): import('@vybestack/llxprt-code-tools').ToolRegistry;
+    getAgentClient: Config['getAgentClient'];
+    getProviderManager: Config['getProviderManager'];
+    getSettingsService: Config['getSettingsService'];
+    getToolRegistry: Config['getToolRegistry'];
   };
 
 

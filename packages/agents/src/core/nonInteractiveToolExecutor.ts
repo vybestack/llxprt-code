@@ -41,7 +41,7 @@ export type ToolExecutionConfig = {
     },
     options?: { interactiveMode?: boolean },
     extraDependencies?: { messageBus?: MessageBus },
-  ): Promise<CoreToolScheduler>;
+  ): Promise<ToolSchedulerContract>;
   disposeScheduler(sessionId: string): void;
 } & Partial<{
   getAllowedTools(): string[] | undefined;
@@ -80,7 +80,7 @@ type SchedulerConfig = ToolExecutionConfig & {
     },
     options?: { interactiveMode?: boolean },
     extraDependencies?: { messageBus?: MessageBus },
-  ): Promise<CoreToolScheduler>;
+  ): Promise<ToolSchedulerContract>;
 };
 
 async function createScheduler(
