@@ -28,7 +28,10 @@ import type {
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+import {
+  recordFinalizedPromptEnvelopeEstimate,
+  recordTurnJoinContext,
+} from './tokenUsageEstimateLogger.js';
 import {
   prepareAtSendSeam,
   preparePromptEnvelopeAfterEnforcement,
@@ -104,6 +107,25 @@ function extractAllowedFunctionNames(
   return toolConfig.allowedFunctionNames;
 }
 
+/**
+ * Stamp `promptId` onto user content metadata so it carries through to
+ * history persistence. The reciprocal join key (AC-2, issue #3130).
+ */
+function stampPromptIdOnContent(
+  userContent: IContent | IContent[],
+  promptId: string,
+): IContent | IContent[] {
+  if (promptId.length === 0) return userContent;
+  const stamp = (content: IContent): IContent => ({
+    ...content,
+    metadata: { ...(content.metadata ?? {}), promptId },
+  });
+  if (Array.isArray(userContent)) {
+    return userContent.map(stamp);
+  }
+  return stamp(userContent);
+}
+
 /** Result of firing the BeforeModel hook (contents + metadata + pre-hook snapshot). */
 interface BeforeModelHookFireResult {
   contents: IContent[];
@@ -154,6 +176,10 @@ export class StreamProcessor {
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
 
+    // Stamp promptId on the user content so it carries through to history
+    // persistence — the reciprocal join key (AC-2, issue #3130).
+    const stampedUserContent = stampPromptIdOnContent(userContent, promptId);
+
     this.logger.debug(
       () => '[StreamProcessor] Active provider snapshot before stream request',
       {
@@ -174,11 +200,11 @@ export class StreamProcessor {
     const streamResponse = await this._executeStreamApiCall(
       params,
       promptId,
-      userContent,
+      stampedUserContent,
       provider,
     );
 
-    return this._createCancellableStream(streamResponse, userContent);
+    return this._createCancellableStream(streamResponse, stampedUserContent);
   }
 
   private _createCancellableStream(
@@ -506,6 +532,12 @@ export class StreamProcessor {
         this.compressionHandler.tokenUsageLogger,
         promptId,
         prepared.estimate,
+      );
+      recordTurnJoinContext(
+        this.compressionHandler.tokenUsageLogger,
+        promptId,
+        this.runtimeContext.state,
+        this.historyService,
       );
 
       const streamResponse = provider.generateChatCompletion(prepared.options);

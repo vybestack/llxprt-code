@@ -514,6 +514,7 @@ export class SubagentOrchestrator {
     profile: Profile,
     modelConfig: ModelConfig,
     agentRuntimeId: string,
+    subagentName: string,
   ): AgentRuntimeState {
     const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
     const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
@@ -533,6 +534,8 @@ export class SubagentOrchestrator {
         maxTokens: profile.modelParams.max_tokens ?? undefined,
       },
       sessionId,
+      parentRuntimeId: this.baseSessionId(),
+      subagentName,
     });
   }
 
@@ -564,6 +567,7 @@ export class SubagentOrchestrator {
       runtimeStateProfile,
       modelConfig,
       agentRuntimeId,
+      subagent.name,
     );
     const settingsService = createRuntimeSettingsService();
     if (!isLoadBalancerActivation) {

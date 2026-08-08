@@ -174,6 +174,7 @@ describe('TokenUsageLogger', () => {
       'provider',
       'model',
       'estimator',
+      'record_type',
     ]);
     const forbiddenTextKeys = [
       'text',

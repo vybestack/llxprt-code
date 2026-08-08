@@ -16,7 +16,10 @@ import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/I
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+import {
+  recordFinalizedPromptEnvelopeEstimate,
+  recordTurnJoinContext,
+} from './tokenUsageEstimateLogger.js';
 import {
   bindPreparedTransportSignal,
   buildProviderChatOptions,
@@ -567,6 +570,12 @@ export class TurnProcessor {
         this.compressionHandler.tokenUsageLogger,
         promptId,
         prepared.estimate,
+      );
+      recordTurnJoinContext(
+        this.compressionHandler.tokenUsageLogger,
+        promptId,
+        this.runtimeContext.state,
+        this.historyService,
       );
       const transportPrepared = bindPreparedTransportSignal(
         prepared,

@@ -312,4 +312,143 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(record.cached_tokens).toBe(2000);
     expect(record.effective_actual_tokens).toBe(3000);
   });
+
+  // AC-12: Bidirectional join — the token-usage turn record's join keys
+  // locate the conversation turn, and the persisted content carries the
+  // matching promptId. End-to-end through a real ChatSession, not mocks.
+  it('AC-12 bidirectional join: turn record keys match history content promptId', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'ac12-join-session',
+    });
+
+    // Pre-add a human turn with a known turnId so the chronology marker
+    // is predictable at send time.
+    historyService.add(
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Previous context' }],
+        metadata: { turnId: 'pre-existing-turn' },
+      },
+      'claude-3-5-sonnet-20241022',
+    );
+    await historyService.waitForTokenUpdates();
+
+    // Capture the send-time marker — recordTurnJoinContext reads this same
+    // state at the send seam.
+    const sendTimeMarker = historyService.getCurrentTurnMarker();
+    expect(sendTimeMarker).not.toBeNull();
+
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello!' }],
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: 4000,
+              completionTokens: 10,
+              totalTokens: 4010,
+            },
+          },
+          usageMetadata: {
+            promptTokenCount: 4000,
+            candidatesTokenCount: 10,
+            totalTokenCount: 4010,
+          },
+        };
+      }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'ac12-join-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 200,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 180,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'Say hello' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+
+    await historyService.waitForTokenUpdates();
+
+    // --- Assert token-usage record carries the join keys ---
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const record = records[0];
+
+    // AC-1 join keys must be present
+    expect(record.session_id).toBe('ac12-join-session');
+    expect(record.runtime_id).toBe(runtimeState.runtimeId);
+    // Main agent: no parent runtime, no subagent name
+    expect(record.parent_runtime_id).toBeNull();
+    expect(record.subagent_name).toBeNull();
+
+    // turn_id / user_turn / step must match the send-time marker
+    if (sendTimeMarker !== null) {
+      expect(record.turn_id).toBe(sendTimeMarker.turnId);
+      expect(record.user_turn).toBe(sendTimeMarker.userTurn);
+      expect(record.step).toBe(sendTimeMarker.step);
+    }
+
+    // --- Assert persisted content carries the matching promptId (AC-2) ---
+    const allHistory = historyService.getAll();
+    const humanWithPromptId = allHistory.find(
+      (c) => c.speaker === 'human' && c.metadata?.promptId === promptId,
+    );
+    expect(humanWithPromptId).toBeDefined();
+    if (humanWithPromptId !== undefined) {
+      expect(humanWithPromptId.metadata?.promptId).toBe(promptId);
+      // The promptId on the content matches the prompt_id in the record
+      // — this is the reciprocal join (AC-2).
+      expect(record.prompt_id).toBe(promptId);
+    }
+  });
 });
