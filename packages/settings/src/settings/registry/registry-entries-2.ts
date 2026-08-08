@@ -201,6 +201,7 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'enum',
     enumValues: ['now', 'status', 'on', 'error', 'off'],
     persistToProfile: true,
+    sessionScope: true,
   },
   {
     key: 'authOnly',

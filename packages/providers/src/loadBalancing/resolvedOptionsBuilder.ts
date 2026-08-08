@@ -13,6 +13,7 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { isSessionScopedSettingKey } from '@vybestack/llxprt-code-settings';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type {
   ResolvedSubProfile,
@@ -27,6 +28,28 @@ export interface OptionsBuildContext {
   logger: DebugLogger;
   providerName: string;
   getEffectiveContextLimit: () => number | undefined;
+}
+
+/**
+ * Extracts registry-classified session-scoped keys from the immutable upstream
+ * invocation snapshot. These values must overlay member/LB profile ephemerals
+ * LAST so an explicit session override (e.g. `/dumpcontext on`) is never
+ * clobbered by a delegate profile value.
+ */
+function extractUpstreamSessionEphemerals(
+  options: GenerateChatOptions,
+): Record<string, unknown> {
+  const upstream = options.invocation?.ephemerals;
+  if (upstream === undefined) {
+    return {};
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(upstream)) {
+    if (isSessionScopedSettingKey(key)) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 /**
@@ -99,9 +122,14 @@ function buildResolvedSubProfileOptions(
     ...subProfile.modelParams,
     ...ctx.lbProfileModelParams,
   };
+  // Session-scoped keys from the immutable upstream invocation snapshot must
+  // overlay member/LB profile ephemerals LAST so an explicit session override
+  // (e.g. `/dumpcontext on`) is never clobbered by a delegate profile value.
+  const upstreamSessionEphemerals = extractUpstreamSessionEphemerals(options);
   const mergedInvocationEphemerals = {
     ...mergedEphemeralSettings,
     ...mergedModelParams,
+    ...upstreamSessionEphemerals,
   };
 
   const temperature = readNumericSetting(

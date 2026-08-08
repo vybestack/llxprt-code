@@ -9,6 +9,7 @@ import { GitService } from '../services/gitService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
 import { shutdownLsp } from './lspIntegration.js';
 import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
@@ -287,6 +288,36 @@ export abstract class ConfigBase extends ConfigBaseCore {
       }
     }
     return allSettings;
+  }
+
+  // ---- Session-scoped settings ----
+
+  /**
+   * Reads the effective value of a registry-classified session setting. The
+   * overlay is consulted first, with profile/local fallback. Unlike
+   * {@link getEphemeralSetting}, this accessor does not apply key-specific
+   * normalization.
+   */
+  getSessionSetting(key: string): unknown {
+    return this.settingsService.get(assertSessionScopedKey(key));
+  }
+
+  /**
+   * Writes a session-scoped override that survives profile application and is
+   * shared by reference with child services (subagents). Use this for
+   * session-wide settings like `/dumpcontext` that must not be erased when a
+   * profile is loaded.
+   */
+  setSessionSetting(key: string, value: unknown): void {
+    this.settingsService.setSessionScoped(key, value);
+  }
+
+  /**
+   * Clears a session-scoped override so subsequent reads fall back to the
+   * profile/local value.
+   */
+  clearSessionSetting(key: string): void {
+    this.settingsService.clearSessionScoped(key);
   }
 
   getShellReplacement(): ShellReplacementMode {
