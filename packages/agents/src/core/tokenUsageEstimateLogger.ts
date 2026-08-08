@@ -15,7 +15,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
-import { approximateTokens } from './tokenUsageRequestShape.js';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
@@ -130,10 +130,9 @@ export function recordTurnJoinContext(
  * Cost discipline: the logger's `isEnabled()` gate is checked FIRST, so no
  * computation runs when telemetry is disabled.  The computation itself is
  * O(n) in the number of request contents — each content is token-counted
- * exactly once, counted with the cheap {@link approximateTokens} approximation
- * rather than tiktoken: the seam already pays one full tokenization pass to
- * produce `estimated_tokens`, and a second one cost ~31ms per send on a large
- * request versus ~0.3ms for the approximation.
+ * exactly once per send with the codebase's shared tiktoken-based
+ * {@link estimateTokens}, and each content's counts are cached for the session
+ * so a carried tool result is tokenized once rather than on every send.
  *
  * `promptCacheKey` is deliberately NOT populated here: the actual key is
  * derived and sanitized inside the provider-specific executor
@@ -160,7 +159,7 @@ export function recordRequestShapeContext(
     requestContents,
     tools,
     instructionsText,
-    countTokens: approximateTokens,
+    countTokens: estimateTokens,
   });
 
   const context: TokenUsageTurnContext = {

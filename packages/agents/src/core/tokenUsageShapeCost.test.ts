@@ -19,9 +19,8 @@
 import { describe, it, expect } from 'bun:test';
 import {
   computeRequestShape,
-  approximateTokens,
+  RequestShapeSessionMemory,
   FINGERPRINT_PREFIX_CHAR_BUDGET,
-  APPROX_CHARS_PER_TOKEN,
 } from './tokenUsageRequestShape.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
@@ -34,7 +33,7 @@ class CountingTokenizer {
 
   readonly count = (text: string): number => {
     this.lengths.push(text.length);
-    return approximateTokens(text);
+    return Math.ceil(text.length / 3);
   };
 
   get totalChars(): number {
@@ -47,6 +46,11 @@ function textTurn(i: number): IContent {
     speaker: i % 2 === 0 ? 'ai' : 'human',
     blocks: [{ type: 'text', text: `message ${i}` }],
   };
+}
+
+/** Stamp the stable id the history pipeline preserves across sends. */
+function identified(content: IContent, id: string): IContent {
+  return { ...content, metadata: { ...(content.metadata ?? {}), id } };
 }
 
 function toolTurn(callId: string, body: string): IContent {
@@ -107,27 +111,26 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
     expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
   });
 
-  it('bounds the fingerprint so a long conversation costs the same as a short one', () => {
-    // Two histories whose heads are identical and whose tails differ far past
-    // the prefix budget must fingerprint the same. That is only possible if the
-    // fingerprint stops reading at the budget instead of hashing everything.
-    const head: IContent[] = [toolTurn('call-head', BIG_BODY)];
-    const shortHistory = [...head, textTurn(1)];
-    const longHistory = [
-      ...head,
-      ...Array.from({ length: 200 }, (_, i) => textTurn(i + 2)),
-    ];
+  it('bounds the fingerprint so it stops growing with the conversation', () => {
+    // Once the prefix budget is spent, later turns must not change the hash.
+    // Otherwise the fingerprint reads the whole conversation on every send,
+    // which is what made this measurement quadratic.
+    const head = Array.from({ length: 2000 }, (_, i) =>
+      identified(textTurn(i), `content-${i}`),
+    );
 
     const shape = (contents: IContent[]) =>
       computeRequestShape({
         requestContents: contents,
         tools: undefined,
         instructionsText: undefined,
-        countTokens: approximateTokens,
+        countTokens: (t: string) => t.length,
         previouslySentCallIds: new Set<string>(),
       }).prefixFingerprint;
 
-    expect(shape(longHistory)).toBe(shape(shortHistory));
+    expect(shape([...head, identified(textTurn(9999), 'extra')])).toBe(
+      shape(head),
+    );
   });
 
   it('still detects a change inside the cacheable prefix', () => {
@@ -137,14 +140,14 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
       requestContents: [textTurn(1)],
       tools: undefined,
       instructionsText: 'system prompt A',
-      countTokens: approximateTokens,
+      countTokens: (t: string) => t.length,
       previouslySentCallIds: new Set<string>(),
     }).prefixFingerprint;
     const changed = computeRequestShape({
       requestContents: [textTurn(1)],
       tools: undefined,
       instructionsText: 'system prompt B',
-      countTokens: approximateTokens,
+      countTokens: (t: string) => t.length,
       previouslySentCallIds: new Set<string>(),
     }).prefixFingerprint;
 
@@ -172,9 +175,49 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
     }
   });
 
-  it('approximates tokens by character length rather than invoking a tokenizer', () => {
-    // The send seam already pays one full tokenization pass for
-    // `estimated_tokens`. A second one is what made this measurement expensive.
-    expect(approximateTokens('a'.repeat(30))).toBe(30 / APPROX_CHARS_PER_TOKEN);
+  it('tokenizes a carried content once, not once per send', () => {
+    // The whole point: a big tool result that rides along for many turns must
+    // not be re-tokenized every send. Earlier this was linear per send and
+    // quadratic per session (935ms per send by turn 20).
+    const memory = new RequestShapeSessionMemory();
+    const contents: IContent[] = [
+      identified(toolTurn('call-1', BIG_BODY), 'content-1'),
+    ];
+    const tokenizer = new CountingTokenizer();
+
+    for (let send = 0; send < 5; send += 1) {
+      memory.recordRequestShape({
+        // A fresh object each time, exactly as the history pipeline produces.
+        requestContents: contents.map((c) => ({ ...c, blocks: [...c.blocks] })),
+        tools: undefined,
+        instructionsText: undefined,
+        countTokens: tokenizer.count,
+      });
+    }
+
+    // Send 1 measures it. Sends 2-5 must not tokenize the body again, so the
+    // recorded volume stays at one send's worth rather than five.
+    expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
+  });
+
+  it('still reports the carried content cost on later sends', () => {
+    // Caching must not silently drop the bucket: a cache hit has to contribute
+    // the same tokens a fresh measurement would.
+    const memory = new RequestShapeSessionMemory();
+    const build = (): IContent[] => [
+      identified(toolTurn('call-1', BIG_BODY), 'content-1'),
+    ];
+    const shape = () =>
+      memory.recordRequestShape({
+        requestContents: build(),
+        tools: undefined,
+        instructionsText: undefined,
+        countTokens: (t: string) => t.length,
+      });
+
+    const first = shape();
+    const second = shape();
+
+    expect(second.historyTokens).toBe(first.historyTokens);
   });
 });

@@ -63,12 +63,6 @@ export const FINGERPRINT_HEX_LENGTH = 16;
  */
 export const FINGERPRINT_PREFIX_CHAR_BUDGET = 8192;
 
-/**
- * Characters per token used by {@link approximateTokens}. Matches the fallback
- * ratio the repository's tiktoken helper uses when encoding is unavailable.
- */
-export const APPROX_CHARS_PER_TOKEN = 3;
-
 /** Maximum distinct callIds retained in per-session memory before FIFO eviction. */
 export const DEFAULT_MAX_SENT_CALL_IDS = 2000;
 
@@ -87,6 +81,12 @@ export interface RequestShapeInput {
   readonly countTokens: TokenCountFn;
   readonly previouslySentCallIds: ReadonlySet<string>;
   readonly previousFingerprint?: string | undefined;
+  /**
+   * Optional per-session measurement cache. Without it every content is
+   * re-tokenized on every send, which is linear per send and quadratic over a
+   * session; with it a carried content is tokenized once.
+   */
+  readonly measurementCache?: ContentMeasurementCache | undefined;
 }
 
 /** A single tool-call attribution entry (AC-5). */
@@ -154,49 +154,70 @@ interface MeasuredToolResult {
   readonly wasTruncated: boolean;
 }
 
-/** The expensive, reusable part of measuring one content. */
-interface ContentMeasurement {
-  readonly serialized: string;
+/**
+ * A content's measured token costs. Deliberately holds no serialized text, so
+ * caching one across a session does not retain a large tool-result body.
+ */
+export interface ContentMeasurement {
   readonly tokens: number;
   readonly toolResults: readonly MeasuredToolResult[];
 }
 
 /**
- * Approximate a token count from character length.
- *
- * Deliberately NOT the tiktoken-backed estimator. This measurement runs over
- * the request on every send, and the send seam already pays one full
- * tokenization pass to produce `estimated_tokens`; adding a second one made a
- * turn 30ms slower with a large carried tool result and got worse as the
- * conversation grew. Measured on the real request path, tiktoken accounted for
- * roughly 99% of this function's cost (31ms per send versus 0.3ms).
- *
- * These buckets exist to apportion a prompt — "how much of this is tool
- * results versus instructions" — not to bill it. The authoritative totals are
- * `estimated_tokens` (the provider's own projection) and `actual_prompt_tokens`
- * (what the provider reported). Because every bucket and every tool result uses
- * this same approximation, the proportions between them are meaningful even
- * though the absolute values are approximate.
+ * Cache of per-content measurements for one session, keyed by
+ * {@link measurementCacheKey}. Lets a carried content be tokenized once ever
+ * rather than once per send.
  */
-export function approximateTokens(text: string): number {
-  return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
+export interface ContentMeasurementCache {
+  get(key: string): ContentMeasurement | undefined;
+  set(key: string, measurement: ContentMeasurement): void;
+}
+
+/**
+ * Cache key for a content's measurement.
+ *
+ * `metadata.id` is stamped when the turn is created and survives the history
+ * pipeline's per-send rebuild, so it identifies the same logical content across
+ * sends even though the object itself is new every time. The block count is
+ * appended as cheap insurance: if a content were ever extended in place under a
+ * reused id, the key changes and the stale measurement is not used.
+ *
+ * Returns null when the content has no id, in which case it is measured
+ * normally but not cached.
+ */
+function measurementCacheKey(content: IContent): string | null {
+  const id = content.metadata?.id;
+  if (id !== undefined && id.length > 0)
+    return `${id}:${content.blocks.length}`;
+  // The history pipeline does not preserve `metadata.id` on tool contents, which
+  // are the expensive ones. Their blocks carry their own stable identities, so
+  // fall back to those rather than leaving a large body uncacheable.
+  const blockKeys = content.blocks.map(blockCacheKey);
+  if (blockKeys.some((key) => key === null)) return null;
+  return `blocks:${blockKeys.join(',')}`;
+}
+
+/**
+ * Stable identity for a block, when it has one. A tool result is identified by
+ * the call it answers and a tool call by its own id; both are unique and
+ * immutable, so a body carried across many turns is measured once.
+ */
+function blockCacheKey(block: ContentBlock): string | null {
+  if (block.type === 'tool_response') return `tr:${block.callId}`;
+  if (block.type === 'tool_call') return `tc:${block.id}`;
+  return null;
 }
 
 /**
  * Measure one content, serializing each block exactly ONCE and reusing that
  * string for the content's token count, each tool result's token count, the
- * truncation check, and the prefix fingerprint. Earlier revisions serialized
+ * truncation check, and the prefix fingerprint. An earlier revision serialized
  * the same tool-result body four times per send.
- *
- * Not cached across sends: the history pipeline rebuilds every content, its
- * blocks array, and each block object on every send, so there is no stable
- * identity to key a cache on. Serialization alone is cheap (~0.3ms for a
- * 200KB request); it was only expensive when paired with tiktoken.
  */
 function measureContent(
   content: IContent,
   countTokens: TokenCountFn,
-): ContentMeasurement {
+): { measurement: ContentMeasurement; serialized: string } {
   const serializedBlocks = content.blocks.map(serializeBlockForCounting);
   const toolResults: ContentMeasurement['toolResults'] = content.blocks.flatMap(
     (block, index) =>
@@ -214,7 +235,10 @@ function measureContent(
         : [],
   );
   const serialized = serializedBlocks.join('\n');
-  return { serialized, tokens: countTokens(serialized), toolResults };
+  return {
+    measurement: { tokens: countTokens(serialized), toolResults },
+    serialized,
+  };
 }
 
 /** True when a content carries at least one MediaBlock. */
@@ -244,37 +268,6 @@ function classifyContent(content: IContent): ContentBucket {
 // ---------------------------------------------------------------------------
 // Prefix fingerprint
 // ---------------------------------------------------------------------------
-
-/**
- * Build a stable serialization of the request prefix for fingerprinting.
- * The serialization includes instructions + tool schemas + the leading request
- * contents, joined by delimiters that cannot appear inside a JSON string
- * escape.  The resulting string is hashed (never stored), so no prompt text
- * leaks — only the sha256 digest is retained (AC-10).
- */
-function serializePrefixForFingerprint(
-  instructionsText: string | undefined,
-  toolsJson: string,
-  requestContents: readonly IContent[],
-  measure: (content: IContent) => ContentMeasurement,
-): string {
-  const parts: string[] = [`I:${instructionsText ?? ''}`, `T:${toolsJson}`];
-  // Bounded on purpose. This is the request PREFIX — the part a provider can
-  // cache — so only the head is informative: a change here breaks the cache,
-  // whereas a change at the tail never could. Hashing the whole conversation
-  // instead would rebuild the entire history as one string on every send,
-  // which is what made this measurement quadratic over a session.
-  let budget = FINGERPRINT_PREFIX_CHAR_BUDGET;
-  for (const content of requestContents) {
-    if (budget <= 0) break;
-    const serialized = measure(content).serialized;
-    parts.push(
-      `C:${content.speaker}:${content.metadata?.synthetic === true ? 1 : 0}:${serialized.slice(0, budget)}`,
-    );
-    budget -= serialized.length;
-  }
-  return parts.join('\u0000');
-}
 
 /**
  * Deterministic stringify that sorts object keys, so two structurally
@@ -368,6 +361,87 @@ function buildToolCallNameMap(
  * (`previouslySentCallIds`, `previousFingerprint`) but never mutates them.
  * The caller is responsible for updating session memory after this returns.
  */
+/** A content's contribution to the prefix fingerprint, and its budget cost. */
+interface FingerprintContribution {
+  readonly text: string;
+  readonly consumed: number;
+}
+
+/**
+ * Measure one content, using and populating the session cache, and produce its
+ * fingerprint contribution.
+ *
+ * Serialization happens only when something still needs the string: the content
+ * has never been measured, or it has no stable identity and the fingerprint
+ * still has budget. Past the budget an already-measured content costs nothing,
+ * which is what keeps a long conversation from being re-serialized and
+ * re-tokenized on every send.
+ */
+function resolveContentMeasurement(
+  content: IContent,
+  countTokens: TokenCountFn,
+  fingerprintBudget: number,
+  cache: ContentMeasurementCache | undefined,
+): {
+  measurement: ContentMeasurement;
+  fingerprintPart: FingerprintContribution | null;
+} {
+  const cacheKey = measurementCacheKey(content);
+  const cached = cacheKey === null ? undefined : cache?.get(cacheKey);
+  const needsSerialization =
+    cached === undefined || (cacheKey === null && fingerprintBudget > 0);
+  const fresh = needsSerialization
+    ? measureContent(content, countTokens)
+    : undefined;
+  const measurement = cached ?? fresh?.measurement;
+  // `needsSerialization` is true whenever `cached` is undefined, so one of the
+  // two is always present; this keeps that invariant explicit for the reader.
+  if (measurement === undefined) {
+    throw new Error('Content measurement resolved to neither cache nor fresh');
+  }
+  if (cached === undefined && cacheKey !== null) {
+    cache?.set(cacheKey, measurement);
+  }
+
+  return {
+    measurement,
+    fingerprintPart: buildFingerprintContribution(
+      content,
+      cacheKey,
+      fresh?.serialized,
+      fingerprintBudget,
+    ),
+  };
+}
+
+/**
+ * A content's fingerprint contribution, or null when the budget is spent.
+ *
+ * An identified content contributes its id: the id is stable across sends and
+ * changes when the content is replaced, so hashing it detects the prefix changes
+ * that break a provider cache (instructions edited, tool schemas changed, a head
+ * rewritten by compression, reordered or dropped turns) without re-reading any
+ * body.
+ */
+function buildFingerprintContribution(
+  content: IContent,
+  cacheKey: string | null,
+  serialized: string | undefined,
+  budget: number,
+): FingerprintContribution | null {
+  if (budget <= 0) return null;
+  if (cacheKey !== null) {
+    const text = `C#${cacheKey}`;
+    return { text, consumed: text.length };
+  }
+  if (serialized === undefined) return null;
+  const synthetic = content.metadata?.synthetic === true ? 1 : 0;
+  return {
+    text: `C:${content.speaker}:${synthetic}:${serialized.slice(0, budget)}`,
+    consumed: serialized.length,
+  };
+}
+
 export function computeRequestShape(
   input: RequestShapeInput,
 ): RequestShapeResult {
@@ -381,24 +455,24 @@ export function computeRequestShape(
   let newToolResultTokens = 0;
   let carriedToolResultTokens = 0;
 
-  // Memoized for the duration of this send only. Object identity is stable
-  // within one request, so this stops the fingerprint pass from re-serializing
-  // and re-counting every body the bucket pass already measured. It is NOT a
-  // cross-send cache: the history pipeline rebuilds every content object on
-  // each send, so there is no identity to key one on.
-  const perSend = new Map<IContent, ContentMeasurement>();
-  const measure = (content: IContent): ContentMeasurement => {
-    const existing = perSend.get(content);
-    if (existing !== undefined) return existing;
-    const measured = measureContent(content, countTokens);
-    perSend.set(content, measured);
-    return measured;
-  };
+  const toolsJson = stableStringify(input.tools);
+  // Instructions and tool schemas are the head of the cacheable prefix and are
+  // always included in full; history then fills the remaining budget.
+  const fingerprintParts: string[] = [
+    `I:${input.instructionsText ?? ''}`,
+    `T:${toolsJson}`,
+  ];
+  let fingerprintBudget = FINGERPRINT_PREFIX_CHAR_BUDGET;
 
   for (const content of requestContents) {
-    const bucket = classifyContent(content);
-    const measurement = measure(content);
+    const { measurement, fingerprintPart } = resolveContentMeasurement(
+      content,
+      countTokens,
+      fingerprintBudget,
+      input.measurementCache,
+    );
 
+    const bucket = classifyContent(content);
     if (bucket === 'injected') {
       injectedTokens += measurement.tokens;
     } else if (bucket === 'media') {
@@ -424,16 +498,14 @@ export function computeRequestShape(
         newToolResultTokens += result.resultTokens;
       }
     }
+
+    if (fingerprintPart !== null) {
+      fingerprintParts.push(fingerprintPart.text);
+      fingerprintBudget -= fingerprintPart.consumed;
+    }
   }
 
-  const toolsJson = stableStringify(input.tools);
-  const prefix = serializePrefixForFingerprint(
-    input.instructionsText,
-    toolsJson,
-    requestContents,
-    measure,
-  );
-  const prefixFingerprint = computeFingerprint(prefix);
+  const prefixFingerprint = computeFingerprint(fingerprintParts.join('\u0000'));
   const prefixFingerprintChanged =
     input.previousFingerprint === undefined
       ? null
@@ -488,13 +560,39 @@ function resolveToolName(
  * memory, and rare in practice (requires the same tool result to be re-sent
  * after `maxCallIds` other distinct results displaced it).
  */
-export class RequestShapeSessionMemory {
+export class RequestShapeSessionMemory implements ContentMeasurementCache {
   private readonly sentCallIds = new Set<string>();
   private lastFp: string | undefined;
   private readonly maxCallIds: number;
 
+  /**
+   * Per-content measurements, so a content carried across many turns is
+   * tokenized once instead of on every send. Holds counts only — never
+   * serialized bodies — and is FIFO-bounded like {@link sentCallIds}. An evicted
+   * content is simply re-measured on its next send; nothing is wrong, only
+   * slower.
+   */
+  private readonly measurements = new Map<string, ContentMeasurement>();
+
   constructor(maxCallIds: number = DEFAULT_MAX_SENT_CALL_IDS) {
     this.maxCallIds = maxCallIds;
+  }
+
+  /** Number of cached content measurements currently retained. */
+  get measurementCount(): number {
+    return this.measurements.size;
+  }
+
+  get(key: string): ContentMeasurement | undefined {
+    return this.measurements.get(key);
+  }
+
+  set(key: string, measurement: ContentMeasurement): void {
+    if (this.measurements.size >= this.maxCallIds) {
+      const oldest = this.measurements.keys().next().value;
+      if (oldest !== undefined) this.measurements.delete(oldest);
+    }
+    this.measurements.set(key, measurement);
   }
 
   /** Number of distinct callIds currently retained. */
@@ -517,6 +615,7 @@ export class RequestShapeSessionMemory {
       ...input,
       previouslySentCallIds: this.sentCallIds,
       previousFingerprint: this.lastFp,
+      measurementCache: this,
     });
 
     for (const tc of result.toolCalls) {
