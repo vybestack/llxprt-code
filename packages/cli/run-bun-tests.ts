@@ -24,25 +24,38 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { availableParallelism } from 'node:os';
+import {
+  DEFAULT_PER_FILE_TIMEOUT_MS,
+  DEFAULT_PER_TEST_TIMEOUT_MS,
+  resolveTestConcurrency,
+} from '../../scripts/lib/bun-test-policy.js';
 
-const PER_FILE_TIMEOUT_MS = 120_000;
+const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**
- * Per-test timeout, matching the testTimeout the removed vitest.config.ts set.
- * Bun defaults to 5s, which the tests that spawn the real CLI exceed once the
- * suite runs with concurrency. Passed as a flag because the bunfig.toml key is
- * not picked up for a single-file invocation.
+ * Per-test timeout. Bun defaults to 5s, which the tests that spawn the real
+ * CLI exceed once the suite runs with concurrency. Passed as a flag because
+ * the bunfig.toml key is not picked up for a single-file invocation.
+ *
+ * Raised from 30s to the shared budget for issue #3139: this workspace was the
+ * worst-failing CI shard (5/15 first attempts) because it combined the tight
+ * bound with a pool that saturated every core.
  */
-const PER_TEST_TIMEOUT_MS = 30_000;
+const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
 
 /**
  * Integration tests spawn the built CLI, which cold-starts from TypeScript
  * source and is far slower than an in-process test — especially on a loaded CI
  * runner. They get a larger per-test budget so a slow boot is not reported as a
  * failure.
+ *
+ * Expressed as a multiple of the shared budget rather than a fixed 120s: once
+ * the unit budget rose to 180s for issue #3139 a fixed value silently became
+ * the *smaller* of the two, which would have given the slowest tests in the
+ * workspace the tightest bound. It stays well inside
+ * PER_INTEGRATION_FILE_TIMEOUT_MS, which remains the hang backstop.
  */
-const PER_INTEGRATION_TEST_TIMEOUT_MS = 120_000;
+const PER_INTEGRATION_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS * 2;
 
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -104,7 +117,7 @@ function parseConcurrency(): number {
       return parsed;
     }
   }
-  return Math.max(1, Math.min(8, availableParallelism()));
+  return resolveTestConcurrency({ envVar: 'LLXPRT_CLI_TEST_CONCURRENCY' });
 }
 
 export function isTestFile(fileName: string): boolean {
@@ -186,11 +199,17 @@ function runTestFile(file: string): Promise<TestResult> {
       output += chunk.toString();
     });
 
+    // Set by the timer so the exit handler can report the real reason. The
+    // result is only produced once the process has actually exited: killing a
+    // tree only signals it, so resolving from the timer would free this worker
+    // slot while the tree was still winding down. The pool would then exceed
+    // its concurrency cap exactly when the machine is already struggling —
+    // which is how a timeout on one file turns into timeouts on others.
+    let killedByTimeout = false;
+
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+      killedByTimeout = true;
       killProcessTree(child);
-      resolve({ file, passed: false, exitCode: null, timedOut: true, output });
     }, fileTimeoutForFile(file));
 
     child.on('exit', (code) => {
@@ -199,9 +218,9 @@ function runTestFile(file: string): Promise<TestResult> {
       clearTimeout(timer);
       resolve({
         file,
-        passed: code === 0,
-        exitCode: code,
-        timedOut: false,
+        passed: !killedByTimeout && code === 0,
+        exitCode: killedByTimeout ? null : code,
+        timedOut: killedByTimeout,
         output,
       });
     });

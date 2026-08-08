@@ -14,7 +14,11 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { availableParallelism } from 'node:os';
+import {
+  DEFAULT_PER_FILE_TIMEOUT_MS,
+  DEFAULT_PER_TEST_TIMEOUT_MS,
+  resolveTestConcurrency,
+} from '../../scripts/lib/bun-test-policy.js';
 
 /**
  * Every path this runner touches — discovery, the child's working directory,
@@ -25,8 +29,10 @@ import { availableParallelism } from 'node:os';
 const WORKSPACE_ROOT = import.meta.dir;
 const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');
 const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
-const CONCURRENCY = Math.min(8, availableParallelism());
-const PER_FILE_TIMEOUT_MS = 60_000;
+const CONCURRENCY = resolveTestConcurrency({
+  envVar: 'LLXPRT_AUTH_TEST_CONCURRENCY',
+});
+const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 
 const TEST_ROOTS = ['src'] as const;
 
@@ -88,7 +94,16 @@ export function runTestFile(file: string): Promise<TestResult> {
     let resolved = false;
     const child = spawn(
       process.execPath,
-      ['test', '--preload', PRELOAD, file],
+      [
+        'test',
+        // Bun 1.3.14 ignores a `[test] timeout` key in bunfig.toml and falls
+        // back to 5s, so this flag is the only thing that sets the budget.
+        '--timeout',
+        String(DEFAULT_PER_TEST_TIMEOUT_MS),
+        '--preload',
+        PRELOAD,
+        file,
+      ],
       {
         cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
@@ -96,17 +111,18 @@ export function runTestFile(file: string): Promise<TestResult> {
       },
     );
 
+    // Set by the timer so the exit handler can report the real reason. The
+    // result is only produced once the process has actually been reaped:
+    // `kill()` only sends a signal and returns, so resolving from the timer
+    // would free the worker slot while the killed process was still running,
+    // letting the pool exceed its concurrency cap exactly when the machine is
+    // already struggling. This mattered less under the old fixed batches; with
+    // a worker pool the freed slot is filled immediately.
+    let killedByTimeout = false;
+
     const timer = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
+      killedByTimeout = true;
       child.kill('SIGKILL');
-      resolve({
-        file,
-        passed: false,
-        exitCode: null,
-        timedOut: true,
-        signal: null,
-      });
     }, PER_FILE_TIMEOUT_MS);
 
     child.on('exit', (code, signal) => {
@@ -115,10 +131,10 @@ export function runTestFile(file: string): Promise<TestResult> {
       clearTimeout(timer);
       resolve({
         file,
-        passed: code === 0,
-        exitCode: code,
-        timedOut: false,
-        signal: signal ?? null,
+        passed: !killedByTimeout && code === 0,
+        exitCode: killedByTimeout ? null : code,
+        timedOut: killedByTimeout,
+        signal: killedByTimeout ? null : (signal ?? null),
       });
     });
 
@@ -198,13 +214,22 @@ async function main(): Promise<void> {
     `Running ${testFiles.length} test files with concurrency ${CONCURRENCY}`,
   );
 
+  // A worker pool rather than fixed batches: a batch only advances when its
+  // slowest file finishes, so one slow file leaves CONCURRENCY - 1 slots idle
+  // exactly when the machine has work queued behind it.
   const results: TestResult[] = [];
+  let nextIndex = 0;
 
-  for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
-    const batch = testFiles.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(batch.map(runTestFile));
-    results.push(...batchResults);
+  async function worker(): Promise<void> {
+    while (nextIndex < testFiles.length) {
+      const file = testFiles[nextIndex++];
+      results.push(await runTestFile(file));
+    }
   }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, testFiles.length) }, worker),
+  );
 
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed);
