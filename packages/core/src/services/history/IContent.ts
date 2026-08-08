@@ -520,13 +520,25 @@ export function stampAiTurnModel(
  * Stripping forces a full-history send with `store: true`, starting a fresh
  * correct chain (#3134 Fix 3).
  *
- * Returns a new array; entries without `responsesStored` are returned by
- * reference (unchanged), so callers that need immutability for change
- * detection still get it for unaffected entries.
+ * Aliasing contract, deliberate: this returns a NEW array, but the entries in
+ * it are the CALLER'S OWN `IContent` objects, shared by reference. Only AI
+ * entries that actually carried `responsesStored` are replaced, and those get a
+ * new object plus a new `metadata` object. `blocks` is never cloned for any
+ * entry. Treat the result as read-only and do not mutate entries through it.
+ *
+ * The return type is `readonly IContent[]` to say so at the type level. Copying
+ * every entry was considered and rejected: a shallow `{...entry}` would still
+ * share `blocks` and `metadata`, so it would advertise immutability it does not
+ * provide, and a deep clone would be real cost on every compression for a
+ * hazard no caller exhibits. Both call sites — `applyCompressionWithAnchor` and
+ * `applyDensityMutations` — use the result as a replacement history and never
+ * write through it. Sharing entry references is also the established
+ * convention here: `HistoryService.getCurated()` and the compression
+ * strategies' `history.slice(...)` hand out the same objects.
  */
 export function invalidateResponsesStatefulChain(
   history: readonly IContent[],
-): IContent[] {
+): readonly IContent[] {
   return history.map((entry) => {
     if (entry.speaker === 'ai' && entry.metadata?.responsesStored === true) {
       const metadata = { ...entry.metadata };
