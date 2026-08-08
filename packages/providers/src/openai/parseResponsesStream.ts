@@ -13,6 +13,7 @@ import {
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { randomUUID } from 'node:crypto';
 import { isAcceptedTerminalEventType } from './responsesTerminalEvents.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 import type {
@@ -868,6 +869,7 @@ export async function* parseResponsesStream(
     hasEmittedVisibleThinking: false,
     reasoningText: '',
     reasoningSummaryText: '',
+    reasoningStreamEpoch: randomUUID(),
     nextReasoningStreamIndex: 0,
   };
 

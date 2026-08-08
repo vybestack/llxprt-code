@@ -111,12 +111,11 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
       'First part here',
       'First part here',
     ]);
-    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
-      'anthropic-thinking:0:block-0',
-      'anthropic-thinking:0:block-0',
-      'anthropic-thinking:0:block-0',
-      'anthropic-thinking:0:block-0',
-    ]);
+    // Within one thinking block every delta plus the final complete emission
+    // must collapse onto ONE stream id (acceptance criterion 2).
+    const streamIds = thinkingBlocks.map((block) => block.streamId);
+    expect(new Set(streamIds).size).toBe(1);
+    expect(streamIds[0]?.startsWith('anthropic-thinking:')).toBe(true);
     expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
       'delta',
       'delta',
@@ -271,16 +270,21 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     expect(new Set(completedBlocks.map((block) => block.streamId)).size).toBe(
       2,
     );
+    // The two thinking blocks share the same source index (Anthropic reused 0)
+    // but must still carry distinct stream ids. Deltas + complete for each
+    // block collapse onto that block's single id.
     expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
       completedBlocks[0].streamId,
       completedBlocks[0].streamId,
       completedBlocks[1].streamId,
       completedBlocks[1].streamId,
     ]);
-    expect(completedBlocks.map((block) => block.streamId)).toStrictEqual([
-      'anthropic-thinking:0:block-0',
-      'anthropic-thinking:0:block-1',
-    ]);
+    expect(completedBlocks[0].streamId).not.toBe(completedBlocks[1].streamId);
+    expect(
+      completedBlocks.every(
+        (block) => block.streamId?.startsWith('anthropic-thinking:') === true,
+      ),
+    ).toBe(true);
   });
 
   it('should hide streaming thinking chunks when reasoning.includeInResponse is false', async () => {
@@ -388,9 +392,11 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
       thought: '[redacted]',
       signature: 'encrypted-reasoning',
       isHidden: true,
-      streamId: 'anthropic-thinking:0:block-0',
       streamStatus: 'complete',
     });
+    expect(thinkingBlocks[0].streamId?.startsWith('anthropic-thinking:')).toBe(
+      true,
+    );
   });
 
   it('should not emit thinking chunks for empty thinking deltas or zero-length final text', async () => {
@@ -555,5 +561,87 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     expect(textChunks[1].blocks.find((b) => b.type === 'text')).toMatchObject({
       text: 'world',
     });
+  });
+
+  it('produces distinct thinking stream ids across consecutive API calls (issue #3128)', async () => {
+    // Each generateChatCompletion call drives one Anthropic API call. A user
+    // turn spans many such calls, and the UI ref that consumes these ids
+    // lives for the whole turn, so ids must be unique across calls.
+    const buildThinkingStream = (thought: string, signature: string) => ({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: thought },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'signature_delta', signature },
+        };
+        yield { type: 'content_block_stop', index: 0 };
+      },
+    });
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Think twice' }],
+      },
+    ];
+
+    const collectThinking = async (
+      thought: string,
+      signature: string,
+    ): Promise<ThinkingBlock[]> => {
+      mockMessagesCreate.mockResolvedValue(
+        buildThinkingStream(thought, signature),
+      );
+      const chunks: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(
+        buildCallOptions(messages),
+      )) {
+        chunks.push(chunk);
+      }
+      return chunks.flatMap((chunk) =>
+        chunk.blocks.filter(
+          (block): block is ThinkingBlock => block.type === 'thinking',
+        ),
+      );
+    };
+
+    const firstCallBlocks = await collectThinking(
+      'Reasoning from the first iteration',
+      'sig-first',
+    );
+    const secondCallBlocks = await collectThinking(
+      'Reasoning from the second iteration',
+      'sig-second',
+    );
+
+    // Within each call, the single delta + the final complete share one id.
+    expect(new Set(firstCallBlocks.map((b) => b.streamId)).size).toBe(1);
+    expect(new Set(secondCallBlocks.map((b) => b.streamId)).size).toBe(1);
+
+    const firstId = firstCallBlocks[0].streamId;
+    const secondId = secondCallBlocks[0].streamId;
+
+    // Cross-call: the two iterations must NOT reuse the same id. This is the
+    // core regression — previously every call produced block-0 and the second
+    // iteration silently overwrote the first in the transcript.
+    expect(firstId).not.toBe(secondId);
+
+    // Cross-session safety: freshly generated ids must never equal the legacy
+    // format (`anthropic-thinking:0:block-0`) that a resumed session's
+    // persisted history would carry.
+    for (const id of [firstId, secondId]) {
+      expect(id).not.toBe('anthropic-thinking:0:block-0');
+      expect(id?.startsWith('anthropic-thinking:')).toBe(true);
+    }
   });
 });

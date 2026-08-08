@@ -168,6 +168,15 @@ Recommended settings:
 
 **Environment variable:** `export ANTHROPIC_API_KEY=sk-ant-...`
 
+> **Summarized thinking (not a streaming bug):** Anthropic returns a
+> **summary** of the model's reasoning, produced by a _different_ model than
+> the one that generated the raw thinking. Billing reflects the **full raw
+> thinking**, so the visible thinking text is typically far shorter than the
+> billed completion tokens (a median of roughly 4 visible characters per billed
+> token). A summary occasionally ends mid-sentence at a clean word boundary —
+> this is a summarizer artefact, not a truncation or streaming bug. LLxprt
+> records and displays exactly what the API returns.
+
 ### Claude Code OAuth (`claudecode` alias)
 
 Same context and output limits as the `anthropic` alias for current-generation
