@@ -830,8 +830,14 @@ async function buildSystemInstruction(
   // Issue #3136: a subagent's user/core memory previously reached the model
   // only because the provider layer rebuilt its own core prompt. Supply both
   // here so collapsing to a single assembler cannot strip subagent memory.
-  // coreMemory is passed explicitly to avoid the per-call two-file disk read
-  // in getCoreSystemPromptAsync when it is undefined.
+  // Passing coreMemory skips the two-file .LLXPRT_SYSTEM disk read that
+  // getCoreSystemPromptAsync performs when it is undefined — but only when JIT
+  // context is enabled, since Config.getCoreMemory() returns undefined
+  // otherwise and the read happens anyway.
+  //
+  // This differs from ChatSessionFactory, which uses getGlobalMemory() plus
+  // getJitMemoryForPath(); subagents therefore miss JIT subdirectory memory and
+  // can receive MCP instructions twice. See issue #3162 findings D2 and D4.
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
     userMemory: config.getUserMemory(),
     coreMemory: config.getCoreMemory(),
