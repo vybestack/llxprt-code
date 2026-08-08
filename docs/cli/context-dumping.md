@@ -5,13 +5,13 @@ The `/dumpcontext` command captures complete API request/response data for debug
 ## Quick Start
 
 ```bash
-# In an interactive session, enable dumping for the next request only
+# In an interactive session, immediately dump the current conversation context
 /dumpcontext now
 
-# Enable dumping for all requests
+# Enable dumping for every request in the session (foreground and subagents)
 /dumpcontext on
 
-# Enable dumping only when errors occur
+# Enable dumping only when errors occur (foreground and subagents)
 /dumpcontext error
 
 # Check current status
@@ -23,13 +23,37 @@ The `/dumpcontext` command captures complete API request/response data for debug
 
 ## Command Options
 
-| Mode     | Description                           |
-| -------- | ------------------------------------- |
-| `now`    | Dump context on the next request only |
-| `status` | Show current dump status (default)    |
-| `on`     | Dump context before every request     |
-| `error`  | Dump context only when errors occur   |
-| `off`    | Disable context dumping               |
+| Mode     | Description                                                                           |
+| -------- | ------------------------------------------------------------------------------------- |
+| `now`    | Dump the current conversation context immediately (no model request is sent)          |
+| `status` | Show current dump status (default)                                                    |
+| `on`     | Dump context before every request in the session (foreground and subagent requests)   |
+| `error`  | Dump context only when errors occur in the session (foreground and subagent requests) |
+| `off`    | Disable context dumping for the session (foreground and subagent requests)            |
+
+## Session-Wide Scope
+
+The transport modes (`on`, `error`, `off`) are **session-wide**. After you run
+`/dumpcontext on`, every subsequent provider request in the current session is
+dumped — including requests made by **subagents** launched via the `task` tool.
+This is essential for debugging subagent orchestration, prompts, provider
+behavior, and tool calls.
+
+- A mode change affects the **next** provider invocation from both foreground
+  and already-created subagent runtimes.
+- An invocation that is already in flight retains its own immutable settings
+  snapshot and is unaffected by a mid-request mode change.
+- `/dumpcontext status` reports the current **effective mode** (the value
+  consumed by both foreground and subagent requests), but does not indicate
+  whether the mode originates from a session override or a profile-local
+  fallback.
+- If a subagent's own profile specifies `dumpcontext`, the **session value takes
+  precedence** — including session `off` overriding a profile-local `on`.
+- A brand-new session starts with no inherited dump mode.
+
+`/dumpcontext now` is a separate immediate operation: it dumps the current
+foreground conversation history to disk right away and does not change the
+session-wide transport mode.
 
 ## Dump Location
 
@@ -216,6 +240,9 @@ See [Debug Logging](../debug-logging.md) for more information.
 
 - Authorization headers are **never** included in dumps
 - Dumps may contain sensitive conversation content
+- When `on` or `error` mode is active, dumps may also include **subagent
+  prompts, conversation history, and tool-call data** (including tool
+  arguments and results), which can be especially sensitive
 - Store dumps securely and clean up when no longer needed
 - Consider redacting sensitive data before sharing dumps
 

@@ -565,7 +565,9 @@ export class SubagentOrchestrator {
       modelConfig,
       agentRuntimeId,
     );
-    const settingsService = createRuntimeSettingsService();
+    const settingsService = createRuntimeSettingsService({
+      sessionSource: this.options.foregroundConfig.getSettingsService(),
+    });
     if (!isLoadBalancerActivation) {
       populatePreActivationSettings(
         settingsService,

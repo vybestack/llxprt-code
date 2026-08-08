@@ -34,6 +34,12 @@ export interface SettingSpec {
   completionOptions?: ReadonlyArray<{ value: string; description?: string }>;
   /** When true, the value is secret and must be masked in diagnostics. */
   sensitive?: boolean;
+  /**
+   * When true, the setting is session-scoped: isolated child settings services
+   * read its live value from the foreground session source rather than only
+   * from their own profile-populated store.
+   */
+  sessionScope?: boolean;
 }
 
 export interface SeparatedSettings {

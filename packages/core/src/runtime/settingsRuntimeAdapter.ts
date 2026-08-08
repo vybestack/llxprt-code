@@ -10,6 +10,7 @@
 
 import {
   SettingsService,
+  type SettingsServiceInit,
   getSettingsService,
   registerSettingsService,
   resetSettingsService,
@@ -27,8 +28,10 @@ import {
 
 setProviderRuntimeStateFactory(() => new SettingsService());
 
-export function createRuntimeSettingsService(): SettingsService {
-  return new SettingsService();
+export function createRuntimeSettingsService(
+  options?: SettingsServiceInit,
+): SettingsService {
+  return new SettingsService(options);
 }
 
 export interface SettingsProviderRuntimeContextInit

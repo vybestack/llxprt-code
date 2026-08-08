@@ -215,8 +215,9 @@ export const dumpcontextCommand: SlashCommand = {
 
       // Handle status command
       if (mode === 'status') {
+        const rawMode = runtime.getSessionSetting('dumpcontext');
         const currentMode =
-          (runtime.getEphemeralSetting('dumpcontext') as string) || 'off';
+          typeof rawMode === 'string' && rawMode !== '' ? rawMode : 'off';
         return {
           type: 'message',
           messageType: 'info',
@@ -228,8 +229,9 @@ export const dumpcontextCommand: SlashCommand = {
         return await dumpImmediateContext(context);
       }
 
-      // Handle mode changes
-      runtime.setEphemeralSetting('dumpcontext', mode);
+      // Handle mode changes — session-scoped so the value survives profile
+      // application and propagates live to foreground and subagent requests.
+      runtime.setSessionSetting('dumpcontext', mode);
 
       const messages: Record<Exclude<DumpMode, 'now'>, string> = {
         on: `Context dumping enabled for all requests.\nDumps will be saved to: ${dumpDir}`,
