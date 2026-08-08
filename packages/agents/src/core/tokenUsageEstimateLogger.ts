@@ -5,6 +5,7 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type {
   TokenUsageLogger,
   TokenEstimatorType,
@@ -13,7 +14,10 @@ import type { TokenUsageTurnContext } from './tokenUsageRecords.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
+import { extractSystemInstructionText } from './streamRequestHelpers.js';
+import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 const logger = new DebugLogger('llxprt:token-usage-estimate');
 
@@ -109,4 +113,104 @@ export function recordTurnJoinContext(
   };
 
   usageLogger.attachTurnContext(promptId, context);
+}
+
+/**
+ * Compute the AC-5 (tool attribution) + AC-6 (request-shape provenance)
+ * values from the neutral request and attach them to the pending estimate
+ * for `promptId`.  Called at both send seams (StreamProcessor and
+ * TurnProcessor) immediately after {@link recordTurnJoinContext}.
+ *
+ * Cost discipline: the logger's `isEnabled()` gate is checked FIRST, so no
+ * computation runs when telemetry is disabled.  The computation itself is
+ * O(n) in the number of request contents — each content is token-counted
+ * exactly once via the codebase's shared tiktoken-based {@link estimateTokens}
+ * estimator (the same one used for prompt estimation), never re-tokenized.
+ *
+ * `promptCacheKey` is deliberately NOT populated here: the actual key is
+ * derived and sanitized inside the provider-specific executor
+ * (`packages/providers/src/openai-responses/openAIResponsesExecutor.ts`,
+ * `packages/providers/src/openai/OpenAIRequestPreparation.ts`), which is
+ * below the agents-layer send seam.  Recording a re-derived value risks
+ * diverging from what was actually sent, so the field is omitted (AC-6:
+ * "recorded only where the provider actually sends one").
+ *
+ * @issue #3130
+ */
+export function recordRequestShapeContext(
+  usageLogger: TokenUsageLogger | null | undefined,
+  promptId: string,
+  requestContents: readonly IContent[],
+  tools: unknown,
+  instructionsText: string | undefined,
+): void {
+  // Check FIRST — skip all work when disabled.
+  if (usageLogger === undefined || usageLogger === null) return;
+  if (!usageLogger.isEnabled()) return;
+
+  const result = usageLogger.getShapeMemory().recordRequestShape({
+    requestContents,
+    tools,
+    instructionsText,
+    countTokens: estimateTokens,
+  });
+
+  const context: TokenUsageTurnContext = {
+    toolCalls: result.toolCalls,
+    newToolResultTokens: result.newToolResultTokens,
+    carriedToolResultTokens: result.carriedToolResultTokens,
+    instructionsTokens: result.instructionsTokens,
+    toolsSchemaTokens: result.toolsSchemaTokens,
+    historyTokens: result.historyTokens,
+    mediaTokens: result.mediaTokens,
+    injectedTokens: result.injectedTokens,
+    prefixFingerprint: result.prefixFingerprint,
+    prefixFingerprintChanged: result.prefixFingerprintChanged,
+  };
+
+  usageLogger.attachTurnContext(promptId, context);
+}
+
+/**
+ * Combined send-seam telemetry: records the finalized prompt-envelope
+ * estimate, the AC-1 join keys, AND the AC-5/AC-6 request-shape context in a
+ * single call.  Both send seams (StreamProcessor._sendProviderRequest and
+ * TurnProcessor._executeProviderCall) call this instead of three separate
+ * functions — keeping the seam files under their line caps while staying DRY.
+ *
+ * The raw `systemInstruction` config is accepted (not pre-extracted text) so
+ * the extraction happens once inside the helper, not duplicated at each seam.
+ *
+ * @issue #3130
+ */
+export interface SendSeamTelemetryInput {
+  usageLogger: TokenUsageLogger | null | undefined;
+  promptId: string;
+  estimate: PromptEnvelopeEstimate | null;
+  runtimeState: AgentRuntimeState;
+  historyService: HistoryService;
+  requestContents: readonly IContent[];
+  tools: unknown;
+  systemInstruction: AgentClientGenerateConfig['systemInstruction'];
+}
+
+export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
+  recordFinalizedPromptEnvelopeEstimate(
+    input.usageLogger,
+    input.promptId,
+    input.estimate,
+  );
+  recordTurnJoinContext(
+    input.usageLogger,
+    input.promptId,
+    input.runtimeState,
+    input.historyService,
+  );
+  recordRequestShapeContext(
+    input.usageLogger,
+    input.promptId,
+    input.requestContents,
+    input.tools,
+    extractSystemInstructionText(input.systemInstruction),
+  );
 }

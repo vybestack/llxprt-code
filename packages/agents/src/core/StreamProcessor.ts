@@ -28,10 +28,7 @@ import type {
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import {
-  recordFinalizedPromptEnvelopeEstimate,
-  recordTurnJoinContext,
-} from './tokenUsageEstimateLogger.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import {
   prepareAtSendSeam,
   preparePromptEnvelopeAfterEnforcement,
@@ -530,17 +527,16 @@ export class StreamProcessor {
           ),
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordFinalizedPromptEnvelopeEstimate(
-        this.compressionHandler.tokenUsageLogger,
+      recordSendSeamTelemetry({
+        usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
-        prepared.estimate,
-      );
-      recordTurnJoinContext(
-        this.compressionHandler.tokenUsageLogger,
-        promptId,
-        this.runtimeContext.state,
-        this.historyService,
-      );
+        estimate: prepared.estimate,
+        runtimeState: this.runtimeContext.state,
+        historyService: this.historyService,
+        requestContents: requestPayload.contents,
+        tools: requestPayload.tools,
+        systemInstruction: this.generationConfig.systemInstruction,
+      });
 
       const streamResponse = provider.generateChatCompletion(prepared.options);
 

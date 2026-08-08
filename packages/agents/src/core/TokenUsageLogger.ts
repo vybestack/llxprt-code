@@ -20,10 +20,12 @@ import {
   type SerializedTokenUsageLifecycleRecord,
   type SerializedTokenUsageRecord,
 } from './tokenUsageRecords.js';
+import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 
 // Re-export for backward compatibility — SerializedTokenUsageRecord now lives
 // in the schema module as an alias of SerializedTokenUsageTurnRecord.
 export type { SerializedTokenUsageRecord } from './tokenUsageRecords.js';
+export type { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 
 export type TokenEstimatorType =
   | 'openai-tiktoken'
@@ -124,11 +126,25 @@ export class TokenUsageLogger {
   private readonly errorLogger = new DebugLogger('llxprt:token-usage-logger');
   private dirEnsured = false;
   private writeChain: Promise<void> = Promise.resolve();
+  /**
+   * Per-session request-shape memory for the AC-5 new-vs-carried split and
+   * the AC-6 prefix-fingerprint change detection. Lives on the logger because
+   * the logger is already per-session; bounded internally.
+   */
+  private readonly shapeMemory = new RequestShapeSessionMemory();
 
   constructor(
     private readonly enabled: boolean,
     private readonly logFilePath: string | undefined,
   ) {}
+
+  /**
+   * Per-session request-shape memory (callId tracking + fingerprint history).
+   * Used by the request-shape seam helper to compute AC-5/AC-6 values.
+   */
+  getShapeMemory(): RequestShapeSessionMemory {
+    return this.shapeMemory;
+  }
 
   isEnabled(): boolean {
     return this.enabled;

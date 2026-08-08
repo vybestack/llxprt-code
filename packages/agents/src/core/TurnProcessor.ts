@@ -19,10 +19,7 @@ import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/I
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import {
-  recordFinalizedPromptEnvelopeEstimate,
-  recordTurnJoinContext,
-} from './tokenUsageEstimateLogger.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import {
   bindPreparedTransportSignal,
   buildProviderChatOptions,
@@ -589,17 +586,16 @@ export class TurnProcessor {
           ),
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordFinalizedPromptEnvelopeEstimate(
-        this.compressionHandler.tokenUsageLogger,
+      recordSendSeamTelemetry({
+        usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
-        prepared.estimate,
-      );
-      recordTurnJoinContext(
-        this.compressionHandler.tokenUsageLogger,
-        promptId,
-        this.runtimeContext.state,
-        this.historyService,
-      );
+        estimate: prepared.estimate,
+        runtimeState: this.runtimeContext.state,
+        historyService: this.historyService,
+        requestContents,
+        tools,
+        systemInstruction: this.generationConfig.systemInstruction,
+      });
       const transportPrepared = bindPreparedTransportSignal(
         prepared,
         timeoutController.signal,
