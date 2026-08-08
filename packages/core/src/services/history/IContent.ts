@@ -507,3 +507,32 @@ export function stampAiTurnModel(
 
   return { ...content, metadata };
 }
+
+/**
+ * Strip `responsesStored` from all AI entries in the given history so the
+ * Responses stateful chain is invalidated.
+ *
+ * Any operation that rewrites history behind the current head (compression,
+ * density optimization, tool-response replacement) breaks the invariant that
+ * retained AI entries still represent what the server holds behind
+ * `previous_response_id`. Without this strip, the next turn would select a
+ * pre-rewrite parent and the server would replay stale/missing context.
+ * Stripping forces a full-history send with `store: true`, starting a fresh
+ * correct chain (#3134 Fix 3).
+ *
+ * Returns a new array; entries without `responsesStored` are returned by
+ * reference (unchanged), so callers that need immutability for change
+ * detection still get it for unaffected entries.
+ */
+export function invalidateResponsesStatefulChain(
+  history: readonly IContent[],
+): IContent[] {
+  return history.map((entry) => {
+    if (entry.speaker === 'ai' && entry.metadata?.responsesStored === true) {
+      const metadata = { ...entry.metadata };
+      delete metadata.responsesStored;
+      return { ...entry, metadata };
+    }
+    return entry;
+  });
+}

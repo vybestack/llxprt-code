@@ -40,6 +40,7 @@ import { resolveUserMemory } from '../utils/userMemory.js';
 import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   toOpenAIResponsesWireEffort,
@@ -131,6 +132,19 @@ export interface ResponsesExecutorDeps {
    * must not permanently demote the session to HTTP (issue #3034).
    */
   readonly onWebSocketSuccess?: () => void;
+  /**
+   * Returns true when the session has permanently suppressed Responses
+   * statefulness because a previous_response_id was rejected by the API.
+   * Once set, computeStatefulConversation stops selecting a parent so
+   * every subsequent turn sends full history (#3134 Fix 1).
+   */
+  readonly isResponsesStatefulFailed?: () => boolean;
+  /**
+   * Marks the session as having permanently suppressed Responses
+   * statefulness. Called exactly once, when a previous-response-not-found
+   * error is detected before any content has been yielded (#3134 Fix 1).
+   */
+  readonly markResponsesStatefulFailed?: () => void;
 }
 
 export interface PreparedResponsesRequestContext {
@@ -185,6 +199,27 @@ export async function buildResponsesRequestContextForProjection(
   );
 }
 
+/**
+ * Detect an API rejection caused by an unresolvable `previous_response_id`.
+ *
+ * The OpenAI Responses API returns HTTP 400 (or 404) with a body that mentions
+ * `previous_response_id` or the phrase `Previous response with id` when the
+ * stored parent cannot be found. This is the one sanctioned recovery trigger:
+ * a genuinely external, unpredictable API response (#3134 Fix 1).
+ */
+function isPreviousResponseNotFoundError(error: unknown): boolean {
+  const status = getErrorStatus(error);
+  if (status !== 400 && status !== 404) return false;
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+  return (
+    message.includes('previous_response_id') ||
+    message.includes('previous response with id')
+  );
+}
+
 export async function* executeOpenAIResponsesRequest(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
@@ -207,18 +242,77 @@ export async function* executeOpenAIResponsesRequest(
 
   await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
 
-  yield* streamResponses(
-    {
-      ...requestContext,
-      abortSignal,
-      maxStreamingAttempts:
-        (invocationEphemerals['retries'] as number | undefined) ?? 6,
-      streamRetryInitialDelayMs:
-        (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
-      normalizedOptions: options,
-    },
+  const streamParams = buildStreamParams(
+    requestContext,
+    abortSignal,
+    invocationEphemerals,
+    options,
+  );
+
+  // #3134 Fix 1: one-shot recovery when previous_response_id is rejected.
+  // The safe replay boundary is "no IContent has been yielded to the consumer"
+  // — if even one chunk escaped we cannot retry without duplicating output.
+  let contentYielded = false;
+  try {
+    for await (const content of streamResponses(streamParams, deps)) {
+      contentYielded = true;
+      yield content;
+    }
+    return;
+  } catch (error) {
+    if (
+      contentYielded ||
+      prepared.request.previous_response_id === undefined ||
+      !isPreviousResponseNotFoundError(error)
+    ) {
+      throw error;
+    }
+    deps.logger.debug(
+      () =>
+        `responses-stateful: previous_response_id was rejected by the API; retrying once with full history. Error: ${String(error)}`,
+    );
+  }
+
+  // Mark the session so all future turns suppress statefulness, then rebuild
+  // the request context. computeStatefulConversation will now return full
+  // history with no parent because deps.isResponsesStatefulFailed() is true.
+  deps.markResponsesStatefulFailed?.();
+  const recoveryPrepared = await buildResponsesRequestContextForProjection(
+    options,
+    deps,
+    invocationEphemerals,
+  );
+  const recoveryContext = await resolveResponsesTransportContext(
+    options,
+    recoveryPrepared,
     deps,
   );
+  yield* streamResponses(
+    buildStreamParams(recoveryContext, abortSignal, invocationEphemerals, options),
+    deps,
+  );
+}
+
+/**
+ * Shared stream-parameter builder so the initial and recovery paths stay
+ * identical (#3134 Fix 1). Extracted to keep executeOpenAIResponsesRequest
+ * within the project max-lines budget.
+ */
+function buildStreamParams(
+  requestContext: RequestContext,
+  abortSignal: AbortSignal | undefined,
+  invocationEphemerals: Record<string, unknown>,
+  options: NormalizedGenerateChatOptions,
+): StreamResponsesParams {
+  return {
+    ...requestContext,
+    abortSignal,
+    maxStreamingAttempts:
+      (invocationEphemerals['retries'] as number | undefined) ?? 6,
+    streamRetryInitialDelayMs:
+      (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
+    normalizedOptions: options,
+  };
 }
 
 export async function buildRequestContext(
@@ -245,6 +339,8 @@ export async function buildRequestContext(
     invocationEphemerals,
     explicitUserStore,
     isCodex,
+    rawBaseURL,
+    deps.isResponsesStatefulFailed?.() ?? false,
     deps.logger,
   );
   const input = buildInput(
@@ -260,6 +356,7 @@ export async function buildRequestContext(
     options,
     userMemory,
     deps,
+    stateful.parentId !== undefined,
   );
   const request = createRequest(options, requestInput, requestOverrides, deps);
   applyInstructionsAndTools(request, systemPrompt, options);
@@ -272,13 +369,7 @@ export async function buildRequestContext(
   applyTextVerbosity(request, options, invocationEphemerals, deps);
   applyCodexRequestSettings(request, isCodex, deps);
   applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
-  applyStatefulConversation(
-    request,
-    stateful,
-    explicitUserStore,
-    isCodex,
-    deps.logger,
-  );
+  applyStatefulConversation(request, stateful, explicitUserStore, deps.logger);
   return {
     rawBaseURL,
     isCodex,
@@ -550,6 +641,7 @@ function buildRequestInput(
   options: NormalizedGenerateChatOptions,
   userMemory: string | undefined,
   deps: ResponsesExecutorDeps,
+  serverSideParentActive: boolean,
 ): ResponsesInputItem[] {
   if (!isCodex) return input;
 
@@ -559,7 +651,13 @@ function buildRequestInput(
   const itemsForInjection = requestInput.filter(
     (item) => !('type' in item && item.type === 'reasoning'),
   );
-  injectSyntheticConfigFileRead(itemsForInjection, options, userMemory, deps);
+  // Fix 6: only inject the synthetic AGENTS.md read on turns that start a
+  // fresh chain (no parent). When previous_response_id is set the server
+  // already holds the first copy behind the parent; re-injecting each turn
+  // would accumulate one copy of user memory per turn (#3134).
+  if (!serverSideParentActive) {
+    injectSyntheticConfigFileRead(itemsForInjection, options, userMemory, deps);
+  }
   const injectedItems = itemsForInjection.filter(
     (item) => !requestInput.includes(item),
   );
@@ -735,6 +833,10 @@ function applyCodexRequestSettings(
 ): void {
   if (!isCodex) return;
 
+  // store=false is only the Codex DEFAULT. applyStatefulConversation runs
+  // after this and raises it to store=true whenever statefulness is active.
+  // See the design rationale doc comment on applyStatefulConversation in
+  // openAIResponsesStateful.ts for the full trade-off discussion (#3134).
   request.store = false;
   if ('max_output_tokens' in request) {
     delete request.max_output_tokens;

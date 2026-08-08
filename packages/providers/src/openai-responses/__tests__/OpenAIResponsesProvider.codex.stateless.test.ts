@@ -16,22 +16,17 @@
  */
 
 /**
- * Codex mode must always remain stateless.
+ * Issue #3134: Codex statefulness — stop resending full history.
  *
- * The OpenAI Responses API supports server-side statefulness via
- * `store=true` and `previous_response_id`. This is desirable for the
- * standard OpenAI backend but is incompatible with the Codex (ChatGPT)
- * backend, which must send every turn with full history and
- * `store=false`.
- *
- * These regression tests verify that even when `responses-stateful` is
- * requested via ephemeral/model-behavior settings, Codex mode:
- *   1. Never sets `store=true`
- *   2. Never sends `previous_response_id`
- *   3. Never trims history (keeps the full conversation)
+ * The OpenAI Responses API supports server-side statefulness via store=true
+ * and previous_response_id. Codex mode previously force-disabled this,
+ * resending the entire conversation on every request. These tests verify the
+ * new behavior: statefulness is ON BY DEFAULT for Codex, trims history to the
+ * delta when a stored parent exists, and falls back to full history when no
+ * parent is available or the user explicitly opts out.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -44,38 +39,66 @@ import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
+import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
+import type {
+  StreamResponseOptions,
+  WebSocketTransport,
+} from '../openAIResponsesWebSocketTransport.js';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
-const TEST_RUNTIME_ID = 'codex-stateless-test-runtime';
-const originalFetch = global.fetch;
-const mockFetch = vi.fn();
+const TEST_RUNTIME_ID = 'codex-stateful-test-runtime';
 
-function createMockStreamingResponse() {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(
-        encoder.encode('data: {"type":"content.delta","delta":"ok"}\n\n'),
-      );
-      controller.enqueue(
-        encoder.encode(
-          'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-        ),
-      );
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      controller.close();
-    },
-  });
+/**
+ * In-process WebSocket transport double that records every request sent and
+ * yields a deterministic completion. Mirrors what parseResponsesStream would
+ * produce when responsesStored is true, so the parent-lookup logic can chain.
+ */
+class RecordingTransport implements WebSocketTransport {
+  readonly sentRequests: OpenAIResponsesRequest[] = [];
+  lastOptions: StreamResponseOptions | undefined;
 
-  return new Response(stream, {
-    status: 200,
-    headers: { 'content-type': 'text/event-stream' },
-  });
+  async *streamResponse(
+    request: OpenAIResponsesRequest,
+    options: StreamResponseOptions,
+  ): AsyncIterableIterator<IContent> {
+    this.sentRequests.push(request);
+    this.lastOptions = options;
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        id: 'resp_completed',
+        ...(options.responsesStored === true ? { responsesStored: true } : {}),
+        stopReason: 'end_turn',
+        finishReason: 'completed',
+      },
+    };
+  }
+
+  close(): void {}
 }
 
-function buildCodexProviderWithOAuth(): OpenAIResponsesProvider {
-  const oauthManager = {
-    getOAuthToken: vi.fn(async () => ({
+/**
+ * Provider subclass that injects the recording transport so we can observe
+ * the exact request the executor builds, without standing up a real WebSocket
+ * server or falling back to HTTP.
+ */
+class TestableCodexProvider extends OpenAIResponsesProvider {
+  readonly recordingTransport = new RecordingTransport();
+
+  constructor(oauthManager: object) {
+    super('codex-api-key', CODEX_BASE_URL, undefined, oauthManager);
+  }
+
+  protected override createWebSocketTransport(): WebSocketTransport {
+    return this.recordingTransport;
+  }
+}
+
+function buildCodexOAuthManager(): object {
+  return {
+    getOAuthToken: async () => ({
       access_token: 'codex-token',
       token_type: 'Bearer',
       expires_in: 3600,
@@ -83,40 +106,16 @@ function buildCodexProviderWithOAuth(): OpenAIResponsesProvider {
       refresh_token: 'test-refresh',
       scope: 'openid',
       account_id: 'acct_codex_123',
-    })),
+    }),
   };
-
-  return new OpenAIResponsesProvider(
-    'codex-api-key',
-    CODEX_BASE_URL,
-    undefined,
-    oauthManager as unknown as object,
-  );
 }
 
 async function captureRequestBody(
-  provider: OpenAIResponsesProvider,
+  provider: TestableCodexProvider,
   contents: IContent[],
   settings: SettingsService,
   ephemerals: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  let capturedBody: string | undefined;
-
-  mockFetch.mockImplementation(
-    async (
-      _input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      if (init?.body !== null && init?.body !== undefined) {
-        capturedBody =
-          typeof init.body === 'string'
-            ? init.body
-            : await new Response(init.body).text();
-      }
-      return createMockStreamingResponse();
-    },
-  );
-
   const runtime = createProviderRuntimeContext({
     settingsService: settings,
     runtimeId: TEST_RUNTIME_ID,
@@ -144,16 +143,11 @@ async function captureRequestBody(
     // drain
   }
 
-  if (capturedBody === undefined) {
-    throw new Error('Request body was not captured');
+  const sent = provider.recordingTransport.sentRequests;
+  if (sent.length === 0) {
+    throw new Error('No request was sent over the WebSocket transport');
   }
-  try {
-    return JSON.parse(capturedBody) as Record<string, unknown>;
-  } catch (error) {
-    throw new Error('Captured request body was not valid JSON', {
-      cause: error,
-    });
-  }
+  return sent[0] as unknown as Record<string, unknown>;
 }
 
 function inputItems(body: Record<string, unknown>): ResponsesInputItem[] {
@@ -202,11 +196,8 @@ function assistantMessages(items: ResponsesInputItem[]): string[] {
   return messages;
 }
 
-describe('OpenAIResponsesProvider Codex mode stays stateless', () => {
+describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    global.fetch = mockFetch as unknown as typeof fetch;
-
     setActiveProviderRuntimeContext(
       createProviderRuntimeContext({
         settingsService: new SettingsService(),
@@ -217,11 +208,10 @@ describe('OpenAIResponsesProvider Codex mode stays stateless', () => {
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
-    global.fetch = originalFetch;
   });
 
-  it('always sets store=false even when responses-stateful is requested', async () => {
-    const provider = buildCodexProviderWithOAuth();
+  it('T1: sends previous_response_id and omits the parent turn when a stored parent exists', async () => {
+    const provider = new TestableCodexProvider(buildCodexOAuthManager());
 
     const settings = new SettingsService();
     settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
@@ -234,7 +224,11 @@ describe('OpenAIResponsesProvider Codex mode stays stateless', () => {
       {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'first answer' }],
-        metadata: { id: 'resp_1', responsesStored: true },
+        metadata: {
+          id: 'resp_1',
+          responsesStored: true,
+          providerBaseURL: CODEX_BASE_URL,
+        },
       },
       {
         speaker: 'human',
@@ -242,52 +236,141 @@ describe('OpenAIResponsesProvider Codex mode stays stateless', () => {
       },
     ];
 
-    const body = await captureRequestBody(provider, contents, settings, {
-      'responses-stateful': true,
-    });
+    const body = await captureRequestBody(provider, contents, settings, {});
 
-    expect(body['store']).toBe(false);
-    expect(body['previous_response_id']).toBeUndefined();
-  });
-
-  it('preserves full history when responses-stateful is requested with a stored parent', async () => {
-    const provider = buildCodexProviderWithOAuth();
-
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
-
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'first question' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'first answer' }],
-        metadata: { id: 'resp_1', responsesStored: true },
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'second question' }],
-      },
-    ];
-
-    const body = await captureRequestBody(provider, contents, settings, {
-      'responses-stateful': true,
-    });
+    expect(body['previous_response_id']).toBe('resp_1');
+    expect(body['store']).toBe(true);
 
     const items = inputItems(body);
     const users = userMessages(items);
     const assistants = assistantMessages(items);
 
-    // Full history must be present — no trimming in Codex mode.
+    // The parent turn and everything before it must be omitted.
+    expect(users).not.toContain('first question');
+    expect(assistants).not.toContain('first answer');
+    expect(users).toContain('second question');
+  });
+
+  it('T2: sends full history and no previous_response_id when no stored parent exists', async () => {
+    const provider = new TestableCodexProvider(buildCodexOAuthManager());
+
+    const settings = new SettingsService();
+    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        // No responsesStored metadata — not a valid parent.
+        metadata: { id: 'resp_1' },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second question' }],
+      },
+    ];
+
+    const body = await captureRequestBody(provider, contents, settings, {});
+
+    expect(body['previous_response_id']).toBeUndefined();
+    const items = inputItems(body);
+    const users = userMessages(items);
+    const assistants = assistantMessages(items);
+
     expect(users).toContain('first question');
     expect(assistants).toContain('first answer');
     expect(users).toContain('second question');
   });
 
-  it('remains stateless by default (no ephemeral stateful flag)', async () => {
-    const provider = buildCodexProviderWithOAuth();
+  it('T3: statefulness is active by default with no responses-stateful ephemeral set', async () => {
+    const provider = new TestableCodexProvider(buildCodexOAuthManager());
+
+    const settings = new SettingsService();
+    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: {
+          id: 'resp_1',
+          responsesStored: true,
+          providerBaseURL: CODEX_BASE_URL,
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second question' }],
+      },
+    ];
+
+    // No 'responses-stateful' ephemeral — proves Codex defaults ON (B2).
+    const body = await captureRequestBody(provider, contents, settings, {});
+
+    expect(body['previous_response_id']).toBe('resp_1');
+    expect(body['store']).toBe(true);
+
+    const items = inputItems(body);
+    expect(userMessages(items)).not.toContain('first question');
+    expect(userMessages(items)).toContain('second question');
+  });
+
+  it('T4: explicit store=false override disables statefulness and strips previous_response_id', async () => {
+    const provider = new TestableCodexProvider(buildCodexOAuthManager());
+
+    const settings = new SettingsService();
+    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+    settings.setProviderSetting(provider.name, 'store', false);
+
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: {
+          id: 'resp_1',
+          responsesStored: true,
+          providerBaseURL: CODEX_BASE_URL,
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second question' }],
+      },
+    ];
+
+    const body = await captureRequestBody(provider, contents, settings, {});
+
+    expect(body['previous_response_id']).toBeUndefined();
+    expect(body['store']).toBe(false);
+
+    const items = inputItems(body);
+    const users = userMessages(items);
+    const assistants = assistantMessages(items);
+
+    // Full history must be present — statefulness is disabled.
+    expect(users).toContain('first question');
+    expect(assistants).toContain('first answer');
+    expect(users).toContain('second question');
+  });
+
+  it('T5: a completed Codex response stamps metadata.responsesStored + metadata.id so the next turn can chain', async () => {
+    // B6 end-to-end: the executor must pass responsesStored=true to the
+    // transport so parseResponsesStream stamps metadata.responsesStored +
+    // metadata.id on the completion IContent. Without this the B4 parent
+    // lookup can never succeed and the feature is inert.
+    const provider = new TestableCodexProvider(buildCodexOAuthManager());
 
     const settings = new SettingsService();
     settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
@@ -299,9 +382,43 @@ describe('OpenAIResponsesProvider Codex mode stays stateless', () => {
       },
     ];
 
-    const body = await captureRequestBody(provider, contents, settings, {});
+    const runtime = createProviderRuntimeContext({
+      settingsService: settings,
+      runtimeId: TEST_RUNTIME_ID,
+      config: createRuntimeConfigStub(settings),
+    });
 
-    expect(body['store']).toBe(false);
-    expect(body['previous_response_id']).toBeUndefined();
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: provider.name,
+      ephemeralsSnapshot: {},
+    });
+
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      settings,
+      config: createRuntimeConfigStub(settings),
+      runtime,
+      invocation,
+      contents,
+      ephemeralSettings: {},
+    });
+
+    const output: IContent[] = [];
+    for await (const content of provider.generateChatCompletion(options)) {
+      output.push(content);
+    }
+
+    // The executor must have told the transport that responses are stored.
+    expect(provider.recordingTransport.lastOptions?.responsesStored).toBe(true);
+
+    // The completion IContent must carry the metadata stamp.
+    const completion = output.find(
+      (c) => c.metadata !== undefined && c.blocks.length === 0,
+    );
+    expect(completion).toBeDefined();
+    expect(completion!.metadata!.responsesStored).toBe(true);
+    expect(completion!.metadata!.id).toBe('resp_completed');
   });
 });

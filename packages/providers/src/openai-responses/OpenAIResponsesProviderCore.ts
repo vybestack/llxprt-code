@@ -47,6 +47,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   private webSocketTransport: WebSocketTransport | undefined;
   private webSocketStickToHttp = false;
   private webSocketConsecutiveFallbacks = 0;
+  // #3134 Fix 1: session-scoped flag — once a previous_response_id is rejected
+  // by the API, all subsequent turns suppress statefulness (full history).
+  private responsesStatefulFailed = false;
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
@@ -80,6 +83,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       onWebSocketSuccess: () => {
         this.webSocketConsecutiveFallbacks = 0;
       },
+      isResponsesStatefulFailed: () => this.responsesStatefulFailed,
+      markResponsesStatefulFailed: () => {
+        this.responsesStatefulFailed = true;
+      },
     };
   }
 
@@ -110,6 +117,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.webSocketTransport = undefined;
     this.webSocketStickToHttp = false;
     this.webSocketConsecutiveFallbacks = 0;
+    this.responsesStatefulFailed = false;
   }
 
   protected override async *generateChatCompletionWithOptions(
