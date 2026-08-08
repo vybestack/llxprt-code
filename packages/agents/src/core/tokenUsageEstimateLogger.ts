@@ -213,4 +213,61 @@ export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
     input.tools,
     extractSystemInstructionText(input.systemInstruction),
   );
+  void recordProviderOrModelSwitch(
+    input.usageLogger,
+    input.runtimeState,
+    input.historyService,
+  );
+}
+
+/**
+ * Emit a `provider_switch` or `model_switch` lifecycle record when the
+ * provider/model serving this send differs from the one that served the
+ * previous send in this session (AC-7).
+ *
+ * The switch is detected by OBSERVATION at the send seam rather than at the
+ * settings-layer sites that initiate it: those live in `packages/core` and
+ * have no path to this session's logger, and reaching them would mean a new
+ * cross-package event bus. Observing at the seam also records the switch that
+ * actually affected billing, which is the question the log exists to answer.
+ *
+ * A provider change is reported as `provider_switch` (it necessarily carries a
+ * model change too); a model change under the same provider is reported as
+ * `model_switch`.
+ *
+ * @issue #3130
+ */
+export async function recordProviderOrModelSwitch(
+  usageLogger: TokenUsageLogger | null | undefined,
+  runtimeState: AgentRuntimeState,
+  historyService: HistoryService,
+): Promise<void> {
+  if (usageLogger === undefined || usageLogger === null) return;
+  if (!usageLogger.isEnabled()) return;
+
+  const { provider, model, sessionId } = runtimeState;
+  const previous = usageLogger.observeServingProvider(provider, model);
+  if (previous === null) return;
+
+  const turnId = findCurrentTurnMarker(historyService.getRawHistory())?.turnId;
+  const common = { sessionId, turnId: turnId ?? null };
+
+  await usageLogger.recordLifecycleEvent(
+    previous.fromProvider === provider
+      ? {
+          type: 'model_switch',
+          ...common,
+          fromModel: previous.fromModel,
+          toModel: model,
+          provider,
+        }
+      : {
+          type: 'provider_switch',
+          ...common,
+          fromProvider: previous.fromProvider,
+          toProvider: provider,
+          fromModel: previous.fromModel,
+          toModel: model,
+        },
+  );
 }

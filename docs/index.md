@@ -78,6 +78,7 @@ LLxprt Code ships with built-in tools for file editing, shell commands, web sear
 
 - [Agent API](./agent-api.md) — embed the LLxprt Code agent in your own program
 - [Application Directories](./reference/application-directories.md) — where config, data, cache, and logs live on Linux/macOS/Windows, and how to override them
+- [Token Usage Log](./token-usage-log.md) — per-session token-usage JSONL schema, the join to conversation turns, and privacy posture
 - [Ephemeral Settings Reference](./reference/ephemerals.md) — every ephemeral setting with defaults, types, and advice
 - [Profile File Reference](./reference/profiles.md) — the profile JSON format, auth config, load balancers, precedence
 - [Commands](./cli/commands.md)

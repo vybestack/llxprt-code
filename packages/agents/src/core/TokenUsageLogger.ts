@@ -146,6 +146,31 @@ export class TokenUsageLogger {
     return this.shapeMemory;
   }
 
+  /**
+   * The provider/model that served the previous send in this session, or
+   * `undefined` before the first send. Used to detect a provider or model
+   * switch by observation at the send seam, which is where the per-session
+   * logger is reachable — the settings-layer sites that initiate a switch
+   * have no path to it.
+   */
+  private lastServedBy: { provider: string; model: string } | undefined;
+
+  /**
+   * Record which provider/model is serving this send and report the switch
+   * that just became observable, or `null` when nothing changed. The caller
+   * turns a non-null result into a lifecycle record.
+   */
+  observeServingProvider(
+    provider: string,
+    model: string,
+  ): { fromProvider: string; fromModel: string } | null {
+    const previous = this.lastServedBy;
+    this.lastServedBy = { provider, model };
+    if (previous === undefined) return null;
+    if (previous.provider === provider && previous.model === model) return null;
+    return { fromProvider: previous.provider, fromModel: previous.model };
+  }
+
   isEnabled(): boolean {
     return this.enabled;
   }
