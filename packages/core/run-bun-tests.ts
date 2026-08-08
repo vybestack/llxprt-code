@@ -13,9 +13,12 @@
  * file as a separate `bun test <file>` invocation avoids the multi-file
  * process management that triggers the hang.
  *
- * Each child process has a per-file timeout (60s on POSIX, 180s on Windows).
- * If a file takes longer, the process is killed to prevent a single
- * slow/hanging file from blocking the entire suite.
+ * Concurrency and both timeout budgets come from
+ * scripts/lib/bun-test-policy.ts, shared with the other runners (issue #3139).
+ * This workspace keeps its own lower concurrency cap because its files are
+ * unusually heavy; the budgets are the shared ones. If a file exceeds the
+ * per-file budget the process is killed, so a single hanging file cannot block
+ * the suite.
  *
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
