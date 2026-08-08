@@ -114,7 +114,8 @@ export interface HostShellJobInfo {
   state: HostShellJobState;
   startedAt: number;
   endedAt?: number;
-  pid: number;
+  /** Process ID of the spawned process; undefined when spawn produced none. */
+  pid: number | undefined;
   exitCode?: number;
   signal?: string;
   failureReason?: string;

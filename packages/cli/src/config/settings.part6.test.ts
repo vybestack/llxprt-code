@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/// <reference types="vitest/globals" />
-
 // Mock 'os' first.
 import * as osActual from 'os';
 import path, * as pathActual from 'node:path'; // Import for type info for the mock factory

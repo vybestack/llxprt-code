@@ -107,7 +107,6 @@ const NO_TEST_METADATA = new Set<string>([
   'bunfig.toml',
   'junit-integration.xml',
   'tsconfig.scripts.json',
-  'vitest.coverage.ts',
 ]);
 
 const NO_TEST_PATH_RES: readonly RegExp[] = [

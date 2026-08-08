@@ -442,7 +442,6 @@ describe('published package no-compile runtime contract (S6)', () => {
     );
 
     expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt');
-    expect(cliPackage.bin?.llxprt).toBe('bin/llxprt');
     expect(cliPackage.scripts?.start).toBe('bun index.ts');
     expect(cliPackage.scripts?.debug).toBe('bun --inspect-brk index.ts');
 
@@ -494,6 +493,12 @@ describe('published package no-compile runtime contract (S6)', () => {
     // directly execve-compatible on POSIX. On Windows, the root postinstall
     // generates native .cmd/.ps1 launchers that invoke the package-local Bun.
     expect(packed.has('packages/cli/bin/llxprt')).toBe(true);
+    // The private root manifest still declares bin.llxprt pointing here, so the
+    // checked-in target must exist on disk — not just inside the tarball. This
+    // mirrors the existsSync symmetry already applied to the platform packages.
+    expect(existsSync(join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'))).toBe(
+      true,
+    );
     expect(packed.has('packages/cli/index.ts')).toBe(true);
     expect(packed.has('packages/cli/src/cli.tsx')).toBe(true);
     expect(packed.has('packages/core/index.ts')).toBe(true);
@@ -769,22 +774,32 @@ describe('published package no-compile runtime contract (S6)', () => {
     ).toEqual([]);
   }, 60000);
 
-  it('runs the checked-in launcher without a compiled CLI entry', () => {
-    // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
-    // directly execve-compatible (no /bin/sh wrapper needed). Running it
-    // directly exercises the real installed-command path.
-    const stdout = execFileSync(
-      join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'),
-      ['--version'],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-      },
-    );
+  // The sh launcher has a #!/bin/sh shebang and is execve'd directly. Windows
+  // has no sh and cannot execve a shebang script (no sh is present on PATH on
+  // this host), so the POSIX end-to-end launch is only verifiable on POSIX
+  // here. The real Windows entry point (.cmd) is covered by the dedicated
+  // issue-2978 windows-launcher suite.
+  const launcherIt = process.platform === 'win32' ? it.skip : it;
+  launcherIt(
+    'runs the checked-in launcher without a compiled CLI entry',
+    () => {
+      // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
+      // directly execve-compatible (no /bin/sh wrapper needed). Running it
+      // directly exercises the real installed-command path.
+      const stdout = execFileSync(
+        join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'),
+        ['--version'],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024,
+        },
+      );
 
-    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  }, 30000);
+      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    },
+    30000,
+  );
 });
 
 describe('release build self-contained generate contract (issue #2392)', () => {

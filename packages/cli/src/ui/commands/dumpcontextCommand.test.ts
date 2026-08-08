@@ -23,13 +23,13 @@ import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: vi.fn(() => ({
-    getEphemeralSetting: vi.fn((key: string) => {
+    getSessionSetting: vi.fn((key: string) => {
       if (key === 'dumpcontext') {
         return 'off';
       }
       return undefined;
     }),
-    setEphemeralSetting: vi.fn(),
+    setSessionSetting: vi.fn(),
   })),
 }));
 
@@ -55,8 +55,8 @@ describe('dumpcontextCommand', () => {
   describe('status subcommand', () => {
     it('should show current dumpcontext status when mode is off', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       assertDefined(dumpcontextCommand.action);
@@ -72,8 +72,8 @@ describe('dumpcontextCommand', () => {
 
     it('should show current dumpcontext status when mode is on', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'on'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'on'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       assertDefined(dumpcontextCommand.action);
@@ -89,8 +89,8 @@ describe('dumpcontextCommand', () => {
 
     it('should default to status when no args provided', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'error'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'error'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       assertDefined(dumpcontextCommand.action);
@@ -107,17 +107,17 @@ describe('dumpcontextCommand', () => {
 
   describe('on subcommand', () => {
     it('should enable context dumping for all requests', async () => {
-      const mockSetEphemeralSetting = vi.fn();
+      const mockSetSessionSetting = vi.fn();
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: mockSetEphemeralSetting,
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: mockSetSessionSetting,
       } as never);
 
       assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'on');
 
-      expect(mockSetEphemeralSetting).toHaveBeenCalledWith('dumpcontext', 'on');
+      expect(mockSetSessionSetting).toHaveBeenCalledWith('dumpcontext', 'on');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -128,17 +128,17 @@ describe('dumpcontextCommand', () => {
 
   describe('error subcommand', () => {
     it('should enable context dumping only for errors', async () => {
-      const mockSetEphemeralSetting = vi.fn();
+      const mockSetSessionSetting = vi.fn();
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: mockSetEphemeralSetting,
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: mockSetSessionSetting,
       } as never);
 
       assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'error');
 
-      expect(mockSetEphemeralSetting).toHaveBeenCalledWith(
+      expect(mockSetSessionSetting).toHaveBeenCalledWith(
         'dumpcontext',
         'error',
       );
@@ -152,20 +152,17 @@ describe('dumpcontextCommand', () => {
 
   describe('off subcommand', () => {
     it('should disable context dumping', async () => {
-      const mockSetEphemeralSetting = vi.fn();
+      const mockSetSessionSetting = vi.fn();
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'on'),
-        setEphemeralSetting: mockSetEphemeralSetting,
+        getSessionSetting: vi.fn(() => 'on'),
+        setSessionSetting: mockSetSessionSetting,
       } as never);
 
       assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'off');
 
-      expect(mockSetEphemeralSetting).toHaveBeenCalledWith(
-        'dumpcontext',
-        'off',
-      );
+      expect(mockSetSessionSetting).toHaveBeenCalledWith('dumpcontext', 'off');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -175,11 +172,11 @@ describe('dumpcontextCommand', () => {
   });
 
   describe('now subcommand', () => {
-    it('should dump context immediately and not set ephemeral setting', async () => {
-      const mockSetEphemeralSetting = vi.fn();
+    it('should dump context immediately and not set session setting', async () => {
+      const mockSetSessionSetting = vi.fn();
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: mockSetEphemeralSetting,
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: mockSetSessionSetting,
       } as never);
 
       const mockGetHistoryService = vi.fn().mockReturnValue({
@@ -206,7 +203,7 @@ describe('dumpcontextCommand', () => {
 
       const result = await dumpcontextAction(ctxWithHistory, 'now');
 
-      expect(mockSetEphemeralSetting).not.toHaveBeenCalled();
+      expect(mockSetSessionSetting).not.toHaveBeenCalled();
       expect(dumpRequestContext).toHaveBeenCalledTimes(1);
       expect(dumpRequestContext).toHaveBeenCalledWith(
         expect.objectContaining({ url: 'immediate-context-dump' }),
@@ -230,8 +227,8 @@ describe('dumpcontextCommand', () => {
 
     it('should dump context immediately when getAgentClient relies on its receiver (this binding)', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const historyService = {
@@ -279,8 +276,8 @@ describe('dumpcontextCommand', () => {
 
     it('should shape immediate dump body for OpenAI history', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithHistory = createMockCommandContext({
@@ -373,8 +370,8 @@ describe('dumpcontextCommand', () => {
 
     it('should shape immediate dump body for OpenAI-compatible aliases', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const history = [
@@ -411,8 +408,8 @@ describe('dumpcontextCommand', () => {
 
     it('should shape immediate dump body for Anthropic history', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithHistory = createMockCommandContext({
@@ -507,8 +504,8 @@ describe('dumpcontextCommand', () => {
 
     it('should shape immediate dump body for Gemini history', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithHistory = createMockCommandContext({
@@ -605,8 +602,8 @@ describe('dumpcontextCommand', () => {
 
     it('should pass active config and model into Gemini immediate dump conversion', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const longResult = Array.from(
@@ -676,8 +673,8 @@ describe('dumpcontextCommand', () => {
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
       ];
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithHistory = createMockCommandContext({
@@ -706,8 +703,8 @@ describe('dumpcontextCommand', () => {
 
     it('should return friendly error when history is unavailable', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithoutHistory = createMockCommandContext({
@@ -730,8 +727,8 @@ describe('dumpcontextCommand', () => {
 
     it('should return friendly error when agent client is undefined', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithoutAgentClient = createMockCommandContext({
@@ -753,10 +750,10 @@ describe('dumpcontextCommand', () => {
     });
 
     it('should default provider name to backend when no provider manager', async () => {
-      const mockSetEphemeralSetting = vi.fn();
+      const mockSetSessionSetting = vi.fn();
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: mockSetEphemeralSetting,
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: mockSetSessionSetting,
       } as never);
 
       const mockGetHistoryService = vi.fn().mockReturnValue({
@@ -794,8 +791,8 @@ describe('dumpcontextCommand', () => {
 
     it('should return friendly error when history service returns null', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithNullHistory = createMockCommandContext({
@@ -820,8 +817,8 @@ describe('dumpcontextCommand', () => {
 
     it('should return friendly error when getAgentClient is not callable', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       const ctxWithoutCallableAgentClient = createMockCommandContext({
@@ -849,8 +846,8 @@ describe('dumpcontextCommand', () => {
   describe('invalid subcommand', () => {
     it('should return error for invalid mode', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
-        getEphemeralSetting: vi.fn(() => 'off'),
-        setEphemeralSetting: vi.fn(),
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
       } as never);
 
       assertDefined(dumpcontextCommand.action);

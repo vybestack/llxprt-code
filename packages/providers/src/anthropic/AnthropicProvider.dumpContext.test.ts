@@ -55,6 +55,7 @@ describe('AnthropicProvider dumpContext integration', () => {
         },
       ],
       tools: undefined,
+      systemInstruction: 'test system prompt',
       resolved: {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
@@ -108,6 +109,7 @@ describe('AnthropicProvider dumpContext integration', () => {
         },
       ],
       tools: undefined,
+      systemInstruction: 'test system prompt',
       resolved: {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
@@ -173,6 +175,7 @@ describe('AnthropicProvider dumpContext integration', () => {
         },
       ],
       tools: undefined,
+      systemInstruction: 'test system prompt',
       resolved: {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
@@ -226,6 +229,7 @@ describe('AnthropicProvider dumpContext integration', () => {
         },
       ],
       tools: undefined,
+      systemInstruction: 'test system prompt',
       resolved: {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
@@ -291,6 +295,7 @@ describe('AnthropicProvider dumpContext integration', () => {
         },
       ],
       tools: undefined,
+      systemInstruction: 'test system prompt',
       resolved: {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',

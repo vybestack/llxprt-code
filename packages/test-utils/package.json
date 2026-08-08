@@ -19,8 +19,7 @@
   "devDependencies": {
     "@lydell/node-pty": "1.1.0",
     "strip-ansi": "^7.1.0",
-    "typescript": "^5.3.3",
-    "vitest": "^3.2.6"
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=24"

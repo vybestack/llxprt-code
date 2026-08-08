@@ -13,6 +13,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import {
   SIGKILL_TIMEOUT_MS,
   boundedTaskkill,
+  isKillablePid,
   type TaskkillResult,
 } from './shellProcessKill.js';
 import { ShellJobBudget } from './shellJobBudget.js';
@@ -72,7 +73,7 @@ export interface ShellJobPrefixLookup {
  */
 export interface SurvivorEntry {
   readonly child: ChildProcess;
-  readonly pid: number;
+  readonly pid: number | undefined;
 }
 
 /**
@@ -91,7 +92,7 @@ export function survivorNeedsReap(entry: SurvivorEntry): boolean {
  */
 export interface SurvivorInfo {
   readonly id: string;
-  readonly pid: number;
+  readonly pid: number | undefined;
   readonly remediation: string;
 }
 
@@ -413,7 +414,18 @@ export class ShellJobManager {
    * enforcement, and dispose so no path can hang or leak an unhandled
    * rejection.
    */
-  private safeWindowsKill(pid: number): Promise<TaskkillResult> {
+  private safeWindowsKill(pid: number | undefined): Promise<TaskkillResult> {
+    // A non-killable pid (undefined, 0, negative, NaN, Infinity, or fractional)
+    // must never reach taskkill: 0 would be reinterpreted and an absent/invalid
+    // pid would only error. Resolve as a no-op failure BEFORE entering the
+    // timeout race, so no taskkill process is ever spawned and the
+    // never-rejecting contract is preserved.
+    if (!isKillablePid(pid)) {
+      return Promise.resolve({
+        ok: false,
+        error: new Error(`Cannot taskkill non-killable pid: ${String(pid)}`),
+      });
+    }
     return new Promise<TaskkillResult>((resolve) => {
       let settled = false;
       const finish = (result: TaskkillResult): void => {
@@ -795,7 +807,9 @@ export class ShellJobManager {
       .map(([id, entry]) => ({
         id,
         pid: entry.pid,
-        remediation: `taskkill /T /F /PID ${entry.pid}`,
+        remediation: !isKillablePid(entry.pid)
+          ? 'pid unknown; cannot emit taskkill remediation'
+          : `taskkill /T /F /PID ${entry.pid}`,
       }));
     if (remaining.length > 0) {
       debugLogger.warn(

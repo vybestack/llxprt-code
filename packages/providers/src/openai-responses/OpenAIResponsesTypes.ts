@@ -39,7 +39,12 @@ export type ResponsesInputItem =
     }
   | {
       type: 'reasoning';
-      id: string;
+      /**
+       * Optional: omitted when a server-side parent is active and no genuine
+       * server-issued id is available (#3134 Fix 5). The API validates item
+       * ids against the stored chain, so a synthesized id is a plausible 400.
+       */
+      id?: string;
       summary?: Array<{ type: string; text: string }>;
       encrypted_content?: string;
     };

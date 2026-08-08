@@ -99,9 +99,10 @@ describe('github operation catalog', () => {
       [...EXPECTED_MUTATING].sort(),
     );
     for (const op of GITHUB_SUPPORTED_OPS) {
-      if (GITHUB_MUTATING_OPS.has(op)) {
-        expect(EXPECTED_MUTATING, `${op} is not a known write`).toContain(op);
-      }
+      expect(
+        !GITHUB_MUTATING_OPS.has(op) || EXPECTED_MUTATING.includes(op),
+        `${op} is not a known write`,
+      ).toBe(true);
     }
   });
 

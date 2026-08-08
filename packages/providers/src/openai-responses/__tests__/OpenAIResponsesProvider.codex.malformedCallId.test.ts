@@ -45,6 +45,7 @@ function buildCodexOptions(overrides?: Partial<NormalizedGenerateChatOptions>) {
       getModelBehavior: () => undefined,
     },
     settings: undefined,
+    systemInstruction: 'test system prompt',
     userMemory: undefined,
   };
 

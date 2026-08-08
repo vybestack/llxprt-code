@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /**
  * Resolve the chronology `seq` that should become the new cache anchor after a
@@ -76,9 +77,14 @@ export function applyCompressionWithAnchor(
 ): void {
   const anchorSeq = resolveHeadAnchorSeq(newHistory, topPreserved);
   const isPrefixDestroyed = topPreserved <= 0;
-  const annotated = stampCacheAnchorMarker(
-    annotate(historyService.getRawHistory(), newHistory),
-    isPrefixDestroyed ? 0 : topPreserved,
+  // #3134 Fix 3: compression rewrites history behind the head, invalidating
+  // the Responses stateful chain. Strip responsesStored from retained AI
+  // entries so the next turn finds no parent and sends full history.
+  const annotated = invalidateResponsesStatefulChain(
+    stampCacheAnchorMarker(
+      annotate(historyService.getRawHistory(), newHistory),
+      isPrefixDestroyed ? 0 : topPreserved,
+    ),
   );
 
   // Exactly one preserved-head entry — the last one — carries the marker, so

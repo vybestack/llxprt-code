@@ -6,6 +6,9 @@
  */
 
 export { SettingsService } from './settings/SettingsService.js';
+export type { SettingsServiceInit } from './settings/SettingsService.js';
+// SessionSettingsOverlay is intentionally NOT exported: it is an internal
+// implementation detail owned by SettingsService.
 
 export {
   resolveAlias,
@@ -25,6 +28,9 @@ export {
   getDirectSettingSpecs,
   getInternalSettingKeys,
   isInternalSettingKey,
+  isSessionScopedSettingKey,
+  getSessionScopedSettingKeys,
+  assertSessionScopedKey,
   redactSensitiveValues,
   isSensitiveSettingKey,
   REDACTED_VALUE,

@@ -1144,7 +1144,7 @@ npm install --save-dev @stryker-mutator/core @stryker-mutator/typescript-checker
 # stryker.conf.js must specify:
 module.exports = {
   mutate: ['src/**/*.ts', '!src/**/*.spec.ts'],
-  testRunner: 'vitest',
+  testRunner: 'bun',
   thresholds: { high: 80, low: 60, break: 50 },
   reporters: ['json', 'html'],
   disableTypeChecks: false

@@ -14,6 +14,11 @@ import {
   orderWindowsBunCandidates,
   type WindowsBunCandidate,
 } from './bun-candidate-policy.js';
+import {
+  detectHostPlatform,
+  selectOvenVariants,
+  type OvenBunVariant,
+} from './oven-bun-variants.js';
 
 const PATH_COMMAND_TIMEOUT_MS = 5_000;
 const MAX_PATH_COMMAND_OUTPUT_BYTES = 65_536;
@@ -57,6 +62,36 @@ function directDependencyCandidatesForPlatform(
 }
 
 /**
+ * Lazily-detected @oven variants, memoized so host detection (sysctl,
+ * /proc/cpuinfo, PowerShell) runs at most once per process and ONLY when
+ * `bun/bin/bun[.exe]` was not found. On the healthy path this stays `null`
+ * and no detection subprocesses are forked.
+ */
+let ovenVariantsCache: readonly OvenBunVariant[] | null = null;
+
+function resolvedOvenVariants(): readonly OvenBunVariant[] {
+  if (ovenVariantsCache !== null) {
+    return ovenVariantsCache;
+  }
+  const host = detectHostPlatform();
+  ovenVariantsCache = host ? selectOvenVariants(host) : [];
+  return ovenVariantsCache;
+}
+
+/**
+ * Returns the full candidate path for each @oven variant exe under a given
+ * node_modules directory. Detection is deferred to {@link resolvedOvenVariants}
+ * so callers that resolve via .bin or bun/bin never pay the detection cost.
+ */
+function ovenCandidatesFor(nodeModulesParentDir: string): readonly string[] {
+  return resolvedOvenVariants().flatMap((variant) =>
+    variant.exeNames.map((exeName) =>
+      join(nodeModulesParentDir, 'node_modules', variant.packageName, exeName),
+    ),
+  );
+}
+
+/**
  * Collects each ancestor directory starting from moduleDir through the
  * filesystem root.
  */
@@ -94,6 +129,16 @@ async function resolveFromNodeModules(
       const candidatePath = join(dir, 'node_modules', 'bun', 'bin', candidate);
       if (await pathChecker(candidatePath)) {
         return candidatePath;
+      }
+    }
+    // @oven fallback (issue #2978): probed only after .bin and bun/bin were
+    // not found at this ancestor. npm v12 default-deny blocks bun's
+    // postinstall so bun/bin/bun.exe never materializes; the @oven
+    // sub-packages contain only bin/bun[.exe] with no scripts and
+    // materialize under default-deny. Detection runs lazily.
+    for (const candidate of ovenCandidatesFor(dir)) {
+      if (await pathChecker(candidate)) {
+        return candidate;
       }
     }
   }
@@ -167,6 +212,25 @@ function windowsNodeModuleCandidates(
   ]);
 }
 
+/**
+ * @oven candidate paths for Windows (issue #2978). Classified as
+ * `direct-native` so they sort after `bin-native` and alongside the bundled
+ * `bun/bin/bun.exe` candidate, but are probed only AFTER the bundled binary
+ * was not found. Detection runs lazily via {@link resolvedOvenVariants}.
+ */
+function windowsOvenCandidates(
+  moduleDir: string,
+): readonly WindowsBunCandidate[] {
+  return [...ancestorDirs(moduleDir)].flatMap((dir) =>
+    resolvedOvenVariants().flatMap((variant) =>
+      variant.exeNames.map((exeName) => ({
+        path: join(dir, 'node_modules', variant.packageName, exeName),
+        kind: 'direct-native' as const,
+      })),
+    ),
+  );
+}
+
 async function firstUsableCandidate(
   candidates: readonly WindowsBunCandidate[],
   pathChecker: PathChecker,
@@ -193,6 +257,18 @@ async function resolveWindowsBunPath(
   );
   if (localNative !== null) {
     return localNative;
+  }
+
+  // @oven fallback (issue #2978): probe @oven variant binaries as
+  // direct-native candidates after the bundled bun/bin was not found.
+  // Detection runs lazily so the healthy path (bun/bin/bun.exe present)
+  // never forks.
+  const ovenUsable = await firstUsableCandidate(
+    windowsOvenCandidates(moduleDir),
+    pathChecker,
+  );
+  if (ovenUsable !== null) {
+    return ovenUsable;
   }
 
   const pathCandidates = classifyWindowsPathCandidates(

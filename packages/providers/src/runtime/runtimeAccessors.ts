@@ -625,6 +625,21 @@ export function clearEphemeralSetting(key: string): void {
   config.setEphemeralSetting(key, undefined);
 }
 
+export function getSessionSetting(key: string): unknown {
+  const { config } = getCliRuntimeServices();
+  return config.getSessionSetting(key);
+}
+
+export function setSessionSetting(key: string, value: unknown): void {
+  const { config } = getCliRuntimeServices();
+  config.setSessionSetting(key, value);
+}
+
+export function clearSessionSetting(key: string): void {
+  const { config } = getCliRuntimeServices();
+  config.clearSessionSetting(key);
+}
+
 export function getActiveModelParams(): Record<string, unknown> {
   const { config, settingsService } = getCliRuntimeServices();
   const providerName = resolveActiveProviderName(settingsService, config);

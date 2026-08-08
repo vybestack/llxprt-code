@@ -13,6 +13,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { userTextsOf } from './openAIResponsesWebSocketTransport.test-helpers.js';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const TEST_RUNTIME_ID = 'codex-ws-fallback-test-runtime';
@@ -68,6 +69,7 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
 function buildOptions(
   provider: OpenAIResponsesProvider,
   settings: SettingsService,
+  contents?: IContent[],
 ): ReturnType<typeof createProviderCallOptions> {
   const runtime = createProviderRuntimeContext({
     settingsService: settings,
@@ -86,9 +88,11 @@ function buildOptions(
     config: createRuntimeConfigStub(settings),
     runtime,
     invocation,
-    contents: [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
-    ] as IContent[],
+    contents:
+      contents ??
+      ([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+      ] as IContent[]),
     ephemeralSettings: { retries: 1, retrywait: 1 },
   });
 }
@@ -262,5 +266,84 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
     const after = await runOutcome(provider);
     expect(after.wsAttempts).toBe(4);
     expect(after.text).toContain('ws-ok');
+  });
+
+  describe('WebSocket->HTTP demotion drops the parent @issue:3134', () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    /**
+     * Codex statefulness is bound to the WebSocket connection. Verified against
+     * the live backend: `store: true` is rejected outright
+     * (400 `{"detail":"Store must be set to false"}`), so nothing is stored
+     * server-side and a parent id cannot be resolved over HTTP — sending one
+     * there is rejected, wasting a round trip and permanently suppressing
+     * statefulness for the session.
+     *
+     * A demoted request must therefore carry NO parent and the FULL history.
+     */
+    it('sends full history and no previous_response_id after falling back to HTTP', async () => {
+      let capturedBody: string | undefined;
+      (globalThis as { fetch: unknown }).fetch = async (
+        _input: unknown,
+        init?: RequestInit,
+      ) => {
+        if (init?.body instanceof Blob) {
+          capturedBody = await init.body.text();
+        } else if (typeof init?.body === 'string') {
+          capturedBody = init.body;
+        }
+        return httpSseResponse();
+      };
+
+      const provider = new TestableCodexProvider(['fail'], codexOAuthManager());
+
+      const contentsWithParent: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'first question' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'first answer' }],
+          metadata: {
+            id: 'resp_parent',
+            responsesStored: true,
+            providerBaseURL: CODEX_BASE_URL,
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'second question' }],
+        },
+      ];
+
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+
+      const options = buildOptions(provider, settings, contentsWithParent);
+      for await (const _chunk of provider.generateChatCompletion(options)) {
+        // drain
+      }
+
+      if (capturedBody === undefined) {
+        throw new Error('HTTP request body was not captured');
+      }
+      // Prove the WebSocket was genuinely attempted and fell back; otherwise a
+      // change that skipped the socket entirely would still satisfy the body
+      // assertions below.
+      expect(provider.wsAttempts.count).toBe(1);
+
+      const body = JSON.parse(capturedBody) as Record<string, unknown>;
+      expect(body['previous_response_id']).toBeUndefined();
+      expect(body['store']).toBe(false);
+
+      // Full history, since the HTTP endpoint cannot resolve the parent.
+      const users = userTextsOf(body['input']);
+      expect(users).toEqual(['first question', 'second question']);
+    });
   });
 });

@@ -258,3 +258,39 @@ export function parsedObject(serialized: string): object {
   }
   return value;
 }
+
+/**
+ * Extracts the text of every `user` item in a Responses `input` array.
+ *
+ * Statefulness assertions care about WHICH turns were sent, so tests need the
+ * user-visible text rather than the raw item shapes (which also carry tool
+ * calls, reasoning items and the synthetic config-file read).
+ */
+export function userTextsOf(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    throw new Error('Expected a Responses "input" array');
+  }
+  const texts: string[] = [];
+  for (const item of input as Array<
+    { role?: string; content?: unknown } | null | undefined
+  >) {
+    // Input arrays come from parsed wire JSON, so a nullish slot is possible
+    // and must be skipped rather than crash the assertion helper.
+    if (item?.role !== 'user') continue;
+    const text = responsesContentText(item.content);
+    if (text !== '') texts.push(text);
+  }
+  return texts;
+}
+
+function responsesContentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.map(responsesPartText).join('');
+}
+
+function responsesPartText(part: unknown): string {
+  if (typeof part !== 'object' || part === null) return '';
+  const text = (part as { text?: unknown }).text;
+  return text === undefined || text === null ? '' : String(text);
+}

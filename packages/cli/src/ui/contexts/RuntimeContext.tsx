@@ -56,6 +56,9 @@ import {
   getLoadBalancerStats,
   getLoadBalancerLastSelected,
   getAllLoadBalancerStats,
+  getSessionSetting,
+  setSessionSetting,
+  clearSessionSetting,
   enterRuntimeScope,
   runWithRuntimeScope,
 } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -104,6 +107,9 @@ const runtimeFunctions = {
   getLoadBalancerStats,
   getLoadBalancerLastSelected,
   getAllLoadBalancerStats,
+  getSessionSetting,
+  setSessionSetting,
+  clearSessionSetting,
 } as const;
 
 type RuntimeFunctions = typeof runtimeFunctions;

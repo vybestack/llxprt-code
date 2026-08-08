@@ -32,6 +32,7 @@ import { AgentTerminateMode } from './types.js';
 import { validateToolsForNonInteractiveUse } from './executor-validation.js';
 import {
   buildAgentSystemPrompt,
+  extractDeclaredToolNames,
   applyTemplateToInitialMessages,
 } from './executor-prompt-builder.js';
 import { checkAgentTermination } from './executor-termination.js';
@@ -53,6 +54,7 @@ import {
   buildCompleteTaskDeclaration,
 } from './executor-tool-dispatch.js';
 import { callModelAndConsumeStream } from './executor-stream-processor.js';
+import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 
 /**
  * Provider-neutral generation config shape.
@@ -892,11 +894,37 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     if (!promptConfig.systemPrompt) {
       return '';
     }
-    return buildAgentSystemPrompt(
+
+    const personaPrompt = await buildAgentSystemPrompt(
       inputs,
       this.runtimeContext,
       promptConfig.systemPrompt,
     );
+
+    // Issue #3136: the agent layer owns system-prompt assembly. Providers
+    // transport options.systemInstruction verbatim and never rebuild a core
+    // prompt. Assemble the complete prompt here: core prompt first, then
+    // persona, blank-line separated. coreMemory is passed explicitly to avoid
+    // the per-call two-file disk read in getCoreSystemPromptAsync when it is
+    // undefined.
+    const corePrompt = await getCoreSystemPromptAsync({
+      userMemory: this.runtimeContext.getUserMemory(),
+      coreMemory: this.runtimeContext.getCoreMemory(),
+      mcpInstructions: this.runtimeContext.getMcpInstructions(),
+      model: this.definition.modelConfig.model,
+      // Derive from the FINAL declaration list, not toolConfig.tools, so the
+      // auto-injected complete_task tool is described in the prompt. Otherwise
+      // the prompt's tool list disagrees with what the model can actually call
+      // (subagentRuntimeSetup does the same via combinedDeclarations).
+      tools: extractDeclaredToolNames(this.prepareToolsList()),
+      includeSubagentDelegation: false,
+      interactionMode: 'subagent',
+    });
+
+    const sections = [corePrompt.trim(), personaPrompt.trim()].filter(
+      (section) => section.length > 0,
+    );
+    return sections.length > 0 ? sections.join('\n\n') : '';
   }
 
   /**

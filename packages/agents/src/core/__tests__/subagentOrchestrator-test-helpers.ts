@@ -13,19 +13,25 @@
 import { vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import {
+  SettingsService,
+  type Profile,
+  type ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 
 export function makeForegroundConfig(): Config {
+  const settingsService = new SettingsService();
   return {
     getSessionId: () => 'primary-session',
     getProvider: () => 'gemini',
     getContentGeneratorConfig: () => undefined,
     getModel: () => 'gemini-1.5-flash',
     getToolRegistry: () => undefined,
+    getSettingsService: () => settingsService,
   } as unknown as Config;
 }
 

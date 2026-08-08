@@ -71,6 +71,7 @@ import {
 } from './OpenAIPromptProjectionPreparation.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
@@ -413,6 +414,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
+    // before any request preparation so a missing instruction is never
+    // silently transported as an empty prompt.
+    requireAssembledSystemInstruction(options.systemInstruction);
+
     const model = options.resolved.model || this.getModel();
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
 
@@ -654,6 +660,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
 
       const existingInstruction = options.systemInstruction ?? '';
+      // Intentional additive writer under the #3136 contract: appends
+      // request-specific media references to the agent-assembled system
+      // instruction. This is NOT core-prompt assembly.
       const combinedInstruction =
         existingInstruction.trim().length > 0
           ? `${existingInstruction}\n\n${result.fileReferenceText}`

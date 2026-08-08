@@ -135,8 +135,7 @@
     "@types/debug": "^4.1.12",
     "@types/node": "^24.2.1",
     "fast-check": "^4.2.0",
-    "typescript": "^5.3.3",
-    "vitest": "^3.2.6"
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=24"

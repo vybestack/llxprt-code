@@ -28,8 +28,8 @@ linker = "hoisted"
 By default Bun uses an isolated dependency layout. npm, by contrast, hoists
 shared dependencies to the top of `node_modules`. A great deal of tooling in
 this repository (and in transitive dependencies) walks `node_modules` directly
-and assumes a hoisted topology — for example `scripts/tests/vitest.config.ts`
-aliases into the root `node_modules`. Setting `linker = "hoisted"` makes Bun use
+and assumes a hoisted topology — for example, several scripts resolve
+into the root `node_modules`. Setting `linker = "hoisted"` makes Bun use
 the same hoisted `node_modules` topology class as npm (rather than Bun's
 isolated linker) during S1. Bun's hoisting is not byte-for-byte identical to
 npm's algorithm, but using the hoisted layout removes the large class of
@@ -461,21 +461,12 @@ workspaces.
 
 ### Why `bun test` does not work as a root test entry point
 
-`bun test` invokes Bun's **native test runner**, which provides `bun:test`
-APIs (`describe`, `test`, `expect` from Bun). The repository's tests are
-written for **Vitest** and use Vitest-specific helper APIs that have no Bun
-equivalent:
-
-- `vi.stubEnv` / `vi.unstubAllEnvs` — environment-variable stubbing
-- `vi.mocked` — typed mock introspection
-- `vi.setSystemTime` — fake clock control
-- `it.runIf` — conditional test execution
-
-Additionally, Bun's `bun run <script>` does **not** invoke npm lifecycle
-hooks (`pretest` / `posttest`) the way `npm run <script>` does. The agents
-package uses a `pretest` hook to run its API-surface guard
+All repository tests now import `bun:test` directly. However, Bun's
+`bun run <script>` does **not** invoke npm lifecycle hooks (`pretest` /
+`posttest`) the way `npm run <script>` does. The agents package uses a
+`pretest` hook to run its API-surface guard
 (`scripts/check-agents-api-surface.ts`); running tests via `bun run test`
-would silently skip it.
+would silently skip it. The orchestrator script handles this.
 
 ### The `test:bun` entry point
 
@@ -497,9 +488,9 @@ This script is a Bun-backed orchestrator that mirrors `npm run test
    API-surface guard and any future pretest hooks.
 
 3. **Runs each workspace's `test` script** in the workspace directory with
-   `node_modules/.bin` on `PATH`. Migrated workspaces point that script at
+   `node_modules/.bin` on `PATH`. Every workspace points that script at
    `scripts/run_bun_tests.ts` (Bun's native runner, one isolated process per
-   file); the workspaces still finishing their migration run under Vitest.
+   file).
 
 4. **Runs the script harness tests** (`scripts/tests/`) after workspace
    tests, matching the root `test:scripts` script. These run natively under
@@ -541,10 +532,9 @@ npm run test:all_evals                  # bun scripts/run_bun_tests.ts --root ev
 
 ### Overview
 
-Bun's own test runner (`bun test`) is the primary runner for every workspace
-except `agents` and `cli`, which are still on Vitest and tracked by #2578.
-Native Bun tests run faster (no Vitest overhead) and integrate better with
-Bun's module system.
+Bun's own test runner (`bun test`) is the primary runner for every workspace.
+Native Bun tests run faster (no third-party runner overhead) and integrate
+better with Bun's module system.
 
 ### Workspace `test:bun` scripts
 
@@ -557,12 +547,12 @@ runs the native Bun test files in isolated processes via
 ```
 
 The isolation (one fresh Bun process per test file) preserves the same
-module-level mock isolation that Vitest provides per file, because Bun's
+module-level mock isolation that a per-file runner provides, because Bun's
 `mock.module` is process-wide.
 
 ### Writing tests against Bun's API
 
-Tests import `bun:test` directly. Bun does not provide everything Vitest did,
+Tests import `bun:test` directly. Bun does not provide every convenience API,
 so a few patterns are worth knowing.
 
 **Replacing a module.** `vi.mock` is hoisted above the importing file's own
@@ -635,7 +625,7 @@ The CLI workspace has additional complexities:
 All 330 `packages/agents` test files run under Bun. The workspace `test` and
 `test:ci` scripts invoke `bun run-bun-tests.ts`, a workspace-local runner that
 discovers every `src/**/*.{test,spec}.{ts,tsx}` file and executes each in its
-own `bun test <file>` process. `test:vitest` is retained as the Vitest fallback.
+own `bun test <file>` process.
 There is no exclusion list: every discovered file must pass.
 
 Two Bun behaviours the runner has to work around:
@@ -643,7 +633,7 @@ Two Bun behaviours the runner has to work around:
 1. **`[test] timeout` in `bunfig.toml` is ignored.** Bun 1.3.14 silently falls
    back to its 5s default even when `bunfig.toml` declares a longer timeout, so
    the runner passes `--timeout 30000` on the command line to preserve the
-   `testTimeout: 30000` the workspace ran under in Vitest. A `bunfig.toml`
+   `testTimeout: 30000` the workspace previously used. A `bunfig.toml`
    timeout would look correct and do nothing.
 2. **File concurrency must stay below the core count.** Every file is a fresh
    process that re-executes the whole agents module graph, and suites under
@@ -692,10 +682,10 @@ A root may also declare:
 | `cwd`              | Working directory override; defaults to `packages/<root>`                                         |
 | `directories`      | Subdirectories of `cwd` to scan; defaults to `cwd` itself                                         |
 | `pattern`          | Custom test-file pattern, e.g. `\.eval\.ts$`                                                      |
-| `preload`          | One or more Bun `--preload` scripts (the equivalent of Vitest `setupFiles`)                       |
+| `preload`          | One or more Bun `--preload` scripts (the equivalent of `setupFiles`)                              |
 | `tsconfig`         | A test-only `--tsconfig-override`, e.g. to stub the editor-injected `vscode`                      |
-| `timeout`          | Per-test timeout, mirroring Vitest `testTimeout`                                                  |
-| `retries`          | Per-file retry budget, mirroring Vitest `retry`                                                   |
+| `timeout`          | Per-test timeout                                                                                  |
+| `retries`          | Per-file retry budget                                                                             |
 | `globalSetup`      | `setup()` / `teardown()` run once in the runner process around the whole root                     |
 | `credentialed`     | Marks a root that calls a real provider; excluded unless requested by `--root`                    |
 | `timeoutOverrides` | Per-file timeout budgets keyed by an absolute-path pattern; changes budget only, never membership |

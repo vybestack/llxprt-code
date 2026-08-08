@@ -34,12 +34,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
-import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   toOpenAIResponsesWireEffort,
@@ -68,6 +66,7 @@ import {
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  bestEffortDump,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -129,6 +128,32 @@ export interface ResponsesExecutorDeps {
    * must not permanently demote the session to HTTP (issue #3034).
    */
   readonly onWebSocketSuccess?: () => void;
+  /**
+   * Reports whether the backend has already refused this response id as a
+   * parent, so the parent scan can skip it (#3134 Fix 1).
+   */
+  readonly isRejectedStatefulParent?: (responseId: string) => boolean;
+  /**
+   * Records a response id the backend refused as a parent. Scoped to the one
+   * dead id rather than disabling statefulness for the session: Codex parents
+   * belong to a single WebSocket connection, so a resumed session starts with
+   * parents that are already dead, and a session-wide switch would make such a
+   * session replay full history forever instead of starting a new chain
+   * (#3134 Fix 1).
+   */
+  readonly markStatefulParentRejected?: (responseId: string) => void;
+  /**
+   * Whether this request will go over the Codex Responses WebSocket.
+   *
+   * Codex statefulness is transport-bound and the backend enforces it: the
+   * ChatGPT endpoint rejects `store: true` outright
+   * (400 `{"detail":"Store must be set to false"}`), so a parent can only be
+   * resolved from the live socket that produced it. Sending
+   * `previous_response_id` over HTTP is rejected, costing a wasted round trip
+   * and permanently suppressing statefulness for the session, so the request
+   * builder must know the transport before it trims history (#3134).
+   */
+  readonly isWebSocketTransportActive?: () => boolean;
 }
 
 export interface PreparedResponsesRequestContext {
@@ -171,6 +196,7 @@ export async function buildResponsesRequestContextForProjection(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
   invocationEphemerals = resolveInvocationEphemerals(options),
+  forceStateless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
     options.contents,
@@ -180,6 +206,7 @@ export async function buildResponsesRequestContextForProjection(
     patchedContent,
     invocationEphemerals,
     deps,
+    forceStateless,
   );
 }
 
@@ -188,6 +215,10 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
+  // Issue #3136: fail fast before any request preparation. Projection paths
+  // call buildResponsesRequestContextForProjection directly and are exempt.
+  requireAssembledSystemInstruction(options.systemInstruction);
+
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
   const prepared =
@@ -203,20 +234,182 @@ export async function* executeOpenAIResponsesRequest(
     deps,
   );
 
-  await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
-
-  yield* streamResponses(
-    {
-      ...requestContext,
-      abortSignal,
-      maxStreamingAttempts:
-        (invocationEphemerals['retries'] as number | undefined) ?? 6,
-      streamRetryInitialDelayMs:
-        (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
-      normalizedOptions: options,
-    },
+  const dumpResult = await dumpFinalizedRequest(
+    requestContext,
+    invocationEphemerals,
     deps,
   );
+
+  const streamParams: StreamResponsesParams = {
+    ...buildStreamParams(
+      requestContext,
+      abortSignal,
+      invocationEphemerals,
+      options,
+      dumpResult,
+    ),
+    rebuildStateless: () =>
+      buildStatelessTurn(options, deps, invocationEphemerals, abortSignal),
+  };
+
+  // #3134 Fix 1: one-shot recovery when previous_response_id is rejected.
+  // The safe replay boundary is "no IContent has been yielded to the consumer"
+  // — if even one chunk escaped we cannot retry without duplicating output.
+  let contentYielded = false;
+  let rejectedParentId: string;
+  try {
+    for await (const content of streamResponses(streamParams, deps)) {
+      contentYielded = true;
+      yield content;
+    }
+    return;
+  } catch (error) {
+    // Guard on the request the transport actually sent, not on `prepared`,
+    // so a future divergence between the two cannot skip recovery.
+    const sentParentId = requestContext.request.previous_response_id;
+    if (
+      contentYielded ||
+      sentParentId === undefined ||
+      !isPreviousResponseNotFoundError(error)
+    ) {
+      throw error;
+    }
+    rejectedParentId = sentParentId;
+    deps.logger.debug(
+      () =>
+        `responses-stateful: parent ${sentParentId} was rejected by the API; retiring it and retrying once with full history. Error: ${String(error)}`,
+    );
+  }
+
+  yield* retryWithoutStatefulness(
+    options,
+    deps,
+    invocationEphemerals,
+    abortSignal,
+    rejectedParentId,
+  );
+}
+
+/**
+ * Second and final attempt for a turn whose `previous_response_id` the backend
+ * refused (#3134 Fix 1). Only reachable before any IContent has been yielded,
+ * so replaying the turn cannot duplicate output.
+ *
+ * Extracted from executeOpenAIResponsesRequest to keep it within the project
+ * max-lines-per-function budget.
+ */
+async function* retryWithoutStatefulness(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals: Record<string, unknown>,
+  abortSignal: AbortSignal | undefined,
+  rejectedParentId: string,
+): AsyncIterableIterator<IContent> {
+  // Retire only the dead id, then rebuild. The retry therefore sends full
+  // history with no parent, and — because the parent scan takes the NEWEST
+  // eligible turn — the response it produces becomes the parent for the very
+  // next turn. The chain re-establishes itself instead of the session
+  // degrading to permanent full-history replay.
+  //
+  // This matters most on `--continue`: resumed history carries parents scoped
+  // to a WebSocket connection that no longer exists, so the first turn of a
+  // resumed session always spends one rejected request here.
+  deps.markStatefulParentRejected?.(rejectedParentId);
+  const recoveryPrepared = await buildResponsesRequestContextForProjection(
+    options,
+    deps,
+    invocationEphemerals,
+  );
+  const recoveryContext = await resolveResponsesTransportContext(
+    options,
+    recoveryPrepared,
+    deps,
+  );
+  // The recovery request is the one that actually reaches the model, so it is
+  // the one worth seeing under `dumpcontext`.
+  const recoveryDump = await dumpFinalizedRequest(
+    recoveryContext,
+    invocationEphemerals,
+    deps,
+  );
+  // Note: if both the initial and the recovery attempt fall back from the
+  // WebSocket, `onWebSocketFallback` fires twice for a single turn. That is
+  // accepted: the counter tracks CONSECUTIVE transport failures, and two real
+  // failed WebSocket attempts did occur.
+  yield* streamResponses(
+    buildStreamParams(
+      recoveryContext,
+      abortSignal,
+      invocationEphemerals,
+      options,
+      recoveryDump,
+    ),
+    deps,
+  );
+}
+
+/**
+ * Shared stream-parameter builder so the initial and recovery paths stay
+ * identical (#3134 Fix 1). Extracted to keep executeOpenAIResponsesRequest
+ * within the project max-lines budget.
+ */
+/**
+ * Re-derives the current turn with statefulness suppressed (full history, no
+ * `previous_response_id`), for the mid-turn WebSocket->HTTP fallback: the HTTP
+ * endpoint cannot resolve a socket-scoped parent.
+ *
+ * Deliberately does NOT mark the session as stateful-failed — a transport blip
+ * is not evidence that the parent itself was bad (#3134).
+ */
+async function buildStatelessTurn(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals: Record<string, unknown>,
+  abortSignal: AbortSignal | undefined,
+): Promise<StreamResponsesParams> {
+  const prepared = await buildResponsesRequestContextForProjection(
+    options,
+    deps,
+    invocationEphemerals,
+    /* forceStateless */ true,
+  );
+  const context = await resolveResponsesTransportContext(
+    options,
+    prepared,
+    deps,
+  );
+  const dumpResult = await dumpFinalizedRequest(
+    context,
+    invocationEphemerals,
+    deps,
+  );
+  return buildStreamParams(
+    context,
+    abortSignal,
+    invocationEphemerals,
+    options,
+    dumpResult,
+  );
+}
+
+function buildStreamParams(
+  requestContext: RequestContext,
+  abortSignal: AbortSignal | undefined,
+  invocationEphemerals: Record<string, unknown>,
+  options: NormalizedGenerateChatOptions,
+  dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>,
+): StreamResponsesParams {
+  return {
+    ...requestContext,
+    abortSignal,
+    maxStreamingAttempts:
+      (invocationEphemerals['retries'] as number | undefined) ?? 6,
+    streamRetryInitialDelayMs:
+      (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
+    normalizedOptions: options,
+    dumpBaseId: dumpResult.baseId,
+    dumpMode: dumpResult.dumpMode,
+  };
 }
 
 export async function buildRequestContext(
@@ -224,25 +417,35 @@ export async function buildRequestContext(
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
+  forceStateless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const systemPrompt = await buildSystemPrompt(options, userMemory, deps);
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim (empty for projection).
+  // options.userMemory is deliberately NOT read here: user memory is baked
+  // into the assembled instruction upstream.
+  const systemPrompt = options.systemInstruction ?? '';
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore =
     typeof requestOverrides['store'] === 'boolean'
       ? requestOverrides['store']
       : undefined;
+  // Codex can only be stateful over the WebSocket transport (the backend
+  // rejects store=true, so the parent lives on the socket). Non-Codex uses
+  // real server-side storage and is transport-independent.
+  const statefulTransportSupported =
+    !forceStateless &&
+    (!isCodex || (deps.isWebSocketTransportActive?.() ?? false));
   const stateful = computeStatefulConversation(
     options,
     patchedContent,
     invocationEphemerals,
     explicitUserStore,
     isCodex,
+    rawBaseURL,
+    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
+    statefulTransportSupported,
     deps.logger,
   );
   const input = buildInput(
@@ -275,7 +478,10 @@ export async function buildRequestContext(
     isCodex,
     request,
     includeThinkingInResponse: reasoning.includeThinkingInResponse,
-    responsesStored: request.store === true,
+    // Codex cannot use `store` (the backend rejects store=true), so its
+    // continuation is tracked by the connection instead. A stateful Codex turn
+    // is therefore "stored" for chaining purposes even though store=false.
+    responsesStored: request.store === true || (isCodex && stateful.enabled),
   };
 }
 
@@ -323,61 +529,6 @@ async function resolveApiKey(
     isCodex
       ? 'Codex authentication required. Run /auth codex enable to authenticate.'
       : 'OpenAI API key is required',
-  );
-}
-
-async function buildSystemPrompt(
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const toolNames = getToolNamesForPrompt(options);
-  const configWithManagers = options.config as
-    | {
-        getMcpClientManager?: () =>
-          | { getMcpInstructions?: () => string | undefined }
-          | undefined;
-        getSubagentManager?: () => ReturnType<
-          NonNullable<typeof options.config>['getSubagentManager']
-        >;
-      }
-    | undefined;
-  const mcpClientManager = configWithManagers?.getMcpClientManager?.();
-  const mcpInstructions = mcpClientManager?.getMcpInstructions?.();
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNames ?? [],
-    () => configWithManagers?.getSubagentManager?.(),
-  );
-  const corePrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model:
-      options.resolved.model !== ''
-        ? options.resolved.model
-        : deps.getDefaultModel(),
-    tools: toolNames,
-    includeSubagentDelegation,
-    interactionMode:
-      options.config?.isInteractive() === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
-  return mergeSystemInstruction(corePrompt, options.systemInstruction);
-}
-
-function getToolNamesForPrompt(
-  options: NormalizedGenerateChatOptions,
-): string[] | undefined {
-  if (options.tools === undefined) return undefined;
-
-  return Array.from(
-    new Set(
-      options.tools.flatMap((group) =>
-        group.functionDeclarations
-          .map((declaration) => declaration.name)
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ),
   );
 }
 
@@ -698,6 +849,10 @@ function applyCodexRequestSettings(
 ): void {
   if (!isCodex) return;
 
+  // store=false is only the Codex DEFAULT. applyStatefulConversation runs
+  // after this and raises it to store=true whenever statefulness is active.
+  // See the design rationale doc comment on applyStatefulConversation in
+  // openAIResponsesStateful.ts for the full trade-off discussion (#3134).
   request.store = false;
   if ('max_output_tokens' in request) {
     delete request.max_output_tokens;
@@ -745,30 +900,40 @@ function applyPromptCaching(
   if (!isCodex) request.prompt_cache_retention = '24h';
 }
 
+interface DumpFinalizedResult {
+  baseId?: string;
+  dumpMode?: DumpMode;
+}
+
 /**
  * Dumps the finalized Responses request at the common pre-transport seam when
  * context dumping is enabled, matching OpenAI Chat and Anthropic parity.
  * Best-effort: failures are logged and never block the request.
+ * Returns the dump base id and resolved mode so the transport can write a
+ * linked error-response dump on failure (issue #3140).
  */
 async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-): Promise<void> {
+): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
-  if (!shouldDumpSDKContext(dumpMode, false)) return;
-  try {
-    await dumpSDKRequestContext(
-      deps.providerName,
-      '/responses',
-      requestContext.request,
-      requestContext.baseURL,
-    );
-  } catch (error) {
-    deps.logger.debug(
-      () => `Best-effort Responses request dump failed: ${String(error)}`,
-    );
+  if (!shouldDumpSDKContext(dumpMode, false)) {
+    return { dumpMode };
   }
+  const result = await bestEffortDump(
+    'request',
+    deps.providerName,
+    () =>
+      dumpSDKRequestContext(
+        deps.providerName,
+        '/responses',
+        requestContext.request,
+        requestContext.baseURL,
+      ),
+    deps.logger,
+  );
+  return { baseId: result?.baseId, dumpMode };
 }
 
 async function* streamResponses(
@@ -790,7 +955,7 @@ async function* streamResponses(
       transport,
       params.request,
       streamOptions,
-      () => streamOverHttp(params, deps),
+      () => streamOverHttpWithoutStatefulness(params, deps),
       deps.onWebSocketFallback,
       deps.logger,
       deps.onWebSocketSuccess,
@@ -799,6 +964,33 @@ async function* streamResponses(
   }
 
   yield* streamOverHttp(params, deps);
+}
+
+/**
+ * HTTP fallback for a request that was built for the WebSocket.
+ *
+ * A WebSocket-built Codex request can carry a socket-scoped
+ * `previous_response_id` and a trimmed input. The Codex HTTP endpoint cannot
+ * resolve that parent (it rejects the request, since nothing is stored
+ * server-side), so replaying the WebSocket request here would fail and lose
+ * the trimmed-away context. Re-derive a stateless request instead (#3134).
+ */
+async function* streamOverHttpWithoutStatefulness(
+  params: StreamResponsesParams,
+  deps: ResponsesExecutorDeps,
+): AsyncIterableIterator<IContent> {
+  if (
+    params.rebuildStateless === undefined ||
+    params.request.previous_response_id === undefined
+  ) {
+    yield* streamOverHttp(params, deps);
+    return;
+  }
+  deps.logger.debug(
+    () =>
+      'Codex WebSocket fallback: rebuilding the request without previous_response_id for HTTP.',
+  );
+  yield* streamOverHttp(await params.rebuildStateless(), deps);
 }
 
 async function buildWebSocketHandshakeHeaders(
