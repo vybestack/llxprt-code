@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/// <reference types="vitest/globals" />
-
 import { describe, it, expect } from 'bun:test';
 import {
   validateSettings,

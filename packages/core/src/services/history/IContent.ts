@@ -135,6 +135,18 @@ export interface ContentMetadata {
   /** Stable identifier for a conversation turn */
   turnId?: string;
 
+  /**
+   * The originating prompt identifier for this content's turn, providing the
+   * reciprocal join key to the per-session token-usage log. Stamped where
+   * `turnId` is stamped for the in-flight prompt send so a recorded content
+   * entry locates its cost record and vice-versa. Content created outside a
+   * prompt (synthetic, resumed, compression summary) has no `promptId` and the
+   * field is absent — not null, not empty string.
+   *
+   * @issue #3130
+   */
+  promptId?: string;
+
   /** Stop reason from provider (e.g., end_turn, max_tokens) */
   stopReason?: string;
 
@@ -506,4 +518,45 @@ export function stampAiTurnModel(
   }
 
   return { ...content, metadata };
+}
+
+/**
+ * Strip `responsesStored` from all AI entries in the given history so the
+ * Responses stateful chain is invalidated.
+ *
+ * Any operation that rewrites history behind the current head (compression,
+ * density optimization, tool-response replacement) breaks the invariant that
+ * retained AI entries still represent what the server holds behind
+ * `previous_response_id`. Without this strip, the next turn would select a
+ * pre-rewrite parent and the server would replay stale/missing context.
+ * Stripping forces a full-history send with `store: true`, starting a fresh
+ * correct chain (#3134 Fix 3).
+ *
+ * Aliasing contract, deliberate: this returns a NEW array, but the entries in
+ * it are the CALLER'S OWN `IContent` objects, shared by reference. Only AI
+ * entries that actually carried `responsesStored` are replaced, and those get a
+ * new object plus a new `metadata` object. `blocks` is never cloned for any
+ * entry. Treat the result as read-only and do not mutate entries through it.
+ *
+ * The return type is `readonly IContent[]` to say so at the type level. Copying
+ * every entry was considered and rejected: a shallow `{...entry}` would still
+ * share `blocks` and `metadata`, so it would advertise immutability it does not
+ * provide, and a deep clone would be real cost on every compression for a
+ * hazard no caller exhibits. Both call sites — `applyCompressionWithAnchor` and
+ * `applyDensityMutations` — use the result as a replacement history and never
+ * write through it. Sharing entry references is also the established
+ * convention here: `HistoryService.getCurated()` and the compression
+ * strategies' `history.slice(...)` hand out the same objects.
+ */
+export function invalidateResponsesStatefulChain(
+  history: readonly IContent[],
+): readonly IContent[] {
+  return history.map((entry) => {
+    if (entry.speaker === 'ai' && entry.metadata?.responsesStored === true) {
+      const metadata = { ...entry.metadata };
+      delete metadata.responsesStored;
+      return { ...entry, metadata };
+    }
+    return entry;
+  });
 }

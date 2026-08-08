@@ -698,12 +698,12 @@ describe('Finding10: static empty spread — no false positive', () => {
 // ─── Finding 11: variant config filename classification ─────────────────────
 
 describe('Finding11: variant config filename classification', () => {
-  it('classifies standard vitest.config.ts as NOT a runtime export surface', () => {
-    expect(isRuntimeExportSurface('vitest.config.ts')).toBe(false);
+  it('classifies standard eslint.config.js as NOT a runtime export surface', () => {
+    expect(isRuntimeExportSurface('eslint.config.js')).toBe(false);
   });
 
-  it('classifies variant vitest.unit.config.ts as NOT a runtime export surface', () => {
-    expect(isRuntimeExportSurface('vitest.unit.config.ts')).toBe(false);
+  it('classifies variant vite.unit.config.ts as NOT a runtime export surface', () => {
+    expect(isRuntimeExportSurface('vite.unit.config.ts')).toBe(false);
   });
 
   it('classifies vite.worker.config.mjs as NOT a runtime export surface', () => {
@@ -715,6 +715,6 @@ describe('Finding11: variant config filename classification', () => {
   });
 
   it('does NOT classify a file with a similar but non-config name as config', () => {
-    expect(isRuntimeExportSurface('vitest-helper.ts')).toBe(true);
+    expect(isRuntimeExportSurface('eslint-helper.ts')).toBe(true);
   });
 });

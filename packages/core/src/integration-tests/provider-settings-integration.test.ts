@@ -163,9 +163,11 @@ describe('Provider Settings Integration', () => {
     // Provider methods should work properly with SettingsService
     const provider = instantiateProvider('test-compat');
 
-    await provider.getModelFromSettings();
-    await provider.getApiKeyFromSettings();
-    await provider.getBaseUrlFromSettings();
-    await provider.getModelParamsFromSettings();
+    // Backward compatibility: all accessor methods resolve to undefined for
+    // a fresh provider with no configured settings, proving they don't throw
+    expect(await provider.getModelFromSettings()).toBeUndefined();
+    expect(await provider.getApiKeyFromSettings()).toBeUndefined();
+    expect(await provider.getBaseUrlFromSettings()).toBeUndefined();
+    expect(await provider.getModelParamsFromSettings()).toBeUndefined();
   });
 });

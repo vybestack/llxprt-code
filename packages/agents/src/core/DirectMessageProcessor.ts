@@ -8,7 +8,10 @@ import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core
 import type { SendMessageParams } from './chatSession.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  ContentMetadata,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
@@ -179,7 +182,7 @@ export class DirectMessageProcessor {
       throw new Error('No active provider configured');
     }
 
-    const userIContents = this._convertUserInput(params.message);
+    const userIContents = this._convertUserInput(params.message, prompt_id);
 
     // #2410: when the user message converts to zero IContent turns (e.g.
     // empty array), skip the provider call entirely — never submit a
@@ -235,18 +238,25 @@ export class DirectMessageProcessor {
    * Converts user input message to IContent array, preserving turn boundaries
    * and stamping each turn with metadata.
    */
-  private _convertUserInput(message: SendMessageParams['message']): IContent[] {
+  private _convertUserInput(
+    message: SendMessageParams['message'],
+    promptId?: string,
+  ): IContent[] {
     const userContents = normalizeToolInteractionInput(message);
     return userContents.map((content) => {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+      const metadata: ContentMetadata = {
+        ...(content.metadata ?? {}),
+        id: idGen(),
+        turnId: turnKey,
+      };
+      if (promptId !== undefined && promptId.length > 0) {
+        metadata.promptId = promptId;
+      }
       return {
         ...content,
-        metadata: {
-          ...(content.metadata ?? {}),
-          id: idGen(),
-          turnId: turnKey,
-        },
+        metadata,
       };
     });
   }

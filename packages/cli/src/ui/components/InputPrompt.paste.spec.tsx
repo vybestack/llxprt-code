@@ -554,4 +554,452 @@ describe('InputPrompt paste functionality', () => {
       'pasted text from mouse',
     );
   });
+
+  it('should expand a single large paste before steering', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+
+    const multiLineContent = 'Line 1\nLine 2\nLine 3\nLine 4';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: multiLineContent,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSteer).toHaveBeenCalledWith(multiLineContent);
+  });
+
+  it('should steer original content for a single-line 1000-code-point paste', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+
+    // Exactly 1000 Unicode code points (998 ASCII + 2 astral-plane emoji).
+    // This crosses LARGE_PASTE_CHAR_THRESHOLD while staying on one line, so
+    // the buffer shows the character-count placeholder form rather than the
+    // line-count form.
+    const singleLinePaste = 'a'.repeat(998) + '\u{1F600}' + '\u{1F601}';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: singleLinePaste,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Single-line paste at the char threshold produces the character-count
+    // placeholder form, not the line-count form.
+    expect(mockBuffer.text).toMatch(/\[1000 characters pasted #\d+\]/);
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    // onSteer receives the exact original content, not the display label.
+    expect(mockOnSteer).toHaveBeenCalledWith(singleLinePaste);
+  });
+
+  it('should preserve surrounding text when steering a large paste', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+
+    const pasteContent = 'Pasted 1\nPasted 2\nPasted 3\nPasted 4';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: pasteContent,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    mockBuffer.text = `before ${mockBuffer.text} after`;
+    mockBuffer.lines = mockBuffer.text.split('\n');
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSteer).toHaveBeenCalledWith(`before ${pasteContent} after`);
+  });
+
+  it('should expand multiple large pastes in order before steering', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+
+    const firstPaste =
+      'Block 1 line 1\nBlock 1 line 2\nBlock 1 line 3\nBlock 1 line 4';
+    const secondPaste =
+      'Block 2 line 1\nBlock 2 line 2\nBlock 2 line 3\nBlock 2 line 4';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: firstPaste,
+    });
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: secondPaste,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSteer).toHaveBeenCalledWith(firstPaste + secondPaste);
+  });
+
+  it('should keep paste state usable when steer is declined then submit full paste', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => false);
+
+    const multiLineContent = 'Line 1\nLine 2\nLine 3\nLine 4';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: multiLineContent,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Model the production newline behaviour in the declined scenario only:
+    // after the paste the cursor sits at the end of the placeholder, so
+    // newline appends \n and advances the cursor one row — matching what a
+    // real buffer would show after Ctrl+Enter falls through from declined steer.
+    (
+      mockBuffer.newline as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(() => {
+      mockBuffer.text += '\n';
+      mockBuffer.lines = mockBuffer.text.split('\n');
+      mockBuffer.cursor = [mockBuffer.cursor[0] + 1, 0];
+    });
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    // Steer receives the expanded multi-line content even though it declines.
+    expect(mockOnSteer).toHaveBeenCalledWith(multiLineContent);
+
+    // Declined steer falls through to NEWLINE: the buffer now holds the
+    // tracked placeholder followed by the inserted newline and was not cleared.
+    expect(mockBuffer.text).toMatch(/\[4 lines pasted #\d+\]\n$/);
+    expect(mockBuffer.text).not.toBe('');
+
+    await sendKey({
+      name: 'return',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    // Normal Enter trims the fallback newline before expansion, so the
+    // original full paste content is submitted.
+    expect(mockOnSubmit).toHaveBeenCalledWith(multiLineContent);
+  });
+
+  it('should pass plain text unchanged when steering', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    mockBuffer.text = 'just plain text';
+    mockBuffer.lines = ['just plain text'];
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSteer).toHaveBeenCalledWith('just plain text');
+  });
+
+  it('should steer exact unchanged content after a sub-threshold paste', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+
+    // Sub-threshold: single line, well under the 4-line/1000-char limits.
+    // No placeholder is created — the sequence flows through handleInput.
+    const pasteContent = 'sub threshold single line paste';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Give the fake handleInput enough behavior to place the pasted
+    // sequence into observable buffer state (sub-threshold pastes bypass
+    // the placeholder mechanism and delegate to buffer.handleInput).
+    (
+      mockBuffer.handleInput as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation((key: { sequence: string }) => {
+      mockBuffer.text += key.sequence;
+      mockBuffer.lines = mockBuffer.text.split('\n');
+    });
+
+    await sendKey({
+      name: 'paste',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      sequence: pasteContent,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSteer).toHaveBeenCalledWith(pasteContent);
+  });
+
+  it('should steer all queued submissions on Ctrl+Enter with empty buffer', async () => {
+    const mockDispatch = vi.fn();
+    const mockOnSteer = vi.fn(() => true);
+    const mockSteerAllQueuedSubmissions = vi.fn();
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          onSteer={mockOnSteer}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+          queuedSubmissionCount={3}
+          steerAllQueuedSubmissions={mockSteerAllQueuedSubmissions}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await sendKey({
+      name: 'return',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\r',
+    });
+
+    expect(mockSteerAllQueuedSubmissions).toHaveBeenCalled();
+    expect(mockOnSteer).not.toHaveBeenCalled();
+  });
 });

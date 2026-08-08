@@ -17,6 +17,7 @@
 import type { DensityResult } from '../../core/compression/types.js';
 import { CompressionStrategyError } from '../../core/compression/types.js';
 import type { IContent } from './IContent.js';
+import { invalidateResponsesStatefulChain } from './IContent.js';
 
 /**
  * Validate a DensityResult against the current history bounds.
@@ -109,5 +110,14 @@ export function applyDensityMutations(
   // M3: Apply removals in reverse order
   for (const index of sortedRemovals) {
     history.splice(index, 1);
+  }
+
+  // M4: Density mutations rewrite history behind the head, so a retained AI
+  // entry no longer describes what the server holds behind
+  // `previous_response_id`. Invalidate the Responses stateful chain in place
+  // so the next turn starts a fresh one (#3134).
+  const invalidated = invalidateResponsesStatefulChain(history);
+  for (let index = 0; index < invalidated.length; index += 1) {
+    history[index] = invalidated[index];
   }
 }

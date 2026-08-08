@@ -88,6 +88,47 @@ function buildMessageBusManagers() {
   return { subagentManager, profileManager };
 }
 
+describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
+  it('gives the subagent runtime its own id, the parent runtime id, and its name', async () => {
+    const subagentConfig: SubagentConfig = {
+      name: 'burn-attribution',
+      profile: 'analysis-profile',
+      systemPrompt: 'Analyse.',
+      level: 'project',
+      filePath: '/tmp/burn-attribution.md',
+    };
+    const subagentManager = {
+      loadSubagent: vi.fn().mockResolvedValue(subagentConfig),
+    } as unknown as SubagentManager;
+    const profileManager = {
+      loadProfile: vi.fn().mockResolvedValue(baseProfile),
+    } as unknown as ProfileManager;
+    const { factory } = createScopeFactory();
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const foregroundConfig = makeForegroundConfig();
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({ name: subagentConfig.name });
+
+    expect(runtimeLoader).toHaveBeenCalledTimes(1);
+    const loaderOptions = runtimeLoader.mock.calls[0][0];
+    const state = loaderOptions.profile.state;
+
+    // Its own runtime, distinct from the parent's.
+    expect(state.runtimeId).not.toBe('primary-session');
+    // Burn rolls up to the invoking parent.
+    expect(state.parentRuntimeId).toBe('primary-session');
+    expect(state.subagentName).toBe(subagentConfig.name);
+  });
+});
+
 describe('SubagentOrchestrator - Config Resolution', () => {
   it('throws an enhanced error message suggesting list_subagents tool when subagent not found', async () => {
     const subagentName = 'nonexistent-helper';

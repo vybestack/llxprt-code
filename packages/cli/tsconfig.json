@@ -6,7 +6,10 @@
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "composite": false,
-    "types": ["node", "bun-types/test"],
+    // bun-types/test.d.ts declares only the `bun:test` module (import { ... } from 'bun:test');
+    // test-globals.d.ts declares the ambient globals (describe/it/expect/beforeEach...).
+    // Both are needed so test files compile under the Bun-native runner (issue #2970).
+    "types": ["node", "bun-types/test", "bun-types/test-globals"],
     "baseUrl": ".",
     "rootDir": "..",
     "paths": {

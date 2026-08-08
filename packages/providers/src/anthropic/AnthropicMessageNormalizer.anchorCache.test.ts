@@ -178,10 +178,9 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
     // No non-last message carries a breakpoint.
     for (let i = 0; i < messages.length - 1; i++) {
       const blocks = messages[i].content;
-      if (Array.isArray(blocks)) {
-        for (const b of blocks) {
-          expect((b as Record<string, unknown>).cache_control).toBeUndefined();
-        }
+      if (!Array.isArray(blocks)) continue;
+      for (const b of blocks) {
+        expect((b as Record<string, unknown>).cache_control).toBeUndefined();
       }
     }
   });

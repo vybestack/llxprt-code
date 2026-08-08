@@ -17,6 +17,13 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
+import { createCodexResponsesWebSocketTransport } from './openAIResponsesWebSocketTransport.js';
+import {
+  SocketHarness,
+  completingScript,
+  drain as drainHarness,
+  userTextsOf,
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 
 const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
@@ -82,6 +89,8 @@ function buildDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,
+    // Codex statefulness is WS-bound; these harnesses exercise the WS path.
+    isWebSocketTransportActive: () => true,
     ...overrides,
   };
 }
@@ -258,6 +267,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         blocks: [],
         metadata: {
           id: 'r1',
+          responsesStored: true,
           stopReason: 'end_turn',
           finishReason: 'completed',
         },
@@ -275,6 +285,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         blocks: [],
         metadata: {
           id: 'r1',
+          responsesStored: true,
           stopReason: 'end_turn',
           finishReason: 'completed',
         },
@@ -282,5 +293,101 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(transport.streamResponseCalls).toBe(1);
+  });
+});
+
+describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversation stateful @issue:3134', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    restoreGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * A dropped socket must not force a full-history replay. Because the parent
+   * response was stored server-side (store=true), its id stays resolvable on a
+   * brand-new connection, so the reconnected turn still sends only the delta.
+   */
+  it('sends previous_response_id and only the post-parent turn on a brand-new socket', async () => {
+    // Real transport + fake-socket harness, so the reconnect path is exercised
+    // end-to-end rather than simulated.
+    const harness = new SocketHarness([
+      completingScript('first'),
+      completingScript('second'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    // Request 1: no stored parent. Opens socket 1.
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions(),
+        buildDeps({ getWebSocketTransport: () => transport }),
+      ),
+    );
+
+    // Kill socket 1 so the next request is forced to reconnect.
+    harness.sockets[0].serverClose();
+
+    // Request 2: history carries a stored parent, so the turn is trimmed.
+    const options2 = buildNormalizedOptions({
+      contents: [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'first question' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'first answer' }],
+          metadata: {
+            id: 'resp_parent',
+            responsesStored: true,
+            providerBaseURL: CODEX_BASE_URL,
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'second question' }],
+        },
+      ],
+    });
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        options2,
+        buildDeps({ getWebSocketTransport: () => transport }),
+      ),
+    );
+
+    expect(harness.sockets).toHaveLength(2);
+
+    const sentRaw = harness.sockets[1].sent[0];
+    expect(sentRaw).toBeDefined();
+    const sent = JSON.parse(sentRaw) as Record<string, unknown>;
+    expect(sent['type']).toBe('response.create');
+    expect(sent['previous_response_id']).toBe('resp_parent');
+    // Codex must NEVER send store=true: the backend rejects it outright
+    // (400 "Store must be set to false"). The parent is resolved from the
+    // live socket instead, which is why store stays false here.
+    expect(sent['store']).toBe(false);
+
+    // The first request opens the chain and likewise never sets store.
+    const firstSent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+      string,
+      unknown
+    >;
+    expect(firstSent['store']).toBe(false);
+    expect(firstSent['previous_response_id']).toBeUndefined();
+
+    const userTexts = userTextsOf(sent['input']);
+    // Exact equality, not toContain: an empty array would satisfy both a
+    // toContain-absent and a not.toContain assertion, hiding a total failure.
+    expect(userTexts).toEqual(['second question']);
+
+    transport.close();
   });
 });

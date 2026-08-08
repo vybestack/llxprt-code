@@ -14,8 +14,8 @@
  * healthy-keyring assertion red.
  *
  * This lives in its own file rather than in test-setup-storage-isolation.ts
- * because that file is loaded by BOTH bunfig.toml and vitest.config.ts, and
- * importing `bun:test` there breaks Vitest collection with
+ * because that file is loaded by bunfig.toml, and importing `bun:test`
+ * there can break test collection with
  * "Cannot find package 'bun:test'".
  *
  * @plan PLAN-20260805-ISSUE2928

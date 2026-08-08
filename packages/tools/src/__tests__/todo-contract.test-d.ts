@@ -11,8 +11,8 @@
  * boundary must therefore make that dependency required so a mis-wired
  * construction fails at compile time rather than throwing at runtime.
  *
- * These assertions use expectTypeOf (run via vitest typecheck, see
- * vitest.config.ts typecheck.include) to prove the constructor's first
+ * These assertions use expectTypeOf (run via Bun's typecheck, see
+ * bunfig.toml) to prove the constructor's first
  * parameter is the required ITodoService (not optional) for every todo tool.
  *
  * They are complemented by runtime behavioral round-trip tests in

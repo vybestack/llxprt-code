@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/// <reference types="vitest/globals" />
-
 // Mock 'os' first.
 import * as osActual from 'os';
 const actualOs = { ...(await import('os')) };

@@ -26,7 +26,7 @@
 ## Technology Stack
 
 - **Language**: TypeScript (strict mode required)
-- **Testing**: Vitest + React Testing Library
+- **Testing**: Bun (`bun:test`) + React Testing Library
 - **Validation**: Zod for schema-first development
 - **State**: Immutable patterns only
 

@@ -479,10 +479,13 @@ describe('Provider package build configuration', () => {
    *
    * Verify the providers package has the required configuration files
    * that enable it to build, test, and lint as a workspace member.
+   *
+   * Issue #2970: vitest.config.ts is removed — the package uses bun:test.
+   * Assert its absence to prevent regression.
    */
-  it('providers package has vitest.config.ts', () => {
+  it('providers package does NOT have vitest.config.ts (#2970)', () => {
     expect(fs.existsSync(path.join(PROVIDERS_DIR, 'vitest.config.ts'))).toBe(
-      true,
+      false,
     );
   });
 
