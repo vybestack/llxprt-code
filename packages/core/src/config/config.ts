@@ -763,12 +763,16 @@ export class Config extends ConfigBase {
    * @plan PLAN-20260130-ASYNCTASK.P22
    * @param isAgentBusy Function to check if the agent is busy
    * @param triggerAgentTurn Function to trigger an agent turn with a message
+   * @param shellJobManager Optional session-owned manager. When omitted (the CLI
+   *   builds its UiRuntime from Config before the owning SessionRuntime exists)
+   *   shell-job-completion notifications are not wired into the auto-trigger.
+   *   The manager is owned by SessionRuntime; Config never constructs it.
    * @returns Cleanup function to unsubscribe from auto-trigger
    */
   setupAsyncTaskAutoTrigger(
-    shellJobManager: ShellJobManager | undefined,
     isAgentBusy: () => boolean,
     triggerAgentTurn: (message: string) => Promise<void>,
+    shellJobManager?: ShellJobManager,
   ): () => void {
     return setupAsyncTaskAutoTrigger(
       this.getSettingsService(),

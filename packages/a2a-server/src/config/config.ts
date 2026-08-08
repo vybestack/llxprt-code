@@ -28,6 +28,7 @@ import {
   createAgentClient,
   createToolScheduler,
   createTaskToolRegistration,
+  SessionRuntime,
 } from '@vybestack/llxprt-code-agents';
 
 import { logger } from '../utils/logger.js';
@@ -38,7 +39,7 @@ export async function loadConfig(
   settings: Settings,
   extensions: LlxprtExtension[],
   taskId: string,
-): Promise<Config> {
+): Promise<{ config: Config; sessionRuntime: SessionRuntime }> {
   const workspaceDir = process.cwd();
   const configParams = await createConfigParameters(
     settings,
@@ -47,9 +48,9 @@ export async function loadConfig(
     workspaceDir,
   );
   const config = new Config(configParams);
-  await initializeConfig(config);
+  const sessionRuntime = await initializeConfig(config);
   await refreshConfigAuth(config);
-  return config;
+  return { config, sessionRuntime };
 }
 
 async function createConfigParameters(
@@ -159,16 +160,22 @@ async function loadWorkspaceMemory(
   );
 }
 
-async function initializeConfig(config: Config): Promise<void> {
+async function initializeConfig(config: Config): Promise<SessionRuntime> {
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
   );
-  await (
-    config as Config & {
-      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-    }
-  ).initialize({ messageBus: sessionMessageBus });
+  // @plan PLAN-20260808-ISSUE2615
+  // Construct the session-owned ShellJobManager BEFORE initialize and lend it
+  // to Config via coreServices so tool assembly borrows the real manager. The
+  // returned runtime is retained by the caller and disposed at task shutdown.
+  const sessionRuntime = new SessionRuntime(config.getSettingsService());
+  sessionRuntime.attachToConfig(config);
+  await config.initialize({
+    messageBus: sessionMessageBus,
+    coreServices: sessionRuntime.coreSessionServices,
+  });
+  return sessionRuntime;
 }
 
 async function refreshConfigAuth(config: Config): Promise<void> {

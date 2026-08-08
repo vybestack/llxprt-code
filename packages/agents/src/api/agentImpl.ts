@@ -11,6 +11,7 @@
  * @requirement:REQ-017
  */
 
+import type { ShellJobManager } from '@vybestack/llxprt-code-core';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -130,6 +131,17 @@ import { AggregateDisposeError } from './disposeErrors.js';
  */
 export interface AgentDeps {
   readonly config: Config;
+  /**
+   * The session runtime that owns the ShellJobManager. Agent disposal awaits
+   * its disposal, which terminates real background processes. Optional only
+   * while callers that do not yet assemble a runtime are migrated.
+   *
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  readonly sessionRuntime?: {
+    readonly shellJobManager: ShellJobManager;
+    dispose(): Promise<void>;
+  };
   readonly providerManager: RuntimeProviderManager;
   readonly oauthManager: OAuthManager;
   readonly settingsService: SettingsService;
@@ -537,7 +549,7 @@ export class AgentImpl implements Agent {
   private buildTasksControl(): TasksControl {
     const tasksDeps: TasksControlDeps = {
       getManager: () => this.deps.config.getAsyncTaskManager(),
-      getShellJobManager: () => this.deps.config.getShellJobManager(),
+      shellJobManager: this.deps.sessionRuntime?.shellJobManager,
     };
     return new TasksControl(tasksDeps);
   }
@@ -1367,6 +1379,15 @@ export class AgentImpl implements Agent {
     // @pseudocode dispose.md 55: runtimeHandle.cleanup() unregisters the runtime
     // context (and tears down OAuth infra within).
     await this.safe(errors, () => this.deps.runtimeHandle.cleanup());
+
+    // @plan PLAN-20260808-ISSUE2615
+    // @pseudocode dispose.md 65 (NET-NEW): terminate the session-owned
+    // ShellJobManager's real background processes. This runs UNCONDITIONALLY —
+    // regardless of whether the Config is caller-owned (fromConfig) or
+    // agent-owned (createAgent) — because the session runtime, not Config,
+    // owns the ShellJobManager. A disposal failure is aggregated via safe() so
+    // it cannot short-circuit the remaining teardown steps.
+    await this.safe(errors, () => this.deps.sessionRuntime?.dispose());
 
     // @pseudocode dispose.md 60: config.dispose() disposes agentClient
     // (_unsubscribe → undefined) and stops mcpClientManager.

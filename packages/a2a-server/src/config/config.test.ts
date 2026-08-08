@@ -72,7 +72,7 @@ describe('loadConfig auth fallback', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://collector.example';
 
-    const config = await loadConfig(
+    const { config } = await loadConfig(
       { telemetry: { enabled: true, logPrompts: false } },
       [],
       'test-task-id',
@@ -104,7 +104,7 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     process.env.LLXPRT_YOLO_MODE = 'true';
     delete process.env.GEMINI_YOLO_MODE;
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
     expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
 
@@ -122,7 +122,7 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     delete process.env.LLXPRT_YOLO_MODE;
     delete process.env.GEMINI_YOLO_MODE;
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
   });
 
@@ -140,7 +140,7 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     delete process.env.LLXPRT_YOLO_MODE;
     process.env.GEMINI_YOLO_MODE = 'true';
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
   });
 });
@@ -155,7 +155,7 @@ describe('loadConfig interactive mode', () => {
     vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
 
     expect(config.isInteractive()).toBe(true);
     expect(config.getNonInteractive()).toBe(false);
@@ -181,7 +181,7 @@ describe('loadConfig provider-neutral defaults', () => {
     delete process.env.GOOGLE_API_KEY;
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
     expect(config.getModel()).toBe(PLACEHOLDER_MODEL);
   });
 
@@ -264,7 +264,7 @@ describe('loadConfig provider-neutral defaults', () => {
     delete process.env.GOOGLE_API_KEY;
     process.env.LLXPRT_DEFAULT_PROVIDER = '   ';
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
 
     // A whitespace-only env value must not select any provider or trigger auth.
     expect(refreshAuthSpy).not.toHaveBeenCalled();
@@ -284,7 +284,7 @@ describe('loadConfig provider-neutral defaults', () => {
     delete process.env.GOOGLE_API_KEY;
     process.env.LLXPRT_DEFAULT_PROVIDER = '  openai  ';
 
-    const config = await loadConfig({} as never, [], 'test-task-id');
+    const { config } = await loadConfig({} as never, [], 'test-task-id');
 
     // The padded value must be trimmed to 'openai'.
     expect(config.getProvider()).toBe('openai');

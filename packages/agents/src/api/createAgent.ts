@@ -61,6 +61,7 @@ import {
 } from './loop/rebuildLoop.js';
 import { buildAgent } from './agentImpl.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
+import { SessionRuntime } from '../session/SessionRuntime.js';
 import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from './constants.js';
 import {
   resolveAuthType,
@@ -127,6 +128,14 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   applyRuntimeEphemerals(config, parsed);
   const settingsService = config.getSettingsService();
 
+  // @plan PLAN-20260808-ISSUE2615
+  // Construct the session-owned ShellJobManager BEFORE initialize so Config can
+  // borrow the already-built manager during tool assembly. Attach the
+  // shell-admission reactor so writes to `shell-max-background-jobs` propagate
+  // synchronously. The runtime owns construction + disposal; Config borrows it.
+  const sessionRuntime = new SessionRuntime(settingsService);
+  sessionRuntime.attachToConfig(config);
+
   // @pseudocode createAgent.md steps 41-58
   // SHARED runtime context — adopts OUR Config/MessageBus. DO NOT pass
   // provider/apiKey/baseUrl (they are not valid options; applied via mutators
@@ -167,6 +176,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     resolvedAuth,
     config,
     messageBus,
+    sessionRuntime,
   );
   const finalizedParsed =
     activationOutcome !== undefined
@@ -193,6 +203,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     onOAuthPrompt,
     editorCallbacks,
     injectedSchedulerHandles,
+    sessionRuntime,
     'agent',
   );
   await agent.hooks.triggerSessionStart();
@@ -255,6 +266,12 @@ export async function finalizeAgent(
   onOAuthPrompt: unknown,
   editorCallbacks: EditorCallbacks | undefined,
   injectedSchedulerHandles: AgentSchedulerHandle[],
+  // @plan PLAN-20260808-ISSUE2615
+  // The session-owned runtime that constructed the ShellJobManager lent into
+  // Config.initialize. Threaded through so AgentImpl.dispose() can await its
+  // disposal (terminating real background processes) regardless of config
+  // ownership. The structural type matches AgentDeps.sessionRuntime.
+  sessionRuntime: SessionRuntime,
   // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001,REQ-006 @requirement:REQ-001.3
   // Threading the config ownership origin so dispose() can skip tearing down a
   // caller-owned Config (fromConfig) while still tearing down an agent-owned
@@ -321,6 +338,7 @@ export async function finalizeAgent(
     editorCallbacks,
     initialAuth: parsed.auth,
     injectedSchedulerHandles,
+    sessionRuntime,
     configOwnership,
   });
 }
@@ -351,6 +369,13 @@ interface AssembleFacadeDeps {
   readonly editorCallbacks: EditorCallbacks | undefined;
   readonly initialAuth: AgentAuth | undefined;
   readonly injectedSchedulerHandles: AgentSchedulerHandle[];
+  /**
+   * The session-owned runtime owning the ShellJobManager. Threaded into
+   * AgentDeps so AgentImpl.dispose() awaits its disposal.
+   *
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  readonly sessionRuntime: SessionRuntime;
   /**
    * The config ownership origin. 'agent' when createAgent constructed the
    * Config (dispose() tears it down); 'caller' when fromConfig adopted an
@@ -404,6 +429,7 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
     ...(deps.initialAuth !== undefined
       ? { initialAuth: deps.initialAuth }
       : {}),
+    sessionRuntime: deps.sessionRuntime,
   });
 
   // SessionStart is driven by the frontend after it has installed observers
@@ -522,9 +548,13 @@ async function applyActivationOrLegacy(
   },
   config: Config,
   messageBus: MessageBus,
+  sessionRuntime: SessionRuntime,
 ): Promise<{ readonly provider: string; readonly model: string } | void> {
   if (parsed.activation !== undefined) {
-    await config.initialize({ messageBus });
+    await config.initialize({
+      messageBus,
+      coreServices: sessionRuntime.coreSessionServices,
+    });
     const activationResult = await executeProviderActivation(
       config,
       parsed.activation,
@@ -564,7 +594,10 @@ async function applyActivationOrLegacy(
   // @pseudocode createAgent.md steps 61-79: apply provider/model/auth via real mutators
   await applyInitialProviderModelAuth(parsed, resolvedAuth, config);
   // @pseudocode createAgent.md step 81-82: initialize (creates transient pre-auth client)
-  await config.initialize({ messageBus });
+  await config.initialize({
+    messageBus,
+    coreServices: sessionRuntime.coreSessionServices,
+  });
   // @pseudocode createAgent.md step 95-96: refreshAuth (creates post-auth client)
   await config.refreshAuth(resolvedAuth.authMethod);
   return undefined;

@@ -58,10 +58,15 @@ export function buildZedTerminalSetup(
     registry.registerTool(tool);
   }
   if (hasShellTool) {
+    // The zed terminal path routes shell execution through AcpTerminalShellHost
+    // (interactive terminals), not the session-owned ShellJobManager, so the
+    // background-job manager is intentionally undefined here. The owning
+    // SessionRuntime (built inside fromConfig) retains the real manager for the
+    // tasks API and background launches.
     registry.registerTool(
       new ShellTool(
         new AcpTerminalShellHost(
-          new CoreShellToolHostAdapter(config),
+          new CoreShellToolHostAdapter(config, undefined),
           terminals,
         ),
         messageBusAdapter,

@@ -35,6 +35,7 @@ import {
 import { loadConfig, loadEnvironment, setTargetDir } from '../config/config.js';
 import { loadSettings } from '../config/settings.js';
 import { loadExtensions } from '../config/extension.js';
+import type { SessionRuntime } from '@vybestack/llxprt-code-agents';
 import { Task } from './task.js';
 import { requestStorage } from '../http/requestStorage.js';
 
@@ -51,14 +52,37 @@ function throwIfAborted(signal: AbortSignal): void {
 class TaskWrapper {
   task: Task;
   agentSettings: AgentSettings;
+  // @plan PLAN-20260808-ISSUE2615
+  // Session-owned ShellJobManager lifecycle retained for disposal when the
+  // task reaches a final state, terminating any background processes.
+  private readonly sessionRuntime: SessionRuntime | undefined;
+  private disposed = false;
 
-  constructor(task: Task, agentSettings: AgentSettings) {
+  constructor(
+    task: Task,
+    agentSettings: AgentSettings,
+    sessionRuntime?: SessionRuntime,
+  ) {
     this.task = task;
     this.agentSettings = agentSettings;
+    this.sessionRuntime = sessionRuntime;
   }
 
   get id() {
     return this.task.id;
+  }
+
+  /**
+   * Disposes the session-owned runtime (terminating background shell processes
+   * and detaching the settings reactor). Idempotent.
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  async dispose(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    await this.sessionRuntime?.dispose();
   }
 
   toSDKTask(): SDKTask {
@@ -87,8 +111,24 @@ class TaskWrapper {
 /**
  * CoderAgentExecutor implements the agent's core logic for code generation.
  */
+/**
+ * Result of loading a Config: the Config itself plus the optional
+ * session-owned ShellJobManager runtime retained for disposal at task shutdown.
+ * @plan PLAN-20260808-ISSUE2615
+ */
+export type LoadConfigResult = {
+  config: Config;
+  sessionRuntime?: SessionRuntime;
+};
+
+export type LoadConfigFn = (
+  settings: Parameters<typeof loadConfig>[0],
+  extensions: Parameters<typeof loadConfig>[1],
+  taskId: string,
+) => Promise<LoadConfigResult>;
+
 export interface CoderAgentExecutorDependencies {
-  loadConfig?: typeof loadConfig;
+  loadConfig?: LoadConfigFn;
   loadEnvironment?: typeof loadEnvironment;
   setTargetDir?: typeof setTargetDir;
   loadSettings?: typeof loadSettings;
@@ -109,7 +149,7 @@ export class CoderAgentExecutor implements AgentExecutor {
   private async getConfig(
     agentSettings: AgentSettings,
     taskId: string,
-  ): Promise<Config> {
+  ): Promise<LoadConfigResult> {
     const workspaceRoot = (this.dependencies.setTargetDir ?? setTargetDir)(
       agentSettings,
     );
@@ -145,7 +185,10 @@ export class CoderAgentExecutor implements AgentExecutor {
     }
 
     const agentSettings = persistedState._agentSettings;
-    const config = await this.getConfig(agentSettings, sdkTask.id);
+    const { config, sessionRuntime } = await this.getConfig(
+      agentSettings,
+      sdkTask.id,
+    );
     const contextId = (metadata['_contextId'] as string) || sdkTask.contextId;
     const runtimeTask = await (this.dependencies.createTask ?? Task.create)(
       sdkTask.id,
@@ -161,7 +204,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       await runtimeTask.agentClient.initialize(contentGeneratorConfig);
     }
 
-    const wrapper = new TaskWrapper(runtimeTask, agentSettings);
+    const wrapper = new TaskWrapper(runtimeTask, agentSettings, sessionRuntime);
     this.tasks.set(sdkTask.id, wrapper);
     logger.info(`Task ${sdkTask.id} reconstructed from store.`);
     return wrapper;
@@ -174,7 +217,10 @@ export class CoderAgentExecutor implements AgentExecutor {
     eventBus?: ExecutionEventBus,
   ): Promise<TaskWrapper> {
     const agentSettings = agentSettingsInput ?? ({} as AgentSettings);
-    const config = await this.getConfig(agentSettings, taskId);
+    const { config, sessionRuntime } = await this.getConfig(
+      agentSettings,
+      taskId,
+    );
     const runtimeTask = await (this.dependencies.createTask ?? Task.create)(
       taskId,
       contextId,
@@ -188,7 +234,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       await runtimeTask.agentClient.initialize(contentGeneratorConfig2);
     }
 
-    const wrapper = new TaskWrapper(runtimeTask, agentSettings);
+    const wrapper = new TaskWrapper(runtimeTask, agentSettings, sessionRuntime);
     this.tasks.set(taskId, wrapper);
     logger.info(`New task ${taskId} created.`);
     return wrapper;
@@ -332,6 +378,15 @@ export class CoderAgentExecutor implements AgentExecutor {
       );
       await this.taskStore?.save(wrapper.toSDKTask());
       logger.info(`[CoderAgentExecutor] Task ${taskId} state CANCELED saved.`);
+      // @plan PLAN-20260808-ISSUE2615
+      // Task shutdown: terminate the session-owned background processes.
+      await wrapper.dispose().catch((err: unknown) => {
+        logger.warn(
+          `[CoderAgentExecutor] SessionRuntime disposal failed for task ${taskId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';

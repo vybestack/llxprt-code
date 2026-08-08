@@ -9,6 +9,12 @@ import { createTaskRegistration } from './api/runtimeFactories.js';
 
 export * from './api/index.js';
 
+// SessionRuntime: the session-owned ShellJobManager lifecycle owner. Exported
+// from the root barrel so downstream packages (a2a-server) that initialize
+// Config directly can construct, retain, and dispose it.
+// @plan PLAN-20260808-ISSUE2615
+export { SessionRuntime } from './session/SessionRuntime.js';
+
 // CompressionResult: the root barrel must export the CORE low-level
 // CompressionResult (from @vybestack/llxprt-code-core/core/compression/types.js)
 // for backwards compatibility — NOT the API agent.ts shape. An explicit named

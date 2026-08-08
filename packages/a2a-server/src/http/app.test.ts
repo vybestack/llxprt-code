@@ -111,7 +111,7 @@ describe('E2E Tests', () => {
     }) as Config;
     const taskStore = new InMemoryTaskStore();
     const agentExecutor = new CoderAgentExecutor(taskStore, {
-      loadConfig: async () => config,
+      loadConfig: async () => ({ config }),
       createTask: async (...args) => {
         const task = await Task.create(...args);
         vi.spyOn(task.agentClient, 'sendMessageStream').mockImplementation(

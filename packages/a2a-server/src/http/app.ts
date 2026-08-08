@@ -30,7 +30,7 @@ import { loadSettings } from '../config/settings.js';
 import { loadExtensions } from '../config/extension.js';
 import { commandRegistry } from '../commands/command-registry.js';
 import type { Command, CommandArgument } from '../commands/types.js';
-import type { GitService } from '@vybestack/llxprt-code-core';
+import type { GitService, Config } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
 type CommandResponse = {
@@ -111,7 +111,14 @@ export interface AppAgentExecutor extends AgentExecutor {
 }
 
 export type AppContext = {
-  config: Awaited<ReturnType<typeof loadConfig>>;
+  config: Config;
+  /**
+   * Session-owned ShellJobManager lifecycle, disposed at server shutdown.
+   * Optional so test stubs that build a Config without a runtime still type
+   * against AppContext.
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  sessionRuntime?: Awaited<ReturnType<typeof loadConfig>>['sessionRuntime'];
   git: GitService | undefined;
   agentExecutor: AppAgentExecutor;
 };
@@ -125,15 +132,18 @@ export interface CreateAppDependencies {
   agentCard?: AgentCard;
   createAgentCard?: () => AgentCard;
   createStartupContext?: () => Promise<AppContext & TaskStores>;
-  getGitService?: (
-    config: Awaited<ReturnType<typeof loadConfig>>,
-  ) => Promise<GitService | undefined>;
+  getGitService?: (config: Config) => Promise<GitService | undefined>;
 }
 
 export async function createApp(dependencies: CreateAppDependencies = {}) {
   try {
-    const { config, agentExecutor, taskStoreForExecutor, taskStoreForHandler } =
-      await (dependencies.createStartupContext ?? createStartupContext)();
+    const {
+      config,
+      sessionRuntime,
+      agentExecutor,
+      taskStoreForExecutor,
+      taskStoreForHandler,
+    } = await (dependencies.createStartupContext ?? createStartupContext)();
     const git = await (dependencies.getGitService ?? getGitService)(config);
     const agentCard =
       dependencies.agentCard ??
@@ -154,7 +164,12 @@ export async function createApp(dependencies: CreateAppDependencies = {}) {
     expressApp.use(express.json());
 
     registerTaskCreationRoute(expressApp, agentExecutor, taskStoreForExecutor);
-    registerCommandRoutes(expressApp, { config, git, agentExecutor });
+    registerCommandRoutes(expressApp, {
+      config,
+      sessionRuntime,
+      git,
+      agentExecutor,
+    });
     registerTaskMetadataRoutes(expressApp, agentExecutor, taskStoreForExecutor);
     return expressApp;
   } catch (error) {
@@ -170,11 +185,16 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
   const extensions = loadExtensions(workspaceRoot, {
     folderTrust: settings.folderTrust,
   });
-  const config = await loadConfig(settings, extensions, 'a2a-server');
+  const { config, sessionRuntime } = await loadConfig(
+    settings,
+    extensions,
+    'a2a-server',
+  );
   const { taskStoreForExecutor, taskStoreForHandler } = createTaskStores();
   const agentExecutor = new CoderAgentExecutor(taskStoreForExecutor);
   return {
     config,
+    sessionRuntime,
     git: undefined,
     agentExecutor,
     taskStoreForExecutor,
@@ -201,9 +221,7 @@ function createTaskStores(): TaskStores {
   };
 }
 
-async function getGitService(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-): Promise<GitService | undefined> {
+async function getGitService(config: Config): Promise<GitService | undefined> {
   try {
     return await config.getGitService();
   } catch (e) {

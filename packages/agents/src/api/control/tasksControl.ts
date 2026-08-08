@@ -28,7 +28,13 @@ import type {
  */
 export interface TasksControlDeps {
   readonly getManager: () => AsyncTaskManager | undefined;
-  readonly getShellJobManager?: () => ShellJobManager | undefined;
+  /**
+   * The session-owned ShellJobManager, injected directly rather than fetched
+   * through Config. Undefined only when the caller has no shell runtime.
+   *
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  readonly shellJobManager?: ShellJobManager;
 }
 
 /**
@@ -81,7 +87,7 @@ export class TasksControl implements AgentTasksControl {
         results.push(this.project(t));
       }
     }
-    const shellMgr = this.deps.getShellJobManager?.();
+    const shellMgr = this.deps.shellJobManager;
     if (shellMgr) {
       for (const j of shellMgr.list()) {
         results.push(this.projectShell(j));
@@ -99,7 +105,7 @@ export class TasksControl implements AgentTasksControl {
         results.push(this.project(t));
       }
     }
-    const shellMgr = this.deps.getShellJobManager?.();
+    const shellMgr = this.deps.shellJobManager;
     if (shellMgr) {
       for (const j of shellMgr.getRunningJobs()) {
         results.push(this.projectShell(j));
@@ -117,7 +123,7 @@ export class TasksControl implements AgentTasksControl {
         return this.project(task);
       }
     }
-    const shellMgr = this.deps.getShellJobManager?.();
+    const shellMgr = this.deps.shellJobManager;
     if (shellMgr) {
       const job = shellMgr.get(id);
       if (job) {
@@ -136,7 +142,7 @@ export class TasksControl implements AgentTasksControl {
         return mgr.cancelTask(id);
       }
     }
-    const shellMgr = this.deps.getShellJobManager?.();
+    const shellMgr = this.deps.shellJobManager;
     if (shellMgr) {
       const job = shellMgr.get(id);
       if (job) {
@@ -155,7 +161,7 @@ export class TasksControl implements AgentTasksControl {
         if (mgr.cancelTask(task.id)) count++;
       }
     }
-    const shellMgr = this.deps.getShellJobManager?.();
+    const shellMgr = this.deps.shellJobManager;
     if (shellMgr) {
       for (const job of shellMgr.getRunningJobs()) {
         if (await shellMgr.cancel(job.id)) count++;

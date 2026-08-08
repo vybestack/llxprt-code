@@ -27,6 +27,7 @@ import {
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { consumeCompletedActivationPreflight } from './activationPreflightState.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
+import { SessionRuntime } from '../session/SessionRuntime.js';
 
 /**
  * Adopts an existing caller-supplied Config and returns a ready Agent.
@@ -113,7 +114,20 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   });
 
   // @pseudocode lines 31-35: initialize once or adopt the original result.
-  await config.ensureInitialized({ messageBus });
+  // @plan PLAN-20260808-ISSUE2615
+  // Construct the session-owned ShellJobManager from the EXACT SettingsService
+  // resolved from the caller's Config, attach the shell-admission reactor, and
+  // lend the borrowed services into Config.initialize so Config assembles tools
+  // against THIS manager without retaining it. Threaded into finalizeAgent so
+  // AgentImpl.dispose() awaits its disposal even though the Config is
+  // caller-owned (dispose() skips config.dispose() but still terminates real
+  // background processes owned by the session runtime).
+  const sessionRuntime = new SessionRuntime(settingsService);
+  sessionRuntime.attachToConfig(config);
+  await config.ensureInitialized({
+    messageBus,
+    coreServices: sessionRuntime.coreSessionServices,
+  });
 
   // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
   await resolveActivation(config, options);
@@ -139,6 +153,7 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     options.onOAuthPrompt,
     options.editorCallbacks,
     [],
+    sessionRuntime,
     'caller',
   );
 }
