@@ -27,6 +27,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ModelSelection, MemoryAccess, EphemeralSettings, McpAccess, WorkspacePaths, SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
@@ -34,8 +35,20 @@ import type { TodoContinuationService } from './TodoContinuationService.js';
  * Assembles ephemeral settings into an immutable snapshot for the runtime.
  * Pure function — reads config, no side effects.
  */
+/** Narrow config surface for ChatSessionFactory. */
+type ChatSessionConfigSurface = ModelSelection &
+  MemoryAccess &
+  EphemeralSettings &
+  McpAccess &
+  WorkspacePaths &
+  SessionIdentity & {
+    getProviderManager(): import('@vybestack/llxprt-code-core/runtime/providerManager.js').RuntimeProviderManager | undefined;
+    getSettingsService(): import('@vybestack/llxprt-code-core').SettingsService;
+  };
+
+
 export function buildSettingsSnapshot(
-  config: Config,
+  config: ChatSessionConfigSurface,
   getToolGovernance: typeof getToolGovernanceEphemerals = getToolGovernanceEphemerals,
 ): ReadonlySettingsSnapshot {
   const rawCompressionThreshold = config.getEphemeralSetting(
@@ -111,7 +124,7 @@ export function buildSettingsSnapshot(
  * in clientLlmUtilities which skips env context, core memory, and JIT memory.
  */
 export async function buildSystemInstruction(
-  config: Config,
+  config: ChatSessionConfigSurface,
   enabledToolNames: string[],
   envParts: Array<{ text?: string }>,
   model: string,
@@ -154,7 +167,7 @@ export async function buildSystemInstruction(
 }
 
 export interface CreateChatSessionDeps {
-  config: Config;
+  config: ChatSessionConfigSurface;
   runtimeState: AgentRuntimeState;
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
@@ -260,7 +273,7 @@ function buildGenerateContentConfig(
  * Builds the runtime bundle, tool declarations, and ChatSession instance.
  */
 async function buildChatFromRuntime(
-  config: Config,
+  config: ChatSessionConfigSurface,
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
@@ -358,7 +371,7 @@ export async function createChatSession(
     createHistoryService,
   );
 
-  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
+  const getTokenizerFactory = (config as unknown as Record<string, (...args: unknown[]) => unknown>)[
     'getTokenizerFactory'
   ];
   if (typeof getTokenizerFactory === 'function') {

@@ -18,6 +18,7 @@ import type { Turn } from './turn.js';
 import { type ServerAgentStreamEvent } from './turn.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ModelSelection, SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import {
   buildToolDeclarationsFromView,
@@ -75,6 +76,13 @@ import {
   type RoutedModelProvider,
 } from './modelInfoHelpers.js';
 
+/** Narrow config surface for the agent client. */
+type ClientConfigSurface = ModelSelection &
+  SessionIdentity & {
+    getToolRegistry(): import('@vybestack/llxprt-code-tools').ToolRegistry;
+  };
+
+
 export class AgentClient implements AgentClientContract {
   private chat?: ChatSession;
   private contentGenerator?: ContentGenerator;
@@ -130,7 +138,7 @@ export class AgentClient implements AgentClientContract {
    * Otherwise falls back to Config-based operation (backward compatibility)
    */
   constructor(
-    private readonly config: Config,
+    private readonly config: ClientConfigSurface,
     runtimeState: AgentRuntimeState,
     historyService?: HistoryService,
     createTurn?: MessageStreamDeps['createTurn'],

@@ -350,7 +350,7 @@ export class StreamProcessor {
    * snapshot (captured only when hooks fire — G1). Throws on stop/block.
    */
   private async _fireBeforeModelHook(
-    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+    configForHooks: HookRuntimeConfig | undefined,
     requestContents: IContent[],
     tools: ProviderToolset | undefined,
     hookRestrictedAllowedTools: string[] | undefined,
@@ -566,7 +566,7 @@ export class StreamProcessor {
   }
 
   private async _applyToolSelectionHook(
-    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+    configForHooks: HookRuntimeConfig | undefined,
     tools: AgentClientGenerateConfig['tools'],
   ): Promise<ToolSelectionHookResult> {
     if (configForHooks === undefined) {

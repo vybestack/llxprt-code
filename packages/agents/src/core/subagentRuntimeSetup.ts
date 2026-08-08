@@ -15,6 +15,7 @@
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RuntimeLifecycle, ToolAccess, PolicyAccess, McpAccess, TelemetryAccess } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
   ApprovalMode,
@@ -60,6 +61,15 @@ import {
   type EnvironmentContextLoader,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
+/** Narrow config surface for subagent runtime setup. */
+type SubagentRuntimeSetupConfig = RuntimeLifecycle &
+  ToolAccess &
+  PolicyAccess &
+  McpAccess &
+  TelemetryAccess & {
+    getOrCreateScheduler: Config['getOrCreateScheduler'];
+    getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
+  };
 // ---------------------------------------------------------------------------
 // Simple utilities
 // ---------------------------------------------------------------------------
@@ -245,7 +255,7 @@ export function buildEphemeralSettings(
 export function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
   toolRegistry: ToolRegistry,
-  foregroundConfig: Config,
+  foregroundConfig: SubagentRuntimeSetupConfig,
   messageBus?: MessageBus,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
@@ -586,7 +596,7 @@ type DefensiveConfig = {
 
 function resolveConfigAccessors(
   toolExecutorContext: ToolExecutionConfig,
-  foregroundConfig: Config,
+  foregroundConfig: SubagentRuntimeSetupConfig,
   defensiveConfig: DefensiveConfig,
 ): Pick<
   Config,
@@ -647,7 +657,7 @@ function resolveConfigAccessors(
  */
 export function createSchedulerConfig(
   toolExecutorContext: ToolExecutionConfig,
-  foregroundConfig: Config,
+  foregroundConfig: SubagentRuntimeSetupConfig,
   options?: { interactive?: boolean },
 ): Config {
   const isInteractive = options?.interactive ?? false;
@@ -786,7 +796,7 @@ async function buildSystemInstruction(
   runtimeContext: AgentRuntimeContext,
   modelConfig: ModelConfig,
   combinedDeclarations: ToolDeclaration[],
-  config: Config,
+  config: McpAccess,
   personaPrompt: string,
   logger: { debug: (fn: () => string) => void },
 ): Promise<string> {
