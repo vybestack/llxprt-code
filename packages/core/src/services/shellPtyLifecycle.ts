@@ -14,7 +14,11 @@ import type {
 } from './shellExecutionTypes.js';
 import { createExitGuard } from './shellExitGuard.js';
 import { makeInactivityTimer } from './shellOutputUtils.js';
-import { SIGKILL_TIMEOUT_MS, taskkillTree } from './shellProcessKill.js';
+import {
+  SIGKILL_TIMEOUT_MS,
+  isKillablePid,
+  taskkillTree,
+} from './shellProcessKill.js';
 import type { PtyExecState } from './shellPtyState.js';
 import type { ActivePty } from './shellPtyHelpers.js';
 import {
@@ -218,11 +222,13 @@ function setupPtyInactivityHandler(
   state.resetInactivityTimer();
 }
 
-async function ptyInactivityAbortAction(
+export async function ptyInactivityAbortAction(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
 ): Promise<void> {
-  if (state.ptyProcess.pid === 0 || state.exitedGuard.isExited()) {
+  // A non-killable pid (0, negative, NaN, Infinity) must never reach
+  // process.kill(-pid): pid 0 would signal the caller's own process group.
+  if (!isKillablePid(state.ptyProcess.pid) || state.exitedGuard.isExited()) {
     return;
   }
   const pid = state.ptyProcess.pid;
@@ -274,12 +280,13 @@ function setupPtyAbortHandler(
   };
 }
 
-async function ptyAbortAction(
+export async function ptyAbortAction(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
 ): Promise<void> {
-  // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
-  if (state.ptyProcess.pid === 0 || state.exitedGuard.isExited()) {
+  // A non-killable pid (0, negative, NaN, Infinity) must never reach
+  // process.kill(-pid): pid 0 would signal the caller's own process group.
+  if (!isKillablePid(state.ptyProcess.pid) || state.exitedGuard.isExited()) {
     return;
   }
   const pid = state.ptyProcess.pid;

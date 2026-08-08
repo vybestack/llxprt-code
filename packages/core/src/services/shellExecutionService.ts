@@ -16,7 +16,11 @@ import type {
   ShellOutputEvent,
 } from './shellExecutionTypes.js';
 import { ensurePromptvarsDisabled } from './shellOutputUtils.js';
-import { SIGKILL_TIMEOUT_MS } from './shellProcessKill.js';
+import {
+  SIGKILL_TIMEOUT_MS,
+  isKillablePid,
+  taskkillTree,
+} from './shellProcessKill.js';
 import {
   isIgnorablePtyExitError,
   cleanupPtyEntryResources,
@@ -243,14 +247,30 @@ export class ShellExecutionService {
     return this.lastActivePtyIdRef.value;
   }
 
-  /** Terminates the pseudo-terminal (PTY) process. */
-  static terminatePty(pid: number): void {
+  /**
+   * Terminates the pseudo-terminal (PTY) process.
+   *
+   * `pid` is deliberately widened to `number | undefined` to match the pid type
+   * carried by the shell job records. A narrower `number` would push callers
+   * holding an optional pid into writing `pid ?? 0`, and pid 0 is precisely the
+   * value that makes the process.kill(-pid) below signal the caller's own
+   * process group. The guard runs before the registry lookup so a non-killable
+   * pid can never select an unrelated PTY entry.
+   */
+  static terminatePty(pid: number | undefined): void {
+    if (!isKillablePid(pid)) {
+      return;
+    }
     const activePty = this.activePtys.get(pid);
     if (!activePty) {
       return;
     }
 
-    if (activePty.supportsProcessGroupKill) {
+    const isWindows = os.platform() === 'win32';
+    if (isWindows) {
+      // Windows has no POSIX process groups; walk the descendant tree only.
+      taskkillTree(pid);
+    } else if (activePty.supportsProcessGroupKill) {
       try {
         process.kill(-pid, 'SIGTERM');
       } catch {
@@ -268,7 +288,9 @@ export class ShellExecutionService {
       if (!this.activePtys.has(pid)) {
         return;
       }
-      if (activePty.supportsProcessGroupKill) {
+      if (isWindows) {
+        taskkillTree(pid);
+      } else if (activePty.supportsProcessGroupKill) {
         try {
           process.kill(-pid, 'SIGKILL');
         } catch {

@@ -82,6 +82,21 @@ function pgidOf(pid: number): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+/**
+ * Kill a process group for test cleanup, refusing any pgid that POSIX kill(2)
+ * would reinterpret. `pgidOf` returns null on failure and `Number(null)` is 0,
+ * so an unguarded `process.kill(-pgid)` would become `process.kill(0)` and
+ * signal the TEST RUNNER's own process group.
+ */
+function reapGroupSafe(pgid: number | null | undefined): void {
+  if (typeof pgid !== 'number' || !Number.isInteger(pgid) || pgid <= 0) return;
+  try {
+    process.kill(-pgid, 'SIGKILL');
+  } catch {
+    // Already gone.
+  }
+}
+
 function isProcessGroupGone(pid: number): boolean {
   const pgid = pgidOf(pid);
   if (pgid === null) {
@@ -196,6 +211,42 @@ describe.skipIf(os.platform() === 'win32')('ShellJobManager', () => {
       const terminal2 = await waitForTerminal(manager, job2.id);
       expect(terminal2?.state).toBe('completed');
     });
+
+    // Regression guard for issue #3126: a job whose spawn failed carries a
+    // sentinel/absent pid. Cancelling it must never deliver a signal to the
+    // caller's own process group, and the job must already be (or reach) a
+    // terminal state. The genuinely dangerous pid (0) is exercised at the
+    // primitive chokepoints (killProcessGroupSafe/escalateKillUnix); this
+    // guards the full manager cancel path end-to-end.
+    it('cancel of a spawn-failed job does not signal the caller process group', async () => {
+      const badCwd = path.join(baseDir, 'does-not-exist');
+      // A sibling sharing the test process's own group must survive any cancel.
+      const sibling = spawn('sleep', ['30'], { stdio: 'ignore' });
+      sibling.unref();
+      const siblingPid = sibling.pid ?? 0;
+      expect(siblingPid).toBeGreaterThan(0);
+      try {
+        const job = manager.launch({ command: 'echo hi', cwd: badCwd });
+        const terminal = await waitForTerminal(manager, job.id, 5000);
+        expect(terminal?.state).toBe('failed');
+
+        // Cancel is a no-op for an already-terminal job; it must not signal.
+        await manager.cancel(job.id);
+
+        // There is no event to await for the ABSENCE of a signal, so a fixed
+        // settle window is the only available construct. It is not a flake
+        // risk in the failing direction: a loaded runner that delivers a
+        // stray signal after the window makes this test pass spuriously, not
+        // fail spuriously, so the window is a lower bound on confidence
+        // rather than a deadline that can expire.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const siblingPgid = pgidOf(siblingPid);
+        expect(siblingPgid).not.toBeNull();
+        expect(() => process.kill(siblingPid, 0)).not.toThrow();
+      } finally {
+        reapGroupSafe(pgidOf(siblingPid));
+      }
+    });
   });
 
   describe('external signal kill', () => {
@@ -209,11 +260,7 @@ describe.skipIf(os.platform() === 'win32')('ShellJobManager', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Kill the process group externally
-      try {
-        process.kill(-job.pid, 'SIGKILL');
-      } catch {
-        // May already be gone.
-      }
+      reapGroupSafe(job.pid);
 
       const terminal = await waitForTerminal(manager, job.id, 5000);
       expect(terminal).toBeDefined();
@@ -704,7 +751,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
         command: buildInnerPidMarkerCommand(innerMarker),
         cwd: os.tmpdir(),
       });
-      survivorPid = job.pid;
+      survivorPid = job.pid ?? 0;
       expect(survivorPid).toBeGreaterThan(0);
       innerPid = await readInnerPidFromMarker(innerMarker, 10000);
       expect(innerPid).toBeGreaterThan(0);
@@ -730,7 +777,9 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
         true,
       );
     }
-  });
+    // Waiting for the inner PowerShell marker alone allows up to 10s, so the
+    // 5s default timeout could never cover this test on a loaded machine.
+  }, 30000);
 
   // --- G1/H4: dispose must not kill unrelated processes via PID reuse ---
   // Re-expressed against the PURE reap-eligibility helper (no production
@@ -750,7 +799,7 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
     });
     const exitedEntry: SurvivorEntry = {
       child: exited,
-      pid: exited.pid ?? 0,
+      pid: exited.pid,
     };
     expect(survivorNeedsReap(exitedEntry)).toBe(false);
 
@@ -790,7 +839,10 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
         command: buildInnerPidMarkerCommand(innerMarker),
         cwd: os.tmpdir(),
       });
-      pid = job.pid;
+      pid = job.pid ?? 0;
+      // Fail fast rather than proceeding with pid 0, which the guarded cleanup
+      // helpers would silently skip.
+      expect(pid).toBeGreaterThan(0);
       innerPid = await readInnerPidFromMarker(innerMarker, 10000);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -834,7 +886,10 @@ describe.skipIf(os.platform() !== 'win32')('ShellJobManager on Windows', () => {
         ),
         cwd: os.tmpdir(),
       });
-      pid = job.pid;
+      pid = job.pid ?? 0;
+      // Fail fast rather than proceeding with pid 0, which the guarded cleanup
+      // helpers would silently skip.
+      expect(pid).toBeGreaterThan(0);
       innerPid = await readInnerPidFromMarker(innerMarker, 10000);
 
       // Wait for the cap to be exceeded and at least one poll to fire.

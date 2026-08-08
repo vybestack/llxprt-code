@@ -72,7 +72,7 @@ export interface ShellJobPrefixLookup {
  */
 export interface SurvivorEntry {
   readonly child: ChildProcess;
-  readonly pid: number;
+  readonly pid: number | undefined;
 }
 
 /**
@@ -91,7 +91,7 @@ export function survivorNeedsReap(entry: SurvivorEntry): boolean {
  */
 export interface SurvivorInfo {
   readonly id: string;
-  readonly pid: number;
+  readonly pid: number | undefined;
   readonly remediation: string;
 }
 
@@ -413,7 +413,16 @@ export class ShellJobManager {
    * enforcement, and dispose so no path can hang or leak an unhandled
    * rejection.
    */
-  private safeWindowsKill(pid: number): Promise<TaskkillResult> {
+  private safeWindowsKill(pid: number | undefined): Promise<TaskkillResult> {
+    // An absent pid (spawn never produced one) cannot be taskkilled; resolve
+    // as a no-op failure rather than entering the timeout race, so no
+    // taskkill process is ever spawned for an unknown pid.
+    if (pid === undefined) {
+      return Promise.resolve({
+        ok: false,
+        error: new Error('Cannot taskkill: process has no pid'),
+      });
+    }
     return new Promise<TaskkillResult>((resolve) => {
       let settled = false;
       const finish = (result: TaskkillResult): void => {
@@ -795,7 +804,10 @@ export class ShellJobManager {
       .map(([id, entry]) => ({
         id,
         pid: entry.pid,
-        remediation: `taskkill /T /F /PID ${entry.pid}`,
+        remediation:
+          entry.pid === undefined
+            ? 'pid unknown; cannot emit taskkill remediation'
+            : `taskkill /T /F /PID ${entry.pid}`,
       }));
     if (remaining.length > 0) {
       debugLogger.warn(
