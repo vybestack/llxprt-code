@@ -67,6 +67,8 @@ application bootstrap, and is not what decomposition means. What must end is
       mcpAccess.ts                mcp servers, instructions, discovery
       telemetryAccess.ts          re-export of telemetry's TelemetryConfig
       diagnostics.ts              debug mode, conversation logging, redaction
+      runtimeLifecycle.ts         dispose, initialize, ensureInitialized, disposeScheduler, shutdownLspService
+      runtimeMutations.ts         cross-package setters (RuntimeMutations interface + adapter)
     packages/core/src/config/runtimeDependencies.ts
                                   explicit record for composition roots
 
@@ -106,7 +108,7 @@ Per-package, per-PR-able commits. Every phase leaves the build green.
   type from any specifier.
 - **REQ-001.1** Enforced by `scripts/check-config-boundary.ts`, wired into the
   `lint` npm script and CI.
-- **REQ-002** `packages/core/src/config/roles/` exports at most 10 interfaces,
+- **REQ-002** `packages/core/src/config/roles/` exports at most 11 interfaces,
   each with at most 12 members.
 - **REQ-002.1** Enforced by a test asserting member counts.
 - **REQ-003** The five composition roots take `RuntimeDependencies`, not

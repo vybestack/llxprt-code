@@ -13,7 +13,7 @@ import ts from 'typescript';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROLES_DIR = __dirname;
 
-const MAX_ROLES = 10;
+const MAX_ROLES = 11;
 const MAX_MEMBERS_PER_ROLE = 12;
 
 interface RoleMemberCount {

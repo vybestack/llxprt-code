@@ -166,3 +166,26 @@ export function runtimeDependenciesFromConfig(
     getOrCreateScheduler: config.getOrCreateScheduler.bind(config),
   };
 }
+
+/**
+ * Structural type guard that identifies a concrete Config (or any object that
+ * structurally satisfies it) without importing the class for an `instanceof`
+ * check (issue #2615, P06b Gap 3).
+ *
+ * Two members unique to the Config hierarchy are checked: `getSessionId`
+ * (SessionIdentity role) and `initialize` (RuntimeLifecycle role). Their
+ * combination is sufficient to distinguish a Config from any other runtime
+ * object in the codebase.
+ *
+ * During the bottom-up migration (P07–P10) the values passing through this
+ * guard are still Config instances; once the migration completes the guard can
+ * be tightened to check for the RuntimeDependencies record shape instead.
+ */
+export function isRuntimeDependencies(value: unknown): value is Config {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.getSessionId === 'function' &&
+    typeof record.initialize === 'function'
+  );
+}

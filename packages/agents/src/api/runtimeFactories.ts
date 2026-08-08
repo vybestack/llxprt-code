@@ -19,7 +19,8 @@
  * public helper instead (#2204).
  */
 
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { isRuntimeDependencies } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -51,7 +52,7 @@ function assertConfig(
   value: unknown,
   context: string,
 ): asserts value is Config {
-  if (!(value instanceof Config)) {
+  if (!isRuntimeDependencies(value)) {
     throw new TypeError(`${context}: expected Config instance`);
   }
 }

@@ -24,6 +24,7 @@ import type { PolicyAccess } from './policyAccess.js';
 import type { McpAccess } from './mcpAccess.js';
 import type { TelemetryAccess } from './telemetryAccess.js';
 import type { Diagnostics } from './diagnostics.js';
+import type { RuntimeLifecycle } from './runtimeLifecycle.js';
 
 /** Constrains Impl to extend Role; errors at the call site if it does not. */
 type SatisfiesConstraint<Role, Impl extends Role> = Impl;
@@ -38,6 +39,7 @@ type _AssertPolicyAccess = SatisfiesConstraint<PolicyAccess, Config>;
 type _AssertMcpAccess = SatisfiesConstraint<McpAccess, Config>;
 type _AssertTelemetryAccess = SatisfiesConstraint<TelemetryAccess, Config>;
 type _AssertDiagnostics = SatisfiesConstraint<Diagnostics, Config>;
+type _AssertRuntimeLifecycle = SatisfiesConstraint<RuntimeLifecycle, Config>;
 
 /**
  * Single exported alias that references every per-role assertion so none are
@@ -55,4 +57,5 @@ export type ConfigSatisfiesAllRoles = [
   _AssertMcpAccess,
   _AssertTelemetryAccess,
   _AssertDiagnostics,
+  _AssertRuntimeLifecycle,
 ];

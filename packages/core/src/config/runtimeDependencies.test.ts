@@ -7,7 +7,10 @@
 import { describe, it, expect } from 'bun:test';
 import type { RuntimeDependencies } from './runtimeDependencies.js';
 import type { Config } from './config.js';
-import { runtimeDependenciesFromConfig } from './runtimeDependencies.js';
+import {
+  runtimeDependenciesFromConfig,
+  isRuntimeDependencies,
+} from './runtimeDependencies.js';
 
 /**
  * Compile-time assertion: the adapter return type is exactly RuntimeDependencies.
@@ -112,5 +115,55 @@ describe('RuntimeDependencies (issue #2615, P06)', () => {
 
   it('exposes the adapter as a function', () => {
     expect(typeof runtimeDependenciesFromConfig).toBe('function');
+  });
+});
+
+describe('isRuntimeDependencies (issue #2615, P06b Gap 3)', () => {
+  it('returns true for an object with getSessionId and initialize methods', () => {
+    const candidate = {
+      getSessionId: () => 'test',
+      initialize: () => Promise.resolve(),
+    };
+    expect(isRuntimeDependencies(candidate)).toBe(true);
+  });
+
+  it('returns false for null', () => {
+    expect(isRuntimeDependencies(null)).toBe(false);
+  });
+
+  it('returns false for undefined', () => {
+    expect(isRuntimeDependencies(undefined)).toBe(false);
+  });
+
+  it('returns false for primitives', () => {
+    expect(isRuntimeDependencies(42)).toBe(false);
+    expect(isRuntimeDependencies('hello')).toBe(false);
+    expect(isRuntimeDependencies(true)).toBe(false);
+  });
+
+  it('returns false for a plain empty object', () => {
+    expect(isRuntimeDependencies({})).toBe(false);
+  });
+
+  it('returns false for an object missing initialize', () => {
+    const candidate = {
+      getSessionId: () => 'test',
+    };
+    expect(isRuntimeDependencies(candidate)).toBe(false);
+  });
+
+  it('returns false for an object missing getSessionId', () => {
+    const candidate = {
+      initialize: () => Promise.resolve(),
+    };
+    expect(isRuntimeDependencies(candidate)).toBe(false);
+  });
+
+  it('returns false when getSessionId is not a function', () => {
+    const candidate = {
+      getSessionId: 'not-a-function',
+      initialize: () => Promise.resolve(),
+    };
+    expect(isRuntimeDependencies(candidate)).toBe(false);
   });
 });
