@@ -328,6 +328,11 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
       if (capturedBody === undefined) {
         throw new Error('HTTP request body was not captured');
       }
+      // Prove the WebSocket was genuinely attempted and fell back; otherwise a
+      // change that skipped the socket entirely would still satisfy the body
+      // assertions below.
+      expect(provider.wsAttempts.count).toBe(1);
+
       const body = JSON.parse(capturedBody) as Record<string, unknown>;
       expect(body['previous_response_id']).toBe('resp_parent');
       expect(body['store']).toBe(true);

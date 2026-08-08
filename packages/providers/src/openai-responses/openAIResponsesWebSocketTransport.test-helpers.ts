@@ -271,8 +271,12 @@ export function userTextsOf(input: unknown): string[] {
     throw new Error('Expected a Responses "input" array');
   }
   const texts: string[] = [];
-  for (const item of input as Array<{ role?: string; content?: unknown }>) {
-    if (item.role !== 'user') continue;
+  for (const item of input as Array<
+    { role?: string; content?: unknown } | null | undefined
+  >) {
+    // Input arrays come from parsed wire JSON, so a nullish slot is possible
+    // and must be skipped rather than crash the assertion helper.
+    if (item?.role !== 'user') continue;
     const text = responsesContentText(item.content);
     if (text !== '') texts.push(text);
   }

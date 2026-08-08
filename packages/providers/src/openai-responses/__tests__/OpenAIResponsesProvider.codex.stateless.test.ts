@@ -277,6 +277,9 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
     const body = await captureRequestBody(provider, contents, settings, {});
 
     expect(body['previous_response_id']).toBeUndefined();
+    // Even with no parent, the turn must still be STORED so it can become the
+    // parent of the next turn — this is what bootstraps the whole chain.
+    expect(body['store']).toBe(true);
     const items = inputItems(body);
     const users = userMessages(items);
     const assistants = assistantMessages(items);

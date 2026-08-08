@@ -258,9 +258,11 @@ export async function* executeOpenAIResponsesRequest(
     }
     return;
   } catch (error) {
+    // Guard on the request the transport actually sent, not on `prepared`,
+    // so a future divergence between the two cannot skip recovery.
     if (
       contentYielded ||
-      prepared.request.previous_response_id === undefined ||
+      requestContext.request.previous_response_id === undefined ||
       !isPreviousResponseNotFoundError(error)
     ) {
       throw error;
@@ -274,6 +276,14 @@ export async function* executeOpenAIResponsesRequest(
   // Mark the session so all future turns suppress statefulness, then rebuild
   // the request context. computeStatefulConversation will now return full
   // history with no parent because deps.isResponsesStatefulFailed() is true.
+  //
+  // This is deliberately session-wide rather than per-parent. The trigger is a
+  // narrow signature (400/404 naming previous_response_id), which means the
+  // backend did not resolve a parent we believed was stored — evidence about
+  // the endpoint, not just about this one id. Suppressing for the session
+  // trades the delta optimization for guaranteed correctness, which is the
+  // right side to err on while backend `store: true` support is unconfirmed.
+  // `clearState()` resets it.
   deps.markResponsesStatefulFailed?.();
   const recoveryPrepared = await buildResponsesRequestContextForProjection(
     options,

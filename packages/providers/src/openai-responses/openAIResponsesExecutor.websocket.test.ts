@@ -367,6 +367,17 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     const sent = JSON.parse(sentRaw) as Record<string, unknown>;
     expect(sent['type']).toBe('response.create');
     expect(sent['previous_response_id']).toBe('resp_parent');
+    // store:true is the mechanical prerequisite for the backend to resolve the
+    // parent; without it the trimmed input would lose all prior context.
+    expect(sent['store']).toBe(true);
+
+    // The first request opens a new chain, so it must also be stored.
+    const firstSent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+      string,
+      unknown
+    >;
+    expect(firstSent['store']).toBe(true);
+    expect(firstSent['previous_response_id']).toBeUndefined();
 
     const userTexts = userTextsOf(sent['input']);
     // Exact equality, not toContain: an empty array would satisfy both a
