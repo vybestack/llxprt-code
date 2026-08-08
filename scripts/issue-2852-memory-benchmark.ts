@@ -94,6 +94,43 @@ export interface PlateauResult {
   readonly withinTolerance: boolean;
 }
 
+export interface CheckpointRecord {
+  readonly name?: string;
+  readonly jsc?: { readonly heapSize?: number };
+  readonly processMemory?: { readonly external?: number };
+}
+
+/**
+ * Parses the target's checkpoint JSONL and keeps the post-GC records.
+ *
+ * A parse failure names the 1-based line as it appears in the file, because a
+ * bare SyntaxError identifies neither the file nor which of several hundred
+ * records is malformed. Line numbers are captured before blank lines are
+ * dropped, so the reported number survives blank lines anywhere in the file.
+ * The error is re-thrown, never swallowed: a corrupt artifact must fail the run.
+ */
+export function parsePostGcRecords(
+  path: string,
+  contents: string,
+): CheckpointRecord[] {
+  return contents
+    .split('\n')
+    .map((line, index) => ({ line, lineNumber: index + 1 }))
+    .filter(({ line }) => line.trim().length > 0)
+    .map(({ line, lineNumber }) => {
+      try {
+        return JSON.parse(line) as CheckpointRecord;
+      } catch (error) {
+        throw new Error(
+          `${path} line ${lineNumber} is not valid JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    })
+    .filter((record) => record.name?.endsWith('-post-gc') === true);
+}
+
 export function evaluatePostGcPlateau(
   postGcHeapBytes: readonly number[],
   tolerance: number,
@@ -122,6 +159,62 @@ export function evaluatePostGcPlateau(
     // subtraction in the ratio loses precision, so growth of exactly the
     // tolerance would otherwise be reported as a leak.
     withinTolerance: maxBytes <= settledBaselineBytes * (1 + tolerance),
+  };
+}
+
+/**
+ * Post-GC memory readings for one turn, combining the three required metrics:
+ * JSC heap size, process.memoryUsage().external, and dirty WebKit Malloc.
+ */
+export interface PostGcMetrics {
+  readonly jscHeapBytes: number;
+  readonly externalBytes: number;
+  readonly webkitMallocDirtyBytes: number;
+}
+
+export interface MetricPlateauResult extends PlateauResult {
+  readonly name: string;
+}
+
+export interface MultiMetricPlateauResult {
+  readonly overallWithinTolerance: boolean;
+  readonly metrics: readonly MetricPlateauResult[];
+}
+
+/**
+ * Evaluates post-GC plateau for every required metric independently. The
+ * overall verdict passes only when every metric plateaus within the tolerance;
+ * the first post-GC sample is warm-up for each metric.
+ */
+export function evaluateMultiMetricPlateau(
+  samples: readonly PostGcMetrics[],
+  tolerance: number,
+): MultiMetricPlateauResult {
+  if (samples.length < 3) {
+    throw new Error('Plateau needs at least three post-GC turns');
+  }
+  if (!(tolerance > 0)) {
+    throw new Error('Tolerance must be positive');
+  }
+
+  const extractors: ReadonlyArray<{
+    name: string;
+    read: (s: PostGcMetrics) => number;
+  }> = [
+    { name: 'jscHeap', read: (s) => s.jscHeapBytes },
+    { name: 'external', read: (s) => s.externalBytes },
+    { name: 'webkitMallocDirty', read: (s) => s.webkitMallocDirtyBytes },
+  ];
+
+  const metricResults = extractors.map(({ name, read }) => {
+    const series = samples.map(read);
+    const result = evaluatePostGcPlateau(series, tolerance);
+    return { name, ...result };
+  });
+
+  return {
+    overallWithinTolerance: metricResults.every((m) => m.withinTolerance),
+    metrics: metricResults,
   };
 }
 

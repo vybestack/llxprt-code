@@ -29,6 +29,9 @@ import process from 'node:process';
 import { heapStats } from 'bun:jsc';
 import { EmojiFilter } from '../packages/core/src/filters/EmojiFilter.js';
 import { PendingResponseBuffer } from '../packages/cli/src/ui/hooks/agentStream/pendingResponseBuffer.js';
+import { StreamOutputAccumulator } from '../packages/agents/src/core/streamOutputAccumulator.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const [, , outputPath, mode = 'text', turnArg = '4'] = process.argv;
 if (
@@ -36,11 +39,11 @@ if (
   process.env['LLXPRT_MEMORY_PORT'] === undefined
 ) {
   throw new Error(
-    'Usage: LLXPRT_MEMORY_PORT=PORT bun issue-2852-memory-target.ts OUTPUT [text|media] [turns]',
+    'Usage: LLXPRT_MEMORY_PORT=PORT bun issue-2852-memory-target.ts OUTPUT [text|media|reasoning] [turns]',
   );
 }
-if (mode !== 'text' && mode !== 'media') {
-  throw new Error(`Mode must be 'text' or 'media', got: ${mode}`);
+if (mode !== 'text' && mode !== 'media' && mode !== 'reasoning') {
+  throw new Error(`Mode must be 'text', 'media', or 'reasoning', got: ${mode}`);
 }
 const port = process.env['LLXPRT_MEMORY_PORT'];
 if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65_535) {
@@ -148,6 +151,111 @@ function runMediaTurn(): number {
   return bytes;
 }
 
+function reasoningChunk(
+  blocks: ModelStreamChunk['content']['blocks'],
+): ModelStreamChunk {
+  return { content: { speaker: 'ai', blocks } };
+}
+
+function reasoningThinking(partial: {
+  thought: string;
+  streamId: string;
+  streamStatus: 'delta' | 'complete';
+  signature?: string;
+}): ThinkingBlock {
+  return { type: 'thinking', sourceField: 'thinking', ...partial };
+}
+
+const REASONING_STEP_PREFIX = 'step '.repeat(20);
+
+/**
+ * Deterministic final reasoning string per turn: roughly 30 KB so 200 deltas of
+ * full-so-far prefixes accumulate several MB of cumulative materialized text
+ * per turn, reproducing the original duplicated-string pressure.
+ */
+const REASONING_FINAL_LENGTH = 30_000;
+
+function buildFinalReasoningThought(turn: number): string {
+  const filler = REASONING_STEP_PREFIX.repeat(
+    Math.ceil(REASONING_FINAL_LENGTH / REASONING_STEP_PREFIX.length),
+  );
+  return `turn ${turn} final complete reasoning
+${filler}`.slice(0, REASONING_FINAL_LENGTH);
+}
+
+function materializeReasoningPrefix(finalThought: string, end: number): string {
+  return Buffer.from(finalThought.slice(0, end), 'utf8').toString('utf8');
+}
+
+/**
+ * Drives the real StreamOutputAccumulator with full-so-far thinking deltas the
+ * way Anthropic streams them: each delta carries the complete accumulated
+ * thought-so-far. Each prefix is copied through a Buffer so the benchmark
+ * creates distinct string backing stores instead of engine-dependent substring
+ * views. The terminal complete block carries the exact full final string plus
+ * signature. The accumulator must collapse each span to one block with the
+ * final complete text — the unbounded-growth path this exercises.
+ */
+function runReasoningTurn(turn: number): number {
+  const streamId = `reasoning-span-${turn}`;
+  const accumulator = new StreamOutputAccumulator();
+  const finalThought = buildFinalReasoningThought(turn);
+  const signature = `sig-${turn}`;
+  const deltaCount = 200;
+  const stepSize = Math.ceil(finalThought.length / deltaCount);
+  for (let i = 1; i <= deltaCount; i++) {
+    accumulator.add(
+      reasoningChunk([
+        reasoningThinking({
+          thought: materializeReasoningPrefix(finalThought, stepSize * i),
+          streamId,
+          streamStatus: 'delta',
+        }),
+      ]),
+    );
+  }
+  accumulator.add(
+    reasoningChunk([
+      reasoningThinking({
+        thought: finalThought,
+        streamId,
+        streamStatus: 'complete',
+        signature,
+      }),
+    ]),
+  );
+  const output = accumulator.materialize();
+  const thinkingBlocks = output.content.blocks.filter(
+    (b): b is ThinkingBlock => b.type === 'thinking',
+  );
+  if (thinkingBlocks.length !== 1) {
+    throw new Error(
+      `Reasoning turn ${turn} produced ${thinkingBlocks.length} thinking blocks, expected 1`,
+    );
+  }
+  if (thinkingBlocks[0].thought !== finalThought) {
+    throw new Error(
+      `Reasoning turn ${turn} thought mismatch: got ${thinkingBlocks[0].thought.length} bytes, expected ${finalThought.length}`,
+    );
+  }
+  if (thinkingBlocks[0].streamStatus !== 'complete') {
+    throw new Error(
+      `Reasoning turn ${turn} streamStatus is ${thinkingBlocks[0].streamStatus}, expected complete`,
+    );
+  }
+  if (thinkingBlocks[0].streamId !== streamId) {
+    throw new Error(
+      `Reasoning turn ${turn} streamId is ${thinkingBlocks[0].streamId}, expected ${streamId}`,
+    );
+  }
+  if (thinkingBlocks[0].signature !== signature) {
+    throw new Error(
+      `Reasoning turn ${turn} signature is ${thinkingBlocks[0].signature}, expected ${signature}`,
+    );
+  }
+  return thinkingBlocks[0].thought.length;
+}
+
 const deltas = toDeltas(buildResponse());
 
 checkpoint('baseline');
@@ -156,6 +264,8 @@ await awaitSample('baseline');
 for (let turn = 1; turn <= turns; turn += 1) {
   if (mode === 'media') {
     runMediaTurn();
+  } else if (mode === 'reasoning') {
+    runReasoningTurn(turn);
   } else {
     runTurn(deltas);
   }
