@@ -19,7 +19,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
@@ -324,8 +324,8 @@ export async function resolveStandardCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: StandardProfile,
-  profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
-  config: Config | undefined,
+  profileManager: ProfileManager,
+  config: ProfileManager | undefined,
   parentEphemerals: Record<string, unknown> = {},
 ): Promise<CompressionProviderResult> {
   const provider = ctx.resolveExplicitCompressionProvider(
@@ -395,8 +395,8 @@ export async function buildCompressionLoadBalancerCandidates(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: Config | undefined,
-  profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
+  config: ProfileManager | undefined,
+  profileManager: ProfileManager,
 ): Promise<CompressionLoadBalancerCandidate[]> {
   const candidates: CompressionLoadBalancerCandidate[] = [];
   for (const subProfileName of profile.profiles) {
@@ -441,8 +441,8 @@ export async function resolveLoadBalancedCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: Config | undefined,
-  profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
+  config: ProfileManager | undefined,
+  profileManager: ProfileManager,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
     ctx,

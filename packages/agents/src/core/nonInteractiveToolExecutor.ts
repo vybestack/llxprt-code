@@ -10,7 +10,8 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   type CompletedToolCall,
@@ -22,18 +23,30 @@ import { canonicalizeToolName } from './toolGovernance.js';
  * Configuration subset required for non-interactive tool execution.
  * Uses the scheduler singleton via getOrCreateScheduler/disposeScheduler.
  */
-export type ToolExecutionConfig = Pick<
-  Config,
-  | 'getToolRegistry'
-  | 'getEphemeralSettings'
-  | 'getEphemeralSetting'
-  | 'getExcludeTools'
-  | 'getSessionId'
-  | 'getTelemetryLogPromptsEnabled'
-  | 'getOrCreateScheduler'
-  | 'disposeScheduler'
-> &
-  Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>>;
+export type ToolExecutionConfig = {
+  getToolRegistry(): ToolRegistry;
+  getEphemeralSettings(): Record<string, unknown>;
+  getEphemeralSetting(key: string): unknown;
+  getExcludeTools(): string[] | undefined;
+  getSessionId(): string;
+  getTelemetryLogPromptsEnabled(): boolean;
+  getOrCreateScheduler(
+    sessionId: string,
+    callbacks: {
+      getPreferredEditor: () => undefined;
+      onEditorClose: () => void;
+      onAllToolCallsComplete: (
+        completedToolCalls: CompletedToolCall[],
+      ) => Promise<void>;
+    },
+    options?: { interactiveMode?: boolean },
+    extraDependencies?: { messageBus?: MessageBus },
+  ): Promise<CoreToolScheduler>;
+  disposeScheduler(sessionId: string): void;
+} & Partial<{
+  getAllowedTools(): string[] | undefined;
+  getApprovalMode(): ApprovalMode;
+}>;
 
 /**
  * Executes a single tool call non-interactively by leveraging the CoreToolScheduler singleton.

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SettingsServiceSource } from '../config/capabilities.js';
 import type {
   SubagentOrchestrator,
   SubagentLaunchRequest,
@@ -54,7 +54,7 @@ export interface AsyncSetupResult {
 
 /** Collaborators needed to run an async task. */
 export interface AsyncTaskCollaborators {
-  config: Config;
+  config: SettingsServiceSource;
   normalized: TaskToolInvocationParams;
   params: { timeout_seconds?: number; grace_period_seconds?: number };
   createOrchestrator: () => SubagentOrchestrator;
@@ -88,7 +88,7 @@ export function normalizeSubagentStreamingText(text: string): string {
  * Uses boundary-validation for `getSettingsService` because partial config
  * mocks omit the method even though the static `Config` type requires it.
  */
-export function checkAsyncSettings(config: Config): ToolResult | undefined {
+export function checkAsyncSettings(config: SettingsServiceSource): ToolResult | undefined {
   const settingsService =
     typeof config.getSettingsService === 'function'
       ? config.getSettingsService()
