@@ -108,6 +108,7 @@ import type {
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 
 /**
  * Error thrown when agent execution is stopped by a hook.
@@ -625,7 +626,7 @@ export class ChatSession {
     let logFilePath: string | undefined;
     if (tokenUsageEnabled && config) {
       try {
-        const tempDir = config.getProjectTempDir();
+        const tempDir = (config as WorkspacePaths).getProjectTempDir();
         if (tempDir) {
           logFilePath = nodePath.join(
             tempDir,

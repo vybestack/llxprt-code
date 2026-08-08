@@ -94,7 +94,7 @@ export async function createMockConfig(
   const config = new Config(configParams);
   await initializeTestConfig(config);
 
-  await config.refreshAuth();
+  await (config as RuntimeLifecycle).refreshAuth();
 
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
     model: DEFAULT_GEMINI_MODEL,

@@ -21,6 +21,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -155,7 +156,7 @@ export function wrapSchedulerFactory(
   return (options: ToolSchedulerFactoryOptions): ToolSchedulerContract => {
     const scheduler = buildRealScheduler(options);
     const handle = factory({
-      sessionId: options.config.getSessionId(),
+      sessionId: (options.config as SessionIdentity).getSessionId(),
       ...(options.toolContextInteractiveMode !== undefined
         ? { interactiveMode: options.toolContextInteractiveMode }
         : {}),

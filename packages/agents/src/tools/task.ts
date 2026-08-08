@@ -12,6 +12,8 @@ import {
   type LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   SubagentOrchestrator,
   type SubagentLaunchRequest,
@@ -691,7 +693,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     context.set('task_goal', this.normalized.goalPrompt);
     context.set('task_name', this.normalized.subagentName);
 
-    const sessionId = this.config.getSessionId();
+    const sessionId = (this.config as SessionIdentity).getSessionId();
     if (sessionId.length > 0) {
       context.set('sessionId', sessionId);
     }
@@ -792,13 +794,13 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       {
         createOrchestrator: () => this.ensureOrchestrator(messageBus),
         getToolRegistry:
-          typeof this.config.getToolRegistry === 'function'
-            ? () => this.config.getToolRegistry()
+          typeof (this.config as { getToolRegistry(): ToolRegistry }).getToolRegistry === 'function'
+            ? () => (this.config as { getToolRegistry(): ToolRegistry }).getToolRegistry()
             : undefined,
         getSchedulerFactory: this.dependencies.schedulerFactoryProvider,
         isInteractiveEnvironment:
           this.dependencies.isInteractiveEnvironment ??
-          (() => this.config.isInteractive()),
+          (() => (this.config as SessionIdentity).isInteractive()),
         getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
       },
       messageBus,
