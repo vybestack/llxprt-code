@@ -214,15 +214,17 @@ export function closeServer(
   });
 }
 
-interface ProxyRequestOptions {
+export interface ProxyRequestOptions {
   retryCount: string | null;
   body: string;
   authorization: string;
   pathSuffix?: string;
   headers?: Record<string, string>;
+  onRequest?: (request: http.ClientRequest) => void;
+  onResponse?: (response: http.IncomingMessage) => void;
 }
 
-interface ProxyResponse {
+export interface ProxyResponse {
   statusCode: number | undefined;
   headers: http.IncomingHttpHeaders;
   body: string;
@@ -236,6 +238,8 @@ export function proxyRequest(
     pathSuffix = '',
     retryCount = '0',
     headers = {},
+    onRequest,
+    onResponse,
   }: ProxyRequestOptions,
 ): Promise<ProxyResponse> {
   const url = new URL(proxyUrl);
@@ -257,6 +261,7 @@ export function proxyRequest(
         },
       },
       (response) => {
+        onResponse?.(response);
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(chunk));
         response.on('end', () =>
@@ -268,6 +273,7 @@ export function proxyRequest(
         );
       },
     );
+    onRequest?.(request);
     request.once('timeout', () => {
       request.destroy(new Error('proxy request timed out'));
     });
@@ -326,7 +332,7 @@ function toMonitorChild(
   };
 }
 
-interface MonitorResource {
+export interface MonitorResource {
   child: MonitorChild;
   directory: string;
   telemetryPath: string;
@@ -674,31 +680,30 @@ export async function startEmbeddedMonitor(
 export async function stopEmbeddedMonitor(
   resource: MonitorResource,
 ): Promise<Record<string, unknown>> {
-  let telemetry: Record<string, unknown>;
+  await terminateAndReap(resource.child);
   try {
-    await terminateAndReap(resource.child);
-    telemetry = asRecord(
+    return asRecord(
       JSON.parse(fs.readFileSync(resource.telemetryPath, 'utf8')),
     );
   } finally {
-    activeResources = activeResources.filter((item) => item !== resource);
     fs.rmSync(resource.directory, { recursive: true, force: true });
+    activeResources = activeResources.filter((item) => item !== resource);
   }
-  return telemetry;
 }
 
 export async function cleanEmbeddedMonitors(): Promise<void> {
   const failures: unknown[] = [];
+  const remainingResources: MonitorResource[] = [];
   for (const resource of activeResources) {
     try {
       await terminateAndReap(resource.child);
+      fs.rmSync(resource.directory, { recursive: true, force: true });
     } catch (error) {
       failures.push(error);
-    } finally {
-      fs.rmSync(resource.directory, { recursive: true, force: true });
+      remainingResources.push(resource);
     }
   }
-  activeResources = [];
+  activeResources = remainingResources;
   if (failures.length > 0) {
     throw new AggregateError(failures, 'monitor cleanup failed');
   }
