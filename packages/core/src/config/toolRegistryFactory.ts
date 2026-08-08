@@ -136,7 +136,6 @@ export interface ToolRegistryHost {
     | SubagentSchedulerFactory
     | undefined;
   getAsyncTaskManager(): AsyncTaskManager | undefined;
-  getShellJobManager(): ShellJobManager | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
@@ -359,6 +358,7 @@ function registerStandardTools(
   config: Config,
   host: ToolRegistryHost,
   messageBus: MessageBus,
+  shellJobManager: ShellJobManager | undefined,
 ): void {
   const toolHostAdapter = new CoreToolHostAdapter(config);
   const ideServiceAdapter = new CoreIdeServiceAdapter(config);
@@ -406,7 +406,7 @@ function registerStandardTools(
   registerIdeLspTool(ApplyPatchTool);
   registerCoreTool(
     ShellTool,
-    new CoreShellToolHostAdapter(config),
+    new CoreShellToolHostAdapter(config, shellJobManager),
     messageBusAdapter,
   );
   registerCoreTool(MemoryTool, {
@@ -516,6 +516,7 @@ function registerAgentTools(
   registry: ToolRegistry,
   effectiveCoreTools: string[] | undefined,
   messageBus: MessageBus,
+  shellJobManager: ShellJobManager | undefined,
 ): void {
   // @plan PLAN-20260610-ISSUE1592.P03
   // @requirement REQ-INV-003
@@ -583,7 +584,7 @@ function registerAgentTools(
   // #1995 slice 3 — facade aggregates both managers
   const asyncWorkFacade = new AsyncWorkFacade(
     () => host.getAsyncTaskManager(),
-    () => host.getShellJobManager(),
+    () => shellJobManager,
   );
   const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter(asyncWorkFacade);
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
@@ -599,6 +600,7 @@ export async function createToolRegistry(
   host: ToolRegistryHost,
   config: ConfigBaseCore,
   messageBus: MessageBus,
+  shellJobManager: ShellJobManager | undefined,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
   const registry = new ToolRegistry(
     new CoreToolRegistryHostAdapter(config as Config),
@@ -625,7 +627,13 @@ export async function createToolRegistry(
     allPotentialTools,
   );
 
-  registerStandardTools(registerCoreTool, config as Config, host, messageBus);
+  registerStandardTools(
+    registerCoreTool,
+    config as Config,
+    host,
+    messageBus,
+    shellJobManager,
+  );
 
   const { profileManager, subagentManager } = resolveManagers(host);
 
@@ -639,6 +647,7 @@ export async function createToolRegistry(
     registry,
     effectiveCoreTools,
     messageBus,
+    shellJobManager,
   );
 
   await registry.discoverAllTools();

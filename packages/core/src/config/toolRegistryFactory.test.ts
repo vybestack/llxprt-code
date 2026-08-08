@@ -10,7 +10,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
 import {
   createToolRegistry,
   type ToolRegistryHost,
@@ -21,14 +20,13 @@ import type { SubagentManager } from './subagentManager.js';
 function createHost(
   options: {
     asyncTaskManager?: AsyncTaskManager;
-    shellJobManager?: ShellJobManager;
     subagentManager?: SubagentManager;
     profileManager?: ProfileManager;
     noCoreTools?: boolean;
     getImageBackendResolver?: () => (() => unknown) | null | undefined;
   } = {},
 ): ToolRegistryHost {
-  const { asyncTaskManager, shellJobManager, noCoreTools } = options;
+  const { asyncTaskManager, noCoreTools } = options;
   let { profileManager, subagentManager } = options;
   const getImageBackendResolver = options.getImageBackendResolver;
   return {
@@ -53,7 +51,6 @@ function createHost(
     },
     getInteractiveSubagentSchedulerFactory: () => undefined,
     getAsyncTaskManager: () => asyncTaskManager,
-    getShellJobManager: () => shellJobManager,
     getTaskToolRegistration: () => undefined,
     ...(getImageBackendResolver !== undefined
       ? { getImageBackendResolver }
@@ -103,6 +100,7 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
       }),
       createConfigBoundary(),
       new MessageBus(),
+      undefined,
     );
 
     const tool = registry.getTool('list_subagents');
@@ -127,6 +125,7 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
       createHost({ asyncTaskManager }),
       createConfigBoundary(),
       new MessageBus(),
+      undefined,
     );
 
     const tool = registry.getTool('check_async_tasks');
@@ -154,6 +153,7 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
       }),
       configBoundary,
       new MessageBus(),
+      undefined,
     );
   }
 
@@ -388,6 +388,7 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
       host,
       configBoundary,
       new MessageBus(),
+      undefined,
     );
 
     // Now inject the resolver (lazy: read at invocation time, not registration).
@@ -436,6 +437,7 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
         host,
         configBoundary,
         new MessageBus(),
+        undefined,
       );
 
       const tool = registry.getTool('generate_image');

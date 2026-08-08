@@ -10,9 +10,12 @@ import os from 'node:os';
 import { Config } from '../config/config.js';
 import { CoreShellToolHostAdapter } from './CoreShellToolHostAdapter.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
+import { ShellJobManager } from '../services/shellJobManager.js';
+import type { ShellJob } from '../services/shellJobManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * Windows-only end-to-end coverage for the real background-job path that was
@@ -32,6 +35,7 @@ let sessionIdCounter = 0;
 function makeAdapter(): {
   config: Config;
   adapter: CoreShellToolHostAdapter;
+  manager: ShellJobManager;
 } {
   sessionIdCounter += 1;
   const config = new Config({
@@ -45,8 +49,10 @@ function makeAdapter(): {
     cwd: os.tmpdir(),
     settingsService: new SettingsService(),
   });
-  const adapter = new CoreShellToolHostAdapter(config);
-  return { config, adapter };
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-shell-jobs-'));
+  const manager = new ShellJobManager({ baseDir });
+  const adapter = new CoreShellToolHostAdapter(config, manager);
+  return { config, adapter, manager };
 }
 
 /**
@@ -87,19 +93,6 @@ function waitForTerminal(
   });
 }
 
-/**
- * Returns the ShellJobManager the adapter lazily built. Lives outside the test
- * body so its guard is not a conditional-in-test. Throwing here (rather than
- * asserting) also preserves the precise TypeScript narrowing the caller needs.
- */
-function requireManager(config: Config): ShellJobManager {
-  const manager = config.getShellJobManager();
-  if (manager === undefined) {
-    throw new Error('ShellJobManager was not created by the adapter');
-  }
-  return manager;
-}
-
 /** Extracts the real job id the tool printed, throwing if absent. */
 function extractJobId(llm: string): string {
   const match = /Job ID: (shell_\w+)/.exec(llm);
@@ -112,28 +105,25 @@ function extractJobId(llm: string): string {
 describe.skipIf(os.platform() !== 'win32')(
   'CoreShellToolHostAdapter -> real ShellJobManager (Windows end-to-end)',
   () => {
-    let config: Config;
     let adapter: CoreShellToolHostAdapter;
+    let manager: ShellJobManager;
 
     beforeEach(() => {
       const built = makeAdapter();
-      config = built.config;
       adapter = built.adapter;
+      manager = built.manager;
     });
 
     afterEach(async () => {
-      const manager = config.getShellJobManager();
-      if (manager !== undefined) {
-        // dispose() rejects by design when Windows survivors are retained.
-        // Catch so teardown does not mask real test results or leak processes.
-        try {
-          await manager.dispose();
-        } catch (err) {
-          debugLogger.warn(
-            '[CoreShellToolHostAdapter.test] dispose() rejected during teardown:',
-            err instanceof Error ? err.message : String(err),
-          );
-        }
+      // dispose() rejects by design when Windows survivors are retained.
+      // Catch so teardown does not mask real test results or leak processes.
+      try {
+        await manager.dispose();
+      } catch (err) {
+        debugLogger.warn(
+          '[CoreShellToolHostAdapter.test] dispose() rejected during teardown:',
+          err instanceof Error ? err.message : String(err),
+        );
       }
     });
 
@@ -147,7 +137,6 @@ describe.skipIf(os.platform() !== 'win32')(
       expect(job.id).toMatch(/^shell_/);
       expect(job.state).toBe('running');
 
-      const manager = requireManager(config);
       const terminal = await waitForTerminal(manager, job.id);
 
       // The real process reached a terminal state with a real exit code.
@@ -167,7 +156,6 @@ describe.skipIf(os.platform() !== 'win32')(
 
       expect(job.id).toMatch(/^shell_/);
 
-      const manager = requireManager(config);
       const terminal = await waitForTerminal(manager, job.id);
 
       // A real failing command surfaces its real non-zero exit code.
@@ -193,7 +181,6 @@ describe.skipIf(os.platform() !== 'win32')(
       // prove the process actually ran: terminal state + retrievable output.
       const jobId = extractJobId(llm);
 
-      const manager = requireManager(config);
       const terminal = await waitForTerminal(manager, jobId);
       expect(terminal.state).toBe('completed');
       expect(terminal.exitCode).toBe(0);

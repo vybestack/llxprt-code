@@ -9,7 +9,7 @@
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
-import { ShellJobManager } from '../services/shellJobManager.js';
+import type { ShellJobManager } from '../services/shellJobManager.js';
 import { ShellNotificationAdapter } from '../services/shellNotificationAdapter.js';
 import type { ShellNotificationSource } from '../services/shellNotificationSource.js';
 import {
@@ -80,47 +80,6 @@ export function resolveShellJobSettings(settingsService: SettingsService): {
   };
 }
 
-export function getOrCreateShellJobManager(
-  settingsService: SettingsService,
-  getter: () => ShellJobManager | undefined,
-  setter: (manager: ShellJobManager) => void,
-): ShellJobManager {
-  const existing = getter();
-  if (existing) {
-    return existing;
-  }
-  const { maxBackgroundJobs, logMaxBytes } =
-    resolveShellJobSettings(settingsService);
-  const manager = new ShellJobManager({
-    maxBackgroundJobs,
-    logMaxBytes,
-  });
-  setter(manager);
-  return manager;
-}
-
-/**
- * Dispose the shell job manager if it exists, terminating running jobs.
- * Returns any error so the caller can collect it in its own failure list.
- */
-export async function disposeShellJobManager(
-  manager: ShellJobManager | undefined,
-  failures: unknown[],
-): Promise<void> {
-  if (!manager) {
-    return;
-  }
-  try {
-    await manager.dispose();
-  } catch (error) {
-    failures.push(error);
-  }
-}
-
-/**
- * Lazily initializes and returns the AsyncTaskManager, storing it via
- * the provided setter for reuse on subsequent calls.
- */
 export function getOrCreateAsyncTaskManager(
   settingsService: SettingsService,
   getter: () => AsyncTaskManager | undefined,
@@ -171,6 +130,7 @@ export function getOrCreateAsyncTaskReminderService(
  */
 export function setupAsyncTaskAutoTrigger(
   settingsService: SettingsService,
+  shellJobManager: ShellJobManager | undefined,
   accessors: {
     getManager: () => AsyncTaskManager | undefined;
     setManager: (manager: AsyncTaskManager) => void;
@@ -178,7 +138,6 @@ export function setupAsyncTaskAutoTrigger(
     setReminder: (service: AsyncTaskReminderService) => void;
     getAutoTrigger: () => AsyncTaskAutoTrigger | undefined;
     setAutoTrigger: (trigger: AsyncTaskAutoTrigger) => void;
-    getShellJobManager: () => ShellJobManager | undefined;
   },
   isAgentBusy: () => boolean,
   triggerAgentTurn: (message: string) => Promise<void>,
@@ -196,10 +155,9 @@ export function setupAsyncTaskAutoTrigger(
     accessors.setReminder,
   );
 
-  const shellManager = accessors.getShellJobManager();
   const shellSource: ShellNotificationSource | undefined =
-    shellManager !== undefined
-      ? new ShellNotificationAdapter(shellManager)
+    shellJobManager !== undefined
+      ? new ShellNotificationAdapter(shellJobManager)
       : undefined;
   reminderService.setShellNotificationSource(shellSource);
 

@@ -77,6 +77,17 @@ export {
   type ShellJobTailResult,
   type ShellJobPrefixLookup,
 } from './services/shellJobManager.js';
+// @plan PLAN-20260808-ISSUE2615
+// ShellJobManager ownership contracts consumed by the agents-layer
+// SessionRuntime. resolveShellJobSettings constructs the manager from the
+// session-scoped SettingsService; CoreSessionServices and
+// ShellAdmissionSettingsReactor are the borrowed-service and settings-reactor
+// contracts.
+export { resolveShellJobSettings } from './config/asyncTaskServices.js';
+export type {
+  CoreSessionServices,
+  ShellAdmissionSettingsReactor,
+} from './config/coreSessionServices.js';
 // Export SubagentTerminateMode for OutputObject types
 export { SubagentTerminateMode } from './core/subagentTypes.js';
 

@@ -23,7 +23,7 @@ import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import { ShellExecutionService } from '../services/shellExecutionService.js';
 import type { ShellOutputEvent } from '../services/shellExecutionService.js';
-import type { ShellJob } from '../services/shellJobManager.js';
+import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 import {
   getCommandRoots,
@@ -38,7 +38,10 @@ import { limitOutputTokens } from '../utils/toolOutputLimiter.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
 
 export class CoreShellToolHostAdapter implements IShellToolHost {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly config: Config,
+    private readonly shellJobManager: ShellJobManager | undefined,
+  ) {}
 
   getTargetDir(): string {
     return this.config.getTargetDir();
@@ -236,24 +239,25 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     command: string;
     cwd: string;
   }): ToolsShellJobInfo {
-    const manager = this.config.getShellJobManager();
-    if (manager === undefined) {
+    if (this.shellJobManager === undefined) {
       throw new Error(
         'Background jobs are not available (ShellJobManager is not configured).',
       );
     }
-    const job = manager.launch({ command: input.command, cwd: input.cwd });
+    const job = this.shellJobManager.launch({
+      command: input.command,
+      cwd: input.cwd,
+    });
     return toToolsShellJobInfo(job);
   }
 
   tailBackgroundJob(id: string): ToolsShellJobTailResult {
-    const manager = this.config.getShellJobManager();
-    if (manager === undefined) {
+    if (this.shellJobManager === undefined) {
       throw new Error(
         'Background jobs are not available (ShellJobManager is not configured).',
       );
     }
-    return manager.tailOutput(id);
+    return this.shellJobManager.tailOutput(id);
   }
 
   detectTrailingBackground(command: string): BackgroundPromotionResult {

@@ -41,7 +41,6 @@ import type { GitService } from '../services/gitService.js';
 import type { ContextManager } from '../services/contextManager.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import type { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 import type { FileSystemService } from '../services/fileSystemService.js';
@@ -142,8 +141,6 @@ export abstract class ConfigBaseCore {
     undefined;
   // @plan PLAN-20260130-ASYNCTASK.P09
   protected asyncTaskManager: AsyncTaskManager | undefined = undefined;
-  // #1995 slice 2 — session-owned background shell jobs
-  protected shellJobManager: ShellJobManager | undefined = undefined;
   // @plan PLAN-20260130-ASYNCTASK.P22
   protected asyncTaskReminderService?: AsyncTaskReminderService;
   protected asyncTaskAutoTrigger?: AsyncTaskAutoTrigger;

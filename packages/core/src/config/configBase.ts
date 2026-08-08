@@ -29,6 +29,7 @@ import {
   normalizeMaxAsyncTasks,
   normalizeShellMaxBackgroundJobs,
 } from './asyncTaskServices.js';
+import type { ShellAdmissionSettingsReactor } from './coreSessionServices.js';
 
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
@@ -36,7 +37,40 @@ export abstract class ConfigBase extends ConfigBaseCore {
   abstract getJitContextEnabled(): boolean;
   abstract getExcludeTools(): string[] | undefined;
   abstract getAsyncTaskManager(): AsyncTaskManager | undefined;
-  abstract getShellJobManager(): ShellJobManager | undefined;
+
+  /**
+   * Registered shell-admission reactors. When `shell-max-background-jobs` is
+   * written, every reactor's applyMaxBackgroundJobs is called synchronously
+   * BEFORE the write returns. Owned by the session runtime (SessionRuntime),
+   * NOT by Config — Config never constructs or disposes a ShellJobManager.
+   *
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  private readonly shellAdmissionReactors: ShellAdmissionSettingsReactor[] = [];
+
+  /**
+   * Registers a shell-admission reactor so writes to
+   * `shell-max-background-jobs` propagate synchronously. Returns a detach
+   * function that removes the reactor; calling it more than once is a no-op.
+   *
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  registerShellAdmissionReactor(
+    reactor: ShellAdmissionSettingsReactor,
+  ): () => void {
+    this.shellAdmissionReactors.push(reactor);
+    let detached = false;
+    return () => {
+      if (detached) {
+        return;
+      }
+      detached = true;
+      const idx = this.shellAdmissionReactors.indexOf(reactor);
+      if (idx !== -1) {
+        this.shellAdmissionReactors.splice(idx, 1);
+      }
+    };
+  }
 
   async refreshAuth(authMethod?: string) {
     const logger = new DebugLogger('llxprt:config:refreshAuth');
@@ -125,8 +159,16 @@ export abstract class ConfigBase extends ConfigBaseCore {
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  async createToolRegistry(messageBus: MessageBus): Promise<ToolRegistry> {
-    const result = await _createToolRegistry(this, this, messageBus);
+  async createToolRegistry(
+    messageBus: MessageBus,
+    shellJobManager?: ShellJobManager,
+  ): Promise<ToolRegistry> {
+    const result = await _createToolRegistry(
+      this,
+      this,
+      messageBus,
+      shellJobManager,
+    );
     this.allPotentialTools = result.allPotentialTools;
     return result.registry;
   }
@@ -194,6 +236,33 @@ export abstract class ConfigBase extends ConfigBaseCore {
     return rawValue;
   }
 
+  /**
+   * Calls applyMaxBackgroundJobs on every registered reactor, synchronously.
+   * A throwing reactor is caught and aggregated so it cannot starve later
+   * reactors. One failure rethrows that error; multiple throw AggregateError.
+   *
+   * @plan PLAN-20260808-ISSUE2615
+   */
+  private applyShellAdmissionReactors(limit: number): void {
+    const errors: unknown[] = [];
+    for (const reactor of this.shellAdmissionReactors) {
+      try {
+        reactor.applyMaxBackgroundJobs(limit);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        'shell-max-background-jobs reactor(s) failed',
+      );
+    }
+  }
+
   setEphemeralSetting(key: string, value: unknown): void {
     let settingValue = value;
     if (key === 'streaming') {
@@ -227,13 +296,13 @@ export abstract class ConfigBase extends ConfigBaseCore {
       }
     }
 
-    // #1995 slice 2 — propagate shell job settings
+    // @plan PLAN-20260808-ISSUE2615
+    // Propagate shell job limit changes to every registered reactor
+    // synchronously, BEFORE the write returns.
     if (key === 'shell-max-background-jobs') {
-      const shellJobManager = this.getShellJobManager();
-      if (shellJobManager) {
-        const normalized = normalizeShellMaxBackgroundJobs(settingValue);
-        shellJobManager.setMaxBackgroundJobs(normalized);
-      }
+      this.applyShellAdmissionReactors(
+        normalizeShellMaxBackgroundJobs(settingValue),
+      );
     }
 
     // Clear provider caches when auth settings or base-url change

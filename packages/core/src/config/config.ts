@@ -51,10 +51,9 @@ import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
 import {
   getOrCreateAsyncTaskManager,
   getOrCreateAsyncTaskReminderService,
-  getOrCreateShellJobManager,
-  disposeShellJobManager,
   setupAsyncTaskAutoTrigger,
 } from './asyncTaskServices.js';
+import type { CoreSessionServices } from './coreSessionServices.js';
 import { LiveTrustTransitionLifecycle } from './liveTrustTransitionLifecycle.js';
 import { parseSettingsSubagentDefinitions } from './subagentSettingsParser.js';
 
@@ -118,6 +117,12 @@ import {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
+/** Dependencies accepted by Config.initialize / ensureInitialized. */
+type InitializationDeps = {
+  messageBus?: MessageBus;
+  coreServices?: CoreSessionServices;
+};
+
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
 
@@ -164,14 +169,11 @@ export class Config extends ConfigBase {
   private initializationPromise: Promise<void> | undefined;
 
   /** Must only be called once; use ensureInitialized for idempotent adoption. */
-  initialize(dependencies?: { messageBus?: MessageBus }): Promise<void> {
+  initialize(dependencies?: InitializationDeps): Promise<void> {
     if (this.initializationPromise !== undefined) {
       throw Error('Config was already initialized');
     }
     this.initializationPromise = this.performInitialization(dependencies);
-    // Return the exact stored promise so callers (ensureInitialized) that
-    // observe this.initializationPromise see the SAME object identity. A
-    // plain `return` (not async) preserves referential identity.
     return this.initializationPromise;
   }
 
@@ -180,9 +182,7 @@ export class Config extends ConfigBase {
    * A failed initialization remains failed rather than exposing partial state.
    */
   ensureInitialized(
-    dependencies?:
-      | { messageBus?: MessageBus }
-      | (() => { messageBus: MessageBus }),
+    dependencies?: InitializationDeps | (() => InitializationDeps),
   ): Promise<void> {
     if (this.initializationPromise === undefined) {
       const resolvedDependencies =
@@ -193,9 +193,9 @@ export class Config extends ConfigBase {
     return this.initializationPromise;
   }
 
-  private async performInitialization(dependencies?: {
-    messageBus?: MessageBus;
-  }): Promise<void> {
+  private async performInitialization(
+    dependencies?: InitializationDeps,
+  ): Promise<void> {
     const initializationMessageBus = dependencies?.messageBus;
     if (!initializationMessageBus) {
       throw new Error(
@@ -217,7 +217,10 @@ export class Config extends ConfigBase {
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
     await initializeParser();
-    this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
+    this.toolRegistry = await this.createToolRegistry(
+      initializationMessageBus,
+      dependencies.coreServices?.shellJobManager,
+    );
     this.mcpClientManager = new McpClientManager(
       await getCoreVersion(),
       this.toolRegistry,
@@ -741,14 +744,6 @@ export class Config extends ConfigBase {
     );
   }
 
-  getShellJobManager(): ShellJobManager | undefined {
-    return getOrCreateShellJobManager(
-      this.getSettingsService(),
-      () => this.shellJobManager,
-      (m) => (this.shellJobManager = m),
-    );
-  }
-
   /**
    * Get the AsyncTaskReminderService instance
    * @plan PLAN-20260130-ASYNCTASK.P22
@@ -771,11 +766,13 @@ export class Config extends ConfigBase {
    * @returns Cleanup function to unsubscribe from auto-trigger
    */
   setupAsyncTaskAutoTrigger(
+    shellJobManager: ShellJobManager | undefined,
     isAgentBusy: () => boolean,
     triggerAgentTurn: (message: string) => Promise<void>,
   ): () => void {
     return setupAsyncTaskAutoTrigger(
       this.getSettingsService(),
+      shellJobManager,
       {
         getManager: () => this.asyncTaskManager,
         setManager: (manager) => (this.asyncTaskManager = manager),
@@ -783,7 +780,6 @@ export class Config extends ConfigBase {
         setReminder: (service) => (this.asyncTaskReminderService = service),
         getAutoTrigger: () => this.asyncTaskAutoTrigger,
         setAutoTrigger: (trigger) => (this.asyncTaskAutoTrigger = trigger),
-        getShellJobManager: () => this.getShellJobManager(),
       },
       isAgentBusy,
       triggerAgentTurn,
@@ -999,8 +995,6 @@ export class Config extends ConfigBase {
         failures.push(error);
       }
     }
-    await disposeShellJobManager(this.shellJobManager, failures);
-    this.shellJobManager = undefined;
     throwFailures(failures);
   }
 }
