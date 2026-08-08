@@ -45,6 +45,11 @@
       "bun": "./src/config/models.ts",
       "import": "./dist/src/config/models.js"
     },
+    "./config/roles.js": {
+      "types": "./dist/src/config/roles/index.d.ts",
+      "bun": "./src/config/roles/index.ts",
+      "import": "./dist/src/config/roles/index.js"
+    },
     "./confirmation-bus/message-bus.js": {
       "bun": "./src/confirmation-bus/message-bus.ts",
       "import": "./dist/src/confirmation-bus/message-bus.js"
