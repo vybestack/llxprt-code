@@ -696,6 +696,9 @@ export class CompressionHandler {
       // AC-7). Exactly-once: this branch runs only on a genuine 'applied'
       // outcome; retry logic is internal to runCompressionWithRetryAndFallback.
       const tokensAfter = this.historyService.getTotalTokens();
+      // The compression itself has already succeeded and history is updated.
+      // Observing it must not undo that, so this is the one fail-open boundary
+      // for the emission; the emitter stays guard-free inside.
       await emitCompressionLifecycleEvent(
         this.tokenUsageLogger,
         this.runtimeContext,
@@ -704,7 +707,9 @@ export class CompressionHandler {
         tokensBefore,
         tokensAfter,
         this.compressionSummary,
-      );
+      ).catch((error: unknown) => {
+        this.logger.error('Failed to record compression telemetry', error);
+      });
       return PerformCompressionResult.COMPRESSED;
     }
 

@@ -203,30 +203,43 @@ export interface SendSeamTelemetryInput {
 }
 
 export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
-  recordFinalizedPromptEnvelopeEstimate(
-    input.usageLogger,
-    input.promptId,
-    input.estimate,
-  );
-  recordTurnJoinContext(
-    input.usageLogger,
-    input.promptId,
-    input.runtimeState,
-    input.historyService,
-    input.turnId,
-  );
-  recordRequestShapeContext(
-    input.usageLogger,
-    input.promptId,
-    input.requestContents,
-    input.tools,
-    extractSystemInstructionText(input.systemInstruction),
-  );
-  void recordProviderOrModelSwitch(
-    input.usageLogger,
-    input.runtimeState,
-    input.historyService,
-  );
+  // Single fail-open boundary for the whole send-seam observation. This runs
+  // on the request path, so a telemetry failure must never abort a real
+  // conversation; equally, the functions below stay guard-free internally so a
+  // genuine bug surfaces here in one place instead of being swallowed in five.
+  try {
+    recordFinalizedPromptEnvelopeEstimate(
+      input.usageLogger,
+      input.promptId,
+      input.estimate,
+    );
+    recordTurnJoinContext(
+      input.usageLogger,
+      input.promptId,
+      input.runtimeState,
+      input.historyService,
+      input.turnId,
+    );
+    recordRequestShapeContext(
+      input.usageLogger,
+      input.promptId,
+      input.requestContents,
+      input.tools,
+      extractSystemInstructionText(input.systemInstruction),
+    );
+    recordProviderOrModelSwitch(
+      input.usageLogger,
+      input.runtimeState,
+      input.historyService,
+    ).catch((error: unknown) => {
+      logger.error('Failed to record provider/model switch', error);
+    });
+  } catch (error) {
+    logger.error(
+      `Failed to record send-seam telemetry for prompt ${input.promptId}`,
+      error,
+    );
+  }
 }
 
 /**

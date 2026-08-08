@@ -296,7 +296,7 @@ describe('TokenUsageLogger', () => {
     expect(records[0].actual_prompt_tokens).toBe(120);
   });
 
-  it('preserves attempt dedupe memory across a re-estimate (issue #3130)', async () => {
+  it('preserves attempt dedupe memory across a retry re-estimate (issue #3130)', async () => {
     const logger = new TokenUsageLogger(true, logFile);
     const estimate = {
       provider: 'openai',
@@ -306,18 +306,50 @@ describe('TokenUsageLogger', () => {
       tiktokenTokens: 90,
     };
     logger.recordEstimate('prompt-reestimate', estimate);
+    // A non-terminal outcome: another attempt for this prompt will follow.
     await logger.recordActual('prompt-reestimate', {
       actualPromptTokens: 120,
       cachedTokens: 0,
       attemptIndex: 0,
+      attemptOutcome: 'abandoned',
     });
 
-    // A retry re-fires the send seam, which re-estimates the same promptId.
+    // The retry re-fires the send seam, which re-estimates the same promptId.
     logger.recordEstimate('prompt-reestimate', estimate);
+    // A late duplicate completion for the attempt already written.
     await logger.recordActual('prompt-reestimate', {
       actualPromptTokens: 999,
       cachedTokens: 0,
       attemptIndex: 0,
+      attemptOutcome: 'abandoned',
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+  });
+
+  it('consumes the pending entry once the turn reaches a terminal outcome (issue #3130)', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-terminal', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+    await logger.recordActual('prompt-terminal', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+      attemptOutcome: 'success',
+    });
+    // No estimate remains, so a stray later completion writes nothing.
+    await logger.recordActual('prompt-terminal', {
+      actualPromptTokens: 999,
+      cachedTokens: 0,
+      attemptIndex: 1,
+      attemptOutcome: 'success',
     });
 
     const records = readJsonl(logFile);

@@ -20,6 +20,7 @@ import { TokenUsageLogger, PENDING_CAP } from './TokenUsageLogger.js';
 import {
   TOKEN_USAGE_SCHEMA_VERSION,
   parseTokenUsageLogRecord,
+  SerializedTokenUsageTurnRecordSchema,
   type TokenUsageTurnContext,
   type TokenUsageLifecycleEvent,
 } from './tokenUsageRecords.js';
@@ -147,10 +148,35 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
     expect(records[0]).not.toHaveProperty('protocol');
   });
 
-  it('does not write prompt text, tool arguments, or tool result bodies', async () => {
+  it('writes only fields the documented schema declares', async () => {
+    // A key-allowlist rather than a denylist: a denylist passes whenever a
+    // future field leaks content under a name nobody thought to forbid.
     const logger = new TokenUsageLogger(true, logFile);
     logger.attachTurnContext('prompt-priv2', {
-      sessionId: 'sess-secret-SENTINEL_TEXT',
+      sessionId: 'sess-1',
+      runtimeId: 'rt-1',
+      turnId: 't-1',
+      userTurn: 1,
+      step: 1,
+      parentRuntimeId: null,
+      subagentName: null,
+      toolCalls: [
+        {
+          callId: 'call-1',
+          toolName: 'read_file',
+          resultTokens: 10,
+          wasTruncated: false,
+        },
+      ],
+      newToolResultTokens: 10,
+      carriedToolResultTokens: 0,
+      instructionsTokens: 5,
+      toolsSchemaTokens: 6,
+      historyTokens: 7,
+      mediaTokens: 0,
+      injectedTokens: 0,
+      prefixFingerprint: 'abcdef0123456789',
+      prefixFingerprintChanged: false,
     });
     logger.recordEstimate('prompt-priv2', {
       provider: 'openai',
@@ -162,23 +188,30 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
     await logger.recordActual('prompt-priv2', {
       actualPromptTokens: 120,
       cachedTokens: 0,
+      outputTokens: 12,
+      totalTokens: 132,
+      attemptIndex: 0,
+      attemptOutcome: 'success',
     });
 
-    const raw = fs.readFileSync(logFile, 'utf-8');
-    expect(raw).toContain('SENTINEL_TEXT');
-    const record = JSON.parse(raw.trim()) as Record<string, unknown>;
-    const textLikeKeys = [
-      'text',
-      'prompt',
-      'content',
-      'message',
-      'args',
-      'arguments',
-      'body',
-      'output_body',
-    ];
-    for (const key of textLikeKeys) {
-      expect(record).not.toHaveProperty(key);
+    const record = readJsonl(logFile)[0];
+    const allowed = new Set(
+      Object.keys(SerializedTokenUsageTurnRecordSchema.shape),
+    );
+    for (const key of Object.keys(record)) {
+      expect(allowed.has(key)).toBe(true);
+    }
+
+    // And the tool attribution entries carry counts and identifiers only.
+    const toolCalls = record.tool_calls;
+    expect(Array.isArray(toolCalls)).toBe(true);
+    if (Array.isArray(toolCalls)) {
+      expect(Object.keys(toolCalls[0]).sort()).toEqual([
+        'call_id',
+        'result_tokens',
+        'tool_name',
+        'was_truncated',
+      ]);
     }
   });
 });

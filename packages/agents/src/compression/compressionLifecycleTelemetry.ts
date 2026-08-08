@@ -27,16 +27,11 @@ async function resolveCompressionModelProvider(
   ) => CompressionProviderResult | Promise<CompressionProviderResult>,
   compressionProfileName: string | undefined,
 ): Promise<ResolvedCompressionModel> {
-  try {
-    const result = await resolveProvider(compressionProfileName);
-    const resolvedModel = result.resolved?.model;
-    return {
-      model: resolvedModel ?? null,
-      provider: result.provider.name,
-    };
-  } catch {
-    return { model: null, provider: null };
-  }
+  const result = await resolveProvider(compressionProfileName);
+  return {
+    model: result.resolved?.model ?? null,
+    provider: result.provider.name,
+  };
 }
 
 /**

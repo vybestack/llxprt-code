@@ -115,9 +115,9 @@ function serializeBlockForCounting(block: ContentBlock): string {
     case 'thinking':
       return block.thought;
     case 'tool_call':
-      return block.name + JSON.stringify(block.parameters);
+      return block.name + stableStringify(block.parameters);
     case 'tool_response':
-      return JSON.stringify(block.result);
+      return stableStringify(block.result);
     case 'media':
       // Length proxy avoids re-tokenizing large base64 payloads.
       return `${block.mimeType}:${block.encoding}:${block.data.length}`;
@@ -170,13 +170,7 @@ function detectTruncation(result: unknown): boolean {
     return result.includes(TOOL_OUTPUT_TRUNCATION_MARKER);
   }
   if (result === null || result === undefined) return false;
-  try {
-    return JSON.stringify(result).includes(TOOL_OUTPUT_TRUNCATION_MARKER);
-  } catch {
-    // Circular or non-serializable result — cannot contain the plain-text
-    // marker, so report not-truncated rather than failing the whole send.
-    return false;
-  }
+  return stableStringify(result).includes(TOOL_OUTPUT_TRUNCATION_MARKER);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,23 +201,40 @@ function serializePrefixForFingerprint(
 }
 
 /**
- * Deterministic JSON stringify that sorts object keys so two structurally
- * identical tool-schema objects produce the same string regardless of key
- * insertion order.
+ * Deterministic stringify that sorts object keys, so two structurally
+ * identical tool schemas produce the same string regardless of key insertion
+ * order, and that never throws.
+ *
+ * Tool schemas, tool arguments and tool result bodies are third-party data:
+ * they can be cyclic, and they can contain values `JSON.stringify` rejects.
+ * This runs on the request path before every send, so a throw here would abort
+ * a real conversation to satisfy telemetry. Cycles are collapsed to a marker
+ * rather than followed. The output is only ever token-counted or hashed, never
+ * persisted (AC-10).
  */
-function stableStringify(value: unknown): string {
-  if (value === undefined) return '';
+/** Total order over object keys, so serialization is insertion-order free. */
+function compareKeys(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
+function stableStringify(value: unknown, seen?: WeakSet<object>): string {
+  if (value === undefined || typeof value === 'function') return '';
+  if (typeof value === 'bigint') return `"${value.toString()}"`;
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
+  const visited = seen ?? new WeakSet<object>();
+  if (visited.has(value)) return '"[circular]"';
+  visited.add(value);
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
+    return `[${value.map((entry) => stableStringify(entry, visited)).join(',')}]`;
   }
-  const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  const entries = keys.map(
-    (k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`,
-  );
+  const entries = Object.entries(value)
+    .sort(([a], [b]) => compareKeys(a, b))
+    .map(
+      ([key, val]) => `${JSON.stringify(key)}:${stableStringify(val, visited)}`,
+    );
   return `{${entries.join(',')}}`;
 }
 
@@ -304,7 +315,7 @@ export function computeRequestShape(
 
     for (const block of content.blocks) {
       if (block.type !== 'tool_response') continue;
-      const resultTokens = countTokens(JSON.stringify(block.result));
+      const resultTokens = countTokens(stableStringify(block.result));
       toolCalls.push({
         callId: block.callId,
         toolName: resolveToolName(block, toolCallNames),

@@ -19,6 +19,7 @@ import {
   type TokenUsageContextTruncationEvent,
   type SerializedTokenUsageLifecycleRecord,
   type SerializedTokenUsageRecord,
+  type TokenUsageAttemptOutcome,
 } from './tokenUsageRecords.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 
@@ -56,6 +57,16 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
 }
 
 export const PENDING_CAP = 100;
+
+/**
+ * True for the outcomes that are followed by another billed attempt for the
+ * same prompt. Any other outcome ends the turn.
+ */
+function isRetriedOutcome(
+  outcome: TokenUsageAttemptOutcome | undefined,
+): boolean {
+  return outcome === 'abandoned' || outcome === 'error';
+}
 
 /** True when a pending entry has all the estimate fields required to emit a turn record. */
 
@@ -296,14 +307,20 @@ export class TokenUsageLogger {
       // Context-only stub with no estimate — cannot emit a turn record.
       return;
     }
-    // One logical turn can produce several billed attempts, so the pending
-    // entry is preserved rather than consumed.  Duplicate protection moves
-    // from "one record per promptId" to "one record per attempt": mark the
-    // attempt before awaiting so a concurrent completion for the same attempt
-    // cannot write a second record.
+    // One logical turn can produce several billed attempts, so a non-terminal
+    // attempt keeps the pending entry alive for the retry that follows.
+    // Duplicate protection becomes "one record per attempt": mark the attempt
+    // before awaiting, so a concurrent completion for the same attempt cannot
+    // write a second record.
     const attemptIndex = actual.attemptIndex ?? 0;
     if (pending.recordedAttempts.has(attemptIndex)) return;
     pending.recordedAttempts.add(attemptIndex);
+    // A terminal outcome ends the turn, so the entry is consumed exactly as it
+    // was before multi-attempt support existed. Only 'abandoned' and 'error'
+    // are followed by another attempt for the same prompt.
+    if (!isRetriedOutcome(actual.attemptOutcome)) {
+      this.pending.delete(promptId);
+    }
 
     const effectiveActualTokens = Math.max(
       0,

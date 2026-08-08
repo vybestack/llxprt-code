@@ -156,6 +156,9 @@ export class TurnProcessor {
 
     this.lastPromptTokenCount = null;
     this.currentPromptEnvelopeEstimate = null;
+    // Reset per turn: a stale index would attribute this turn's cost to a
+    // retry of the previous one (#3130 AC-4).
+    this.lastSendAttemptIndex = 0;
 
     const prepared = this._prepareSendMessage(params, prompt_id);
 
