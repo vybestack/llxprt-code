@@ -8,7 +8,8 @@ import { describe, it, expect } from 'bun:test';
 import {
   validateBudget,
   validateBudgetPolicy,
-  declaredCiApiRequests,
+  validateBudgetNamesAreUsed,
+  extractSetupNames,
   checkLedgerAgainstBudget,
   formatReport,
   parseLedgerPath,
@@ -21,17 +22,12 @@ import {
 } from '../../integration-tests/real-model-budget.ts';
 import type { RealProviderRunRecord } from '../../packages/test-utils/src/model-request-ledger.ts';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function validEntry(
   testName: string,
   apiRequestsPerRun: number,
   reason = 'valid reason',
-  runsInE2eCi = true,
 ): RealModelBudgetEntry {
-  return { testName, apiRequestsPerRun, runsInE2eCi, reason };
+  return { testName, apiRequestsPerRun, reason };
 }
 
 function record(
@@ -41,25 +37,13 @@ function record(
   return { testName, testDir };
 }
 
-// ---------------------------------------------------------------------------
-// validateBudget
-// ---------------------------------------------------------------------------
-
 describe('validateBudget', () => {
-  it('passes for a well-formed budget under the ceiling', () => {
+  it('passes for a well-formed budget', () => {
     const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('test-a', 1),
-      validEntry('test-b', 1),
+      validEntry('test-a', 2),
+      validEntry('test-b', 0),
     ];
-    expect(validateBudget(budget, 2)).toEqual([]);
-  });
-
-  it('passes when the summed total equals the ceiling exactly', () => {
-    const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('test-a', 1),
-      validEntry('test-b', 1),
-    ];
-    expect(validateBudget(budget, 2)).toEqual([]);
+    expect(validateBudget(budget)).toEqual([]);
   });
 
   it('reports a duplicate testName', () => {
@@ -67,158 +51,176 @@ describe('validateBudget', () => {
       validEntry('dup', 0),
       validEntry('dup', 0),
     ];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget(budget);
     expect(violations.some((v) => v.includes('duplicate'))).toBe(true);
     expect(violations.some((v) => v.includes('dup'))).toBe(true);
   });
 
   it('reports a negative apiRequestsPerRun', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('neg', -1)];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget([validEntry('neg', -1)]);
     expect(violations.some((v) => v.includes('negative'))).toBe(true);
   });
 
   it('reports a non-integer apiRequestsPerRun', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('frac', 0.5)];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget([validEntry('frac', 0.5)]);
     expect(violations.some((v) => v.includes('integer'))).toBe(true);
   });
 
   it('reports an empty reason', () => {
-    const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('empty-reason', 0, ''),
-    ];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget([validEntry('empty-reason', 0, '')]);
     expect(violations.some((v) => v.includes('reason'))).toBe(true);
   });
 
   it('reports a whitespace-only reason', () => {
-    const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('ws-reason', 0, '   '),
-    ];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget([validEntry('ws-reason', 0, '   ')]);
     expect(violations.some((v) => v.includes('reason'))).toBe(true);
   });
 
   it('reports an empty testName', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('', 0)];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget([validEntry('', 0)]);
     expect(violations.some((v) => v.includes('testName'))).toBe(true);
   });
 
   it('reports a whitespace-only testName', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('  ', 0)];
-    const violations = validateBudget(budget, 5);
+    const violations = validateBudget([validEntry('  ', 0)]);
     expect(violations.some((v) => v.includes('testName'))).toBe(true);
   });
-
-  it('reports when the declared total for CI-executed tests exceeds the ceiling', () => {
-    const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('a', 2),
-      validEntry('b', 1),
-    ];
-    const violations = validateBudget(budget, 2);
-    expect(violations.some((v) => v.includes('exceeds'))).toBe(true);
-  });
-
-  it('ignores entries that E2E CI never executes when applying the ceiling', () => {
-    const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('runs-in-ci', 2),
-      validEntry('never-selected', 5, 'valid reason', false),
-    ];
-    expect(validateBudget(budget, 2)).toEqual([]);
-  });
 });
-
-// ---------------------------------------------------------------------------
-// declaredCiApiRequests
-// ---------------------------------------------------------------------------
-
-describe('declaredCiApiRequests', () => {
-  it('sums only the entries that E2E CI executes', () => {
-    const budget: readonly RealModelBudgetEntry[] = [
-      validEntry('in-ci-a', 1),
-      validEntry('in-ci-b', 1),
-      validEntry('not-in-ci', 4, 'valid reason', false),
-    ];
-    expect(declaredCiApiRequests(budget)).toBe(2);
-  });
-
-  it('is zero for an empty budget', () => {
-    expect(declaredCiApiRequests([])).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// validateBudgetPolicy
-// ---------------------------------------------------------------------------
 
 describe('validateBudgetPolicy', () => {
-  it('passes when max is at most half of baseline', () => {
-    expect(validateBudgetPolicy(2, 5)).toEqual([]);
+  it('passes when the ceiling is below half the baseline', () => {
+    expect(validateBudgetPolicy(4, 9)).toEqual([]);
   });
 
-  it('passes when max is exactly half of baseline', () => {
-    expect(validateBudgetPolicy(2, 4)).toEqual([]);
+  it('passes when the ceiling is exactly half the baseline', () => {
+    expect(validateBudgetPolicy(4, 8)).toEqual([]);
   });
 
-  it('fails when max is not less than baseline', () => {
-    const violations = validateBudgetPolicy(5, 5);
-    expect(violations.length).toBeGreaterThan(0);
+  it('fails when the ceiling equals the baseline', () => {
+    expect(validateBudgetPolicy(9, 9).length).toBeGreaterThan(0);
   });
 
-  it('fails when max exceeds baseline', () => {
-    const violations = validateBudgetPolicy(6, 5);
-    expect(violations.length).toBeGreaterThan(0);
+  it('fails when the ceiling exceeds the baseline', () => {
+    expect(validateBudgetPolicy(10, 9).length).toBeGreaterThan(0);
   });
 
-  it('fails when max is more than half of baseline', () => {
-    const violations = validateBudgetPolicy(3, 5);
-    expect(violations.length).toBeGreaterThan(0);
+  it('fails when the ceiling is more than half the baseline', () => {
+    const violations = validateBudgetPolicy(5, 9);
+    expect(violations.some((v) => v.includes('50%'))).toBe(true);
   });
 });
 
-// ---------------------------------------------------------------------------
-// checkLedgerAgainstBudget
-// ---------------------------------------------------------------------------
+describe('extractSetupNames', () => {
+  it('extracts the first string argument of each rig.setup call', () => {
+    const source = [
+      "await rig.setup('first name', { settings: {} });",
+      "rig.setup('second name');",
+    ].join('\n');
+    expect(extractSetupNames(source)).toEqual(['first name', 'second name']);
+  });
+
+  it('extracts names written across multiple lines', () => {
+    const source = [
+      'await rig.setup(',
+      "  'wrapped name',",
+      '  {},',
+      ');',
+    ].join('\n');
+    expect(extractSetupNames(source)).toEqual(['wrapped name']);
+  });
+
+  it('handles double-quoted names containing an apostrophe', () => {
+    expect(extractSetupNames('rig.setup("it\'s fine");')).toEqual([
+      "it's fine",
+    ]);
+  });
+
+  it('returns nothing for a source with no setup call', () => {
+    expect(extractSetupNames('const x = 1;')).toEqual([]);
+  });
+});
+
+describe('validateBudgetNamesAreUsed', () => {
+  it('passes when every budget name is used by a setup call', () => {
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('used', 0)];
+    expect(validateBudgetNamesAreUsed(budget, new Set(['used']))).toEqual([]);
+  });
+
+  it('reports a budget name that no setup call uses', () => {
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('ghost', 2)];
+    const violations = validateBudgetNamesAreUsed(budget, new Set(['other']));
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('ghost');
+  });
+});
 
 describe('checkLedgerAgainstBudget', () => {
   const budget: readonly RealModelBudgetEntry[] = [
-    validEntry('canary-a', 1),
-    validEntry('canary-b', 1),
+    validEntry('canary-a', 2),
+    validEntry('canary-b', 2),
     validEntry('zero-cost', 0),
   ];
 
   it('passes for an empty ledger', () => {
-    const result = checkLedgerAgainstBudget([], budget, 2);
+    const result = checkLedgerAgainstBudget([], budget, 4);
     expect(result.violations).toEqual([]);
     expect(result.totalApiRequests).toBe(0);
   });
 
-  it('passes when total is exactly at ceiling', () => {
-    const records: readonly RealProviderRunRecord[] = [
-      record('canary-a'),
-      record('canary-b'),
-    ];
-    const result = checkLedgerAgainstBudget(records, budget, 2);
+  it('passes when the distinct-test total is exactly at the ceiling', () => {
+    const result = checkLedgerAgainstBudget(
+      [record('canary-a'), record('canary-b')],
+      budget,
+      4,
+    );
     expect(result.violations).toEqual([]);
-    expect(result.totalApiRequests).toBe(2);
+    expect(result.totalApiRequests).toBe(4);
   });
 
-  it('fails when total exceeds ceiling by one', () => {
-    const records: readonly RealProviderRunRecord[] = [
-      record('canary-a'),
-      record('canary-a'),
-      record('canary-b'),
-    ];
-    const result = checkLedgerAgainstBudget(records, budget, 2);
+  it('fails when the distinct-test total exceeds the ceiling', () => {
+    const result = checkLedgerAgainstBudget(
+      [record('canary-a'), record('canary-b')],
+      budget,
+      3,
+    );
     expect(result.violations.some((v) => v.includes('exceeds'))).toBe(true);
-    expect(result.totalApiRequests).toBe(3);
+    expect(result.totalApiRequests).toBe(4);
+  });
+
+  // scripts/bun-test-roots.ts gives the integration-tests root retries, and a
+  // retry re-spawns the whole file, so duplicate records are legitimate. Billing
+  // per record would red-fail a green leg.
+  it('bills a retried test once no matter how many times it was recorded', () => {
+    const result = checkLedgerAgainstBudget(
+      [
+        record('canary-a'),
+        record('canary-a'),
+        record('canary-a'),
+        record('canary-b'),
+      ],
+      budget,
+      4,
+    );
+    expect(result.violations).toEqual([]);
+    expect(result.totalApiRequests).toBe(4);
+  });
+
+  it('reports the run count per test so a retry stays visible', () => {
+    const result = checkLedgerAgainstBudget(
+      [record('canary-a'), record('canary-a'), record('canary-b')],
+      budget,
+      4,
+    );
+    expect(result.runsPerTest.get('canary-a')).toBe(2);
+    expect(result.runsPerTest.get('canary-b')).toBe(1);
   });
 
   it('fails when a recorded testName is not in the budget', () => {
-    const records: readonly RealProviderRunRecord[] = [record('unknown-test')];
-    const result = checkLedgerAgainstBudget(records, budget, 2);
+    const result = checkLedgerAgainstBudget(
+      [record('unknown-test')],
+      budget,
+      4,
+    );
     expect(result.violations.some((v) => v.includes('unknown-test'))).toBe(
       true,
     );
@@ -227,91 +229,78 @@ describe('checkLedgerAgainstBudget', () => {
     );
   });
 
-  it('counts zero-cost tests without adding to the total', () => {
-    const records: readonly RealProviderRunRecord[] = [
-      record('zero-cost'),
-      record('zero-cost'),
-    ];
-    const result = checkLedgerAgainstBudget(records, budget, 2);
+  it('records zero-cost tests without adding to the total', () => {
+    const result = checkLedgerAgainstBudget(
+      [record('zero-cost'), record('zero-cost')],
+      budget,
+      4,
+    );
     expect(result.violations).toEqual([]);
     expect(result.totalApiRequests).toBe(0);
-    expect(result.perTest.get('zero-cost')).toBe(2);
-  });
-
-  it('tracks per-test run counts correctly', () => {
-    const records: readonly RealProviderRunRecord[] = [
-      record('canary-a'),
-      record('canary-b'),
-      record('canary-a'),
-    ];
-    const result = checkLedgerAgainstBudget(records, budget, 5);
-    expect(result.perTest.get('canary-a')).toBe(2);
-    expect(result.perTest.get('canary-b')).toBe(1);
+    expect(result.runsPerTest.get('zero-cost')).toBe(2);
   });
 });
 
-// ---------------------------------------------------------------------------
-// formatReport
-// ---------------------------------------------------------------------------
-
 describe('formatReport', () => {
-  it('reports each recorded test with its run count and API cost', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('test-x', 1)];
-    const records: readonly RealProviderRunRecord[] = [
-      record('test-x'),
-      record('test-x'),
-    ];
+  it('reports each recorded test with its API cost', () => {
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('test-x', 2)];
     const report = formatReport(
-      checkLedgerAgainstBudget(records, budget, 5),
+      checkLedgerAgainstBudget([record('test-x')], budget, 4),
       budget,
-      5,
-      10,
+      4,
+      9,
     );
-    expect(report).toContain('test-x: 2 run(s) x 1 req = 2');
-    expect(report).toContain('Recorded API requests: 2');
+    expect(report).toContain('test-x: 2 req');
+    expect(report).toContain('API requests for distinct tests recorded: 2');
+  });
+
+  it('annotates a retried test with its run count', () => {
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('test-x', 2)];
+    const report = formatReport(
+      checkLedgerAgainstBudget([record('test-x'), record('test-x')], budget, 4),
+      budget,
+      4,
+      9,
+    );
+    expect(report).toContain('test-x: 2 req (retried: 2 runs)');
   });
 
   it('states that no runs were recorded for an empty ledger', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('test-y', 1)];
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('test-y', 2)];
     const report = formatReport(
-      checkLedgerAgainstBudget([], budget, 2),
+      checkLedgerAgainstBudget([], budget, 4),
       budget,
-      2,
-      5,
+      4,
+      9,
     );
     expect(report).toContain('No real-provider runs recorded.');
     expect(report).toContain('All checks passed.');
   });
 
   it('marks a recorded test that is absent from the budget as unbudgeted', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('known', 1)];
-    const records: readonly RealProviderRunRecord[] = [record('rogue')];
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('known', 2)];
     const report = formatReport(
-      checkLedgerAgainstBudget(records, budget, 2),
+      checkLedgerAgainstBudget([record('rogue')], budget, 4),
       budget,
-      2,
-      5,
+      4,
+      9,
     );
-    expect(report).toContain('rogue: 1 run(s) x UNBUDGETED req = UNBUDGETED');
+    expect(report).toContain('rogue: UNBUDGETED req');
     expect(report).toContain('VIOLATIONS:');
   });
 
   it('reports the ceiling and baseline it was checked against', () => {
-    const budget: readonly RealModelBudgetEntry[] = [validEntry('t', 1)];
+    const budget: readonly RealModelBudgetEntry[] = [validEntry('t', 2)];
     const report = formatReport(
-      checkLedgerAgainstBudget([], budget, 2),
+      checkLedgerAgainstBudget([], budget, 4),
       budget,
-      2,
-      5,
+      4,
+      9,
     );
-    expect(report).toContain('Ceiling: 2');
-    expect(report).toContain('Baseline: 5');
+    expect(report).toContain('Ceiling: 4');
+    expect(report).toContain('Baseline: 9');
   });
 });
-
-// ---------------------------------------------------------------------------
-// parseLedgerPath
-// ---------------------------------------------------------------------------
 
 describe('parseLedgerPath', () => {
   it('returns undefined when --ledger is absent', () => {
@@ -337,30 +326,25 @@ describe('parseLedgerPath', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Real-repository assertion: the checked-in budget is self-consistent
-// ---------------------------------------------------------------------------
-
 describe('checked-in real-model-budget.ts', () => {
   it('passes validateBudget', () => {
-    const violations = validateBudget(
-      REAL_MODEL_RUN_BUDGET,
-      MAX_REAL_MODEL_API_REQUESTS,
-    );
-    expect(violations).toEqual([]);
+    expect(validateBudget(REAL_MODEL_RUN_BUDGET)).toEqual([]);
   });
 
   it('passes validateBudgetPolicy', () => {
-    const violations = validateBudgetPolicy(
-      MAX_REAL_MODEL_API_REQUESTS,
-      BASELINE_REAL_MODEL_API_REQUESTS,
-    );
-    expect(violations).toEqual([]);
+    expect(
+      validateBudgetPolicy(
+        MAX_REAL_MODEL_API_REQUESTS,
+        BASELINE_REAL_MODEL_API_REQUESTS,
+      ),
+    ).toEqual([]);
   });
 
   it('permits exactly the reviewed set of real-provider tests', () => {
     expect(REAL_MODEL_RUN_BUDGET.map((entry) => entry.testName).sort()).toEqual(
       [
+        'codex-image-real',
+        'extension install test',
         'should allow all with "ShellTool" and other specific tools',
         'should be able to replace content in a file',
         'should be able to run a shell command',
@@ -373,27 +357,29 @@ describe('checked-in real-model-budget.ts', () => {
     );
   });
 
-  it('bills an E2E CI API request only to the two model tool-selection canaries', () => {
-    const billed = REAL_MODEL_RUN_BUDGET.filter(
-      (entry) => entry.runsInE2eCi && entry.apiRequestsPerRun > 0,
-    ).map((entry) => entry.testName);
-    expect(billed.sort()).toEqual(
-      [
-        'should be able to replace content in a file',
-        'should be able to run a shell command',
-      ].sort(),
-    );
+  // The two tests e2e.yml actually selects that reach a model. Everything else
+  // in the budget either never starts a model turn or is not selected in CI.
+  it('holds the two E2E-selected model canaries within the ceiling', () => {
+    const canaries = [
+      'should be able to run a shell command',
+      'should be able to replace content in a file',
+    ];
+    const cost = REAL_MODEL_RUN_BUDGET.filter((entry) =>
+      canaries.includes(entry.testName),
+    ).reduce((sum, entry) => sum + entry.apiRequestsPerRun, 0);
+    expect(cost).toBe(MAX_REAL_MODEL_API_REQUESTS);
   });
 
-  it('declares an E2E CI cost at or below MAX_REAL_MODEL_API_REQUESTS', () => {
-    expect(declaredCiApiRequests(REAL_MODEL_RUN_BUDGET)).toBeLessThanOrEqual(
-      MAX_REAL_MODEL_API_REQUESTS,
-    );
-  });
-
-  it('declares an E2E CI cost at most half the recorded baseline', () => {
-    expect(
-      declaredCiApiRequests(REAL_MODEL_RUN_BUDGET) * 2,
-    ).toBeLessThanOrEqual(BASELINE_REAL_MODEL_API_REQUESTS);
+  it('charges nothing to the tests that exit before any model turn', () => {
+    const freeTests = [
+      'should not crash when using mixed prompt inputs',
+      'should provide clear error message for mixed input',
+      'should exit quickly if stdin stream does not end',
+      'extension install test',
+    ];
+    for (const testName of freeTests) {
+      const entry = REAL_MODEL_RUN_BUDGET.find((e) => e.testName === testName);
+      expect(entry?.apiRequestsPerRun).toBe(0);
+    }
   });
 });

@@ -10,98 +10,108 @@
  *
  * A `TestRig` run reaches a real provider if and only if `rig.setup()` was
  * called without `fakeResponsesPath`; otherwise the model turn is replayed from
- * a checked-in fixture through `FakeProvider` and costs nothing. Every
- * real-provider run is recorded to the ledger by `TestRig`, and
- * `scripts/check-e2e-model-budget.ts` checks the ledger against this file, so a
- * new real-provider test fails CI until it is listed here with a justification.
+ * a checked-in fixture through `FakeProvider` and costs nothing. Every such run
+ * — `run`, `runInteractive` and `runCommand` — is appended to the ledger by
+ * `TestRig`, and `scripts/check-e2e-model-budget.ts` checks the ledger against
+ * this file, so a new real-provider test fails CI until it is listed here with a
+ * justification.
  *
- * `apiRequestsPerRun` is the number of model API requests a single run of that
- * test issues. `runsInE2eCi` records whether `.github/workflows/e2e.yml`
- * actually executes the test: that workflow excludes
- * `integration-tests/run_shell_command.test.ts` from its main invocation and
- * then re-runs only three named cases, so three real-provider cases in that
- * file are never executed in CI and contribute nothing to the CI request count.
+ * `apiRequestsPerRun` is the number of model API requests one execution of the
+ * test issues, MEASURED from the `api_request` events in the run's
+ * `telemetry.log` — not the number of CLI invocations. A test that provokes a
+ * tool call costs two requests: the turn that emits the tool call, and the
+ * continuation turn that reports its result.
+ *
+ * The ceiling is applied to the DISTINCT tests observed in a leg's ledger, not
+ * to the number of recorded runs. `scripts/bun-test-roots.ts` gives the
+ * `integration-tests` root `retries: 2` and `scripts/run_bun_tests.ts` re-spawns
+ * the whole file on a retry, so a flaky-then-passing leg legitimately produces
+ * duplicate records. A retry multiplies real spend, which the report shows, but
+ * it is a CI-infrastructure event rather than a budget violation.
  */
 
 export interface RealModelBudgetEntry {
   /** The name passed to `rig.setup()`, which is what the ledger records. */
   readonly testName: string;
-  /** Model API requests issued by one run of this test. */
+  /** Measured model API requests issued by one execution of this test. */
   readonly apiRequestsPerRun: number;
-  /** Whether `.github/workflows/e2e.yml` actually executes this test. */
-  readonly runsInE2eCi: boolean;
   /** Why this test is allowed to use a real provider. */
   readonly reason: string;
 }
 
 /**
- * Model API requests issued per E2E matrix leg before issue #2278: the shell
- * tool-selection canary, its stdin twin, `replace`, `list_directory`, and
- * `session-summary`.
+ * Measured model API requests per E2E matrix leg before issue #2278: the shell
+ * tool-selection canary (2), its stdin twin (2), `replace` (2),
+ * `list_directory` (2) and `session-summary` (1).
  */
-export const BASELINE_REAL_MODEL_API_REQUESTS = 5;
+export const BASELINE_REAL_MODEL_API_REQUESTS = 9;
 
 /**
- * Ceiling on model API requests per E2E matrix leg. Issue #2278 requires at
- * least a 50% reduction from the baseline.
+ * Ceiling on model API requests per E2E matrix leg, applied to the distinct
+ * tests recorded in the ledger. Issue #2278 requires at least a 50% reduction
+ * from the measured baseline.
  */
-export const MAX_REAL_MODEL_API_REQUESTS = 2;
+export const MAX_REAL_MODEL_API_REQUESTS = 4;
 
 export const REAL_MODEL_RUN_BUDGET: readonly RealModelBudgetEntry[] = [
   {
     testName: 'should be able to run a shell command',
-    apiRequestsPerRun: 1,
-    runsInE2eCi: true,
+    apiRequestsPerRun: 2,
     reason:
-      'Shell tool-selection canary: only real-model coverage that the model picks run_shell_command from a natural-language prompt',
+      'Shell tool-selection canary: only real-model coverage that the model picks run_shell_command from a natural-language prompt. Costs a tool-call turn plus a continuation turn',
   },
   {
     testName: 'should be able to replace content in a file',
-    apiRequestsPerRun: 1,
-    runsInE2eCi: true,
+    apiRequestsPerRun: 2,
     reason:
-      'Text-manipulation canary: only real-model coverage that the model targets the right substring through the replace tool',
+      'Text-manipulation canary: only real-model coverage that the model targets the right substring through the replace tool. Costs a tool-call turn plus a continuation turn',
   },
   {
     testName: 'should not crash when using mixed prompt inputs',
     apiRequestsPerRun: 0,
-    runsInE2eCi: true,
     reason:
       'The CLI rejects piped stdin combined with --prompt-interactive during argument validation, so no model turn occurs; the test asserts readLastApiRequest() is null',
   },
   {
     testName: 'should provide clear error message for mixed input',
     apiRequestsPerRun: 0,
-    runsInE2eCi: true,
     reason:
       'Exercises the same argument-validation exit path as the mixed-input crash test, before any provider call',
   },
   {
     testName: 'should exit quickly if stdin stream does not end',
     apiRequestsPerRun: 0,
-    runsInE2eCi: true,
     reason:
       'The CLI exits on an unterminated stdin stream before any provider call; a fixture would never be consumed',
   },
   {
-    testName: 'should succeed with --yolo mode',
-    apiRequestsPerRun: 1,
-    runsInE2eCi: false,
+    testName: 'extension install test',
+    apiRequestsPerRun: 0,
     reason:
-      'Real-model tool-approval coverage in run_shell_command.test.ts that e2e.yml never selects, so it costs nothing per CI leg',
+      'Drives the `extensions install/list/update` subcommands through runCommand; those subcommands never start a model turn',
+  },
+  {
+    testName: 'should succeed with --yolo mode',
+    apiRequestsPerRun: 2,
+    reason:
+      'Real-model tool-approval coverage in run_shell_command.test.ts. e2e.yml excludes that file from its main invocation and its --testNamePattern does not select this case, so it is not executed in CI',
   },
   {
     testName: 'should allow all with "ShellTool" and other specific tools',
-    apiRequestsPerRun: 1,
-    runsInE2eCi: false,
+    apiRequestsPerRun: 2,
     reason:
-      'Real-model allowlist coverage in run_shell_command.test.ts that e2e.yml never selects, so it costs nothing per CI leg',
+      'Real-model allowlist coverage in run_shell_command.test.ts that e2e.yml does not select, so it is not executed in CI',
   },
   {
     testName: 'should propagate environment variables',
-    apiRequestsPerRun: 1,
-    runsInE2eCi: false,
+    apiRequestsPerRun: 2,
     reason:
-      'Real-model child-environment coverage in run_shell_command.test.ts that e2e.yml never selects, so it costs nothing per CI leg',
+      'Real-model child-environment coverage in run_shell_command.test.ts that e2e.yml does not select, so it is not executed in CI',
+  },
+  {
+    testName: 'codex-image-real',
+    apiRequestsPerRun: 2,
+    reason:
+      'Opt-in Codex image round-trip via runCommand. Skipped whenever CI is set or the real-provider opt-in is absent, so it is not executed in CI',
   },
 ];

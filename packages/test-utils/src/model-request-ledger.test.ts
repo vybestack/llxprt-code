@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'bun:test';
+import { spawn } from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
@@ -162,14 +163,17 @@ describe('recordRealProviderRun', () => {
 
     const labels = ['writer-a', 'writer-b', 'writer-c', 'writer-d'];
     const exitCodes = await Promise.all(
-      labels.map(async (label) => {
-        const child = Bun.spawn([process.execPath, writerPath, label], {
-          env: { ...process.env, LLXPRT_E2E_MODEL_LEDGER: ledgerPath },
-          stdout: 'pipe',
-          stderr: 'pipe',
-        });
-        return await child.exited;
-      }),
+      labels.map(
+        (label) =>
+          new Promise<number | null>((resolve, reject) => {
+            const child = spawn(process.execPath, [writerPath, label], {
+              env: { ...process.env, LLXPRT_E2E_MODEL_LEDGER: ledgerPath },
+              stdio: 'ignore',
+            });
+            child.on('error', reject);
+            child.on('close', resolve);
+          }),
+      ),
     );
     expect(exitCodes).toEqual([0, 0, 0, 0]);
 

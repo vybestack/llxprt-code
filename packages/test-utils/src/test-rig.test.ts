@@ -83,8 +83,9 @@ describe('TestRig setup and cleanup behavior', () => {
     await firstRun;
   });
 
-  // The awaited run must exhaust the provider retry path against an
-  // unreachable base URL, which outlives the default per-test timeout.
+  // The run is recorded before the CLI is spawned. Emptying PATH makes the
+  // spawn fail with ENOENT straight away, so the recording is observable
+  // without a real provider call and without leaving a child process behind.
   it('records a real-provider run to the ledger when LLXPRT_E2E_MODEL_LEDGER is set', async () => {
     const root = createRoot();
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
@@ -92,31 +93,31 @@ describe('TestRig setup and cleanup behavior', () => {
     setEnv('OPENAI_API_KEY', 'test-key');
     setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:1');
     setEnv('LLXPRT_TEST_PROFILE', undefined);
+    setEnv('PATH', join(root, 'no-executables-here'));
 
     const ledgerPath = join(root, 'ledger.jsonl');
     setEnv('LLXPRT_E2E_MODEL_LEDGER', ledgerPath);
 
     const rig = new TestRig();
     rig.setup('real-provider-ledger-test');
-
-    // The ledger entry is written synchronously before the CLI is spawned, so
-    // it is observable without waiting for the (unreachable) provider call to
-    // fail. The run is still awaited afterwards so the child is reaped.
-    const runPromise = rig.run({ args: 'test prompt' });
-
-    const records = readLedger(ledgerPath);
-    expect(records).toHaveLength(1);
-    expect(records[0]?.testName).toBe('real-provider-ledger-test');
     const expectedDir = rig.testDir;
     if (expectedDir === null) {
       throw new Error('testDir should not be null after setup');
     }
+
+    // Bun reports an unresolvable executable as "Executable not found ..."
+    // while Node reports ENOENT; accept either so the test is runtime-agnostic.
+    await expect(rig.run({ args: 'test prompt' })).rejects.toThrow(
+      /Executable not found|ENOENT/,
+    );
+
+    const records = readLedger(ledgerPath);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.testName).toBe('real-provider-ledger-test');
     expect(records[0]?.testDir).toBe(expectedDir);
+  });
 
-    await runPromise.catch(() => undefined);
-  }, 30_000);
-
-  it('refuses a real-provider run when setup() has not established a test name', () => {
+  it('refuses a real-provider run when setup() has not established a test name', async () => {
     const root = createRoot();
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'gpt-4o-mini');
@@ -127,9 +128,10 @@ describe('TestRig setup and cleanup behavior', () => {
 
     const rig = new TestRig();
 
-    expect(rig.run({ args: 'test prompt' })).rejects.toThrow(
+    await expect(rig.run({ args: 'test prompt' })).rejects.toThrow(
       /requires setup\(\) to be called first/,
     );
+    expect(existsSync(join(root, 'ledger.jsonl'))).toBe(false);
   });
 
   it('does not record to the ledger when fakeResponsesPath is set', async () => {

@@ -15,7 +15,10 @@
  *   - `formatSessionTokenUsage` output shape (property-based)
  *
  * Pure in-process: it never spawns the CLI and never contacts a model, so it
- * is exercised once per CI shard rather than once per E2E matrix leg.
+ * costs no model API requests. It still runs on every E2E matrix leg, because
+ * `integration-tests/` is not an npm workspace and therefore belongs to no CI
+ * test shard (`scripts/test-shards.ts`); consolidating six files into this one
+ * cuts that per-leg cost rather than relocating it.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -295,6 +298,7 @@ describe('token-tracking cross-package integration', () => {
       const usage = pm.getSessionTokenUsage();
       expect(usage.input).toBe(200);
       expect(usage.output).toBeGreaterThan(500);
+      expect(usage.total).toBeGreaterThan(700);
     });
   });
 

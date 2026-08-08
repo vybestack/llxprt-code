@@ -6,11 +6,22 @@
  */
 
 /**
- * Guard for the real-provider E2E model request budget (issue #2278 AC1).
+ * Guard for the real-provider E2E model request budget (issue #2278).
  *
- * Validates the checked-in budget declaration and, optionally, checks the
- * E2E run ledger against it so a suite that exceeds the declared ceiling
- * fails CI.
+ * Two modes:
+ *
+ * - `--validate-budget` checks the checked-in declaration in
+ *   `integration-tests/real-model-budget.ts` for internal consistency and
+ *   confirms every declared test name is actually used by a `rig.setup()` call
+ *   in `integration-tests/`. This runs in the CI lint job.
+ * - `--ledger <path>` additionally checks the ledger produced by a real E2E leg:
+ *   any recorded test missing from the budget fails, and the summed cost of the
+ *   DISTINCT recorded tests must stay within the ceiling.
+ *
+ * The ceiling is applied per distinct test rather than per record because the
+ * `integration-tests` root is configured with retries (`scripts/bun-test-roots.ts`)
+ * and a retry re-spawns the whole file, legitimately producing duplicate
+ * records. The report surfaces the run counts so a retry is visible.
  *
  * Usage:
  *   bun scripts/check-e2e-model-budget.ts --validate-budget
@@ -19,7 +30,8 @@
  * Exits 0 on success, 1 on any violation.
  */
 
-import { resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   REAL_MODEL_RUN_BUDGET,
@@ -32,13 +44,15 @@ import {
   type RealProviderRunRecord,
 } from '../packages/test-utils/src/model-request-ledger.ts';
 
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const INTEGRATION_TESTS_DIR = join(REPO_ROOT, 'integration-tests');
+
 // ---------------------------------------------------------------------------
-// Pure validation functions
+// Budget declaration checks
 // ---------------------------------------------------------------------------
 
 export function validateBudget(
   budget: readonly RealModelBudgetEntry[],
-  maxApiRequests: number,
 ): readonly string[] {
   const violations: string[] = [];
   const seenNames = new Set<string>();
@@ -72,29 +86,13 @@ export function validateBudget(
     }
   }
 
-  const declaredCiTotal = declaredCiApiRequests(budget);
-  if (declaredCiTotal > maxApiRequests) {
-    violations.push(
-      `Declared apiRequestsPerRun for tests that run in E2E CI (${declaredCiTotal}) exceeds ceiling (${maxApiRequests}).`,
-    );
-  }
-
   return violations;
 }
 
 /**
- * Sum the declared cost of the entries that `.github/workflows/e2e.yml`
- * actually executes. Entries the workflow never selects cost nothing per leg
- * and so do not count against the ceiling.
+ * Assert the ceiling really is a reduction of at least half the recorded
+ * baseline, which is what issue #2278 requires.
  */
-export function declaredCiApiRequests(
-  budget: readonly RealModelBudgetEntry[],
-): number {
-  return budget
-    .filter((entry) => entry.runsInE2eCi)
-    .reduce((sum, entry) => sum + entry.apiRequestsPerRun, 0);
-}
-
 export function validateBudgetPolicy(
   maxApiRequests: number,
   baselineApiRequests: number,
@@ -110,17 +108,67 @@ export function validateBudgetPolicy(
   const halfBaseline = baselineApiRequests / 2;
   if (maxApiRequests > halfBaseline) {
     violations.push(
-      `MAX_REAL_MODEL_API_REQUESTS (${maxApiRequests}) must be at most half of BASELINE_REAL_MODEL_API_REQUESTS (${baselineApiRequests}), i.e. <= ${halfBaseline}. The issue requires a >= 50% reduction from the baseline.`,
+      `MAX_REAL_MODEL_API_REQUESTS (${maxApiRequests}) must be at most half of BASELINE_REAL_MODEL_API_REQUESTS (${baselineApiRequests}), i.e. <= ${halfBaseline}. Issue #2278 requires a >= 50% reduction from the measured baseline.`,
     );
   }
 
   return violations;
 }
 
+/**
+ * Catch drift between the budget and the tests it claims to describe. The
+ * ledger records the name passed to `rig.setup()`, so a budget entry naming a
+ * string no `rig.setup()` call uses can never match anything and is dead.
+ */
+export function validateBudgetNamesAreUsed(
+  budget: readonly RealModelBudgetEntry[],
+  setupNames: ReadonlySet<string>,
+): readonly string[] {
+  return budget
+    .filter((entry) => !setupNames.has(entry.testName))
+    .map(
+      (entry) =>
+        `Budget entry "${entry.testName}" matches no rig.setup() call in integration-tests/. ` +
+        `Either the test was renamed or removed, or the entry is a typo; the ledger can never match it.`,
+    );
+}
+
+/** Extract every string literal passed as the first argument to `rig.setup(`. */
+export function extractSetupNames(source: string): readonly string[] {
+  const names: string[] = [];
+  const pattern = /\.setup\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g;
+  for (const match of source.matchAll(pattern)) {
+    const name = match[2];
+    if (name !== undefined) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+function collectSetupNames(directory: string): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const fileName of readdirSync(directory)) {
+    if (!fileName.endsWith('.test.ts')) {
+      continue;
+    }
+    const source = readFileSync(join(directory, fileName), 'utf-8');
+    for (const name of extractSetupNames(source)) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
+// ---------------------------------------------------------------------------
+// Ledger checks
+// ---------------------------------------------------------------------------
+
 export interface LedgerCheckResult {
   readonly violations: readonly string[];
   readonly totalApiRequests: number;
-  readonly perTest: ReadonlyMap<string, number>;
+  /** Recorded run count per test name, including retry duplicates. */
+  readonly runsPerTest: ReadonlyMap<string, number>;
 }
 
 export function checkLedgerAgainstBudget(
@@ -129,24 +177,27 @@ export function checkLedgerAgainstBudget(
   maxApiRequests: number,
 ): LedgerCheckResult {
   const violations: string[] = [];
-  const budgetMap = new Map<string, number>();
-  for (const entry of budget) {
-    budgetMap.set(entry.testName, entry.apiRequestsPerRun);
+  const costByTest = new Map(
+    budget.map((entry) => [entry.testName, entry.apiRequestsPerRun]),
+  );
+
+  const runsPerTest = new Map<string, number>();
+  for (const record of records) {
+    runsPerTest.set(
+      record.testName,
+      (runsPerTest.get(record.testName) ?? 0) + 1,
+    );
   }
 
-  const perTest = new Map<string, number>();
   let totalApiRequests = 0;
-
-  for (const rec of records) {
-    const runCount = (perTest.get(rec.testName) ?? 0) + 1;
-    perTest.set(rec.testName, runCount);
-
-    const cost = budgetMap.get(rec.testName);
+  for (const testName of runsPerTest.keys()) {
+    const cost = costByTest.get(testName);
     if (cost === undefined) {
       violations.push(
-        `Recorded test "${rec.testName}" is not in the real-model budget. ` +
-          `Either add a fakeResponsesPath to the test or add a budget entry ` +
-          `with justification in integration-tests/real-model-budget.ts.`,
+        `Recorded test "${testName}" is not in the real-model budget. ` +
+          `Either give the test a fakeResponsesPath so its model turn is replayed from a fixture, ` +
+          `or add an entry to integration-tests/real-model-budget.ts with its measured ` +
+          `apiRequestsPerRun and a justification.`,
       );
       continue;
     }
@@ -155,11 +206,11 @@ export function checkLedgerAgainstBudget(
 
   if (totalApiRequests > maxApiRequests) {
     violations.push(
-      `Recorded real-model API requests (${totalApiRequests}) exceeds the ceiling (${maxApiRequests}).`,
+      `Real-model API requests for the distinct tests recorded (${totalApiRequests}) exceeds the ceiling (${maxApiRequests}).`,
     );
   }
 
-  return { violations, totalApiRequests, perTest };
+  return { violations, totalApiRequests, runsPerTest };
 }
 
 export function formatReport(
@@ -174,22 +225,20 @@ export function formatReport(
   const lines: string[] = [
     'Real-Model E2E Budget Report',
     '='.repeat(60),
-    `Ceiling: ${maxApiRequests} | Baseline: ${baselineApiRequests} | Recorded API requests: ${result.totalApiRequests}`,
+    `Ceiling: ${maxApiRequests} | Baseline: ${baselineApiRequests} | ` +
+      `API requests for distinct tests recorded: ${result.totalApiRequests}`,
     '',
   ];
 
-  if (result.perTest.size === 0) {
+  if (result.runsPerTest.size === 0) {
     lines.push('No real-provider runs recorded.');
   } else {
-    lines.push('Per-test run counts:');
-    for (const [testName, count] of result.perTest) {
-      const apiCost = costByTest.get(testName);
-      const costLabel = apiCost === undefined ? 'UNBUDGETED' : `${apiCost}`;
-      const totalLabel =
-        apiCost === undefined ? 'UNBUDGETED' : `${apiCost * count}`;
-      lines.push(
-        `  ${testName}: ${count} run(s) x ${costLabel} req = ${totalLabel}`,
-      );
+    lines.push('Distinct tests recorded (run count includes retries):');
+    for (const [testName, runs] of result.runsPerTest) {
+      const cost = costByTest.get(testName);
+      const costLabel = cost === undefined ? 'UNBUDGETED' : `${cost}`;
+      const retryNote = runs > 1 ? ` (retried: ${runs} runs)` : '';
+      lines.push(`  ${testName}: ${costLabel} req${retryNote}`);
     }
   }
 
@@ -227,6 +276,21 @@ export function parseLedgerPath(args: readonly string[]): string | undefined {
   return value;
 }
 
+/**
+ * An absent ledger means no real-provider run happened on this leg — for
+ * instance when every budgeted test was skipped for the platform. That is
+ * within the ceiling, so it is reported as zero rather than treated as an error.
+ */
+function readLedgerRecords(
+  ledgerPath: string,
+): readonly RealProviderRunRecord[] {
+  if (!existsSync(ledgerPath)) {
+    console.log(`No ledger at ${ledgerPath}; no real-provider runs occurred.`);
+    return [];
+  }
+  return readLedger(ledgerPath);
+}
+
 function main(): void {
   const args = process.argv.slice(2);
 
@@ -239,23 +303,27 @@ function main(): void {
   }
 
   const violations: string[] = [
-    ...validateBudget(REAL_MODEL_RUN_BUDGET, MAX_REAL_MODEL_API_REQUESTS),
+    ...validateBudget(REAL_MODEL_RUN_BUDGET),
     ...validateBudgetPolicy(
       MAX_REAL_MODEL_API_REQUESTS,
       BASELINE_REAL_MODEL_API_REQUESTS,
+    ),
+    ...validateBudgetNamesAreUsed(
+      REAL_MODEL_RUN_BUDGET,
+      collectSetupNames(INTEGRATION_TESTS_DIR),
     ),
   ];
 
   if (ledgerPath === undefined) {
     console.log(
       `Budget validation: ${REAL_MODEL_RUN_BUDGET.length} entries, ` +
-        `declared E2E CI API requests=${declaredCiApiRequests(REAL_MODEL_RUN_BUDGET)}, ` +
-        `ceiling=${MAX_REAL_MODEL_API_REQUESTS}, baseline=${BASELINE_REAL_MODEL_API_REQUESTS}`,
+        `ceiling=${MAX_REAL_MODEL_API_REQUESTS}, ` +
+        `measured baseline=${BASELINE_REAL_MODEL_API_REQUESTS}`,
     );
   } else {
     let records: readonly RealProviderRunRecord[];
     try {
-      records = readLedger(ledgerPath);
+      records = readLedgerRecords(ledgerPath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to read ledger: ${message}`);

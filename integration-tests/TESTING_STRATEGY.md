@@ -216,10 +216,15 @@ Use this checklist when deciding whether to mock:
                                                     ┌───────────────┴───────────────┐
                                                     │ YES                           │ NO
                                                     ▼                               ▼
-                                              ┌──────────┐                   ┌─────────┐
-                                              │ CAN MOCK │                   │REAL LLM │
-                                              └──────────┘                   │(default)│
-                                                                             └─────────┘
+                                              ┌──────────┐                  ┌──────────┐
+                                              │ CAN MOCK │                  │ FIXTURE  │
+                                              └──────────┘                  │(default; │
+                                                                            │ a real   │
+                                                                            │ model    │
+                                                                            │ needs a  │
+                                                                            │ budget   │
+                                                                            │ entry)   │
+                                                                            └──────────┘
 ```
 
 **Quick Reference Checklist:**
@@ -229,7 +234,9 @@ Use this checklist when deciding whether to mock:
 3. Does the test only validate output format/structure? → **CAN MOCK**
 4. Does the test expect errors/crashes? → **CAN MOCK**
 5. Does the test validate infrastructure mechanics? → **CAN MOCK**
-6. **Unsure? → Default to REAL LLM**
+6. **Unsure? → Default to a FIXTURE.** A real-model test costs a budgeted
+   API request and must be justified in
+   [`real-model-budget.ts`](./real-model-budget.ts).
 
 ---
 
@@ -246,11 +253,16 @@ How the cap is enforced:
 - A `TestRig` run reaches a real provider if and only if `rig.setup()` was called
   **without** `fakeResponsesPath`. With a fixture path, the model turn is
   replayed through `FakeProvider` and costs nothing.
-- `TestRig` appends every real-provider run to the ledger named by
-  `LLXPRT_E2E_MODEL_LEDGER` (set only by `e2e.yml`; a no-op otherwise).
-- `scripts/check-e2e-model-budget.ts` validates the budget on every CI lint run
-  (`npm run lint:e2e-model-budget`) and checks the ledger after each E2E leg. A
-  real-provider run whose test is not in the budget **fails the build**.
+- `TestRig` appends every fixture-less invocation — `run`, `runInteractive` and
+  `runCommand` — to the ledger named by `LLXPRT_E2E_MODEL_LEDGER` (set only by
+  `e2e.yml`; a no-op otherwise). A test that spawns the CLI itself, without
+  `TestRig`, is outside the ledger's reach; route model-bearing runs through
+  `TestRig` so they stay accounted for.
+- `scripts/check-e2e-model-budget.ts` validates the budget in the CI `lint`
+  job and in `scripts/lint-all.sh` (`npm run lint:e2e-model-budget`), and checks
+  the ledger after each E2E leg. A real-provider run whose test is not in the
+  budget **fails the build**. The ceiling is applied to the distinct tests
+  recorded, so a retried test is billed once.
 
 So a new test that spends model requests will fail CI until you either give it a
 fixture or add a justified budget entry.
@@ -265,11 +277,23 @@ the model chose, so these two remain real:
 | Shell execution   | `run_shell_command.test.ts` | The model selects `run_shell_command` from a natural-language prompt |
 | Text manipulation | `replace.test.ts`           | The model targets the right substring via the `replace` tool         |
 
-Everything else in this suite — including file read/write (`file-system.test.ts`),
-directory listing, session summaries, JSON output, and the hooks suite — runs
-against checked-in `*.responses.jsonl` fixtures. Tool execution, filesystem
-effects and CLI output are still real in those tests; only the model turn is
-replayed.
+Most of the rest of this suite — file read/write (`file-system.test.ts`),
+directory listing, session summaries, JSON output, and the hooks suite (which
+uses `*.responses` files) — replays its model turn from a checked-in fixture.
+Tool execution, filesystem effects and CLI output are still real in those tests.
+
+The remaining fixture-less tests fall into two groups, and both are listed in
+[`real-model-budget.ts`](./real-model-budget.ts):
+
+- tests where the CLI exits before any model turn (`mixed-input-crash.test.ts`,
+  `stdin-context.test.ts`, `extensions-install.test.ts`), budgeted at zero; and
+- real-model tests that `e2e.yml` does not select, so they cost nothing per leg
+  but also provide no CI coverage (three cases in `run_shell_command.test.ts`,
+  plus the opt-in `codexImage.real.test.ts`).
+
+Files skipped entirely under `CI` (`ctrl-c-exit`, `simple-mcp-server`,
+`mcp_server_cyclic_schema`, `todo-ui-integration`, `web-search-provider`,
+`todo-continuation.e2e`) never reach a provider in CI and so need no entry.
 
 ### Adding a new tool
 
@@ -279,8 +303,11 @@ replayed.
    choice, and only when no existing canary already covers that choice. It must
    be added to `real-model-budget.ts` with a justification, and the declared cost
    must stay within the ceiling.
-3. Record fixtures by running the test with `REGENERATE_MODEL_GOLDENS=true`
-   against a real provider, then commit the resulting JSONL.
+3. Author the fixture by hand, modelled on an existing `*.responses.jsonl` file:
+   one JSON object per model turn, with `{{CWD}}` standing in for the test
+   directory. A tool-calling test needs two turns — the turn that emits the tool
+   call and the continuation turn that reports the result — which is why such a
+   test is budgeted at two API requests when it runs against a real provider.
 
 ---
 

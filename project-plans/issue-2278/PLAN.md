@@ -21,20 +21,25 @@ without `fakeResponsesPath` (`packages/test-utils/src/test-rig.ts:198-201`,
 
 | # | Test (setup name)                                        | Site                                | API requests |
 | - | -------------------------------------------------------- | ----------------------------------- | ------------ |
-| 1 | `should be able to run a shell command`                  | `integration-tests/run_shell_command.test.ts:33` | 1 |
-| 2 | `should be able to run a shell command via stdin`        | `integration-tests/run_shell_command.test.ts:66` | 1 |
-| 3 | `should be able to replace content in a file`            | `integration-tests/replace.test.ts:19`           | 1 |
-| 4 | `should be able to list a directory`                     | `integration-tests/list_directory.test.ts:27`    | 1 |
+| 1 | `should be able to run a shell command`                  | `integration-tests/run_shell_command.test.ts:33` | 2 |
+| 2 | `should be able to run a shell command via stdin`        | `integration-tests/run_shell_command.test.ts:66` | 2 |
+| 3 | `should be able to replace content in a file`            | `integration-tests/replace.test.ts:19`           | 2 |
+| 4 | `should be able to list a directory`                     | `integration-tests/list_directory.test.ts:27`    | 2 |
 | 5 | `should write a session summary in non-interactive mode` | `integration-tests/session-summary.test.ts:18`   | 1 |
 | 6 | `should not crash when using mixed prompt inputs`        | `integration-tests/mixed-input-crash.test.ts:20` | 0 |
 | 7 | `should provide clear error message for mixed input`     | `integration-tests/mixed-input-crash.test.ts:47` | 0 |
 | 8 | `should exit quickly if stdin stream does not end`       | `integration-tests/stdin-context.test.ts:30`     | 0 |
+| 9 | `extension install test`                                 | `integration-tests/extensions-install.test.ts:32` | 0 |
 
-Rows 6–8 configure a real provider but the CLI exits during argument/stdin
-validation before any model turn. Row 6 proves this in-test:
+Rows 6–9 spawn the CLI with real credentials available, but it exits during
+argument/stdin validation or runs a non-model subcommand before any model turn.
+Row 6 proves this in-test:
 `expect(rig.readLastApiRequest()).toBeNull()` (`mixed-input-crash.test.ts:43-44`).
 
-**Baseline: 8 real-provider CLI runs, 5 real model API requests per leg.**
+A tool-calling prompt costs two API requests (the tool-call turn plus the
+continuation turn), measured from `telemetry.log`; see `INVENTORY.md` §1.
+
+**Baseline: 9 fixture-less tests, 9 real model API requests per leg.**
 `e2e.yml` runs three legs (macOS, Linux `sandbox:none`, Linux `sandbox:docker`),
 so 15 API requests per PR; a push to `main` runs two legs.
 
@@ -69,34 +74,47 @@ reviewed budget.
      `LLXPRT_E2E_MODEL_LEDGER`. When that variable is unset or empty it is a
      no-op (so `evals/`, local `bun test`, and unit suites are unaffected).
    - `readLedger(path)` parses the file into records.
-2. `TestRig.run` and `TestRig.runInteractive` call `recordRealProviderRun`
-   exactly when `fakeResponsesPath === undefined`, recording the setup test name
-   and test directory.
+2. `TestRig.run`, `TestRig.runInteractive` and `TestRig.runCommand` call
+   `recordRealProviderRun` exactly when `fakeResponsesPath === undefined`,
+   recording the setup test name and test directory. `runCommand` is included
+   because it does not inject the fake-provider flags, so without a fixture its
+   child inherits whatever real credentials the environment holds.
 3. `integration-tests/real-model-budget.ts` is the single source of truth:
-   the declared baseline (`BASELINE_REAL_MODEL_API_REQUESTS = 5`), the enforced
-   ceiling (`MAX_REAL_MODEL_API_REQUESTS = 2`), and one entry per permitted
-   real-provider test with its `apiRequestsPerRun` and a `reason`.
+   the measured baseline (`BASELINE_REAL_MODEL_API_REQUESTS = 9`), the enforced
+   ceiling (`MAX_REAL_MODEL_API_REQUESTS = 4`), and one entry per permitted
+   fixture-less test with its measured `apiRequestsPerRun` and a `reason`. The
+   cost unit is API requests measured from `telemetry.log`, not CLI invocations:
+   a tool-calling prompt costs two requests (the tool-call turn plus the
+   continuation turn).
 4. `scripts/check-e2e-model-budget.ts`
    - `--validate-budget` mode (no ledger needed): fails on duplicate test names,
-     negative `apiRequestsPerRun`, an empty `reason`, or a declared total that
-     exceeds `MAX_REAL_MODEL_API_REQUESTS`. Wired as `npm run lint:e2e-model-budget`
-     and added to the CI lint guard list.
-   - `--ledger <path>` mode: fails when the ledger is missing/unreadable, when a
-     line is malformed, when a recorded test name is absent from the budget, or
-     when the summed `apiRequestsPerRun` of recorded runs exceeds the ceiling.
-     Prints a per-test report either way.
+     negative or fractional `apiRequestsPerRun`, an empty `reason`, a ceiling
+     that is not at most half the baseline, or an entry naming a `rig.setup()`
+     call that no longer exists anywhere in `integration-tests/`. Wired as
+     `npm run lint:e2e-model-budget`, added to the CI `lint` job alongside the
+     other `lint:*` guards and to `scripts/lint-all.sh`.
+   - `--ledger <path>` mode: fails when a ledger line is malformed, when a
+     recorded test name is absent from the budget, or when the summed
+     `apiRequestsPerRun` of the DISTINCT recorded tests exceeds the ceiling.
+     Billing is per distinct test, not per record, because the
+     `integration-tests` root is configured with `retries: 2` and a retry
+     re-spawns the whole file, so duplicate records are legitimate and billing
+     per record would fail a green leg. The report prints run counts so a retry
+     stays visible. An absent ledger means no fixture-less run occurred and is
+     reported as zero rather than an error.
 5. `e2e.yml` sets `LLXPRT_E2E_MODEL_LEDGER` on the test steps of all three legs
    and runs the ledger check after the tests succeed.
 
 **Boundary cases to test.** Ledger env unset → no file created, no throw.
 Ledger env set to a path in a not-yet-created directory → directory created.
-Empty ledger → 0 runs, exit 0. Count exactly at ceiling → exit 0. One over
-ceiling → exit 1 naming the offending tests. Test name absent from the budget →
-exit 1 naming it. Malformed JSON line → exit 1 quoting the line. Concurrent
-appends from parallel test processes → every record counted (append-mode
-writes). Missing ledger file in `--ledger` mode → exit 1.
+Empty ledger → 0 runs, exit 0. Absent ledger → 0 runs, exit 0 (no fixture-less
+run occurred). Distinct-test total exactly at ceiling → exit 0; one over → exit 1
+naming the offending tests. A test recorded three times (retry) → billed once and
+reported with its run count. Test name absent from the budget → exit 1 naming it.
+Malformed JSON line → exit 1 quoting the line. Concurrent appends from parallel
+test processes → every record counted (append-mode writes).
 
-### AC2 — Real model API requests per leg reduced 5 → 2 (60%)
+### AC2 — Real model API requests per leg reduced 9 → 4 (55.6%)
 
 Converted to checked-in `FakeProvider` fixtures, keeping every existing
 behavioral assertion (real tool execution, real filesystem effects, real
@@ -118,9 +136,12 @@ Rationale for the stdin conversion: the args-path canary already proves the
 model selects `run_shell_command`; the stdin variant's distinct coverage is the
 CLI's stdin plumbing, which the fixture path exercises unchanged.
 
-`e2e.yml`'s `--testNamePattern` for `run_shell_command.test.ts` is narrowed to
-drop the now-fake stdin test from the real-provider invocation, so the fake test
-runs in the main (excluded-file) invocation like every other fixture test.
+`e2e.yml`'s `--testNamePattern` for `run_shell_command.test.ts` is left
+unchanged. That invocation is not inherently a real-provider one — each test's own
+`rig.setup()` decides — so the now-fixture-backed stdin test still runs there at
+zero cost. Narrowing the pattern would have stopped both the stdin test and the
+already-fixture-backed `should run a platform-specific file listing command` from
+running in CI at all.
 
 ### AC3 — `token-tracking` consolidated 6 files → 1, no behavioral coverage lost
 
@@ -132,7 +153,9 @@ runs in the main (excluded-file) invocation like every other fixture test.
 - New `packages/cli/src/ui/utils/tokenFormatters.test.ts` — `tokenFormatters.ts`
   currently has **no** unit test outside `integration-tests/`; its boundary
   behavior moves into the `cli` shard so it runs once in CI instead of three
-  times in E2E.
+  times in E2E. The survivor itself still runs on all three E2E legs, because
+  `integration-tests/` is not an npm workspace and so no CI shard owns it;
+  consolidation cuts that per-leg cost rather than relocating it.
 - Non-behavioral cases are deleted, not migrated.
 
 The consolidation map (clusters, canonical survivors, unique behaviors,
@@ -154,10 +177,17 @@ must be verified against the sources before any deletion.
 
 - CI/E2E sharding and parallelism changes — already delivered (§1.3).
 - E2E quota fail-fast / failure-cascade short-circuit — issue #2279.
+- Token spend as a metric distinct from request count. This change instruments
+  and enforces request count only; `INVENTORY.md` §6 records why requests are a
+  sound proxy here and what measuring tokens would require.
 - "CI + E2E daily-mean wall-clock < 10 min sustained over a week on `main`" —
   not verifiable inside a PR. The enforceable deliverables here are the
-  guard-enforced request budget (AC1/AC2) and the removal of 3223 lines of
-  in-process tests from all three E2E legs (AC3).
+  guard-enforced request budget (AC1/AC2) and the reduction of the in-process
+  token-tracking suite from 3223 lines / 88 cases to 582 lines / 17 cases on each
+  of the three E2E legs (AC3).
+- Giving `integration-tests/` a CI shard so its fixture-backed, in-process tests
+  stop running once per E2E leg. A real remaining inefficiency, but it changes
+  the shard model owned by #2707/#2709.
 - Downgrading any tool-mirror test not named in AC2.
 - Touching test files, workflows, or shard maps owned by other issues.
 

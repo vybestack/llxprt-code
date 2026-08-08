@@ -30,9 +30,9 @@ Disposition legend:
 | token-tracking.test.ts:85 | should correctly accumulate throttle wait times | DUPLICATE OF (survivor:302 throttle accumulate+reset; also ProviderPerformanceTracker.test.ts:165-175) |
 | token-tracking.test.ts:100 | should correctly accumulate session token usage from multiple providers | DUPLICATE OF (survivor:168 session accumulation; also ProviderManager.test.ts:173-244) |
 | token-tracking.test.ts:128 | should correctly accumulate session tokens from provider responses | DUPLICATE OF (survivor:168; also ProviderManager.test.ts:173-244) |
-| token-tracking.test.ts:169 | should create logging wrapper without errors | DELETED NON-BEHAVIORAL (asserts only `typeof === 'function'` on wrapper methods + passthrough `wrapper.name`; no token behavior. Wrapping verified at ProviderManager.test.ts:132) |
+| token-tracking.test.ts:169 | should create logging wrapper without errors | DELETED NON-BEHAVIORAL (asserts only `typeof === 'function'` on wrapper methods, plus the passthrough `wrapper.name` and the `wrappedProvider` identity it was just constructed with; no token behavior. Wrapping verified at ProviderManager.test.ts:132) |
 | token-tracking.test.ts:183 | should format TPM and throttle wait time for footer display | DELETED NON-BEHAVIORAL (hand-written formatting logic inside the test, never imports/calls production `formatTokensPerMinute`/`formatThrottleTime`; regex is near-tautological. Coverage MOVED to tokenFormatters.test.ts:15,21,28,33,41,47,56) |
-| token-tracking.test.ts:208 | should display detailed token metrics correctly in stats UI | DELETED NON-BEHAVIORAL (asserts fields on a `statsDisplay` object the test itself constructs; the underlying accumulate/throttle are covered by survivor:168/302) |
+| token-tracking.test.ts:208 | should display detailed token metrics correctly in stats UI | DUPLICATE OF (survivor:168 exact accumulation sums + survivor:302 throttle. The `statsDisplay` object is built by the test, but its `sessionTokens` field comes from the real `getSessionTokenUsage()` and its throttle assertion reads the real tracker, so this case COULD fail — it is a duplicate, not a tautology) |
 | token-tracking.test.ts:253 | should include comprehensive token tracking information in diagnostics output | DELETED NON-BEHAVIORAL (`toHaveProperty` on a `diagnosticsOutput` object the test itself constructs; production `diagnosticsCommand.action` is never invoked) |
 
 ## 2. `integration-tests/token-tracking-behavioral.test.ts` (17 cases → deleted)
@@ -46,16 +46,16 @@ Disposition legend:
 | token-tracking-behavioral.test.ts:275 | should calculate TPM based on recent token activity within the last minute | DUPLICATE OF (survivor:315 exact TPM; also ProviderPerformanceTracker.test.ts:46-92) |
 | token-tracking-behavioral.test.ts:300 | should return zero TPM when no recent activity exists | DUPLICATE OF (ProviderPerformanceTracker.test.ts:16-25 zero-state assertions incl. tokensPerMinute===0) |
 | token-tracking-behavioral.test.ts:318 | should accumulate throttle wait times from 429 errors | DUPLICATE OF (survivor:302; also ProviderPerformanceTracker.test.ts:165-175) |
-| token-tracking-behavioral.test.ts:336 | should reset throttle wait time when tracker is reset | DUPLICATE OF (survivor:302 reset branch; also ProviderPerformanceTracker.test.ts:193-196) |
+| token-tracking-behavioral.test.ts:336 | should reset throttle wait time when tracker is reset | DUPLICATE OF (survivor:302 reset branch; also ProviderPerformanceTracker.test.ts:197-200) |
 | token-tracking-behavioral.test.ts:357 | should format TPM values with appropriate suffixes | MOVED (tokenFormatters.test.ts:15,21,28,33) |
 | token-tracking-behavioral.test.ts:365 | should format throttle wait times with appropriate units | MOVED (tokenFormatters.test.ts:41,47,56) |
-| token-tracking-behavioral.test.ts:375 | should format session token usage for detailed display | MOVED (tokenFormatters.test.ts:63) |
+| token-tracking-behavioral.test.ts:375 | should format session token usage for detailed display | MOVED (tokenFormatters.test.ts:69) |
 | token-tracking-behavioral.test.ts:406 | should handle OpenAI token format correctly | DUPLICATE OF (survivor:331; also extracted-helpers.behavior.test.ts:280-294) |
 | token-tracking-behavioral.test.ts:442 | should handle Anthropic token format correctly | DUPLICATE OF (survivor:393 Anthropic headers) |
-| token-tracking-behavioral.test.ts:482 | should track tokens through complete request-response cycle | DUPLICATE OF (survivor:168 accumulation; `expect(providerMetrics).toBeDefined()` is non-behavioral; format covered by tokenFormatters.test.ts:63) |
-| token-tracking-behavioral.test.ts:523 | should maintain token tracking accuracy across session lifecycle | DUPLICATE OF (survivor:168 + survivor:239 reset; also ProviderManager.test.ts:241-244) |
+| token-tracking-behavioral.test.ts:482 | should track tokens through complete request-response cycle | DUPLICATE OF (survivor:168 accumulation; `expect(providerMetrics).toBeDefined()` is non-behavioral; format covered by tokenFormatters.test.ts:69) |
+| token-tracking-behavioral.test.ts:523 | should maintain token tracking accuracy across session lifecycle | DUPLICATE OF (survivor:168 + survivor:239 reset; also ProviderManager.test.ts:245-250) |
 | token-tracking-behavioral.test.ts:565 | should handle invalid token values gracefully | KEPT (survivor:262 negative-clamp — no external coverage exists for negative-input clamping) |
-| token-tracking-behavioral.test.ts:588 | should handle missing provider gracefully | DELETED NON-BEHAVIORAL (`accumulateSessionTokens` ignores the provider name (`_providerName`) and never throws — it is pure arithmetic; "does not throw" is tautological) |
+| token-tracking-behavioral.test.ts:588 | should handle missing provider gracefully | DELETED NON-BEHAVIORAL (the sole assertion is `expect(...).not.toThrow()`; `accumulateSessionTokens` has no failure path for an unknown provider name, so the assertion cannot fail. Per-provider accumulation itself is asserted at survivor:168) |
 
 ## 3. `integration-tests/token-tracking-provider-behavioral.test.ts` (14 cases → deleted)
 
@@ -82,15 +82,15 @@ Disposition legend:
 | --- | --- | --- |
 | token-tracking-ui-behavioral.test.ts:74 | should display tokens per minute in footer when available | MOVED (tokenFormatters.test.ts:15,21,28,33) |
 | token-tracking-ui-behavioral.test.ts:90 | should display throttle wait time in footer when throttling occurs | MOVED (tokenFormatters.test.ts:41,47,56) |
-| token-tracking-ui-behavioral.test.ts:106 | should show session token total in footer | DUPLICATE OF (survivor:168 accumulation; the `.toLocaleString()` display is covered by tokenFormatters.test.ts:63,93) |
-| token-tracking-ui-behavioral.test.ts:138 | should format comprehensive session token breakdown for stats display | MOVED (tokenFormatters.test.ts:63) |
-| token-tracking-ui-behavioral.test.ts:167 | should handle zero values in token breakdown gracefully | MOVED (tokenFormatters.test.ts:78) |
-| token-tracking-ui-behavioral.test.ts:194 | should reflect typical chat conversation token progression | DUPLICATE OF (survivor:168 accumulation + tokenFormatters.test.ts:63 format) |
+| token-tracking-ui-behavioral.test.ts:106 | should show session token total in footer | DUPLICATE OF (survivor:168 accumulation; the `.toLocaleString()` display is covered by tokenFormatters.test.ts:69,93) |
+| token-tracking-ui-behavioral.test.ts:138 | should format comprehensive session token breakdown for stats display | MOVED (tokenFormatters.test.ts:69) |
+| token-tracking-ui-behavioral.test.ts:167 | should handle zero values in token breakdown gracefully | MOVED (tokenFormatters.test.ts:86) |
+| token-tracking-ui-behavioral.test.ts:194 | should reflect typical chat conversation token progression | DUPLICATE OF (survivor:168 accumulation + tokenFormatters.test.ts:69 format) |
 | token-tracking-ui-behavioral.test.ts:242 | should handle rapid token accumulation during streaming responses | DUPLICATE OF (survivor:168 — monotonic accumulation) |
-| token-tracking-ui-behavioral.test.ts:281 | should accurately reflect multi-provider usage in UI display | DUPLICATE OF (survivor:168 + tokenFormatters.test.ts:63) |
+| token-tracking-ui-behavioral.test.ts:281 | should accurately reflect multi-provider usage in UI display | DUPLICATE OF (survivor:168 + tokenFormatters.test.ts:69) |
 | token-tracking-ui-behavioral.test.ts:330 | should handle high-frequency token updates without UI lag | KEPT (survivor:278 performance characteristic) |
-| token-tracking-ui-behavioral.test.ts:367 | should maintain formatting consistency across large token values | MOVED (tokenFormatters.test.ts:93) |
-| token-tracking-ui-behavioral.test.ts:399 | should display zero state appropriately when no tokens have been used | MOVED (tokenFormatters.test.ts:78) |
+| token-tracking-ui-behavioral.test.ts:367 | should maintain formatting consistency across large token values | MOVED (tokenFormatters.test.ts:101) |
+| token-tracking-ui-behavioral.test.ts:399 | should display zero state appropriately when no tokens have been used | MOVED (tokenFormatters.test.ts:86) |
 | token-tracking-ui-behavioral.test.ts:416 | should handle TPM formatting edge cases | MOVED (tokenFormatters.test.ts:15,21,28,33) |
 | token-tracking-ui-behavioral.test.ts:433 | should handle throttle time formatting edge cases | MOVED (tokenFormatters.test.ts:41,47,56) |
 
@@ -119,12 +119,12 @@ Disposition legend:
 | token-tracking-property.test.ts:197 | should calculate tokensPerMinute correctly from completion records (itProp) | DUPLICATE OF (survivor:315; totalRequests covered by ProviderPerformanceTracker.test.ts:16-49) |
 | token-tracking-property.test.ts:221 | should derive tokensPerMinute from recorded tokens and durations (itProp) | KEPT (survivor:315 — the exact-formula property; carried over verbatim in intent) |
 | token-tracking-property.test.ts:248 | should never have negative throttleWaitTimeMs values (itProp) | DUPLICATE OF (survivor:302 exact sum) |
-| token-tracking-property.test.ts:259 | should have zero throttleWaitTimeMs for empty sequences (it) | DUPLICATE OF (survivor:302 reset branch; also ProviderPerformanceTracker.test.ts:196) |
+| token-tracking-property.test.ts:259 | should have zero throttleWaitTimeMs for empty sequences (it) | DUPLICATE OF (survivor:302 reset branch; also ProviderPerformanceTracker.test.ts:197-200) |
 | token-tracking-property.test.ts:267 | should correctly sum throttle wait times (itProp) | DUPLICATE OF (survivor:302; also ProviderPerformanceTracker.test.ts:165-175) |
 | token-tracking-property.test.ts:293 | should reset throttleWaitTimeMs to zero after reset (itProp) | DUPLICATE OF (survivor:302 reset branch) |
 | token-tracking-property.test.ts:315 | should never have negative token usage fields (itProp) | DUPLICATE OF (survivor:168 — non-negative inputs always yield non-negative sums) |
 | token-tracking-property.test.ts:339 | should accurately sum all provider token contributions (itProp) | DUPLICATE OF (survivor:168 canonical asserts exact per-field sums) |
-| token-tracking-property.test.ts:394 | should reset all token fields to zero after reset (itProp) | DUPLICATE OF (survivor:239 reset; also ProviderManager.test.ts:241-244) |
+| token-tracking-property.test.ts:394 | should reset all token fields to zero after reset (itProp) | DUPLICATE OF (survivor:239 reset; also ProviderManager.test.ts:245-250) |
 | token-tracking-property.test.ts:420 | should increase total when adding token usage (itProp) | DUPLICATE OF (survivor:168 — accumulation is monotonic) |
 | token-tracking-property.test.ts:492 | should never return negative token counts (itProp) | DUPLICATE OF (survivor:331/465 extraction with non-negative inputs) |
 | token-tracking-property.test.ts:526 | should return zero counts when no token fields are present (itProp) | DUPLICATE OF (survivor:467 missing-data→zeros) |
@@ -146,8 +146,8 @@ Disposition legend:
 | --- | --- |
 | KEPT (survivor) | 13 |
 | MOVED (tokenFormatters.test.ts) | 13 |
-| DUPLICATE OF (survivor canonical or packages/** external) | 51 |
-| DELETED NON-BEHAVIORAL | 11 |
+| DUPLICATE OF (survivor canonical or packages/** external) | 52 |
+| DELETED NON-BEHAVIORAL | 10 |
 | **Total real cases** | **88** (+ 2 helper-internal `it(testName, run)` registrations inside the `itProp` shim, which are not test cases) |
 
 Counts are row counts over the six tables above (8 + 17 + 14 + 13 + 11 + 25 = 88);

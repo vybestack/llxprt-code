@@ -420,6 +420,14 @@ jobs:
         run: |-
           npm run lint:affected-shards
 
+      - name: 'Run E2E real-model budget guard (#2278)'
+        # Validates integration-tests/real-model-budget.ts: no duplicate or
+        # malformed entries, a ceiling that is at least a 50% cut from the
+        # measured baseline, and no entry naming a rig.setup() call that no
+        # longer exists. The per-leg ledger check runs in e2e.yml.
+        run: |-
+          npm run lint:e2e-model-budget
+
       # Build must run BEFORE the type-aware lint: three workspace tsconfigs
       # map cross-workspace imports to `dist/*.d.ts` — cli -> tools, core -> mcp,
       # and a2a-server -> settings/storage/tools — so tsserver (projectService)
@@ -1032,12 +1040,6 @@ jobs:
         # shard map, so adding a package can never silently go untested.
         run: |-
           npm run lint:test-shards
-
-      - name: 'Verify E2E real-model budget (issue #2278)'
-        # Validates the checked-in E2E real-model API request budget so a new
-        # real-provider test cannot exceed the declared ceiling without review.
-        run: |-
-          npm run lint:e2e-model-budget
 
       - name: 'Run shard tests (issue #2707)'
         env:

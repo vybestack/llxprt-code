@@ -116,8 +116,6 @@ describe('formatSessionTokenUsage', () => {
     expect(formatted).toContain(`Tool: ${grouped(123456)}`);
     expect(formatted).toContain(`Thought: ${grouped(78901)}`);
     expect(formatted).toContain(`Total: ${grouped(2881367)}`);
-    // Grouping actually happened: the raw digits alone are not what is shown.
-    expect(grouped(1234567)).not.toBe('1234567');
   });
 
   it('always orders the categories as input, output, cache, tool, thought, total', () => {

@@ -137,23 +137,22 @@ export class TestRig {
   }
 
   /**
-   * Record a run that will hit a real provider so the E2E real-model budget
-   * guard can account for it. Fake-responses runs never reach a provider and
-   * are therefore not recorded.
+   * Record a CLI invocation that is not pinned to a fixture, so the E2E
+   * real-model budget guard can account for it. A fake-responses run replays its
+   * model turn from a checked-in fixture and never reaches a provider, so it is
+   * not recorded.
    */
   private _recordIfRealProviderRun(caller: string): void {
     if (this.fakeResponsesPath !== undefined) {
       return;
     }
-    if (this.testName === undefined) {
+    const { testName, testDir } = this;
+    if (testName === undefined || testDir === null) {
       throw new Error(
-        `TestRig.${caller}() against a real provider requires setup() to be called first to establish the test name`,
+        `TestRig.${caller}() against a real provider requires setup() to be called first to establish the test name and directory`,
       );
     }
-    recordRealProviderRun({
-      testName: this.testName,
-      testDir: this.testDir as string,
-    });
+    recordRealProviderRun({ testName, testDir });
   }
 
   private beginRun(): void {
@@ -272,6 +271,12 @@ export class TestRig {
   ): Promise<string> {
     this.beginRun();
     try {
+      // runCommand does not inject the fake-provider flags, so without a
+      // fixture the child inherits whatever real credentials the environment
+      // holds. It is therefore a real-provider invocation for budget purposes
+      // even when the subcommand it drives never starts a model turn.
+      this._recordIfRealProviderRun('runCommand');
+
       const { command, initialArgs } = this._getCommandAndArgs();
       const commandArgs = [...initialArgs, ...args];
 
