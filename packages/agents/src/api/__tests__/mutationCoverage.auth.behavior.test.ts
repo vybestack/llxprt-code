@@ -419,7 +419,12 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
         fc.asyncProperty(
           fc
             .string({ minLength: 1, maxLength: 30 })
-            .filter((s) => !s.includes('__proto__')),
+            .filter((s) => !s.includes('__proto__'))
+            // A whitespace-only string is non-empty but is not a resolvable
+            // model identity, and since #3138 the system prompt refuses to
+            // assemble without one. This property is about usable model names,
+            // so exclude blanks rather than assert an unsupported case.
+            .filter((s) => s.trim().length > 0),
           async (model) => {
             const { agent, cleanup } = await buildAgent('plain-text.jsonl');
             try {
