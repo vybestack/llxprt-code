@@ -1192,37 +1192,6 @@ export class HistoryService
   }
 
   /**
-   * Read-only snapshot of the newest chronology-marked history item. Returns
-   * `null` when no item carries a chronology marker. The `turnId` comes from
-   * the same item's `metadata.turnId` (null when absent).
-   *
-   * This is a pure accessor over existing state — no new stamping. It provides
-   * the join keys (`turnId`, `userTurn`, `step`, `seq`) that the token-usage
-   * turn record needs to align with the conversation.
-   *
-   * @issue #3130
-   */
-  getCurrentTurnMarker(): {
-    turnId: string | null;
-    userTurn: number;
-    step: number;
-    seq: number;
-  } | null {
-    for (let i = this.history.length - 1; i >= 0; i--) {
-      const marker = this.history[i].metadata?.chronology;
-      if (marker !== undefined) {
-        return {
-          turnId: this.history[i].metadata?.turnId ?? null,
-          userTurn: marker.userTurn,
-          step: marker.step,
-          seq: marker.seq,
-        };
-      }
-    }
-    return null;
-  }
-
-  /**
    * The highest chronology `seq` that the preserved head must always include.
    * Zero means no anchor has been established yet (#3070).
    */

@@ -24,6 +24,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createTokenSyncTestFixture } from './chatSession-tokenSync-helpers.js';
+import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -344,7 +345,9 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     // Capture the send-time marker — recordTurnJoinContext reads this same
     // state at the send seam.
-    const sendTimeMarker = historyService.getCurrentTurnMarker();
+    const sendTimeMarker = findCurrentTurnMarker(
+      historyService.getRawHistory(),
+    );
     expect(sendTimeMarker).not.toBeNull();
 
     const mockProvider = {
@@ -450,5 +453,126 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       // — this is the reciprocal join (AC-2).
       expect(record.prompt_id).toBe(promptId);
     }
+  });
+
+  // AC-12: Cached turn — provider reports Anthropic-style cache read+write.
+  // The JSONL must carry both cache_read_tokens and cache_write_tokens, and
+  // legacy cached_tokens / effective_actual_tokens must remain unchanged.
+  it('AC-12 cached turn: records cache_read_tokens and cache_write_tokens with legacy fields intact', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'ac12-cached-session',
+    });
+
+    historyService.add(
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Tell me about caching' }],
+      },
+      'claude-3-5-sonnet-20241022',
+    );
+    await historyService.waitForTokenUpdates();
+
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Caching helps.' }],
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: 5000,
+              completionTokens: 10,
+              totalTokens: 5010,
+              cache_read_input_tokens: 2000,
+              cache_creation_input_tokens: 500,
+            },
+          },
+          usageMetadata: {
+            promptTokenCount: 5000,
+            candidatesTokenCount: 10,
+            totalTokenCount: 5010,
+            cachedContentTokenCount: 2000,
+          },
+        };
+      }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'ac12-cached-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 300,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 280,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'Tell me about caching' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+
+    await historyService.waitForTokenUpdates();
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const record = records[0];
+
+    // AC-3: new cost fields
+    expect(record.cache_read_tokens).toBe(2000);
+    expect(record.cache_write_tokens).toBe(500);
+    expect(record.output_tokens).toBe(10);
+    expect(record.total_tokens).toBe(5010);
+
+    // AC-11: legacy fields unchanged
+    expect(record.actual_prompt_tokens).toBe(5000);
+    expect(record.cached_tokens).toBe(2000);
+    expect(record.effective_actual_tokens).toBe(3000);
+
+    // Unreported fields are omitted
+    expect('reasoning_tokens' in record).toBe(false);
+    expect('tool_tokens' in record).toBe(false);
   });
 });

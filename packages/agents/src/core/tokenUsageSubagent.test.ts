@@ -31,6 +31,7 @@ import {
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -181,8 +182,8 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     // No history items — no chronology marker exists
     const historyService = new HistoryService();
 
-    // getCurrentTurnMarker must return null for empty history
-    expect(historyService.getCurrentTurnMarker()).toBeNull();
+    // findCurrentTurnMarker must return null for empty history
+    expect(findCurrentTurnMarker(historyService.getRawHistory())).toBeNull();
 
     const promptId = 'empty-history-prompt';
     driveTurn(logger, logFile, state, historyService, promptId);

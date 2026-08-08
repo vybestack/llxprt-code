@@ -79,6 +79,15 @@ interface PendingEntry {
   readonly tiktokenTokens?: number | null;
   readonly tiktokenEstimationFailed?: boolean;
   readonly turnContext?: Partial<TokenUsageTurnContext>;
+  /**
+   * Attempt indices already written for this promptId.  One logical turn can
+   * produce several billed attempts (#3130 AC-4), so the pending entry is not
+   * consumed on the first `recordActual`.  Recording the indices instead keeps
+   * the original duplicate-write protection: a second completion for an
+   * attempt that was already recorded is dropped rather than double-counted,
+   * which would inflate the very burn totals this log exists to measure.
+   */
+  readonly recordedAttempts: Set<number>;
 }
 
 /** Cost + attempt extras extracted from the widened `recordActual` input. */
@@ -150,6 +159,7 @@ export class TokenUsageLogger {
       ts: new Date().toISOString(),
       promptId,
       turnContext: context,
+      recordedAttempts: new Set(),
     });
   }
 
@@ -206,6 +216,10 @@ export class TokenUsageLogger {
       tiktokenTokens: data.tiktokenTokens,
       tiktokenEstimationFailed: data.tiktokenEstimationFailed,
       turnContext: existing?.turnContext,
+      // Carried over, not reset: a re-estimate fires at every send seam
+      // (including each retry attempt), and forgetting which attempts were
+      // already written would reopen the duplicate-write window.
+      recordedAttempts: existing?.recordedAttempts ?? new Set(),
     };
     this.pending.set(promptId, entry);
   }
@@ -241,9 +255,14 @@ export class TokenUsageLogger {
       // Context-only stub with no estimate — cannot emit a turn record.
       return;
     }
-    // Consume before awaiting so concurrent completions cannot write duplicates.
-    // Fail-open I/O intentionally does not requeue a failed measurement.
-    this.pending.delete(promptId);
+    // One logical turn can produce several billed attempts, so the pending
+    // entry is preserved rather than consumed.  Duplicate protection moves
+    // from "one record per promptId" to "one record per attempt": mark the
+    // attempt before awaiting so a concurrent completion for the same attempt
+    // cannot write a second record.
+    const attemptIndex = actual.attemptIndex ?? 0;
+    if (pending.recordedAttempts.has(attemptIndex)) return;
+    pending.recordedAttempts.add(attemptIndex);
 
     const effectiveActualTokens = Math.max(
       0,

@@ -244,6 +244,42 @@ export interface ChronologyTraceEntry {
 }
 
 /**
+ * The chronology identity of the turn a request is being sent for.
+ *
+ * @issue #3130
+ */
+export interface CurrentTurnMarker {
+  readonly turnId: string | null;
+  readonly userTurn: number;
+  readonly step: number;
+  readonly seq: number;
+}
+
+/**
+ * Find the newest history item carrying a chronology marker and project its
+ * join keys. Returns `null` when no item is marked yet, so callers record an
+ * explicit "unknown" rather than inventing a turn or defaulting to zero.
+ *
+ * @issue #3130
+ */
+export function findCurrentTurnMarker(
+  history: readonly IContent[],
+): CurrentTurnMarker | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const marker = history[i].metadata?.chronology;
+    if (marker !== undefined) {
+      return {
+        turnId: history[i].metadata?.turnId ?? null,
+        userTurn: marker.userTurn,
+        step: marker.step,
+        seq: marker.seq,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Build an ordered chronology trace, one entry per history item that carries
  * a chronology marker. Items without a marker are skipped without throwing.
  *

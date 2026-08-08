@@ -40,7 +40,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { logApiResponse, logApiError } from './turnLogging.js';
+import { logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
@@ -54,7 +54,7 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
-import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
+import { logStreamTelemetry } from './streamTelemetryLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
@@ -89,7 +89,6 @@ import {
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
-import { safeJsonStringify } from './turnJsonUtils.js';
 
 /**
  * Extract the allowedFunctionNames array from a tool-config object.
@@ -137,6 +136,7 @@ export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+  private currentAttemptIndex = 0;
 
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
     return this.currentPromptEnvelopeEstimate;
@@ -170,8 +170,10 @@ export class StreamProcessor {
     params: SendMessageParams,
     promptId: string,
     userContent: IContent | IContent[],
+    attemptIndex?: number,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
+    this.currentAttemptIndex = attemptIndex ?? 0;
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
@@ -577,7 +579,7 @@ export class StreamProcessor {
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,
-      { promptId, startTime },
+      { promptId, startTime, attemptIndex: this.currentAttemptIndex },
       hookRestrictedAllowedTools,
     );
 
@@ -700,7 +702,11 @@ export class StreamProcessor {
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
     llmRequest?: Record<string, unknown>,
-    telemetryContext?: { promptId: string; startTime: number },
+    telemetryContext?: {
+      promptId: string;
+      startTime: number;
+      attemptIndex?: number;
+    },
     hookRestrictedAllowedTools?: string[],
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
@@ -732,7 +738,12 @@ export class StreamProcessor {
       throw error;
     }
 
-    await this._logTelemetry(telemetryContext, lastIContent);
+    await logStreamTelemetry(
+      this.runtimeContext,
+      telemetryContext,
+      lastIContent,
+      this.compressionHandler.tokenUsageLogger,
+    );
   }
 
   private _trackPromptTokens(iContent: IContent): void {
@@ -828,37 +839,6 @@ export class StreamProcessor {
     }
 
     return undefined;
-  }
-
-  private async _logTelemetry(
-    telemetryContext: { promptId: string; startTime: number } | undefined,
-    lastIContent: IContent | undefined,
-  ): Promise<void> {
-    if (telemetryContext && lastIContent) {
-      const durationMs = Date.now() - telemetryContext.startTime;
-      const usage = lastIContent.metadata?.usage;
-      logApiResponse(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        this.runtimeContext.state.model,
-        telemetryContext.promptId,
-        durationMs,
-        usage ? { ...usage } : undefined,
-        safeJsonStringify(lastIContent),
-      );
-
-      await recordActualTokenUsage(
-        this.compressionHandler.tokenUsageLogger,
-        telemetryContext.promptId,
-        usage
-          ? {
-              promptTokens: usage.promptTokens,
-              cachedTokens: usage.cachedTokens,
-              cache_read_input_tokens: usage.cache_read_input_tokens,
-            }
-          : undefined,
-      );
-    }
   }
 
   /**

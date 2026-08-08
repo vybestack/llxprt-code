@@ -20,6 +20,7 @@
  */
 
 import type { SendMessageParams } from './chatSession.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   InvalidStreamError,
   EmptyStreamError,
@@ -128,6 +129,21 @@ export function shouldRetryStreamAttempt(
  * repeat. Relocated verbatim from TurnProcessor so that file stays under the
  * lint `max-lines` budget; behaviour is unchanged.
  */
+/**
+ * True when a chunk carried output the user (or the model's own next turn)
+ * would notice. Drives the abandoned-vs-errored distinction for a discarded
+ * stream attempt: an attempt that already emitted output was abandoned
+ * mid-flight, whereas one that emitted nothing simply failed.
+ */
+export function chunkHasVisibleOutput(chunk: ModelStreamChunk): boolean {
+  return chunk.content.blocks.some(
+    (block) =>
+      (block.type === 'text' && block.text.length > 0) ||
+      block.type === 'thinking' ||
+      block.type === 'tool_call',
+  );
+}
+
 export function applyRetryTemperature(
   params: SendMessageParams,
   attempt: number,

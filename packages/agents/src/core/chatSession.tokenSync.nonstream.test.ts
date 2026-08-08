@@ -136,6 +136,10 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       expect(recordActual).toHaveBeenCalledWith('test-prompt-id', {
         actualPromptTokens: 5000,
         cachedTokens: 0,
+        outputTokens: 100,
+        totalTokens: 5100,
+        attemptIndex: 0,
+        attemptOutcome: 'success',
       });
     });
   });

@@ -13,6 +13,7 @@ import type { TokenUsageTurnContext } from './tokenUsageRecords.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 const logger = new DebugLogger('llxprt:token-usage-estimate');
 
@@ -80,7 +81,7 @@ export function recordFinalizedPromptEnvelopeEstimate(
  * The join keys come from two sources:
  * - `runtimeState` provides `sessionId`, `runtimeId`, `parentRuntimeId`,
  *   and `subagentName`.
- * - `historyService.getCurrentTurnMarker()` provides `turnId`, `userTurn`,
+ * - `findCurrentTurnMarker` over the raw history provides `turnId`, `userTurn`,
  *   and `step`. When no chronology marker exists yet, these are `null` —
  *   never invented, never 0-as-unknown.
  *
@@ -95,7 +96,7 @@ export function recordTurnJoinContext(
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
 
-  const marker = historyService.getCurrentTurnMarker();
+  const marker = findCurrentTurnMarker(historyService.getRawHistory());
 
   const context: TokenUsageTurnContext = {
     sessionId: runtimeState.sessionId,

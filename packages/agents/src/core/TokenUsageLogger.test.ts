@@ -213,27 +213,116 @@ describe('TokenUsageLogger', () => {
     expect(fs.existsSync(badPath)).toBe(false);
   });
 
-  it('clears pending entry after recordActual completes', async () => {
+  it('preserves pending entry so multi-attempt recording works (issue #3130)', async () => {
     const logger = new TokenUsageLogger(true, logFile);
-    logger.recordEstimate('prompt-clear', {
+    logger.recordEstimate('prompt-multi', {
       provider: 'openai',
       model: 'gpt-4',
       estimatedTokens: 100,
       estimator: 'openai-tiktoken',
       tiktokenTokens: 90,
     });
-    await logger.recordActual('prompt-clear', {
+    await logger.recordActual('prompt-multi', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+      attemptOutcome: 'abandoned',
+    });
+
+    await logger.recordActual('prompt-multi', {
+      actualPromptTokens: 130,
+      cachedTokens: 0,
+      attemptIndex: 1,
+      attemptOutcome: 'success',
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(2);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+    expect(records[0].attempt_index).toBe(0);
+    expect(records[0].attempt_outcome).toBe('abandoned');
+    expect(records[1].actual_prompt_tokens).toBe(130);
+    expect(records[1].attempt_index).toBe(1);
+    expect(records[1].attempt_outcome).toBe('success');
+  });
+
+  it('drops a repeat recordActual for an attempt already written (issue #3130)', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-dedupe', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+
+    await logger.recordActual('prompt-dedupe', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+    });
+    await logger.recordActual('prompt-dedupe', {
+      actualPromptTokens: 999,
+      cachedTokens: 0,
+      attemptIndex: 0,
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+  });
+
+  it('treats an omitted attemptIndex as attempt 0 for duplicate protection', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-implicit', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 90,
+    });
+
+    await logger.recordActual('prompt-implicit', {
       actualPromptTokens: 120,
       cachedTokens: 0,
     });
-
-    await logger.recordActual('prompt-clear', {
+    await logger.recordActual('prompt-implicit', {
       actualPromptTokens: 999,
       cachedTokens: 0,
     });
 
     const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
+  });
+
+  it('preserves attempt dedupe memory across a re-estimate (issue #3130)', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    const estimate = {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken' as const,
+      tiktokenTokens: 90,
+    };
+    logger.recordEstimate('prompt-reestimate', estimate);
+    await logger.recordActual('prompt-reestimate', {
+      actualPromptTokens: 120,
+      cachedTokens: 0,
+      attemptIndex: 0,
+    });
+
+    // A retry re-fires the send seam, which re-estimates the same promptId.
+    logger.recordEstimate('prompt-reestimate', estimate);
+    await logger.recordActual('prompt-reestimate', {
+      actualPromptTokens: 999,
+      cachedTokens: 0,
+      attemptIndex: 0,
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    expect(records[0].actual_prompt_tokens).toBe(120);
   });
 
   it('evicts oldest pending entry when exceeding PENDING_CAP', async () => {
