@@ -47,6 +47,8 @@ import {
   applyRetryTemperature,
   chunkHasVisibleOutput,
 } from './turnAbortHelpers.js';
+import { prepareUserTurnContents } from './turnIdentity.js';
+import { withReportedUsage } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -119,6 +121,9 @@ export class TurnProcessor {
    */
   private lastSendAttemptIndex = 0;
 
+  /** Canonical turn id for the send in flight (#3130). */
+  private currentTurnId: string | null = null;
+
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
     return this.currentPromptEnvelopeEstimate;
   }
@@ -152,7 +157,7 @@ export class TurnProcessor {
     this.lastPromptTokenCount = null;
     this.currentPromptEnvelopeEstimate = null;
 
-    const prepared = this._prepareSendMessage(params);
+    const prepared = this._prepareSendMessage(params, prompt_id);
 
     // #2410: when the user message converts to zero IContent turns (e.g.
     // empty array after hook-restriction filtering), skip the provider call
@@ -351,17 +356,6 @@ export class TurnProcessor {
     };
   }
 
-  private _stampTurnMetadata(contents: IContent[]): IContent[] {
-    const idGen = this.historyService.getIdGeneratorCallback();
-    return contents.map((content) => ({
-      ...content,
-      metadata: {
-        ...content.metadata,
-        id: idGen(),
-      },
-    }));
-  }
-
   /**
    * Waits for any pending send operation to complete.
    * Fail-open: swallows errors from previous failed sends.
@@ -394,14 +388,20 @@ export class TurnProcessor {
   /**
    * Prepares user message: validates and converts input before provider enforcement.
    */
-  private _prepareSendMessage(params: SendMessageParams): {
+  private _prepareSendMessage(
+    params: SendMessageParams,
+    promptId: string,
+  ): {
     userContents: IContent[];
     userIContents: IContent[];
   } {
-    const userContents = this._normalizeUserContent(params);
-    const userIContents = this._stampTurnMetadata(userContents);
-
-    return { userContents, userIContents };
+    const prepared = prepareUserTurnContents(
+      this._normalizeUserContent(params),
+      this.historyService,
+      promptId,
+    );
+    this.currentTurnId = prepared.turnId;
+    return prepared;
   }
 
   /**
@@ -595,6 +595,7 @@ export class TurnProcessor {
         requestContents,
         tools,
         systemInstruction: this.generationConfig.systemInstruction,
+        turnId: this.currentTurnId,
       });
       const transportPrepared = bindPreparedTransportSignal(
         prepared,
@@ -672,6 +673,10 @@ export class TurnProcessor {
     upstreamAbortSignal: AbortSignal | undefined,
   ): Promise<IContent> {
     let lastResponse: IContent | undefined;
+    // Providers do not all report usage on the final chunk; some report it
+    // once, mid-stream. Keeping the newest reported usage stops a billed
+    // request from being recorded as having cost nothing (#3130).
+    let lastReportedUsage: UsageStats | undefined;
     const blocks: IContent['blocks'] = [];
     const iterator = streamResponse[Symbol.asyncIterator]();
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
@@ -689,6 +694,7 @@ export class TurnProcessor {
       this._trackProviderPromptTokens(iContent);
       blocks.push(...iContent.blocks);
       lastResponse = iContent;
+      lastReportedUsage = iContent.metadata?.usage ?? lastReportedUsage;
       nextResponse = await readProviderStreamResponse(
         iterator,
         timeoutController,
@@ -698,7 +704,7 @@ export class TurnProcessor {
     }
 
     if (!lastResponse) throw new Error('No response from provider');
-    return { ...lastResponse, blocks };
+    return withReportedUsage({ ...lastResponse, blocks }, lastReportedUsage);
   }
 
   private _trackProviderPromptTokens(iContent: IContent): void {

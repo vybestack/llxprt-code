@@ -96,20 +96,26 @@ export function recordTurnJoinContext(
   promptId: string,
   runtimeState: AgentRuntimeState,
   historyService: HistoryService,
+  turnId: string | null,
 ): void {
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
 
-  const marker = findCurrentTurnMarker(historyService.getRawHistory());
+  // The turn being sent is not in history yet — the record is written before
+  // the turn is persisted. `turnId` is therefore the canonical id minted for
+  // this send, not something derived from history; deriving it here would name
+  // the previous turn. `userTurn`/`step` describe the conversation position
+  // the request was built from, which is the newest persisted marker.
+  const priorMarker = findCurrentTurnMarker(historyService.getRawHistory());
 
   const context: TokenUsageTurnContext = {
     sessionId: runtimeState.sessionId,
     runtimeId: runtimeState.runtimeId,
     parentRuntimeId: runtimeState.parentRuntimeId ?? null,
     subagentName: runtimeState.subagentName ?? null,
-    turnId: marker?.turnId ?? null,
-    userTurn: marker?.userTurn ?? null,
-    step: marker?.step ?? null,
+    turnId,
+    userTurn: priorMarker?.userTurn ?? null,
+    step: priorMarker?.step ?? null,
   };
 
   usageLogger.attachTurnContext(promptId, context);
@@ -192,6 +198,8 @@ export interface SendSeamTelemetryInput {
   requestContents: readonly IContent[];
   tools: unknown;
   systemInstruction: AgentClientGenerateConfig['systemInstruction'];
+  /** Canonical turn id minted for this send; null when the seam has none. */
+  turnId: string | null;
 }
 
 export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
@@ -205,6 +213,7 @@ export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
     input.promptId,
     input.runtimeState,
     input.historyService,
+    input.turnId,
   );
   recordRequestShapeContext(
     input.usageLogger,

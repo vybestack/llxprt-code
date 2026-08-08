@@ -62,6 +62,7 @@ function driveTurn(
   runtimeState: AgentRuntimeState,
   historyService: HistoryService,
   promptId: string,
+  turnId: string | null = 'turn-under-test',
 ): void {
   logger.recordEstimate(promptId, {
     provider: 'anthropic',
@@ -70,7 +71,7 @@ function driveTurn(
     estimator: 'anthropic-char',
     tiktokenTokens: 90,
   });
-  recordTurnJoinContext(logger, promptId, runtimeState, historyService);
+  recordTurnJoinContext(logger, promptId, runtimeState, historyService, turnId);
   // recordActual is async — flush synchronously via the internal write chain
   void logger.recordActual(promptId, {
     actualPromptTokens: 500,
@@ -171,7 +172,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     expect(record.session_id).toBe('main-session');
   });
 
-  it('empty-history boundary: turn_id/user_turn/step are null, never 0 or invented', async () => {
+  it('empty-history boundary: user_turn/step are null, never 0 or invented', async () => {
     const state = createAgentRuntimeState({
       runtimeId: 'empty-history-rt',
       provider: 'anthropic',
@@ -186,7 +187,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     expect(findCurrentTurnMarker(historyService.getRawHistory())).toBeNull();
 
     const promptId = 'empty-history-prompt';
-    driveTurn(logger, logFile, state, historyService, promptId);
+    driveTurn(logger, logFile, state, historyService, promptId, 'minted-turn');
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -194,8 +195,11 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     expect(records).toHaveLength(1);
     const record = records[0];
 
-    // Join keys that depend on chronology must be null, never 0 or invented
-    expect(record.turn_id).toBeNull();
+    // turn_id is minted before the send, so it survives an empty history —
+    // that is precisely what stops the first turn of a session being unjoinable.
+    expect(record.turn_id).toBe('minted-turn');
+    // The chronology-derived fields describe the state the request was built
+    // from. There is none, so they are null — never 0, never invented.
     expect(record.user_turn).toBeNull();
     expect(record.step).toBeNull();
 

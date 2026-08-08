@@ -55,7 +55,7 @@ import { logStreamTelemetry } from './streamTelemetryLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
-  contentForTelemetry,
+  contentForTelemetryPreservingUsage,
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
@@ -86,6 +86,7 @@ import {
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
+import { stampTurnIdentityOnInput } from './turnIdentity.js';
 
 /**
  * Extract the allowedFunctionNames array from a tool-config object.
@@ -103,25 +104,6 @@ function extractAllowedFunctionNames(
   return toolConfig.allowedFunctionNames;
 }
 
-/**
- * Stamp `promptId` onto user content metadata so it carries through to
- * history persistence. The reciprocal join key (AC-2, issue #3130).
- */
-function stampPromptIdOnContent(
-  userContent: IContent | IContent[],
-  promptId: string,
-): IContent | IContent[] {
-  if (promptId.length === 0) return userContent;
-  const stamp = (content: IContent): IContent => ({
-    ...content,
-    metadata: { ...(content.metadata ?? {}), promptId },
-  });
-  if (Array.isArray(userContent)) {
-    return userContent.map(stamp);
-  }
-  return stamp(userContent);
-}
-
 /** Result of firing the BeforeModel hook (contents + metadata + pre-hook snapshot). */
 interface BeforeModelHookFireResult {
   contents: IContent[];
@@ -133,6 +115,13 @@ export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+
+  /**
+   * Canonical turn id for the send in flight, minted before the request goes
+   * out so the token-usage record and the persisted turn name the same turn
+   * (#3130). Null before the first send.
+   */
+  private currentTurnId: string | null = null;
   private currentAttemptIndex = 0;
 
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
@@ -175,9 +164,14 @@ export class StreamProcessor {
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
 
-    // Stamp promptId on the user content so it carries through to history
-    // persistence — the reciprocal join key (AC-2, issue #3130).
-    const stampedUserContent = stampPromptIdOnContent(userContent, promptId);
+    // Mint the canonical turn identity before the send and stamp it on the
+    // user content, so the token-usage record and the persisted turn agree
+    // (AC-1/AC-2, issue #3130).
+    this.currentTurnId = this.historyService.generateTurnKey();
+    const stampedUserContent = stampTurnIdentityOnInput(userContent, {
+      promptId,
+      turnId: this.currentTurnId,
+    });
 
     this.logger.debug(
       () => '[StreamProcessor] Active provider snapshot before stream request',
@@ -536,6 +530,7 @@ export class StreamProcessor {
         requestContents: requestPayload.contents,
         tools: requestPayload.tools,
         systemInstruction: this.generationConfig.systemInstruction,
+        turnId: this.currentTurnId,
       });
 
       const streamResponse = provider.generateChatCompletion(prepared.options);
@@ -726,7 +721,10 @@ export class StreamProcessor {
             chunk,
             hookRestrictedAllowedTools,
           )) ?? chunk;
-        lastIContent = contentForTelemetry(yieldedChunk);
+        lastIContent = contentForTelemetryPreservingUsage(
+          yieldedChunk,
+          lastIContent,
+        );
         yield yieldedChunk;
       }
     } catch (error) {

@@ -12,15 +12,22 @@ Every token-usage turn record carries:
 | Field | Source of truth |
 | --- | --- |
 | `session_id` | `AgentRuntimeContext.state.sessionId` (explicit, not parsed from `prompt_id`) |
-| `turn_id` | `ContentMetadata.turnId` of the turn being sent |
-| `user_turn` | `ChronologyMarker.userTurn` of the latest history item at send time |
-| `step` | `ChronologyMarker.step` of the latest history item at send time |
+| `turn_id` | Canonical id minted for the turn being sent, and stamped on that turn when it is persisted |
+| `user_turn` | `ChronologyMarker.userTurn` of the conversation state the request was built from |
+| `step` | `ChronologyMarker.step` of that same prior state |
 | `runtime_id` | `AgentRuntimeContext.state.runtimeId` |
 | `parent_runtime_id` | Parent runtime's `runtimeId`; `null` for the main agent |
 | `subagent_name` | Subagent name; `null` for the main agent |
 
-Boundary cases: history empty at send time (no chronology yet) → `user_turn`/`step`/`turn_id`
-are `null`, never invented, never `0`-as-unknown. Logger disabled → nothing written.
+The record is written **before** the turn it describes reaches history, so a
+turn identity derived from history at send time would name the *previous* turn
+and would be `null` on the very first send. `turn_id` is therefore minted before
+the request goes out and stamped on the content that is persisted, which is what
+makes the join exact. `user_turn`/`step` are deliberately *not* turn identity:
+they describe the preceding conversation state and are documented as such.
+
+Boundary cases: first send of a session → `user_turn`/`step` are `null` (never
+`0`-as-unknown) while `turn_id` is still exact. Logger disabled → nothing written.
 
 ### AC-2 — Reciprocal join key on recorded content
 

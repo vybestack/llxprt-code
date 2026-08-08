@@ -132,7 +132,14 @@ export class ConversationManager {
   ): IContent {
     return {
       ...content,
-      metadata: { ...content.metadata, turnId: turnKey },
+      metadata: {
+        ...content.metadata,
+        // Preserve a turn id already minted for this send. The send seam mints
+        // one before the request goes out so the token-usage record and the
+        // persisted turn name the same turn (#3130); overwriting it here would
+        // break that join.
+        turnId: content.metadata?.turnId ?? turnKey,
+      },
     };
   }
 

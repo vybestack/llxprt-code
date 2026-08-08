@@ -534,6 +534,13 @@ export class SubagentOrchestrator {
         maxTokens: profile.modelParams.max_tokens ?? undefined,
       },
       sessionId,
+      // The foreground agent's runtime id. `resolveRuntimeId` defaults a
+      // runtime's id to its session id when no explicit id is supplied
+      // (see runtimeStateFactory), which is how the foreground runtime is
+      // built, so this is that runtime's id and not merely a session key.
+      // The orchestrator is reached through the tool framework, which does
+      // not carry the caller's runtime context; if that changes, pass the
+      // parent runtime id in explicitly rather than re-deriving it here.
       parentRuntimeId: this.baseSessionId(),
       subagentName,
     });

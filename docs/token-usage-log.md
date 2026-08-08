@@ -69,16 +69,16 @@ Fields are grouped by purpose.
 These fields let you connect a token-usage record to the corresponding turn in
 the conversation log.
 
-| Field               | Type           | Description                                                                                                                   |
-| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `prompt_id`         | string         | Unique identifier for the prompt that initiated this turn. Joins to `metadata.promptId` on the recorded conversation content. |
-| `session_id`        | string         | The session identifier. Matches the filename.                                                                                 |
-| `turn_id`           | string \| null | Stable identifier for the conversation turn. `null` when no chronology marker exists yet (for example, the very first send).  |
-| `user_turn`         | number \| null | The user-turn index (1-based) of the latest history item at send time.                                                        |
-| `step`              | number \| null | The step index within the user turn.                                                                                          |
-| `runtime_id`        | string         | The runtime identifier for the agent that served this request.                                                                |
-| `parent_runtime_id` | string \| null | The parent runtime's identifier for subagent requests; `null` for the main agent.                                             |
-| `subagent_name`     | string \| null | The subagent name; `null` for the main agent.                                                                                 |
+| Field               | Type           | Description                                                                                                                                                                                               |
+| ------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt_id`         | string         | Unique identifier for the prompt that initiated this turn. Joins to `metadata.promptId` on the recorded conversation content.                                                                             |
+| `session_id`        | string         | The session identifier. Matches the filename.                                                                                                                                                             |
+| `turn_id`           | string \| null | Stable identifier for the turn this request served. Minted before the request is sent and stamped on the persisted turn, so the two always agree.                                                         |
+| `user_turn`         | number \| null | User-turn index of the conversation state this request was built from — the newest turn already in history, **not** the turn being sent. `null` on the first request of a session. See the caution below. |
+| `step`              | number \| null | Step index within that same prior user turn. Same caveat as `user_turn`.                                                                                                                                  |
+| `runtime_id`        | string         | The runtime identifier for the agent that served this request.                                                                                                                                            |
+| `parent_runtime_id` | string \| null | The parent runtime's identifier for subagent requests; `null` for the main agent.                                                                                                                         |
+| `subagent_name`     | string \| null | The subagent name; `null` for the main agent.                                                                                                                                                             |
 
 ### Estimator and calibration
 
@@ -228,11 +228,18 @@ directory but in different subdirectories:
 
 ### Join keys
 
-| Token-usage field                   | Conversation content field                                  | Meaning                                        |
-| ----------------------------------- | ----------------------------------------------------------- | ---------------------------------------------- |
-| `prompt_id`                         | `metadata.promptId`                                         | Links a billed request to the turn it served   |
-| `turn_id`                           | `metadata.turnId`                                           | Links to the stable turn identifier            |
-| `session_id` + `user_turn` + `step` | `metadata.chronology.userTurn` + `metadata.chronology.step` | Locates the exact position in the conversation |
+| Token-usage field | Conversation content field | Meaning                                      |
+| ----------------- | -------------------------- | -------------------------------------------- |
+| `prompt_id`       | `metadata.promptId`        | Links a billed request to the turn it served |
+| `turn_id`         | `metadata.turnId`          | Links to the stable turn identifier          |
+| `session_id`      | the recording filename     | Scopes both streams to one session           |
+
+> **Caution:** join on `prompt_id` or `turn_id`. Do **not** join on
+> `user_turn`/`step`. The token-usage record is written before the turn it
+> describes reaches history, so those two fields describe the conversation
+> state the request was _built from_ — the preceding turn — rather than the
+> turn being billed. They are useful for ordering and for seeing how much
+> conversation preceded a request; they are not a turn identity.
 
 ### Worked example
 
@@ -247,8 +254,8 @@ To find the corresponding turn in the conversation log:
 1. Open the `session-*.jsonl` file in `<projectTempDir>/chats/` for session
    `sess-001`.
 2. Search for a content entry where `metadata.promptId === "p-abc123"`.
-3. Alternatively, locate the entry at `metadata.chronology.userTurn === 3` and
-   `metadata.chronology.step === 1`.
+3. Alternatively, search for a content entry where
+   `metadata.turnId === "t-42"`. Both keys resolve to the same turn.
 
 To go the other direction — from a conversation turn to its cost:
 

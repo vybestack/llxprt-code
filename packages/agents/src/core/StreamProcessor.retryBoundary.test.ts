@@ -595,6 +595,9 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
         },
       },
       compressionHandler: {},
+      historyService: {
+        generateTurnKey: () => 'turn-test',
+      },
       providerResolver: vi.fn(() => provider),
       _executeStreamApiCall: executeStreamApiCall,
       processStreamResponse,

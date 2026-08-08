@@ -24,7 +24,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createTokenSyncTestFixture } from './chatSession-tokenSync-helpers.js';
-import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -331,25 +330,6 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       sessionId: 'ac12-join-session',
     });
 
-    // Pre-add a human turn with a known turnId so the chronology marker
-    // is predictable at send time.
-    historyService.add(
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Previous context' }],
-        metadata: { turnId: 'pre-existing-turn' },
-      },
-      'claude-3-5-sonnet-20241022',
-    );
-    await historyService.waitForTokenUpdates();
-
-    // Capture the send-time marker — recordTurnJoinContext reads this same
-    // state at the send seam.
-    const sendTimeMarker = findCurrentTurnMarker(
-      historyService.getRawHistory(),
-    );
-    expect(sendTimeMarker).not.toBeNull();
-
     const mockProvider = {
       name: 'anthropic',
       generateChatCompletion: vi.fn().mockImplementation(async function* () {
@@ -434,23 +414,18 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(record.parent_runtime_id).toBeNull();
     expect(record.subagent_name).toBeNull();
 
-    // turn_id / user_turn / step must match the send-time marker
-    if (sendTimeMarker !== null) {
-      expect(record.turn_id).toBe(sendTimeMarker.turnId);
-      expect(record.user_turn).toBe(sendTimeMarker.userTurn);
-      expect(record.step).toBe(sendTimeMarker.step);
-    }
-
-    // --- Assert persisted content carries the matching promptId (AC-2) ---
+    // --- The join must resolve to the turn THIS send created (AC-1/AC-2) ---
+    // This is the first turn of the session: there is no earlier turn the
+    // record could accidentally name, so a stale or null turn_id fails here.
     const allHistory = historyService.getAll();
-    const humanWithPromptId = allHistory.find(
-      (c) => c.speaker === 'human' && c.metadata?.promptId === promptId,
-    );
-    expect(humanWithPromptId).toBeDefined();
-    if (humanWithPromptId !== undefined) {
-      expect(humanWithPromptId.metadata?.promptId).toBe(promptId);
-      // The promptId on the content matches the prompt_id in the record
-      // — this is the reciprocal join (AC-2).
+    const sentTurn = allHistory.find((c) => c.speaker === 'human');
+    expect(sentTurn).toBeDefined();
+    if (sentTurn !== undefined) {
+      // usage record -> conversation turn
+      expect(record.turn_id).not.toBeNull();
+      expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
+      // conversation turn -> usage record
+      expect(sentTurn.metadata?.promptId).toBe(promptId);
       expect(record.prompt_id).toBe(promptId);
     }
   });
