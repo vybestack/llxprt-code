@@ -20,10 +20,13 @@
  * unsubscribes facade-recorded per-turn subscriptions.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
-import type { AgenticLoopOptions } from '../../core/agenticLoop/types.js';
+import type {
+  AgenticLoopOptions,
+  AgenticLoopRuntime,
+} from '../../core/agenticLoop/types.js';
 
 /** The mutable slot shared by createAgent and rebuildLoop. */
 export interface LoopHolder {
@@ -45,7 +48,7 @@ export interface LoopHolder {
 export interface RebuildLoopDeps {
   loopHolder: LoopHolder;
   resolveClient: () => AgenticLoopOptions['agentClient'];
-  config: Config;
+  config: SessionIdentity & AgenticLoopRuntime;
   messageBus: MessageBus;
   approvalHandler?: AgenticLoopOptions['approvalHandler'];
   displayCallbacks?: AgenticLoopOptions['displayCallbacks'];

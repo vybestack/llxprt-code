@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { EnvironmentContextConfig } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import type {
   IContent,
@@ -20,7 +20,7 @@ const TASK_COMPLETE_TOOL_NAME = 'complete_task';
  */
 export async function buildAgentSystemPrompt(
   inputs: AgentInputs,
-  runtimeContext: Config,
+  runtimeContext: EnvironmentContextConfig,
   systemPromptTemplate: string,
 ): Promise<string> {
   // Inject user inputs into the prompt template.
