@@ -28,7 +28,7 @@
  * re-running a second activation sequence.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderActivationConfig } from './providerActivationExecutor.js';
 import type { ProviderActivationIntent } from './config-types.js';
 import {
   executeProviderActivation,
@@ -62,7 +62,7 @@ export type AgentActivationPreflightResult = ProviderActivationResult & {
  * @returns The typed preflight result.
  */
 export async function preflightAgentActivation(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<AgentActivationPreflightResult> {
   // Invalidate the most-recent token for this Config so a new attempt does not

@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  MemoryAccess,
+  WorkspacePaths,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { LspStatusSource } from './lspControl.js';
+import type { SkillManager } from '@vybestack/llxprt-code-core/skills/skillManager.js';
 import type {
   AgentMemoryControl,
   AgentSkillsControl,
@@ -24,7 +29,18 @@ export interface NewControls {
   dispose(): void;
 }
 
-export function buildNewControls(config: Config): NewControls {
+/**
+ * Narrow config surface for building all new controls: memory, workspace
+ * paths, LSP status, and the skill manager service locator.
+ */
+type NewControlsConfig = MemoryAccess &
+  WorkspacePaths &
+  LspStatusSource & {
+    getSkillManager(): SkillManager;
+    reloadSkills(): Promise<void>;
+  };
+
+export function buildNewControls(config: NewControlsConfig): NewControls {
   const memory = new MemoryControl({ config });
   return {
     memory,
