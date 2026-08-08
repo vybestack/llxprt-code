@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_list_dir","name":"list_directory","parameters":{"path":"{{CWD}}"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"The directory listing shows file1.txt and subdir."}],"metadata":{"usage":{"promptTokens":200,"completionTokens":10,"totalTokens":210}}}]}

@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_echo_stdin","name":"run_shell_command","parameters":{"command":"echo test-stdin","description":"Echo test-stdin"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"The command output is: test-stdin"}],"metadata":{"usage":{"promptTokens":200,"completionTokens":10,"totalTokens":210}}}]}
