@@ -56,7 +56,7 @@ interface ToolSelectionHookResult {
 
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
 import {
   filterHookRestrictedBlocks,
   filterAfcByHookRestrictions,
@@ -101,7 +101,7 @@ async function readNextStreamChunk(
  * Configs may omit it, so validate `typeof === 'function'` (mirrors main's
  * optional-call `getEnableHooks?.()` short-circuit).
  */
-function resolveHooksEnabled(config: Config | undefined): boolean {
+function resolveHooksEnabled(config: HookConfigBoundary | undefined): boolean {
   if (config && typeof config.getEnableHooks === 'function') {
     return config.getEnableHooks() === true;
   }
@@ -114,7 +114,7 @@ function resolveHooksEnabled(config: Config | undefined): boolean {
  * Configs may omit it, so validate `typeof === 'function'` (mirrors main's
  * optional-call `getHookSystem?.()` short-circuit).
  */
-function resolveHookSystem(config: Config | undefined): HookSystem | undefined {
+function resolveHookSystem(config: HookConfigBoundary | undefined): HookSystem | undefined {
   if (config && typeof config.getHookSystem === 'function') {
     return config.getHookSystem();
   }
@@ -577,7 +577,7 @@ export class DirectMessageProcessor {
   }
 
   private async _applyToolSelectionHook(
-    configForHooks: Config,
+    configForHooks: HookConfigBoundary,
     toolsFromConfig: ToolGroupArray,
   ): Promise<ToolSelectionHookResult> {
     if (!resolveHooksEnabled(configForHooks)) {
@@ -622,7 +622,7 @@ export class DirectMessageProcessor {
    * @pseudocode lines 20-22
    */
   private async _handleBeforeModelHook(
-    configForHooks: Config,
+    configForHooks: HookConfigBoundary,
     userIContents: IContent[],
     effectiveToolsFromConfig:
       | Array<{
@@ -723,7 +723,7 @@ export class DirectMessageProcessor {
   private async _processDirectResponse(
     lastResponse: IContent,
     aggregatedText: string,
-    config: Config | undefined,
+    config: HookConfigBoundary | undefined,
     llmRequest?: Record<string, unknown>,
     allowedFunctionNames?: string[],
   ): Promise<ModelOutput> {

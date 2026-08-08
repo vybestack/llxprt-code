@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
 import {
   triggerBeforeAgentHook,
   triggerAfterAgentHook,
@@ -31,9 +31,9 @@ export interface HookState {
  */
 export class AgentHookManager {
   private readonly hookStateMap: Map<string, HookState> = new Map();
-  private readonly config: Config;
+  private readonly config: HookConfigBoundary;
 
-  constructor(config: Config) {
+  constructor(config: HookConfigBoundary) {
     this.config = config;
   }
 

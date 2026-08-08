@@ -10,7 +10,7 @@ import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookConfigBoundary } from '@vybestack/llxprt-code-core/core/hookConfigBoundary.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -708,7 +708,7 @@ export class TurnProcessor {
   }
 
   private async _applyToolSelectionHook(
-    configForHooks: Config | undefined,
+    configForHooks: HookConfigBoundary | undefined,
     tools: AgentClientGenerateConfig['tools'],
   ): Promise<ToolSelectionHookResult> {
     const toolsFromConfig = Array.isArray(tools)
